@@ -239,7 +239,7 @@ internal sealed class Identity(Faker faker)
     private string? _email;
 
     /// <summary>The person's sex; drives gendered names, avatars and sex/gender enums.</summary>
-    public Sex Sex { get; } = faker.Person.SexType();
+    public Sex Sex { get; } = faker.Person.Sex();
 
     /// <summary>First name, matching <see cref="Sex"/>.</summary>
     public string FirstName => _firstName ??= faker.Person.FirstName(Sex);

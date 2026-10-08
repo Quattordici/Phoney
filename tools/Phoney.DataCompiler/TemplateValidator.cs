@@ -27,8 +27,14 @@ internal sealed partial class TemplateValidator(IReadOnlyList<RawLocale> locales
             {
                 var values = leaf.Strings.Concat(leaf.Rows.SelectMany(r => r).OfType<string>());
                 foreach (var value in values)
+                {
                     foreach (var expression in Expressions(value))
                         Check(locale.Code, leaf.Path, expression, merged);
+
+                    // Phoney also accepts .NET-style {{Person.FirstName}}; faker.js treats "{{" + upper case as text.
+                    if (UpperCaseStart().IsMatch(value))
+                        Errors.Add($"{locale.Code}: '{leaf.Path}' contains '{{{{' followed by an upper-case letter, which Phoney would evaluate but faker.js does not: '{value}'.");
+                }
             }
         }
     }
@@ -98,4 +104,8 @@ internal sealed partial class TemplateValidator(IReadOnlyList<RawLocale> locales
     /// <summary><c>{{</c> + lower-case letter … first <c>}}</c>, as faker.js <c>helpers.fake</c> scans.</summary>
     [GeneratedRegex(@"\{\{([a-z].*?)\}\}")]
     private static partial Regex ExpressionRegex();
+
+    /// <summary><c>{{</c> followed by an upper-case letter.</summary>
+    [GeneratedRegex(@"\{\{[A-Z]")]
+    private static partial Regex UpperCaseStart();
 }

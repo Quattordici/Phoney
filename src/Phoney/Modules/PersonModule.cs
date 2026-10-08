@@ -9,6 +9,35 @@ public sealed class PersonModule : FakerModule
     {
     }
 
+    /// <summary>
+    /// Returns a whole, coherent person: the names match the sex, the email and username are built from the names,
+    /// and the age matches the birthdate at <see cref="Phoney.Faker.ReferenceDate"/>.
+    /// </summary>
+    /// <param name="sex">The person's sex; random when not given.</param>
+    /// <param name="minAge">Minimum age.</param>
+    /// <param name="maxAge">Maximum age.</param>
+    public PersonProfile Profile(Sex? sex = null, int minAge = 18, int maxAge = 80)
+    {
+        var s = sex ?? Sex();
+        var firstName = FirstName(s);
+        var lastName = LastName(s);
+        var birthDate = Faker.Date.Birthdate(minAge, maxAge);
+        var today = DateOnly.FromDateTime(Faker.ReferenceDate.UtcDateTime);
+        var age = today.Year - birthDate.Year - (today < birthDate.AddYears(today.Year - birthDate.Year) ? 1 : 0);
+        return new PersonProfile(
+            s,
+            firstName,
+            lastName,
+            FullName(firstName, lastName, s),
+            Faker.Internet.Email(firstName, lastName),
+            Faker.Internet.Username(firstName, lastName),
+            Faker.Phone.Number(),
+            birthDate,
+            age,
+            JobTitle(),
+            Faker.Location.Address());
+    }
+
     /// <summary>Returns a first name; gendered when <paramref name="sex"/> is given and the locale has gendered names.</summary>
     public string FirstName(Sex? sex = null) =>
         Faker.Pick(Select(sex, DataKeys.PersonFirstNameGeneric, DataKeys.PersonFirstNameFemale, DataKeys.PersonFirstNameMale));
@@ -32,7 +61,7 @@ public sealed class PersonModule : FakerModule
     /// </summary>
     public string FullName(string? firstName = null, string? lastName = null, Sex? sex = null)
     {
-        var s = sex ?? SexType();
+        var s = sex ?? Sex();
         // Substitute the name parts ourselves (as faker.js does with mustache) so they share one sex and the
         // caller's first/last name are honoured; anything else in the pattern is evaluated afterwards.
         var result = RawPattern(DataKeys.PersonName);
@@ -47,11 +76,11 @@ public sealed class PersonModule : FakerModule
     /// <summary>Returns a gender identity, e.g. <c>Trans*Man</c>.</summary>
     public string Gender() => Faker.Pick(DataKeys.PersonGender);
 
-    /// <summary>Returns the locale's word for a biological sex, e.g. <c>female</c>.</summary>
-    public string Sex() => Faker.Pick(DataKeys.PersonSex);
-
     /// <summary>Returns <see cref="Modules.Sex.Female"/> or <see cref="Modules.Sex.Male"/>.</summary>
-    public Sex SexType() => Random.Bool() ? Modules.Sex.Female : Modules.Sex.Male;
+    public Sex Sex() => Random.Bool() ? Modules.Sex.Female : Modules.Sex.Male;
+
+    /// <summary>Returns the locale's word for a biological sex, e.g. <c>female</c> or <c>kvinna</c>.</summary>
+    public string SexLabel() => Faker.Pick(DataKeys.PersonSex);
 
     /// <summary>Returns a short social media style bio, e.g. <c>coffee lover, developer 🙌</c>.</summary>
     public string Bio() => Faker.Pick(DataKeys.PersonBioPattern);
@@ -95,7 +124,7 @@ public sealed class PersonModule : FakerModule
         {
             if (genericEntry is not null)
                 return genericEntry;
-            sex = SexType();
+            sex = Sex();
         }
 
         var binaryEntry = data.TryStrings(sex == Modules.Sex.Female ? female : male);
@@ -126,3 +155,28 @@ public sealed class PersonModule : FakerModule
         return entry[entry.PickIndex(Random)];
     }
 }
+
+/// <summary>A coherent fake person, see <see cref="PersonModule.Profile"/>.</summary>
+/// <param name="Sex">Sex; the names are chosen for it.</param>
+/// <param name="FirstName">First name.</param>
+/// <param name="LastName">Last name.</param>
+/// <param name="FullName">Full name in the locale's format, built from the first and last name (may add a prefix or suffix).</param>
+/// <param name="Email">Email address built from the names.</param>
+/// <param name="Username">Username built from the names.</param>
+/// <param name="Phone">Phone number.</param>
+/// <param name="BirthDate">Date of birth.</param>
+/// <param name="Age">Age in whole years at the faker's reference date.</param>
+/// <param name="JobTitle">Job title.</param>
+/// <param name="Address">Home address.</param>
+public sealed record PersonProfile(
+    Sex Sex,
+    string FirstName,
+    string LastName,
+    string FullName,
+    string Email,
+    string Username,
+    string Phone,
+    DateOnly BirthDate,
+    int Age,
+    string JobTitle,
+    AddressProfile Address);

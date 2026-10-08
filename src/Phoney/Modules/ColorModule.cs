@@ -29,11 +29,11 @@ public sealed class ColorModule : FakerModule
     /// <param name="prefix">Text before the hex digits.</param>
     /// <param name="casing">Casing of the hex digits.</param>
     /// <param name="includeAlpha">Append two alpha digits.</param>
-    public string Rgb(string prefix = "#", Casing casing = Casing.Lower, bool includeAlpha = false) =>
+    public string Hex(string prefix = "#", Casing casing = Casing.Lower, bool includeAlpha = false) =>
         Faker.String.Hexadecimal(includeAlpha ? 8 : 6, casing, prefix);
 
-    /// <summary>Returns RGB channel values, optionally with an alpha channel (0–1).</summary>
-    public RgbColor RgbValues(bool includeAlpha = false) =>
+    /// <summary>Returns an RGB color, optionally with an alpha channel (0–1); format it with <see cref="RgbColor.ToHex"/> or <see cref="RgbColor.ToCss"/>.</summary>
+    public RgbColor Rgb(bool includeAlpha = false) =>
         new((byte)Random.Int(0, 255), (byte)Random.Int(0, 255), (byte)Random.Int(0, 255), includeAlpha ? Fraction(0.01) : null);
 
     /// <summary>Returns a CMYK color with components between 0 and 1.</summary>

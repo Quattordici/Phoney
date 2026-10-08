@@ -30,6 +30,9 @@ Fake.Person.FullName();                         // "Madisen Collins"
 Fake.Internet.Email();                          // "Ryann_Beahan@yahoo.com"
 Fake.Location.StreetAddress(useFullAddress: true);
 
+// A whole, coherent person
+PersonProfile p = Fake.Person.Profile();        // names, email, username, phone, birthdate + age, address
+
 // A specific locale and a seed
 var faker = new Faker("sv", seed: 42);
 faker.Person.FullName();                        // "Madeleine Öberg Nordström"
@@ -40,23 +43,40 @@ Customer customer = Fake.One<Customer>();
 List<Customer> customers = Fake.Many<Customer>(1_000);
 ```
 
+## A whole person
+
+`Person.Profile()` returns a `PersonProfile` whose parts belong together: the names match the sex, email and username are built from the names, and the age matches the birthdate.
+
+```csharp
+var faker = new Faker("de", seed: 7);
+PersonProfile p = faker.Person.Profile(Sex.Female, minAge: 25, maxAge: 40);
+// p.FirstName, p.LastName, p.FullName, p.Email, p.Username, p.Phone, p.BirthDate, p.Age, p.JobTitle
+// p.Address.Street, p.Address.City, p.Address.ZipCode, p.Address.State, p.Address.CountryCode
+
+AddressProfile address = faker.Location.Address(); // just an address, as parts
+```
+
+For your own types, [`Fake.For<T>()`](#objects) gives the same coherence: a `Customer`'s `FirstName`, `Email`, `Avatar` and `Gender` describe one person.
+
 ## Values
 
-A `Faker` exposes faker.js' modules with .NET naming:
+A `Faker` groups values by topic:
 
 | Module | Examples |
 |---|---|
-| `Person` | `FirstName(Sex.Female)`, `LastName()`, `FullName()`, `JobTitle()`, `Bio()`, `Prefix()` |
-| `Location` | `StreetAddress()`, `City()`, `ZipCode()`, `State()`, `Country()`, `CountryCode()`, `Latitude()`, `NearbyGpsCoordinate()` |
+| `Person` | `Profile()`, `FirstName(Sex.Female)`, `LastName()`, `FullName()`, `Sex()`, `JobTitle()`, `Bio()`, `Prefix()` |
+| `Location` | `Address()`, `StreetAddress()`, `City()`, `ZipCode()`, `State()`, `Country()`, `CountryCode()`, `Latitude()`, `NearbyGpsCoordinate()` |
 | `Internet` | `Email()`, `Username()`, `Url()`, `DomainName()`, `Ipv4(IPv4Network.PrivateC)`, `Ipv6()`, `Mac()`, `Password()`, `UserAgent()`, `Jwt()`, `Emoji()` |
 | `Phone` | `Number(PhoneStyle.International)`, `Imei()` |
 | `Company` / `Commerce` | `Name()`, `CatchPhrase()`, `ProductName()`, `Price()`, `Isbn()`, `Upc()` |
-| `Finance` | `Iban()`, `Bic()`, `CreditCardNumber("visa")`, `Currency()`, `Amount()`, `RoutingNumber()`, `BitcoinAddress()` |
+| `Finance` | `Iban()`, `Bic()`, `CreditCardNumber(CardIssuer.Visa)`, `Currency()`, `Amount()`, `RoutingNumber()`, `BitcoinAddress()` |
 | `Date` | `Past()`, `Future()`, `Recent()`, `Soon()`, `Between(...)`, `Birthdate(18, 65)`, `Month()`, `Weekday()` |
 | `Lorem` / `Word` | `Sentence()`, `Paragraphs()`, `Slug()`, `Noun(minLength: 5)` |
 | `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)` |
-| `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `ReplaceSymbols("##-??")`, `ReplaceCreditCardSymbols()`, `Slugify()` |
-| also | `Animal`, `Book`, `Music`, `Food`, `Hacker`, `Vehicle` (with valid VINs), `Airline`, `Science`, `Color`, `Database`, `System`, `Git`, `Image` |
+| `Color` | `Human()`, `Hex()`, `Rgb()` (typed, with `ToCss()`/`ToHex()`), `Hsl()`, `Lab()` |
+| `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `DataUri()` (self-contained SVG) |
+| `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `Slugify()`, `LuhnCheck()`, `Multiple(f => …, 5)`, `UniqueValues(…, 10)` |
+| also | `Animal`, `Book`, `Music`, `Food`, `Hacker`, `Vehicle` (with valid VINs), `Airline`, `Science`, `Database`, `System`, `Git` |
 
 Checksums are real: credit cards and IMEIs pass Luhn, IBANs pass MOD 97, ISBN, UPC, VIN and ABA routing numbers have valid check digits.
 
@@ -66,19 +86,26 @@ Checksums are real: credit cards and IMEIs pass Luhn, IBANs pass MOD 97, ISBN, U
 var faker = new Faker("de", seed: 2024) { ReferenceDate = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero) };
 ```
 
-`faker.Random` is the seeded source of randomness (xoshiro256\*\*) for your own values: `Int`, `Long`, `Double`, `Decimal`, `Bool(0.2)`, `Element(list)`, `Elements(list, 3)`, `Enum<T>()`, `Guid()`, `Replace("##??")`.
+`faker.Random` is the seeded source of randomness (xoshiro256\*\*) for your own values: `Int`, `Long`, `Double`, `Decimal`, `Bool(0.2)`, `Element(list)`, `Elements(list, 3)`, `Weighted(("gold", 1), ("silver", 3))`, `Enum<T>()`, `Guid()`, `Replace("##??")`.
+
+Image URLs come from replaceable templates, so generated data doesn't have to point at public placeholder services:
+
+```csharp
+ImageSources.UseHost("https://images.test");                 // …/photos/{seed}/{width}x{height}, …/avatars/{sex}/{size}/{index}.jpg
+ImageSources.Photo = "https://cdn.example.com/{width}x{height}?s={seed}";
+```
 
 ## Templates
 
-Phoney understands faker.js templates, so faker.js data and patterns work unchanged:
+Templates use the same names as the API:
 
 ```csharp
-faker.Parse("{{person.firstName}} ordered {{commerce.productName}} from {{company.name}}");
-faker.Parse("Ticket {{helpers.fromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{string.numeric(4)}}");
-faker.Parse("{{person.last_name.generic}} flies from {{airline.airport.iataCode}}"); // data paths and record fields
+faker.Parse("{{Person.FirstName}} ordered {{Commerce.ProductName}} from {{Company.Name}}");
+faker.Parse("Ticket {{Helpers.FromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{String.Numeric(4)}}");
+faker.Parse("{{Person.FirstName}} lives at {{Location.Address}}");
 ```
 
-An expression is a faker.js method (`person.firstName`, `number.int({"min":1,"max":9})`) or a locale data path. Register your own functions with `TemplateFunctions.Register("shop.sku", (f, _) => f.Random.Replace("SKU-#####"))`.
+Names are case-insensitive, so faker.js templates (`{{person.firstName}}`, `{{number.int({"min":1,"max":9})}}`) work unchanged, and so do locale data paths and record fields (`{{airline.airport.iataCode}}`). Register your own functions with `TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.Replace("SKU-#####"))`.
 
 ## Objects
 
@@ -241,16 +268,23 @@ Fallback works like faker.js: each data group (`person.first_name`, `location.ci
 // A new locale on top of an existing one
 Locales.Register("sv_dalarna", l => l
     .FallbackTo("sv")                                  // sv → en → base
-    .Set("location.city_pattern", "Mora", "Falun", "Rättvik")
-    .Set("person.nickname", "Kalle", "Lisa"));          // new keys are allowed
+    .Cities("Mora", "Falun", "Rättvik")
+    .FirstNames(Sex.Female, "Kerstin", "Margit")      // male names still come from sv
+    .EmailDomains("dalarna.example")
+    .PhoneFormats("0250-## ## ##"));
 
 // Extra or replaced data in an existing locale
-Locales.Extend("en", l => l.Set("commerce.department", "Toys", "Garden"));
+Locales.Extend("en", l => l.CompanyNames("{{Person.LastName}} & Sons", "Acme {{Commerce.Department}}"));
+```
 
-// faker.js-shaped JSON (the same format as faker.js locale files)
+Typed methods cover the common data: `FirstNames`, `LastNames`, `JobTitles`, `Cities`, `Streets`, `States`, `Countries`, `ZipCodeFormats`, `PhoneFormats`, `EmailDomains`, `CompanyNames` and `LoremWords`. Each replaces only that data; everything else is inherited. For anything else, use a faker.js data path, or import a faker.js locale file:
+
+```csharp
+Locales.Extend("en", l => l
+    .Set("commerce.department", "Toys", "Garden")
+    .Set("person.nickname", "Ace", "Buddy"));          // new paths are allowed: faker.Pick("person.nickname")
+
 Locales.Register("en_PIRATE", File.OpenRead("pirate.json"), "en");
-
-new Faker("sv_dalarna").Pick("person.nickname");
 ```
 
 ## Performance

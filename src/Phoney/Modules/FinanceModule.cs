@@ -9,16 +9,19 @@ public sealed class FinanceModule : FakerModule
 {
     private const string UpperAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    /// <summary>Credit card issuers in faker.js naming, mapped to their data keys.</summary>
-    private static readonly (string Issuer, int Key)[] CardIssuers =
+    /// <summary>
+    /// Locale data key of each issuer's number formats, and the issuer's standard IIN range used when the locale
+    /// has no formats for it.
+    /// </summary>
+    private static readonly (CardIssuer Issuer, int Key, string Default)[] CardIssuers =
     [
-        ("american_express", DataKeys.FinanceCreditCardAmericanExpress),
-        ("diners_club", DataKeys.FinanceCreditCardDinersClub),
-        ("discover", DataKeys.FinanceCreditCardDiscover),
-        ("jcb", DataKeys.FinanceCreditCardJcb),
-        ("mastercard", DataKeys.FinanceCreditCardMastercard),
-        ("unionpay", DataKeys.FinanceCreditCardUnionpay),
-        ("visa", DataKeys.FinanceCreditCardVisa),
+        (CardIssuer.AmericanExpress, DataKeys.FinanceCreditCardAmericanExpress, "3[4-7]##-######-####L"),
+        (CardIssuer.DinersClub, DataKeys.FinanceCreditCardDinersClub, "30[0-5]#-######-###L"),
+        (CardIssuer.Discover, DataKeys.FinanceCreditCardDiscover, "6011-####-####-###L"),
+        (CardIssuer.Jcb, DataKeys.FinanceCreditCardJcb, "35[28-89]-####-####-###L"),
+        (CardIssuer.Mastercard, DataKeys.FinanceCreditCardMastercard, "5[1-5]##-####-####-###L"),
+        (CardIssuer.UnionPay, DataKeys.FinanceCreditCardUnionpay, "62##-####-####-###L"),
+        (CardIssuer.Visa, DataKeys.FinanceCreditCardVisa, "4###-####-####-###L"),
     ];
 
     internal FinanceModule(Faker faker) : base(faker)
@@ -88,34 +91,29 @@ public sealed class FinanceModule : FakerModule
     /// <summary>Returns an ISO 4217 numeric currency code, e.g. <c>752</c>.</summary>
     public string CurrencyNumericCode() => Currency().NumericCode;
 
-    /// <summary>Returns a credit card issuer the locale has number formats for, e.g. <c>visa</c>.</summary>
-    public string CreditCardIssuer()
+    /// <summary>Returns a card issuer the locale has number formats for.</summary>
+    public CardIssuer CreditCardIssuer()
     {
         var available = CardIssuers.Where(c => Faker.Data.Has(c.Key)).ToArray();
         return Random.Element(available).Issuer;
     }
 
-    /// <summary>
-    /// Returns a credit card number with a valid Luhn check digit. <paramref name="issuer"/> may be an issuer
-    /// (<c>visa</c>, <c>mastercard</c>, <c>american_express</c>…) or a custom format such as <c>4###-####-####-###L</c>.
-    /// </summary>
-    public string CreditCardNumber(string? issuer = null)
+    /// <summary>Returns a credit card number with a valid Luhn check digit, from a random issuer unless one is given.</summary>
+    public string CreditCardNumber(CardIssuer? issuer = null)
     {
-        string format;
-        var normalized = issuer?.ToLowerInvariant().Replace(' ', '_') ?? "";
-        var known = CardIssuers.FirstOrDefault(c => c.Issuer == normalized);
-        if (known.Issuer is not null)
-            format = Faker.Pick(known.Key);
-        else if (issuer is not null && issuer.Contains('#'))
-            format = issuer;
-        else
-        {
-            var randomIssuer = CreditCardIssuer();
-            format = Faker.Pick(CardIssuers.First(c => c.Issuer == randomIssuer).Key);
-        }
+        var chosen = issuer ?? CreditCardIssuer();
+        var (_, key, fallback) = CardIssuers.First(c => c.Issuer == chosen);
+        return FromCardFormat(Faker.TryPick(key) ?? fallback);
+    }
 
-        // Some locales write formats as /regex/; the slashes are not part of the number.
-        return Faker.Helpers.ReplaceCreditCardSymbols(format.Replace("/", "", StringComparison.Ordinal));
+    /// <summary>
+    /// Returns a card number for a custom format with a valid Luhn check digit: <c>#</c> is a digit, <c>[a-b]</c> a number
+    /// in that range and <c>L</c> the check digit, e.g. <c>4###-####-####-###L</c>.
+    /// </summary>
+    public string CreditCardNumber(string format)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(format);
+        return FromCardFormat(format);
     }
 
     /// <summary>Returns a 3-digit card verification value.</summary>
@@ -209,6 +207,10 @@ public sealed class FinanceModule : FakerModule
         return sb.ToString();
     }
 
+    /// <summary>Fills a card format; some locales write formats as <c>/regex/</c>, and the slashes are not part of the number.</summary>
+    private string FromCardFormat(string format) =>
+        Faker.Helpers.ReplaceCreditCardSymbols(format.Replace("/", "", StringComparison.Ordinal));
+
     /// <summary>ISO 7064 MOD 97-10 over the IBAN's digit form (letters become 10..35).</summary>
     private static int Mod97(string text)
     {
@@ -236,6 +238,31 @@ public sealed class FinanceModule : FakerModule
 /// <param name="Symbol">Symbol, e.g. <c>€</c>; may be empty.</param>
 /// <param name="NumericCode">ISO 4217 numeric code, e.g. <c>978</c>.</param>
 public readonly record struct Currency(string Name, string Code, string Symbol, string NumericCode);
+
+/// <summary>Payment card issuers.</summary>
+public enum CardIssuer
+{
+    /// <summary>American Express.</summary>
+    AmericanExpress,
+
+    /// <summary>Diners Club.</summary>
+    DinersClub,
+
+    /// <summary>Discover.</summary>
+    Discover,
+
+    /// <summary>JCB.</summary>
+    Jcb,
+
+    /// <summary>Mastercard.</summary>
+    Mastercard,
+
+    /// <summary>UnionPay.</summary>
+    UnionPay,
+
+    /// <summary>Visa.</summary>
+    Visa,
+}
 
 /// <summary>Bitcoin address families.</summary>
 public enum BitcoinAddressFamily

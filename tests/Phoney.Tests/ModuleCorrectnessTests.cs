@@ -34,7 +34,7 @@ public sealed class ModuleCorrectnessTests
     [Fact]
     public void Credit_card_numbers_pass_the_Luhn_check()
     {
-        foreach (var issuer in new[] { "visa", "mastercard", "american_express", "discover", "jcb", "diners_club", null })
+        foreach (var issuer in Enum.GetValues<CardIssuer>().Cast<CardIssuer?>().Append(null))
         {
             for (var i = 0; i < 50; i++)
                 HelpersModule.LuhnCheck(_faker.Finance.CreditCardNumber(issuer)).ShouldBeTrue();
@@ -43,7 +43,7 @@ public sealed class ModuleCorrectnessTests
 
     [Fact]
     public void Credit_card_formats_with_ranges_are_expanded() =>
-        _faker.Helpers.ReplaceCreditCardSymbols("2[221-720]-####-####-###L").ShouldMatch("^2(22[1-9]|2[3-9]\\d|[3-6]\\d\\d|7[01]\\d|720)-\\d{4}-\\d{4}-\\d{4}$");
+        _faker.Finance.CreditCardNumber("2[221-720]-####-####-###L").ShouldMatch("^2(22[1-9]|2[3-9]\\d|[3-6]\\d\\d|7[01]\\d|720)-\\d{4}-\\d{4}-\\d{4}$");
 
     [Fact]
     public void Imei_is_valid() =>
@@ -230,8 +230,8 @@ public sealed class ModuleCorrectnessTests
     [Fact]
     public void Color_values_format_as_css()
     {
-        _faker.Color.Rgb().ShouldMatch("^#[0-9a-f]{6}$");
-        _faker.Color.RgbValues(includeAlpha: true).ToCss().ShouldStartWith("rgba(");
+        _faker.Color.Hex().ShouldMatch("^#[0-9a-f]{6}$");
+        _faker.Color.Rgb(includeAlpha: true).ToCss().ShouldStartWith("rgba(");
         _faker.Color.Hsl().ToCss().ShouldMatch("^hsl\\(\\d+deg \\d+% \\d+%\\)$");
         _faker.Color.ColorByCssColorSpace(CssSpace.DisplayP3).ShouldStartWith("color(display-p3 ");
     }

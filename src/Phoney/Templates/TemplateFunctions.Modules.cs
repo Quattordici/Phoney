@@ -5,6 +5,10 @@ namespace Phoney.Templates;
 // Built-in template functions for the modules not registered in TemplateFunctions.cs.
 public static partial class TemplateFunctions
 {
+    /// <summary>Accepts faker.js issuer names (<c>american_express</c>) and .NET names (<c>AmericanExpress</c>).</summary>
+    private static Modules.CardIssuer ParseIssuer(string issuer) =>
+        Enum.Parse<Modules.CardIssuer>(issuer.Replace("_", "", StringComparison.Ordinal), ignoreCase: true);
+
     static partial void RegisterMoreBuiltIns(Dictionary<string, TemplateFunction> functions)
     {
         var f = functions;
@@ -74,8 +78,10 @@ public static partial class TemplateFunctions
         Add("finance.currencyName", x => x.Finance.CurrencyName());
         Add("finance.currencySymbol", x => x.Finance.CurrencySymbol());
         Add("finance.currencyNumericCode", x => x.Finance.CurrencyNumericCode());
-        Add("finance.creditCardIssuer", x => x.Finance.CreditCardIssuer());
-        f["finance.creditCardNumber"] = (faker, a) => faker.Finance.CreditCardNumber(a.String(0, "issuer"));
+        Add("finance.creditCardIssuer", x => x.Finance.CreditCardIssuer().ToString());
+        f["finance.creditCardNumber"] = (faker, a) => a.String(0, "issuer") is { } issuer
+            ? issuer.Contains('#') ? faker.Finance.CreditCardNumber(issuer) : faker.Finance.CreditCardNumber(ParseIssuer(issuer))
+            : faker.Finance.CreditCardNumber();
         Add("finance.creditCardCVV", x => x.Finance.CreditCardCvv());
         f["finance.pin"] = (faker, a) => faker.Finance.Pin(a.Int(0, "length") ?? 4);
         Add("finance.ethereumAddress", x => x.Finance.EthereumAddress());
@@ -120,7 +126,8 @@ public static partial class TemplateFunctions
         // color
         Add("color.human", x => x.Color.Human());
         Add("color.space", x => x.Color.Space());
-        Add("color.rgb", x => x.Color.Rgb());
+        Add("color.rgb", x => x.Color.Hex());
+        Add("color.hex", x => x.Color.Hex());
 
         // animal
         Add("animal.dog", x => x.Animal.Dog());
@@ -188,6 +195,17 @@ public static partial class TemplateFunctions
         Add("database.engine", x => x.Database.Engine());
         Add("database.mongodbObjectId", x => x.Database.MongoDbObjectId());
 
+        // .NET API names that differ from faker.js beyond casing
+        Add("location.address", x => x.Location.Address().ToString());
+        f["location.zipCodeByState"] = (faker, a) => faker.Location.ZipCodeByState(a.String(0) ?? "");
+        f["number.long"] = (faker, a) => faker.Number.Long(a.Int(0, "min") ?? 0, a.Int(1) ?? a.Int(0, "max") ?? long.MaxValue).ToString(inv);
+        f["number.double"] = f["number.float"];
+        f["number.decimal"] = (faker, a) => faker.Number.Decimal((decimal)(a.Double(0) ?? 0), (decimal)(a.Double(1) ?? 1), a.Int(2) ?? 2).ToString(inv);
+        f["commerce.priceText"] = f["commerce.price"];
+        f["finance.amountText"] = f["finance.amount"];
+        Add("string.uuidV7", x => x.String.UuidV7());
+        Add("date.timeOfDay", x => x.Date.TimeOfDay().ToString("HH:mm:ss", inv));
+
         // system, git, image
         f["system.fileName"] = (faker, a) => faker.System.FileName(a.Int(0, "extensionCount") ?? 1);
         Add("system.commonFileName", x => x.System.CommonFileName());
@@ -203,13 +221,10 @@ public static partial class TemplateFunctions
         Add("system.cron", x => x.System.Cron());
         Add("git.branch", x => x.Git.Branch());
         Add("git.commitMessage", x => x.Git.CommitMessage());
-        Add("git.commitDate", x => x.Git.CommitDate());
         f["git.commitSha"] = (faker, a) => faker.Git.CommitSha(a.Int(0, "length") ?? 40);
         Add("image.avatar", x => x.Image.Avatar());
-        Add("image.avatarGitHub", x => x.Image.AvatarGitHub());
-        Add("image.personPortrait", x => x.Image.PersonPortrait());
+        Add("image.personPortrait", x => x.Image.Avatar()); // faker.js name
         Add("image.url", x => x.Image.Url());
-        Add("image.urlPicsumPhotos", x => x.Image.UrlPicsumPhotos());
         Add("image.dataUri", x => x.Image.DataUri());
     }
 }

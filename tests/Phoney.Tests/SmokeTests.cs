@@ -14,7 +14,7 @@ public sealed class SmokeTests
         ("person.middleName", f => f.Person.MiddleName()),
         ("person.fullName", f => f.Person.FullName()),
         ("person.gender", f => f.Person.Gender()),
-        ("person.sex", f => f.Person.Sex()),
+        ("person.sexLabel", f => f.Person.SexLabel()),
         ("person.bio", f => f.Person.Bio()),
         ("person.prefix", f => f.Person.Prefix()),
         ("person.suffix", f => f.Person.Suffix()),
@@ -74,7 +74,7 @@ public sealed class SmokeTests
         ("database.column", f => f.Database.Column()),
         ("system.filePath", f => f.System.FilePath()),
         ("system.commonFileName", f => f.System.CommonFileName()),
-        ("git.commitEntry", f => f.Git.CommitEntry()),
+        ("git.branch", f => f.Git.Branch()),
     ];
 
     [Theory]

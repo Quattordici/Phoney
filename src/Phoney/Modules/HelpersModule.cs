@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace Phoney.Modules;
 
-/// <summary>General-purpose helpers: patterns, symbols, checksums, collections (faker.js <c>helpers</c>).</summary>
+/// <summary>General-purpose helpers: values from regular expressions, slugs, Luhn checksums and repetition. For picking and shuffling use <see cref="Phoney.Faker.Random"/>.</summary>
 public sealed partial class HelpersModule : FakerModule
 {
     internal HelpersModule(Faker faker) : base(faker)
@@ -18,11 +18,8 @@ public sealed partial class HelpersModule : FakerModule
         return PatternGenerator.Get(pattern).Generate(Random);
     }
 
-    /// <summary>Replaces <c>#</c> with a digit, <c>?</c> with an upper-case letter and <c>*</c> with either.</summary>
-    public string ReplaceSymbols(string pattern) => Random.Replace(pattern);
-
-    /// <summary>Replaces <paramref name="symbol"/> with a digit 0-9 and <c>!</c> with a digit 2-9.</summary>
-    public string ReplaceSymbolWithNumber(string pattern, char symbol = '#')
+    /// <summary>Replaces <paramref name="symbol"/> with a digit 0-9 and <c>!</c> with a digit 2-9 (faker.js phone formats).</summary>
+    internal string ReplaceSymbolWithNumber(string pattern, char symbol = '#')
     {
         ArgumentNullException.ThrowIfNull(pattern);
         return string.Create(pattern.Length, (pattern, symbol, Random), static (span, state) =>
@@ -38,10 +35,11 @@ public sealed partial class HelpersModule : FakerModule
     }
 
     /// <summary>
-    /// Fills a credit-card style pattern: <c>[a-b]</c> becomes a number in that range, <c>x{n}</c>/<c>x{n,m}</c>
+    /// Fills a faker.js credit-card pattern: <c>[a-b]</c> becomes a number in that range, <c>x{n}</c>/<c>x{n,m}</c>
     /// repeat a character, <c>#</c> and <c>!</c> become digits and <c>L</c> becomes the Luhn check digit.
+    /// Public callers use <see cref="FinanceModule.CreditCardNumber(string)"/>.
     /// </summary>
-    public string ReplaceCreditCardSymbols(string pattern = "6453-####-####-####-###L", char symbol = '#')
+    internal string ReplaceCreditCardSymbols(string pattern = "6453-####-####-####-###L", char symbol = '#')
     {
         ArgumentNullException.ThrowIfNull(pattern);
         var expanded = ExpandLegacyRanges(pattern);
@@ -82,16 +80,6 @@ public sealed partial class HelpersModule : FakerModule
         return sb.ToString();
     }
 
-    /// <summary>Replaces <c>{{key}}</c> placeholders with values from <paramref name="values"/> (no locale lookups).</summary>
-    public static string Mustache(string text, IReadOnlyDictionary<string, string> values)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        ArgumentNullException.ThrowIfNull(values);
-        foreach (var (key, value) in values)
-            text = text.Replace("{{" + key + "}}", value, StringComparison.Ordinal);
-        return text;
-    }
-
     /// <summary>Returns <paramref name="factory"/>'s result with the given <paramref name="probability"/>, otherwise <see langword="default"/>.</summary>
     public T? Maybe<T>(Func<T> factory, double probability = 0.5)
     {
@@ -112,8 +100,8 @@ public sealed partial class HelpersModule : FakerModule
     /// <summary>Calls <paramref name="factory"/> a random number of times between <paramref name="min"/> and <paramref name="max"/>.</summary>
     public List<T> Multiple<T>(Func<T> factory, int min, int max) => Multiple(factory, Random.Int(min, max));
 
-    /// <summary>Returns up to <paramref name="count"/> distinct values produced by <paramref name="factory"/> (gives up after 1000 attempts per value, like faker.js).</summary>
-    public List<T> UniqueArray<T>(Func<T> factory, int count)
+    /// <summary>Returns up to <paramref name="count"/> distinct values produced by <paramref name="factory"/> (gives up after 1000 attempts per value).</summary>
+    public List<T> UniqueValues<T>(Func<T> factory, int count)
     {
         ArgumentNullException.ThrowIfNull(factory);
         var set = new HashSet<T>();
@@ -127,59 +115,6 @@ public sealed partial class HelpersModule : FakerModule
 
         return result;
     }
-
-    /// <summary>Returns a random element of <paramref name="items"/>.</summary>
-    public T ArrayElement<T>(IReadOnlyList<T> items) => Random.Element(items);
-
-    /// <summary>Returns a random subset (in random order); between 1 and all elements when <paramref name="count"/> is null.</summary>
-    public T[] ArrayElements<T>(IReadOnlyList<T> items, int? count = null)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        return items.Count == 0 ? [] : Random.Elements(items, count ?? Random.Int(1, items.Count));
-    }
-
-    /// <summary>Picks a value according to its relative weight.</summary>
-    public T WeightedArrayElement<T>(IReadOnlyList<(T Value, double Weight)> items)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        if (items.Count == 0)
-            throw new ArgumentException("Cannot pick an element from an empty collection.", nameof(items));
-        var total = 0.0;
-        foreach (var (_, weight) in items)
-        {
-            if (weight <= 0)
-                throw new ArgumentException("Weights must be positive.", nameof(items));
-            total += weight;
-        }
-
-        var target = Random.Double() * total;
-        foreach (var (value, weight) in items)
-        {
-            target -= weight;
-            if (target < 0)
-                return value;
-        }
-
-        return items[^1].Value;
-    }
-
-    /// <summary>Returns a shuffled copy of <paramref name="items"/>.</summary>
-    public T[] Shuffle<T>(IEnumerable<T> items)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        var copy = items.ToArray();
-        Random.Shuffle(copy.AsSpan());
-        return copy;
-    }
-
-    /// <summary>Returns a random value of <typeparamref name="TEnum"/>.</summary>
-    public TEnum EnumValue<TEnum>() where TEnum : struct, Enum => Random.Enum<TEnum>();
-
-    /// <summary>Evaluates a faker.js template; same as <see cref="Phoney.Faker.Parse"/>.</summary>
-    public string Fake(string template) => Faker.Parse(template);
-
-    /// <summary>Picks one of <paramref name="templates"/> and evaluates it.</summary>
-    public string Fake(IReadOnlyList<string> templates) => Faker.Parse(Random.Element(templates));
 
     /// <summary>Replaces runs of <c>#</c> with digits where the first digit is not zero (used for building and apartment numbers).</summary>
     internal string ReplaceHashRunsWithoutLeadingZero(string text) =>

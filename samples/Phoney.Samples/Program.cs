@@ -8,6 +8,9 @@ Console.WriteLine(Fake.Person.FullName());
 Console.WriteLine(Fake.Internet.Email());
 Console.WriteLine(Fake.Location.StreetAddress(useFullAddress: true));
 
+var person = new Faker("de", seed: 3).Person.Profile();
+Console.WriteLine($"{person.FullName} ({person.Age}), {person.Email}, {person.Phone}, {person.Address}");
+
 foreach (var locale in new[] { "en", "sv", "de_AT", "ja" })
 {
     var f = new Faker(locale, seed: 42);
@@ -17,8 +20,8 @@ foreach (var locale in new[] { "en", "sv", "de_AT", "ja" })
 // 2. Templates (faker.js syntax) -----------------------------------------------------------------
 Console.WriteLine("\n== Templates");
 var faker = new Faker(seed: 7);
-Console.WriteLine(faker.Parse("{{person.firstName}} ordered {{commerce.productName}} from {{company.name}}"));
-Console.WriteLine(faker.Parse("Ticket {{helpers.fromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{string.numeric(4)}}"));
+Console.WriteLine(faker.Parse("{{Person.FirstName}} ordered {{Commerce.ProductName}} from {{Company.Name}}"));
+Console.WriteLine(faker.Parse("Ticket {{Helpers.FromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{String.Numeric(4)}}"));
 
 // 3. Objects by convention ---------------------------------------------------------------------
 Console.WriteLine("\n== Objects");
@@ -53,10 +56,13 @@ foreach (var c in SampleData.Customer.Seed(1).Generate(2))
 Console.WriteLine("\n== Custom data");
 Locales.Register("sv_dalarna", l => l
     .FallbackTo("sv")
-    .Set("location.city_pattern", "{{location.city_name}}", "Mora", "Falun", "Rättvik")
+    .Cities("Mora", "Falun", "Rättvik")
+    .FirstNames(Sex.Female, "Kerstin", "Margit")
+    .EmailDomains("dalarna.example")
     .Set("person.nickname", "Kalle", "Lisa"));
 var dalarna = new Faker("sv_dalarna");
-Console.WriteLine($"{dalarna.Person.FirstName()} \"{dalarna.Pick("person.nickname")}\" from {dalarna.Location.City()}");
+var resident = dalarna.Person.Profile(Sex.Female);
+Console.WriteLine($"{resident.FullName} \"{dalarna.Pick("person.nickname")}\" <{resident.Email}> from {resident.Address.City}");
 
 public enum Gender
 {

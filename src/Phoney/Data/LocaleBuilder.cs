@@ -1,12 +1,15 @@
 using System.Globalization;
 using System.Text.Json;
 using Phoney.Data;
+using Phoney.Modules;
 
 namespace Phoney;
 
 /// <summary>
 /// Describes custom locale data for <see cref="Locales.Register(string, Action{LocaleBuilder})"/> and
-/// <see cref="Locales.Extend"/>. Paths use faker.js naming, e.g. <c>person.first_name.generic</c>.
+/// <see cref="Locales.Extend"/>. Use the typed methods (<see cref="FirstNames(string[])"/>, <see cref="Cities"/>…)
+/// or, for any other data, <see cref="Set"/> with a faker.js data path such as <c>person.prefix</c>.
+/// Each value replaces only that data: everything else still comes from the fallback locales.
 /// </summary>
 public sealed class LocaleBuilder
 {
@@ -58,7 +61,61 @@ public sealed class LocaleBuilder
         return this;
     }
 
-    /// <summary>Sets a list of values (may contain <c>{{...}}</c> templates).</summary>
+    /// <summary>Sets the first names, replacing any sex-specific lists inherited from fallback locales.</summary>
+    public LocaleBuilder FirstNames(params string[] names) =>
+        Set("person.first_name.generic", names).Unavailable("person.first_name.female").Unavailable("person.first_name.male");
+
+    /// <summary>
+    /// Sets the first names used for <paramref name="sex"/>; the other sex keeps its names. Where the locale also has
+    /// sex-neutral first names they are mixed in, as for the built-in data; use <see cref="FirstNames(string[])"/>
+    /// to replace all first names.
+    /// </summary>
+    public LocaleBuilder FirstNames(Sex sex, params string[] names) =>
+        Set(sex == Sex.Female ? "person.first_name.female" : "person.first_name.male", names);
+
+    /// <summary>Sets the last names, replacing any sex-specific lists inherited from fallback locales.</summary>
+    /// <remarks>Locales that build last names from patterns (e.g. double-barrelled names) still use those patterns with these names.</remarks>
+    public LocaleBuilder LastNames(params string[] names) =>
+        Set("person.last_name.generic", names).Unavailable("person.last_name.female").Unavailable("person.last_name.male");
+
+    /// <summary>Sets the last names used for <paramref name="sex"/> (for languages with gendered last names).</summary>
+    public LocaleBuilder LastNames(Sex sex, params string[] names) =>
+        Set(sex == Sex.Female ? "person.last_name.female" : "person.last_name.male", names);
+
+    /// <summary>Sets the job titles (may use templates such as <c>{{Person.JobArea}} Manager</c>).</summary>
+    public LocaleBuilder JobTitles(params string[] titles) => Set("person.job_title_pattern", titles);
+
+    /// <summary>Sets the cities returned by <see cref="Modules.LocationModule.City"/>.</summary>
+    public LocaleBuilder Cities(params string[] cities) => Set("location.city_pattern", cities);
+
+    /// <summary>Sets the street names returned by <see cref="Modules.LocationModule.Street"/>.</summary>
+    public LocaleBuilder Streets(params string[] streets) => Set("location.street_pattern", streets);
+
+    /// <summary>Sets the states, provinces or regions.</summary>
+    public LocaleBuilder States(params string[] states) => Set("location.state", states);
+
+    /// <summary>Sets the country names.</summary>
+    public LocaleBuilder Countries(params string[] countries) => Set("location.country", countries);
+
+    /// <summary>Sets the postal code formats: <c>#</c> is a digit, <c>?</c> a letter, e.g. <c>### ##</c>.</summary>
+    public LocaleBuilder ZipCodeFormats(params string[] formats) => Set("location.postcode", formats);
+
+    /// <summary>Sets the phone number formats: <c>#</c> is a digit and <c>!</c> a digit 2–9, e.g. <c>07#-### ## ##</c>.</summary>
+    public LocaleBuilder PhoneFormats(params string[] formats) => Set("phone_number.format.human", formats);
+
+    /// <summary>Sets the email domains used by <see cref="Modules.InternetModule.Email"/>, e.g. <c>example.com</c>.</summary>
+    public LocaleBuilder EmailDomains(params string[] domains) => Set("internet.free_email", domains);
+
+    /// <summary>Sets the company names (may use templates such as <c>{{Person.LastName}} AB</c>).</summary>
+    public LocaleBuilder CompanyNames(params string[] names) => Set("company.name_pattern", names);
+
+    /// <summary>Sets the words used for placeholder text by <see cref="Modules.LoremModule"/>.</summary>
+    public LocaleBuilder LoremWords(params string[] words) => Set("lorem.word", words);
+
+    /// <summary>
+    /// Sets a list of values at a faker.js data path, for data without a dedicated method. Values may contain
+    /// <c>{{...}}</c> templates; an empty list removes a value set earlier.
+    /// </summary>
     public LocaleBuilder Set(string path, params string[] values)
     {
         ArgumentNullException.ThrowIfNull(values);
@@ -218,13 +275,4 @@ public sealed class LocaleBuilder
         JsonValueKind.Null => null,
         _ => value.GetRawText(),
     };
-
-    /// <summary>The entries of a newly registered locale, indexed by key id.</summary>
-    internal Entry?[] BuildEntries()
-    {
-        var entries = new Entry?[KeyRegistry.Count];
-        foreach (var (key, entry) in _changes)
-            entries[key] = entry;
-        return entries;
-    }
 }

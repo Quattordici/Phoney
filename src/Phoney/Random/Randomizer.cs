@@ -162,6 +162,32 @@ public sealed class Randomizer
         }
     }
 
+    /// <summary>Picks a value with probability proportional to its weight, e.g. <c>Weighted(("gold", 1), ("silver", 3))</c>.</summary>
+    /// <exception cref="ArgumentException">There are no items or a weight is not positive.</exception>
+    public T Weighted<T>(params (T Value, double Weight)[] items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (items.Length == 0)
+            throw new ArgumentException("Cannot pick an element from an empty collection.", nameof(items));
+        var total = 0.0;
+        foreach (var (_, weight) in items)
+        {
+            if (weight <= 0 || double.IsNaN(weight))
+                throw new ArgumentException("Weights must be positive.", nameof(items));
+            total += weight;
+        }
+
+        var target = Double() * total;
+        foreach (var (value, weight) in items)
+        {
+            target -= weight;
+            if (target < 0)
+                return value;
+        }
+
+        return items[^1].Value; // rounding: the target landed exactly on the total
+    }
+
     /// <summary>Picks an index according to <paramref name="cumulativeWeights"/> (running totals of the weights).</summary>
     public int WeightedIndex(ReadOnlySpan<int> cumulativeWeights)
     {

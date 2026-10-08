@@ -26,7 +26,7 @@ public static class ConventionValues
                 ConventionKind.Prefix => f.Person.Prefix(scope.Identity.Sex),
                 ConventionKind.Suffix => f.Person.Suffix(),
                 ConventionKind.Gender => f.Person.Gender(),
-                ConventionKind.Sex => f.Person.Sex(),
+                ConventionKind.Sex => f.Person.SexLabel(),
                 ConventionKind.JobTitle => f.Person.JobTitle(),
                 ConventionKind.Bio => f.Person.Bio(),
                 ConventionKind.Username => scope.Identity.Username,
@@ -62,10 +62,10 @@ public static class ConventionValues
                 ConventionKind.Ipv6 => f.Internet.Ipv6(),
                 ConventionKind.Mac => f.Internet.Mac(),
                 ConventionKind.UserAgent => f.Internet.UserAgent(),
-                ConventionKind.Avatar => f.Image.PersonPortrait(scope.Identity.Sex),
+                ConventionKind.Avatar => f.Image.Avatar(scope.Identity.Sex),
                 ConventionKind.ImageUrl => f.Image.Url(),
                 ConventionKind.Color => f.Color.Human(),
-                ConventionKind.HexColor => f.Color.Rgb(),
+                ConventionKind.HexColor => f.Color.Hex(),
                 ConventionKind.Emoji => f.Internet.Emoji(),
                 ConventionKind.CurrencyCode => f.Finance.CurrencyCode(),
                 ConventionKind.Iban => f.Finance.Iban(),
@@ -160,7 +160,7 @@ public static class ConventionValues
     /// <summary>Returns a URL; an avatar or image URL when the member name says so.</summary>
     public static Uri Uri(FakeScope scope, ConventionKind kind) => new(Effective(scope, kind) switch
     {
-        ConventionKind.Avatar => scope.Faker.Image.PersonPortrait(scope.Identity.Sex),
+        ConventionKind.Avatar => scope.Faker.Image.Avatar(scope.Identity.Sex),
         ConventionKind.ImageUrl => scope.Faker.Image.Url(),
         _ => scope.Faker.Internet.Url(),
     });

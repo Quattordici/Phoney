@@ -10,8 +10,9 @@ namespace Phoney.Templates;
 /// picks values and concatenates.
 /// </summary>
 /// <remarks>
-/// Expressions resolve like faker.js <c>helpers.fake</c>: a registered faker.js method wins, otherwise the
-/// expression is a locale data path, optionally ending in a record field (<c>airline.airport.name</c>).
+/// Expressions resolve like faker.js <c>helpers.fake</c>: a registered function wins (names are case-insensitive, so
+/// <c>Person.FirstName</c> and faker.js' <c>person.firstName</c> are the same), otherwise the expression is a locale
+/// data path, optionally ending in a record field (<c>airline.airport.name</c>).
 /// Data values that are templates themselves are evaluated recursively.
 /// </remarks>
 internal sealed class Template
@@ -38,13 +39,17 @@ internal sealed class Template
     /// <summary>The template source text.</summary>
     public string Text { get; }
 
-    /// <summary>faker.js only treats <c>{{</c> followed by a lower-case letter as an expression.</summary>
+    /// <summary>
+    /// An expression starts with <c>{{</c> followed by a letter: <c>{{person.firstName}}</c> (faker.js style) or
+    /// <c>{{Person.FirstName}}</c> (.NET style). The data compiler rejects locale data that would read differently
+    /// under faker.js, which only recognizes lower-case starts.
+    /// </summary>
     public static bool ContainsExpression(string text)
     {
         var index = text.IndexOf("{{", StringComparison.Ordinal);
         while (index >= 0)
         {
-            if (index + 2 < text.Length && char.IsAsciiLetterLower(text[index + 2]))
+            if (index + 2 < text.Length && char.IsAsciiLetter(text[index + 2]))
                 return true;
             index = text.IndexOf("{{", index + 1, StringComparison.Ordinal);
         }
@@ -112,11 +117,11 @@ internal sealed class Template
         }
     }
 
-    /// <summary>Index of the next <c>{{</c> followed by a lower-case letter, or -1.</summary>
+    /// <summary>Index of the next <c>{{</c> followed by a letter, or -1.</summary>
     private static int FindExpressionStart(string text, int from)
     {
         var index = text.IndexOf("{{", from, StringComparison.Ordinal);
-        while (index >= 0 && !(index + 2 < text.Length && char.IsAsciiLetterLower(text[index + 2])))
+        while (index >= 0 && !(index + 2 < text.Length && char.IsAsciiLetter(text[index + 2])))
             index = text.IndexOf("{{", index + 1, StringComparison.Ordinal);
         return index;
     }

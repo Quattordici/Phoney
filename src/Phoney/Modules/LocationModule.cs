@@ -5,9 +5,33 @@ namespace Phoney.Modules;
 /// <summary>Addresses, places and coordinates (faker.js <c>location</c>).</summary>
 public sealed class LocationModule : FakerModule
 {
+    /// <summary>Runs <paramref name="value"/>, returning <see langword="null"/> when the data isn't applicable to the locale.</summary>
+    private static string? OrNull(Func<string> value)
+    {
+        try
+        {
+            return value();
+        }
+        catch (PhoneyDataUnavailableException)
+        {
+            return null;
+        }
+    }
+
     internal LocationModule(Faker faker) : base(faker)
     {
     }
+
+    /// <summary>
+    /// Returns an address as separate parts. Parts the locale has no data for (e.g. states in Swedish) are
+    /// <see langword="null"/>; <see cref="AddressProfile.CountryCode"/> is the locale's country when it has one.
+    /// </summary>
+    public AddressProfile Address() => new(
+        StreetAddress(),
+        City(),
+        OrNull(() => ZipCode()),
+        OrNull(() => State()),
+        Faker.Data.Info.Country);
 
     /// <summary>Returns a postal code in one of the locale's formats, e.g. <c>91745</c>.</summary>
     /// <param name="format">Custom format (<c>#</c> digit, <c>?</c> letter, <c>*</c> either); defaults to the locale's formats.</param>
@@ -120,6 +144,19 @@ public sealed class LocationModule : FakerModule
         longitude = (((longitude % 360) + 540) % 360) - 180;
         return (latitude, longitude);
     }
+}
+
+/// <summary>An address as separate parts.</summary>
+/// <param name="Street">Street and number, e.g. <c>0917 O'Conner Estates</c>.</param>
+/// <param name="City">City.</param>
+/// <param name="ZipCode">Postal code, or <see langword="null"/> where the locale has none.</param>
+/// <param name="State">State, province or region, or <see langword="null"/> where the locale has none.</param>
+/// <param name="CountryCode">ISO 3166 alpha-2 code of the locale's country, or <see langword="null"/> for language-wide locales such as <c>sv</c>.</param>
+public sealed record AddressProfile(string Street, string City, string? ZipCode, string? State, string? CountryCode)
+{
+    /// <summary>Formats the address on one line, e.g. <c>0917 O'Conner Estates, 91745 Lake Rosemary</c>.</summary>
+    public override string ToString() =>
+        string.Join(", ", new[] { Street, string.Join(' ', new[] { ZipCode, City }.Where(p => p is not null)), State }.Where(p => !string.IsNullOrEmpty(p)));
 }
 
 /// <summary>ISO 3166 country code formats.</summary>

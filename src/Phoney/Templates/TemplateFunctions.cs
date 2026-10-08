@@ -10,17 +10,18 @@ namespace Phoney.Templates;
 public delegate string TemplateFunction(Faker faker, TemplateArgs args);
 
 /// <summary>
-/// Registry of the functions templates can call. Names use faker.js spelling (<c>module.camelCaseMethod</c>) so
-/// faker.js locale data and templates written for faker.js work unchanged. Register your own to extend templates.
+/// Registry of the functions templates can call. Names are case-insensitive: write them like the .NET API
+/// (<c>{{Person.FirstName}}</c>, <c>{{String.Numeric(4)}}</c>) or like faker.js (<c>{{person.firstName}}</c>), which the
+/// imported locale data uses. Register your own to extend templates.
 /// </summary>
 public static partial class TemplateFunctions
 {
-    private static readonly ConcurrentDictionary<string, TemplateFunction> Functions = new(CreateBuiltIns(), StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, TemplateFunction> Functions = new(CreateBuiltIns(), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Names of all registered functions.</summary>
-    public static IReadOnlyCollection<string> Names => [.. Functions.Keys.Order(StringComparer.Ordinal)];
+    public static IReadOnlyCollection<string> Names => [.. Functions.Keys.Order(StringComparer.OrdinalIgnoreCase)];
 
-    /// <summary>Registers (or replaces) a template function, e.g. <c>Register("my.sku", (f, _) => f.Random.Replace("SKU-#####"))</c>.</summary>
+    /// <summary>Registers (or replaces) a template function, e.g. <c>Register("Shop.Sku", (f, _) => f.Random.Replace("SKU-#####"))</c>; names are case-insensitive.</summary>
     /// <remarks>Register functions before templates that use them are first evaluated; parsed templates are cached.</remarks>
     public static void Register(string name, TemplateFunction function)
     {
@@ -40,7 +41,7 @@ public static partial class TemplateFunctions
     /// <summary>Built-in functions mirroring faker.js methods. Arguments follow faker.js (positional or an options object).</summary>
     private static Dictionary<string, TemplateFunction> CreateBuiltIns()
     {
-        var f = new Dictionary<string, TemplateFunction>(StringComparer.Ordinal);
+        var f = new Dictionary<string, TemplateFunction>(StringComparer.OrdinalIgnoreCase);
 
         // Methods without arguments: name → module call.
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -48,7 +49,7 @@ public static partial class TemplateFunctions
         // helpers
         f["helpers.arrayElement"] = (faker, a) => faker.Random.Element(a.Strings(0));
         f["helpers.fromRegExp"] = (faker, a) => faker.Helpers.FromRegExp(a.String(0) ?? "");
-        f["helpers.replaceSymbols"] = (faker, a) => faker.Helpers.ReplaceSymbols(a.String(0) ?? "");
+        f["helpers.replaceSymbols"] = (faker, a) => faker.Random.Replace(a.String(0) ?? "");
         f["helpers.replaceSymbolWithNumber"] = (faker, a) => faker.Helpers.ReplaceSymbolWithNumber(a.String(0) ?? "");
         f["helpers.replaceCreditCardSymbols"] = (faker, a) => a.Count == 0 ? faker.Helpers.ReplaceCreditCardSymbols() : faker.Helpers.ReplaceCreditCardSymbols(a.String(0)!);
         f["helpers.slugify"] = (_, a) => HelpersModule.Slugify(a.String(0) ?? "");
@@ -85,7 +86,8 @@ public static partial class TemplateFunctions
         Add("person.middleName", x => x.Person.MiddleName());
         Add("person.fullName", x => x.Person.FullName());
         Add("person.gender", x => x.Person.Gender());
-        Add("person.sex", x => x.Person.Sex());
+        Add("person.sex", x => x.Person.SexLabel());
+        Add("person.sexLabel", x => x.Person.SexLabel());
         Add("person.bio", x => x.Person.Bio());
         Add("person.prefix", x => x.Person.Prefix());
         Add("person.suffix", x => x.Person.Suffix());

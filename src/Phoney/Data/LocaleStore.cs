@@ -4,34 +4,28 @@ namespace Phoney.Data;
 
 /// <summary>
 /// Owns every locale's own data (embedded or user registered) and builds merged <see cref="LocaleData"/>
-/// views on first use. Merging follows faker.js: each <c>module.entry</c> group comes whole from the first
-/// locale in the fallback chain that defines it, so lookups never walk the chain at generation time.
+/// views on first use, so lookups never walk the fallback chain at generation time. Embedded data merges like
+/// faker.js (each <c>module.entry</c> group comes whole from the first locale defining it); user data merges per key.
 /// </summary>
 internal static class LocaleStore
 {
-    /// <summary>A locale's own data (embedded or registered) plus user overrides from <see cref="Locales.Extend"/>.</summary>
+    /// <summary>
+    /// A locale's data in two layers: embedded faker.js data (merged per entry group, like faker.js) and user data
+    /// from <see cref="Locales.Register(string, System.Action{LocaleBuilder})"/> or <see cref="Locales.Extend"/>
+    /// (merged per key, so setting female first names keeps the inherited male ones).
+    /// </summary>
     private sealed class Source(LocaleInfo info, Func<Entry?[]> load)
     {
-        private readonly Lazy<Entry?[]> _own = new(load, LazyThreadSafetyMode.ExecutionAndPublication);
+        private readonly Lazy<Entry?[]> _embedded = new(load, LazyThreadSafetyMode.ExecutionAndPublication);
 
         /// <summary>Locale description, including the fallback chain.</summary>
         public LocaleInfo Info { get; set; } = info;
 
-        /// <summary>Entries replaced or added with <see cref="Locales.Extend"/>.</summary>
-        public Dictionary<int, Entry?> Overlay { get; } = [];
+        /// <summary>User-supplied entries by key id; they win over the embedded data of every locale in the chain after this one.</summary>
+        public Dictionary<int, Entry> User { get; } = [];
 
-        /// <summary>The locale's own entries with the overlay applied.</summary>
-        public Entry?[] OwnEntries()
-        {
-            var own = _own.Value;
-            if (Overlay.Count == 0)
-                return own;
-            var copy = new Entry?[Math.Max(own.Length, Overlay.Keys.Max() + 1)];
-            own.CopyTo(copy, 0);
-            foreach (var (key, entry) in Overlay)
-                copy[key] = entry;
-            return copy;
-        }
+        /// <summary>The embedded (faker.js) entries; empty for user-registered locales.</summary>
+        public Entry?[] Embedded => _embedded.Value;
     }
 
     private static readonly object Gate = new();
@@ -122,20 +116,32 @@ internal static class LocaleStore
             }
 
             var info = new LocaleInfo(builder.Code, builder.TitleText, null, null, null, null, "ltr", builder.FallbackCodes);
-            var entries = builder.BuildEntries();
-            Sources[builder.Code] = new Source(info, () => entries);
+            var source = new Source(info, static () => []);
+            foreach (var (key, entry) in builder.Changes)
+            {
+                if (entry is null)
+                    source.User.Remove(key); // an empty Set(...) removes an earlier value
+                else
+                    source.User[key] = entry;
+            }
+            Sources[builder.Code] = source;
             Merged.Clear();
         }
     }
 
-    /// <summary>Overlays user data on a locale and invalidates merged data.</summary>
+    /// <summary>Adds user data to a locale (per key) and invalidates merged data.</summary>
     public static void Extend(string code, LocaleBuilder builder)
     {
         lock (Gate)
         {
             var source = Sources[Resolve(code)];
             foreach (var (key, entry) in builder.Changes)
-                source.Overlay[key] = entry;
+            {
+                if (entry is null)
+                    source.User.Remove(key); // an empty Set(...) removes an earlier value
+                else
+                    source.User[key] = entry;
+            }
             Merged.Clear();
         }
     }
@@ -144,34 +150,47 @@ internal static class LocaleStore
     private static LocaleData Build(string code)
     {
         Source[] chain;
+        (int Key, Entry Entry)[][] user;
         lock (Gate)
         {
             var source = Sources[code];
             chain = [source, .. source.Info.Fallback.Select(f => Sources[f])];
+            user = [.. chain.Select(c => c.User.Select(u => (u.Key, u.Value)).ToArray())];
         }
 
         var keyCount = KeyRegistry.Count;
-        var own = chain.Select(s => s.OwnEntries()).ToArray();
-        var groupPresent = new bool[own.Length][];
-        for (var c = 0; c < own.Length; c++)
+        var embedded = chain.Select(s => s.Embedded).ToArray();
+
+        // Embedded data follows faker.js: a group (person.first_name, location.city_pattern…) comes whole from the
+        // first locale in the chain that defines any of it.
+        var groupPresent = new bool[chain.Length][];
+        for (var c = 0; c < chain.Length; c++)
         {
             groupPresent[c] = new bool[KeyRegistry.GroupCount];
-            for (var k = 0; k < own[c].Length; k++)
+            for (var k = 0; k < embedded[c].Length; k++)
             {
-                if (own[c][k] is not null)
+                if (embedded[c][k] is not null)
                     groupPresent[c][KeyRegistry.GroupOf(k)] = true;
             }
         }
 
+        var userEntries = user.Select(u => u.ToDictionary(x => x.Key, x => x.Entry)).ToArray();
         var merged = new Entry?[keyCount];
         for (var k = 0; k < keyCount; k++)
         {
             var group = KeyRegistry.GroupOf(k);
-            for (var c = 0; c < own.Length; c++)
+            for (var c = 0; c < chain.Length; c++)
             {
+                // User data is merged per key: it only replaces what was set.
+                if (userEntries[c].TryGetValue(k, out var entry))
+                {
+                    merged[k] = entry;
+                    break;
+                }
+
                 if (group < groupPresent[c].Length && groupPresent[c][group])
                 {
-                    merged[k] = k < own[c].Length ? own[c][k] : null;
+                    merged[k] = k < embedded[c].Length ? embedded[c][k] : null;
                     break;
                 }
             }
