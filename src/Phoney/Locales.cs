@@ -14,7 +14,12 @@ public static class Locales
     /// <summary>All available locales, embedded and registered.</summary>
     public static IReadOnlyList<LocaleInfo> All => LocaleStore.All;
 
-    /// <summary>Returns the locale matching <paramref name="code"/>; accepts <c>de-AT</c>, <c>de_AT</c>, or culture names like <c>sv-SE</c> (→ <c>sv</c>).</summary>
+    /// <summary>
+    /// Returns the locale matching <paramref name="code"/>: a locale code in any casing with <c>-</c> or <c>_</c>
+    /// (<c>de-AT</c>, <c>de_AT</c>), or a .NET culture name resolved to the closest locale, including script-tagged
+    /// names (<c>sv-SE</c> → <c>sv</c>, <c>sr-Latn-RS</c> → <c>sr_RS_latin</c>, <c>zh-Hant-TW</c> → <c>zh_TW</c>).
+    /// A requested script is never substituted with another one.
+    /// </summary>
     public static LocaleInfo Get(string code) => LocaleStore.Info(code);
 
     /// <summary>Whether <paramref name="code"/> resolves to an available locale.</summary>

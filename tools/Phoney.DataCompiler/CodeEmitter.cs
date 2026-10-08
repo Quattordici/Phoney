@@ -91,7 +91,7 @@ internal static class CodeEmitter
     {
         var usable = locales.Where(l => l.Code != "base").ToList();
         var sb = new StringBuilder();
-        sb.AppendLine($"{usable.Count} locales from faker.js {fakerVersion}. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`); culture names fall back to the language (`sv-SE` → `sv`).");
+        sb.AppendLine($"{usable.Count} locales from faker.js {fakerVersion}. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`); a requested script is never substituted.");
         sb.AppendLine();
         sb.AppendLine("| Code | Language | Native name | Falls back to |");
         sb.AppendLine("|---|---|---|---|");

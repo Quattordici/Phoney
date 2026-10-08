@@ -141,7 +141,7 @@ The generator (included in the package) writes a model for each listed type and 
 ```csharp
 Locales.All;                      // 77 locales with code, title, endonym, script, fallback chain
 new Faker("de-AT");               // de_AT → de → en → base
-new Faker(CultureInfo.CurrentCulture); // "sv-SE" resolves to sv
+new Faker(CultureInfo.CurrentCulture); // "sv-SE" → sv, "sr-Latn-RS" → sr_RS_latin
 Fake.Locale = "fr";               // default for Fake.* and generators
 ```
 
@@ -149,7 +149,7 @@ Fake.Locale = "fr";               // default for Fake.* and generators
 <summary>Supported locales</summary>
 
 <!-- locales:start -->
-76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`); culture names fall back to the language (`sv-SE` → `sv`).
+76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`); a requested script is never substituted.
 
 | Code | Language | Native name | Falls back to |
 |---|---|---|---|

@@ -82,8 +82,42 @@ public sealed class LocaleDataTests
     [InlineData("sv-SE", "sv")]
     [InlineData("en_US", "en_US")]
     [InlineData("pt-BR", "pt_BR")]
+    [InlineData("en_AU_ocker", "en_AU_ocker")]
+    [InlineData("de-AT-u-ca-gregory", "de_AT")]
+    // Script-tagged and alias culture names (as .NET's CultureInfo.Name produces them)
+    [InlineData("sr-Latn-RS", "sr_RS_latin")]
+    [InlineData("sr-Latn", "sr_RS_latin")]
+    [InlineData("uz-Latn-UZ", "uz_UZ_latin")]
+    [InlineData("mn-MN", "mn_MN_cyrl")]
+    [InlineData("mn-Cyrl-MN", "mn_MN_cyrl")]
+    [InlineData("zh-Hans-CN", "zh_CN")]
+    [InlineData("zh-Hant-TW", "zh_TW")]
+    [InlineData("zh-TW", "zh_TW")]
+    [InlineData("zh", "zh_CN")]
+    [InlineData("en-Latn-US", "en_US")]
+    [InlineData("ckb-IQ", "ku_ckb")]
+    [InlineData("ku-Arab-IQ", "ku_ckb")]
+    [InlineData("ku", "ku_kmr_latin")]
+    [InlineData("kmr", "ku_kmr_latin")]
+    // Closest locale of the language
+    [InlineData("en-AU", "en_AU")]
+    [InlineData("en-NZ", "en")]
+    [InlineData("de-LU", "de")]
+    [InlineData("pt-AO", "pt_BR")]
     public void Locale_codes_and_culture_names_resolve(string input, string expected) =>
         Locales.Get(input).Code.ShouldBe(expected);
+
+    [Theory]
+    [InlineData("sr-Cyrl-RS")] // only Latin Serbian exists; never substitute another script
+    [InlineData("uz-Cyrl")]
+    [InlineData("mn-Mong-CN")]
+    [InlineData("tlh")]
+    public void Culture_names_without_a_matching_locale_are_rejected(string input) =>
+        Locales.Exists(input).ShouldBeFalse();
+
+    [Fact]
+    public void Faker_accepts_script_tagged_cultures() =>
+        new Faker(new System.Globalization.CultureInfo("sr-Latn-RS")).Locale.ShouldBe("sr_RS_latin");
 
     [Fact]
     public void Unknown_locale_lists_the_available_ones()

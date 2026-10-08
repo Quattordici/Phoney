@@ -53,8 +53,10 @@ internal static class LocaleStore
     public static LocaleInfo Info(string code) => Sources[Resolve(code)].Info;
 
     /// <summary>
-    /// Maps user input such as <c>de-AT</c>, <c>DE_at</c> or <c>sv-SE</c> to an existing locale code, dropping
-    /// trailing segments until a locale matches (so <c>sv-SE</c> resolves to <c>sv</c>).
+    /// Maps user input to an existing locale code: an exact code in any casing and with <c>-</c> or <c>_</c>
+    /// (<c>de-AT</c>, <c>DE_at</c>) or one after dropping trailing segments (<c>sv-SE</c> → <c>sv</c>), otherwise the
+    /// closest locale for a culture name, including script-tagged ones (<c>sr-Latn-RS</c> → <c>sr_RS_latin</c>,
+    /// <c>zh-Hant-TW</c> → <c>zh_TW</c>, <c>ckb-IQ</c> → <c>ku_ckb</c>; see <see cref="CultureMatcher"/>).
     /// </summary>
     public static string Resolve(string code)
     {
@@ -71,21 +73,41 @@ internal static class LocaleStore
         canonical = "";
         if (string.IsNullOrWhiteSpace(code))
             return false;
-        var candidate = code.Trim().Replace('-', '_');
-        while (true)
-        {
-            var match = Sources.Keys.FirstOrDefault(k => string.Equals(k, candidate, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-            {
-                canonical = match;
-                return true;
-            }
+        var locales = Sources.Values.Select(s => s.Info);
+        var normalized = code.Trim().Replace('-', '_');
 
-            var cut = candidate.LastIndexOf('_');
-            if (cut <= 0)
-                return false;
+        // 1. An existing code in any casing and separator style.
+        if (FindCode(normalized) is { } exact)
+            return Found(exact, out canonical);
+
+        // 2. Script-tagged culture names: stripping segments would drop the region (en-Latn-US → en), so match
+        //    on language/script/country instead (sr-Latn-RS → sr_RS_latin, zh-Hant-TW → zh_TW).
+        if (CultureMatcher.TryParse(code, out _, out var script, out _) && script is not null &&
+            CultureMatcher.Match(code, locales) is { } scripted)
+            return Found(scripted, out canonical);
+
+        // 3. Drop trailing segments: sv_SE → sv, de_AT_u_ca → de_AT, sv_dalarna_x → a custom sv_dalarna.
+        for (var candidate = normalized; candidate.LastIndexOf('_') is var cut and > 0;)
+        {
             candidate = candidate[..cut];
+            if (FindCode(candidate) is { } prefix)
+                return Found(prefix, out canonical);
         }
+
+        // 4. The closest locale of the same language: mn-MN → mn_MN_cyrl, ckb-IQ → ku_ckb, pt-AO → pt_BR.
+        if (CultureMatcher.Match(code, locales) is { } closest)
+            return Found(closest, out canonical);
+
+        return false;
+
+        static bool Found(string code, out string canonical)
+        {
+            canonical = code;
+            return true;
+        }
+
+        static string? FindCode(string candidate) =>
+            Sources.Keys.FirstOrDefault(k => string.Equals(k, candidate, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Adds or replaces a user-defined locale and invalidates merged data.</summary>
