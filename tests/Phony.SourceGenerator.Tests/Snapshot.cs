@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Reflection;
 
 namespace Phony.SourceGenerator.Tests;
 
@@ -8,10 +8,15 @@ namespace Phony.SourceGenerator.Tests;
 /// </summary>
 internal static class Snapshot
 {
-    public static void Match(string actual, string name, [CallerFilePath] string callerFile = "")
+    // The project directory comes from build metadata: [CallerFilePath] is path-mapped (/_/...) in CI builds.
+    private static readonly string Directory = Path.Combine(
+        typeof(Snapshot).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "ProjectDirectory").Value!,
+        "Snapshots");
+
+    public static void Match(string actual, string name)
     {
-        var directory = Path.Combine(Path.GetDirectoryName(callerFile)!, "Snapshots");
-        Directory.CreateDirectory(directory);
+        var directory = Directory;
+        System.IO.Directory.CreateDirectory(directory);
         var verified = Path.Combine(directory, name + ".verified.cs");
         var received = Path.Combine(directory, name + ".received.cs");
         actual = actual.ReplaceLineEndings("\n");

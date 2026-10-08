@@ -21,11 +21,11 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -60,7 +60,7 @@ jobs:
 
       - name: Open pull request
         if: success() && steps.versions.outputs.current != steps.versions.outputs.target
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: sync/faker-js-${{ steps.versions.outputs.target }}
           commit-message: Import locale data from faker.js ${{ steps.versions.outputs.target }}

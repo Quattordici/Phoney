@@ -12,6 +12,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Lets the snapshot helper find Snapshots/ even when CI builds map source paths to /_/. -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ProjectDirectory</_Parameter1>
+      <_Parameter2>$(MSBuildProjectDirectory)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Snapshots are expected generator output, not part of this project. -->
     <Compile Remove="Snapshots/**" />
     <None Include="Snapshots/**" />

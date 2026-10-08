@@ -11,7 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources/Locales/*.bin.br" LogicalName="Phony.Locales.%(Filename)%(Extension)" />
+    <!-- WithCulture=false: otherwise MSBuild may read "bin" in "en.bin.br" as a culture and move the data into satellite assemblies. -->
+    <EmbeddedResource Include="Resources/Locales/*.bin.br" LogicalName="Phony.Locales.%(Filename)%(Extension)" WithCulture="false" Type="Non-Resx" />
   </ItemGroup>
 
   <ItemGroup>
