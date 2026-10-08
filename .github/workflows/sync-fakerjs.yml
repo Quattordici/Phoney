@@ -2,7 +2,7 @@ name: Sync faker.js data
 
 # Checks npm for a newer @faker-js/faker, re-imports and recompiles the locale data, runs the tests and opens
 # a pull request with the raw JSON diff and data/report.md. If the new data cannot be compiled (for example a
-# template calls a faker.js method Phonery doesn't implement yet) it opens an issue instead.
+# template calls a faker.js method Phoney doesn't implement yet) it opens an issue instead.
 on:
   schedule:
     - cron: '0 5 * * 1' # Mondays 05:00 UTC
@@ -52,7 +52,7 @@ jobs:
       - name: Compile locale data
         id: compile
         if: steps.versions.outputs.current != steps.versions.outputs.target
-        run: dotnet run --project tools/Phonery.DataCompiler -c Release 2>&1 | tee compile.log
+        run: dotnet run --project tools/Phoney.DataCompiler -c Release 2>&1 | tee compile.log
 
       - name: Test
         if: steps.versions.outputs.current != steps.versions.outputs.target
@@ -70,8 +70,8 @@ jobs:
             tools/extract/package.json
             tools/extract/package-lock.json
             data
-            src/Phonery/Resources/Locales
-            src/Phonery/Data/Generated
+            src/Phoney/Resources/Locales
+            src/Phoney/Data/Generated
 
       - name: Open issue on failure
         if: failure() && steps.versions.outputs.current != steps.versions.outputs.target

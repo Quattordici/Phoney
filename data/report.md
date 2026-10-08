@@ -1,6 +1,6 @@
 # Locale data report
 
-Generated from `@faker-js/faker` **10.6.0** by `tools/Phonery.DataCompiler`.
+Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 
 - Locales: 77
 - Data keys: 274 in 163 entry groups

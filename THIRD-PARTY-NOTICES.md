@@ -1,6 +1,6 @@
 # Third-party notices
 
-Phonery embeds locale data generated from [faker.js](https://github.com/faker-js/faker) (`@faker-js/faker`), and parts of Phonery's generation logic are ported from it. faker.js is distributed under the following license:
+Phoney embeds locale data generated from [faker.js](https://github.com/faker-js/faker) (`@faker-js/faker`), and parts of Phoney's generation logic are ported from it. faker.js is distributed under the following license:
 
 ```
 Faker - Copyright (c) 2022-2025

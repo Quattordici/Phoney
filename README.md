@@ -1,8 +1,8 @@
-# Phonery
+# Phoney
 
-[![NuGet](https://img.shields.io/nuget/v/Phonery.svg?label=NuGet)](https://www.nuget.org/packages/Phonery)
-[![NuGet prerelease](https://img.shields.io/nuget/vpre/Phonery.svg?label=NuGet%20prerelease)](https://www.nuget.org/packages/Phonery)
-[![NuGet downloads](https://img.shields.io/nuget/dt/Phonery.svg?label=Downloads)](https://www.nuget.org/packages/Phonery)
+[![NuGet](https://img.shields.io/nuget/v/Phoney.svg?label=NuGet)](https://www.nuget.org/packages/Phoney)
+[![NuGet prerelease](https://img.shields.io/nuget/vpre/Phoney.svg?label=NuGet%20prerelease)](https://www.nuget.org/packages/Phoney)
+[![NuGet downloads](https://img.shields.io/nuget/dt/Phoney.svg?label=Downloads)](https://www.nuget.org/packages/Phoney)
 
 **Fast, easy and flexible fake data for .NET**, powered by the locale data of [faker.js](https://github.com/faker-js/faker).
 
@@ -17,13 +17,13 @@
 Targets .NET 8 and .NET 10.
 
 ```bash
-dotnet add package Phonery
+dotnet add package Phoney
 ```
 
 ## Quick start
 
 ```csharp
-using Phonery;
+using Phoney;
 
 // Values
 Fake.Person.FullName();                         // "Madisen Collins"
@@ -70,7 +70,7 @@ var faker = new Faker("de", seed: 2024) { ReferenceDate = new DateTimeOffset(202
 
 ## Templates
 
-Phonery understands faker.js templates, so faker.js data and patterns work unchanged:
+Phoney understands faker.js templates, so faker.js data and patterns work unchanged:
 
 ```csharp
 faker.Parse("{{person.firstName}} ordered {{commerce.productName}} from {{company.name}}");
@@ -134,7 +134,7 @@ internal static partial class TestData;
 var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer>, no reflection
 ```
 
-The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phonery is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
+The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
 
 ## Locales
 
@@ -186,15 +186,15 @@ Indicative numbers (Apple Silicon, .NET 10, BenchmarkDotNet short run):
 Run the benchmarks with:
 
 ```bash
-dotnet run -c Release --project benchmarks/Phonery.Benchmarks -- --filter '*'
+dotnet run -c Release --project benchmarks/Phoney.Benchmarks -- --filter '*'
 ```
 
 ## How the faker.js data gets in
 
 ```
 @faker-js/faker (npm, pinned)  →  tools/extract (Node)      →  data/raw/*.json
-data/raw/*.json                →  tools/Phonery.DataCompiler  →  src/Phonery/Resources/Locales/*.bin.br
-                                                               src/Phonery/Data/Generated/*.g.cs
+data/raw/*.json                →  tools/Phoney.DataCompiler  →  src/Phoney/Resources/Locales/*.bin.br
+                                                               src/Phoney/Data/Generated/*.g.cs
                                                                data/report.md
 ```
 
@@ -204,7 +204,7 @@ The **Sync faker.js data** workflow runs weekly: when npm has a newer `@faker-js
 
 ```bash
 cd tools/extract && npm install --save-exact @faker-js/faker@latest && node export-locales.mjs ../../data/raw && cd ../..
-dotnet run --project tools/Phonery.DataCompiler
+dotnet run --project tools/Phoney.DataCompiler
 dotnet test
 ```
 
@@ -213,7 +213,7 @@ dotnet test
 ```bash
 dotnet build
 dotnet test
-dotnet publish tests/Phonery.AotSmoke -c Release   # Native AOT smoke test
+dotnet publish tests/Phoney.AotSmoke -c Release   # Native AOT smoke test
 ```
 
 ## License

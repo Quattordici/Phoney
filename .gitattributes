@@ -2,4 +2,4 @@
 *.br binary
 *.verified.cs text eol=lf
 data/raw/*.json text eol=lf linguist-generated
-src/Phonery/Data/*.g.cs linguist-generated
+src/Phoney/Data/*.g.cs linguist-generated
