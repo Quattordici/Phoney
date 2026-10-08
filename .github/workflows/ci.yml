@@ -85,12 +85,17 @@ jobs:
           name: packages
           path: artifacts/packages
 
+  # Trusted publishing (https://learn.microsoft.com/nuget/nuget-org/trusted-publishing): GitHub issues an OIDC
+  # token that nuget.org exchanges for a one-hour API key, so no long-lived key is stored. The nuget.org policy
+  # must name owner Quattordici, repository Phony, workflow file ci.yml and environment nuget.
   publish:
     name: Publish to NuGet
     if: startsWith(github.ref, 'refs/tags/v')
     needs: pack
     runs-on: ubuntu-latest
     environment: nuget
+    permissions:
+      id-token: write # lets the job request the OIDC token
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -99,4 +104,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - run: dotnet nuget push "packages/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: NuGet login (OIDC → short-lived API key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }} # nuget.org profile name, not the email address
+      - run: dotnet nuget push "packages/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
