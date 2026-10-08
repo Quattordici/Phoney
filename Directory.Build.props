@@ -11,8 +11,8 @@
     <Authors>Mattias Sundström</Authors>
     <Copyright>Copyright © Mattias Sundström</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/Quattordici/Phony</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Quattordici/Phony</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Quattordici/Phonery</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Quattordici/Phonery</RepositoryUrl>
     <PackageTags>fake;faker;fakerjs;test-data;mock;bogus;seed;generator</PackageTags>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>

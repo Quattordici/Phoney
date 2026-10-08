@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Phonery</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>Phonery</PackageId>
+    <Description>Fast, easy and flexible fake data for .NET: 77 locales imported from faker.js, convention-based object population, fluent rules, deterministic seeds and a source generator for reflection-free, AOT-safe generation.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WithCulture=false: otherwise MSBuild may read "bin" in "en.bin.br" as a culture and move the data into satellite assemblies. -->
+    <EmbeddedResource Include="Resources/Locales/*.bin.br" LogicalName="Phonery.Locales.%(Filename)%(Extension)" WithCulture="false" Type="Non-Resx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Phonery.Tests" />
+    <InternalsVisibleTo Include="Phonery.Benchmarks" />
+  </ItemGroup>
+
+  <!-- Ship the source generator inside the Phonery package so [FakeFor<T>] works with a single package reference. -->
+  <ItemGroup>
+    <ProjectReference Include="../Phonery.SourceGenerator/Phonery.SourceGenerator.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="../Phonery.SourceGenerator/bin/$(Configuration)/netstandard2.0/Phonery.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

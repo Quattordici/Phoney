@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Phonery.Benchmarks/Phonery.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Phonery.Samples/Phonery.Samples.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Phonery/Phonery.csproj" />
+    <Project Path="src/Phonery.SourceGenerator/Phonery.SourceGenerator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Phonery.AotSmoke/Phonery.AotSmoke.csproj" />
+    <Project Path="tests/Phonery.SourceGenerator.Tests/Phonery.SourceGenerator.Tests.csproj" />
+    <Project Path="tests/Phonery.Tests/Phonery.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Phonery.DataCompiler/Phonery.DataCompiler.csproj" />
+  </Folder>
+</Solution>

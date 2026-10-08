@@ -1,4 +1,8 @@
-# Phony
+# Phonery
+
+[![NuGet](https://img.shields.io/nuget/v/Phonery.svg?label=NuGet)](https://www.nuget.org/packages/Phonery)
+[![NuGet prerelease](https://img.shields.io/nuget/vpre/Phonery.svg?label=NuGet%20prerelease)](https://www.nuget.org/packages/Phonery)
+[![NuGet downloads](https://img.shields.io/nuget/dt/Phonery.svg?label=Downloads)](https://www.nuget.org/packages/Phonery)
 
 **Fast, easy and flexible fake data for .NET**, powered by the locale data of [faker.js](https://github.com/faker-js/faker).
 
@@ -13,13 +17,13 @@
 Targets .NET 8 and .NET 10.
 
 ```bash
-dotnet add package Phony
+dotnet add package Phonery
 ```
 
 ## Quick start
 
 ```csharp
-using Phony;
+using Phonery;
 
 // Values
 Fake.Person.FullName();                         // "Madisen Collins"
@@ -66,7 +70,7 @@ var faker = new Faker("de", seed: 2024) { ReferenceDate = new DateTimeOffset(202
 
 ## Templates
 
-Phony understands faker.js templates, so faker.js data and patterns work unchanged:
+Phonery understands faker.js templates, so faker.js data and patterns work unchanged:
 
 ```csharp
 faker.Parse("{{person.firstName}} ordered {{commerce.productName}} from {{company.name}}");
@@ -130,7 +134,7 @@ internal static partial class TestData;
 var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer>, no reflection
 ```
 
-The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phony is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
+The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phonery is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
 
 ## Locales
 
@@ -182,15 +186,15 @@ Indicative numbers (Apple Silicon, .NET 10, BenchmarkDotNet short run):
 Run the benchmarks with:
 
 ```bash
-dotnet run -c Release --project benchmarks/Phony.Benchmarks -- --filter '*'
+dotnet run -c Release --project benchmarks/Phonery.Benchmarks -- --filter '*'
 ```
 
 ## How the faker.js data gets in
 
 ```
 @faker-js/faker (npm, pinned)  →  tools/extract (Node)      →  data/raw/*.json
-data/raw/*.json                →  tools/Phony.DataCompiler  →  src/Phony/Resources/Locales/*.bin.br
-                                                               src/Phony/Data/Generated/*.g.cs
+data/raw/*.json                →  tools/Phonery.DataCompiler  →  src/Phonery/Resources/Locales/*.bin.br
+                                                               src/Phonery/Data/Generated/*.g.cs
                                                                data/report.md
 ```
 
@@ -200,28 +204,16 @@ The **Sync faker.js data** workflow runs weekly: when npm has a newer `@faker-js
 
 ```bash
 cd tools/extract && npm install --save-exact @faker-js/faker@latest && node export-locales.mjs ../../data/raw && cd ../..
-dotnet run --project tools/Phony.DataCompiler
+dotnet run --project tools/Phonery.DataCompiler
 dotnet test
 ```
-
-## Coming from Bogus
-
-| Bogus | Phony |
-|---|---|
-| `new Faker<Customer>().RuleFor(c => c.Name, f => f.Name.FullName())` | `Fake.For<Customer>().With(c => c.Name, f => f.Person.FullName())`, or nothing at all: conventions fill `Name` |
-| `.RuleFor(c => c.Email, (f, c) => f.Internet.Email(c.FirstName, c.LastName))` | `.With(c => c.Email, (f, c) => f.Internet.Email(c.FirstName, c.LastName))` |
-| `.UseSeed(42)`, `Randomizer.Seed = new Random(42)` | `.Seed(42)` (per generator, stable across platforms) |
-| `.StrictMode(true)` | `.Strict()` |
-| `.RuleSet("admin", ...)` | derive a generator: `var admins = customers.With(c => c.Role, "Admin")` |
-| `.Generate(10)` | `.Generate(10)`, `.Stream()`, `.GenerateParallel(10)` |
-| `f.Name`, `f.Address` | `f.Person`, `f.Location` (faker.js naming) |
 
 ## Building
 
 ```bash
 dotnet build
 dotnet test
-dotnet publish tests/Phony.AotSmoke -c Release   # Native AOT smoke test
+dotnet publish tests/Phonery.AotSmoke -c Release   # Native AOT smoke test
 ```
 
 ## License

@@ -1,5 +1,5 @@
 // Exports the raw (unmerged) faker.js locale definitions to JSON so the
-// Phony data compiler can turn them into Phony's binary locale resources.
+// Phonery data compiler can turn them into Phonery's binary locale resources.
 //
 // Usage: node export-locales.mjs <outDir>
 import fs from 'node:fs';

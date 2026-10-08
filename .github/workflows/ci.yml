@@ -29,7 +29,7 @@ jobs:
             8.0.x
             10.0.x
       - run: dotnet build -c Release
-      # Tests run on net8.0 and net10.0 in CI (see tests/Phony.Tests/Phony.Tests.csproj).
+      # Tests run on net8.0 and net10.0 in CI (see tests/Phonery.Tests/Phonery.Tests.csproj).
       - run: dotnet test -c Release --no-build
 
   aot:
@@ -41,8 +41,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Publish with Native AOT (trim/AOT warnings fail the build)
-        run: dotnet publish tests/Phony.AotSmoke -c Release -o artifacts/aot -p:TreatWarningsAsErrors=true
-      - run: ./artifacts/aot/Phony.AotSmoke
+        run: dotnet publish tests/Phonery.AotSmoke -c Release -o artifacts/aot -p:TreatWarningsAsErrors=true
+      - run: ./artifacts/aot/Phonery.AotSmoke
 
   data:
     name: Locale data is up to date
@@ -60,9 +60,9 @@ jobs:
         run: |
           npm ci --ignore-scripts
           node export-locales.mjs ../../data/raw
-      - run: dotnet run --project tools/Phony.DataCompiler -c Release
+      - run: dotnet run --project tools/Phonery.DataCompiler -c Release
       - name: Fail if committed data differs from a fresh import
-        run: git diff --exit-code -- data src/Phony/Resources src/Phony/Data/Generated
+        run: git diff --exit-code -- data src/Phonery/Resources src/Phonery/Data/Generated
 
   pack:
     name: Pack
@@ -79,7 +79,7 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
-          dotnet pack src/Phony -c Release -o artifacts/packages -p:Version="$VERSION"
+          dotnet pack src/Phonery -c Release -o artifacts/packages -p:Version="$VERSION"
       - uses: actions/upload-artifact@v7
         with:
           name: packages
@@ -87,7 +87,7 @@ jobs:
 
   # Trusted publishing (https://learn.microsoft.com/nuget/nuget-org/trusted-publishing): GitHub issues an OIDC
   # token that nuget.org exchanges for a one-hour API key, so no long-lived key is stored. The nuget.org policy
-  # must name owner Quattordici, repository Phony, workflow file ci.yml and environment nuget.
+  # must name owner Quattordici, repository Phonery, workflow file ci.yml and environment nuget.
   publish:
     name: Publish to NuGet
     if: startsWith(github.ref, 'refs/tags/v')
