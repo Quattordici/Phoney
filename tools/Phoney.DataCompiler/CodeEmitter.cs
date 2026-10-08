@@ -83,6 +83,28 @@ internal static class CodeEmitter
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Markdown table of the usable locales (everything except <c>base</c>, which only holds shared data) for the
+    /// README, so the documented list always matches the embedded data.
+    /// </summary>
+    public static string LocaleTable(string fakerVersion, IReadOnlyList<RawLocale> locales)
+    {
+        var usable = locales.Where(l => l.Code != "base").ToList();
+        var sb = new StringBuilder();
+        sb.AppendLine($"{usable.Count} locales from faker.js {fakerVersion}. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`); culture names fall back to the language (`sv-SE` → `sv`).");
+        sb.AppendLine();
+        sb.AppendLine("| Code | Language | Native name | Falls back to |");
+        sb.AppendLine("|---|---|---|---|");
+        foreach (var l in usable)
+        {
+            string M(string key) => l.Metadata.TryGetValue(key, out var v) ? v.Replace("|", "\\|", StringComparison.Ordinal) : "";
+            var fallback = string.Join(" → ", l.Fallback.Where(f => f != "base")) is { Length: > 0 } chain ? chain : "—";
+            sb.AppendLine($"| `{l.Code}` | {M("title")} | {M("endonym")} | {fallback} |");
+        }
+
+        return sb.ToString();
+    }
+
     /// <summary>Converts <c>person.first_name.female</c> into <c>PersonFirstNameFemale</c>.</summary>
     public static string Identifier(string path)
     {

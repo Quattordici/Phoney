@@ -62,7 +62,7 @@ jobs:
           node export-locales.mjs ../../data/raw
       - run: dotnet run --project tools/Phoney.DataCompiler -c Release
       - name: Fail if committed data differs from a fresh import
-        run: git diff --exit-code -- data src/Phoney/Resources src/Phoney/Data/Generated
+        run: git diff --exit-code -- data src/Phoney/Resources src/Phoney/Data/Generated README.md
 
   pack:
     name: Pack

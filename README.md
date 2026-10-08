@@ -6,7 +6,7 @@
 
 **Fast, easy and flexible fake data for .NET**, powered by the locale data of [faker.js](https://github.com/faker-js/faker).
 
-- **77 locales** imported from faker.js (`@faker-js/faker` 10.6.0), kept up to date by an automated sync pipeline.
+- **76 locales** imported from faker.js (`@faker-js/faker` 10.6.0), kept up to date by an automated sync pipeline.
 - **One line to a value or a fully populated object**: `Fake.Person.FullName()`, `Fake.Many<Customer>(100)`.
 - **Convention-based population** of classes, records and structs: `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… just work, and names, emails and avatars of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode, custom conventions, custom locales, faker.js-style templates.
@@ -144,6 +144,94 @@ new Faker("de-AT");               // de_AT → de → en → base
 new Faker(CultureInfo.CurrentCulture); // "sv-SE" resolves to sv
 Fake.Locale = "fr";               // default for Fake.* and generators
 ```
+
+<details>
+<summary>Supported locales</summary>
+
+<!-- locales:start -->
+76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`); culture names fall back to the language (`sv-SE` → `sv`).
+
+| Code | Language | Native name | Falls back to |
+|---|---|---|---|
+| `af_ZA` | Afrikaans (South Africa) | Afrikaans (Suid-Afrika) | en |
+| `ar` | Arabic | اَلْعَرَبِيَّةُ | en |
+| `az` | Azerbaijani | azərbaycan dili | en |
+| `bn_BD` | Bengali (Bangladesh) | বাংলা (বাংলাদেশ) | en |
+| `cs_CZ` | Czech (Czechia) | čeština (Česká republika) | en |
+| `cy` | Welsh | Cymraeg | en |
+| `da` | Danish | Dansk | en |
+| `de` | German | Deutsch | en |
+| `de_AT` | German (Austria) | Deutsch (Österreich) | de → en |
+| `de_CH` | German (Switzerland) | Deutsch (Schweiz) | de → en |
+| `dv` | Maldivian | ދިވެހި | en |
+| `el` | Greek | Ελληνικά | en |
+| `en` | English | English | — |
+| `en_AU` | English (Australia) | English (Australia) | en |
+| `en_AU_ocker` | English (Australia Ocker) | English (Australia) | en_AU → en |
+| `en_BORK` | English (Bork) | English (Bork) | en |
+| `en_CA` | English (Canada) | English (Canada) | en |
+| `en_GB` | English (Great Britain) | English (Great Britain) | en |
+| `en_GH` | English (Ghana) | English (Ghana) | en |
+| `en_HK` | English (Hong Kong) | English (Hong Kong) | en |
+| `en_IE` | English (Ireland) | English (Ireland) | en |
+| `en_IN` | English (India) | English (India) | en |
+| `en_NG` | English (Nigeria) | English (Nigeria) | en |
+| `en_NP` | English (Nepal) | English (Nepal) | en |
+| `en_US` | English (United States) | English (United States) | en |
+| `en_ZA` | English (South Africa) | English (South Africa) | en |
+| `eo` | Esperanto | Esperanto | en |
+| `es` | Spanish | Español | en |
+| `es_MX` | Spanish (Mexico) | Español (México) | es → en |
+| `fa` | Farsi/Persian | فارسی | en |
+| `fi` | Finnish | suomi | en |
+| `fr` | French | Français | en |
+| `fr_BE` | French (Belgium) | Français (Belgique) | fr → en |
+| `fr_CA` | French (Canada) | Français (Canada) | fr → en |
+| `fr_CH` | French (Switzerland) | Français (Suisse) | fr → en |
+| `fr_LU` | French (Luxembourg) | Français (Luxembourg) | fr → en |
+| `fr_SN` | French (Senegal) | Français (Sénégal) | fr → en |
+| `he` | Hebrew | עברית | en |
+| `hr` | Croatian | Hrvatski | en |
+| `hu` | Hungarian | magyar | en |
+| `hy` | Armenian | Հայերեն | en |
+| `id_ID` | Indonesian (Indonesia) | Bahasa Indonesia (Indonesia) | en |
+| `it` | Italian | Italiano | en |
+| `ja` | Japanese | 日本語 | en |
+| `ka_GE` | Georgian (Georgia) | ქართული (საქართველო) | en |
+| `ko` | Korean | 한국어 | en |
+| `ku_ckb` | Kurdish (Sorani) | کوردی (سۆرانی) | en |
+| `ku_kmr_latin` | Kurdish (Kurmanji, Latin) | Kurdî (Kurmancî) | en |
+| `lv` | Latvian | latviešu valoda | en |
+| `mk` | Macedonian | македонски јазик | en |
+| `mn_MN_cyrl` | Mongolian (Mongolia, Cyrillic) | Монгол (Монгол Улс, Кирилл) | en |
+| `nb_NO` | Norwegian (Norway) | Norsk bokmål (Norge) | en |
+| `ne` | Nepali | नेपाली | en |
+| `nl` | Dutch | Nederlands | en |
+| `nl_BE` | Dutch (Belgium) | Nederlands (België) | nl → en |
+| `pl` | Polish | Polski | en |
+| `pt_BR` | Portuguese (Brazil) | Português (Brasil) | en |
+| `pt_PT` | Portuguese (Portugal) | Português (Portugal) | en |
+| `ro` | Romanian | Română | en |
+| `ro_MD` | Romanian (Moldova) | Română (Moldova) | ro → en |
+| `ru` | Russian | Русский | en |
+| `sk` | Slovak | slovenčina | en |
+| `sl_SI` | Slovenian (Slovenia) | Slovensko (Slovenia) | en |
+| `sr_RS_latin` | Serbian (Serbia, Latin) | srpski (Srbija, latinica) | en |
+| `sv` | Swedish | Svenska | en |
+| `ta_IN` | Tamil (India) | தமிழ் (இந்தியா) | en |
+| `th` | Thai | ไทย | en |
+| `tr` | Turkish | Türkçe | en |
+| `uk` | Ukrainian | Українська | en |
+| `ur` | Urdu | اردو | en |
+| `uz_UZ_latin` | Uzbek (Uzbekistan, Latin) | O'zbekcha | en |
+| `vi` | Vietnamese | Tiếng Việt | en |
+| `yo_NG` | Yoruba (Nigeria) | Yoruba (Naijiria) | en |
+| `zh_CN` | Chinese (China) | 中文 (中国) | en |
+| `zh_TW` | Chinese (Taiwan) | 中文 (臺灣) | en |
+| `zu_ZA` | Zulu (South Africa) | isiZulu (Iningizimu Afrika) | en |
+<!-- locales:end -->
+
+</details>
 
 Fallback works like faker.js: each data group (`person.first_name`, `location.city_pattern`…) comes from the first locale in the chain that defines it; data a locale marks as not applicable (e.g. name prefixes in Azerbaijani) is never borrowed from another locale.
 

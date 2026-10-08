@@ -5,6 +5,7 @@ using Phoney.DataCompiler;
 //   src/Phoney/Resources/Locales/<code>.bin.br   binary locale data (Brotli)
 //   src/Phoney/Data/Generated/*.g.cs             key catalog + locale catalog
 //   data/report.md                              summary used in sync pull requests
+//   README.md (between locales markers)         the documented list of locales
 //
 // Usage: dotnet run --project tools/Phoney.DataCompiler [-- <repoRoot>]
 
@@ -74,6 +75,22 @@ foreach (var (code, entries, bytes) in sizes)
 }
 
 WriteText(Path.Combine(repoRoot, "data", "report.md"), report.ToString());
+
+// Keep the README's list of locales in sync with the data (between the locales:start/end markers).
+var readmePath = Path.Combine(repoRoot, "README.md");
+if (File.Exists(readmePath))
+{
+    const string Start = "<!-- locales:start -->";
+    const string End = "<!-- locales:end -->";
+    var readme = File.ReadAllText(readmePath);
+    var from = readme.IndexOf(Start, StringComparison.Ordinal);
+    var to = readme.IndexOf(End, StringComparison.Ordinal);
+    if (from >= 0 && to > from)
+    {
+        readme = readme[..(from + Start.Length)] + "\n" + CodeEmitter.LocaleTable(fakerVersion, locales) + readme[to..];
+        WriteText(readmePath, readme);
+    }
+}
 
 Console.WriteLine($"Compiled {locales.Count} locales ({catalog.Keys.Count} keys, {totalBytes / 1024.0:F0} KiB) from faker.js {fakerVersion}.");
 return 0;
