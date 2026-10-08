@@ -1,0 +1,12 @@
+{
+  "name": "phony-extract",
+  "private": true,
+  "type": "module",
+  "description": "Exports faker.js locale definitions to JSON for the Phony data compiler.",
+  "scripts": {
+    "export": "node export-locales.mjs ../../data/raw"
+  },
+  "dependencies": {
+    "@faker-js/faker": "10.6.0"
+  }
+}

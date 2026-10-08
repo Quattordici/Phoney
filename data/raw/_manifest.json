@@ -1,0 +1,1473 @@
+{
+  "fakerVersion": "10.6.0",
+  "locales": [
+    {
+      "code": "af_ZA",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Afrikaans (South Africa)",
+        "code": "af_ZA",
+        "country": "ZA",
+        "language": "af",
+        "endonym": "Afrikaans (Suid-Afrika)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "ar",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Arabic",
+        "code": "ar",
+        "language": "ar",
+        "endonym": "اَلْعَرَبِيَّةُ",
+        "dir": "rtl",
+        "script": "Arab"
+      }
+    },
+    {
+      "code": "az",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Azerbaijani",
+        "code": "az",
+        "language": "az",
+        "endonym": "azərbaycan dili",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "base",
+      "fallback": [],
+      "metadata": {
+        "title": "Base",
+        "code": "base"
+      }
+    },
+    {
+      "code": "bn_BD",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Bengali (Bangladesh)",
+        "code": "bn_BD",
+        "country": "BD",
+        "language": "bn",
+        "endonym": "বাংলা (বাংলাদেশ)",
+        "dir": "ltr",
+        "script": "Beng"
+      }
+    },
+    {
+      "code": "cs_CZ",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Czech (Czechia)",
+        "code": "cs_CZ",
+        "country": "CZ",
+        "language": "cs",
+        "endonym": "čeština (Česká republika)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "cy",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Welsh",
+        "code": "cy",
+        "language": "cy",
+        "endonym": "Cymraeg",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "da",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Danish",
+        "code": "da",
+        "language": "da",
+        "endonym": "Dansk",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "de",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "German",
+        "code": "de",
+        "language": "de",
+        "endonym": "Deutsch",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "de_AT",
+      "fallback": [
+        "de",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "German (Austria)",
+        "code": "de_AT",
+        "country": "AT",
+        "language": "de",
+        "endonym": "Deutsch (Österreich)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "de_CH",
+      "fallback": [
+        "de",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "German (Switzerland)",
+        "code": "de_CH",
+        "country": "CH",
+        "language": "de",
+        "endonym": "Deutsch (Schweiz)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "dv",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Maldivian",
+        "code": "dv",
+        "language": "dv",
+        "endonym": "ދިވެހި",
+        "dir": "rtl",
+        "script": "Thaa"
+      }
+    },
+    {
+      "code": "el",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Greek",
+        "code": "el",
+        "language": "el",
+        "endonym": "Ελληνικά",
+        "dir": "ltr",
+        "script": "Grek"
+      }
+    },
+    {
+      "code": "en",
+      "fallback": [
+        "base"
+      ],
+      "metadata": {
+        "title": "English",
+        "code": "en",
+        "language": "en",
+        "endonym": "English",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_AU",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Australia)",
+        "code": "en_AU",
+        "country": "AU",
+        "language": "en",
+        "endonym": "English (Australia)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_AU_ocker",
+      "fallback": [
+        "en_AU",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Australia Ocker)",
+        "code": "en_AU_ocker",
+        "country": "AU",
+        "language": "en",
+        "variant": "ocker",
+        "endonym": "English (Australia)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_BORK",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Bork)",
+        "code": "en_BORK",
+        "variant": "BORK",
+        "language": "en",
+        "endonym": "English (Bork)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_CA",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Canada)",
+        "code": "en_CA",
+        "country": "CA",
+        "language": "en",
+        "endonym": "English (Canada)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_GB",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Great Britain)",
+        "code": "en_GB",
+        "country": "GB",
+        "language": "en",
+        "endonym": "English (Great Britain)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_GH",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Ghana)",
+        "code": "en_GH",
+        "country": "GH",
+        "language": "en",
+        "endonym": "English (Ghana)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_HK",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Hong Kong)",
+        "code": "en_HK",
+        "country": "HK",
+        "language": "en",
+        "endonym": "English (Hong Kong)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_IE",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Ireland)",
+        "code": "en_IE",
+        "country": "IE",
+        "language": "en",
+        "endonym": "English (Ireland)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_IN",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (India)",
+        "code": "en_IN",
+        "country": "IN",
+        "language": "en",
+        "endonym": "English (India)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_NG",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Nigeria)",
+        "code": "en_NG",
+        "country": "NG",
+        "language": "en",
+        "endonym": "English (Nigeria)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_NP",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (Nepal)",
+        "code": "en_NP",
+        "country": "NP",
+        "language": "en",
+        "endonym": "English (Nepal)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_US",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (United States)",
+        "code": "en_US",
+        "country": "US",
+        "language": "en",
+        "endonym": "English (United States)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "en_ZA",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "English (South Africa)",
+        "code": "en_ZA",
+        "country": "ZA",
+        "language": "en",
+        "endonym": "English (South Africa)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "eo",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Esperanto",
+        "code": "eo",
+        "language": "eo",
+        "endonym": "Esperanto",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "es",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Spanish",
+        "code": "es",
+        "language": "es",
+        "endonym": "Español",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "es_MX",
+      "fallback": [
+        "es",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Spanish (Mexico)",
+        "code": "es_MX",
+        "country": "MX",
+        "language": "es",
+        "endonym": "Español (México)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "fa",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Farsi/Persian",
+        "code": "fa",
+        "language": "fa",
+        "endonym": "فارسی",
+        "dir": "rtl",
+        "script": "Arab"
+      }
+    },
+    {
+      "code": "fi",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Finnish",
+        "code": "fi",
+        "language": "fi",
+        "endonym": "suomi",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "fr",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "French",
+        "code": "fr",
+        "language": "fr",
+        "endonym": "Français",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "fr_BE",
+      "fallback": [
+        "fr",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "French (Belgium)",
+        "code": "fr_BE",
+        "country": "BE",
+        "language": "fr",
+        "endonym": "Français (Belgique)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "fr_CA",
+      "fallback": [
+        "fr",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "French (Canada)",
+        "code": "fr_CA",
+        "country": "CA",
+        "language": "fr",
+        "endonym": "Français (Canada)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "fr_CH",
+      "fallback": [
+        "fr",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "French (Switzerland)",
+        "code": "fr_CH",
+        "country": "CH",
+        "language": "fr",
+        "endonym": "Français (Suisse)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "fr_LU",
+      "fallback": [
+        "fr",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "French (Luxembourg)",
+        "code": "fr_LU",
+        "country": "LU",
+        "language": "fr",
+        "endonym": "Français (Luxembourg)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "fr_SN",
+      "fallback": [
+        "fr",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "French (Senegal)",
+        "code": "fr_SN",
+        "country": "SN",
+        "language": "fr",
+        "endonym": "Français (Sénégal)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "he",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Hebrew",
+        "code": "he",
+        "language": "he",
+        "endonym": "עברית",
+        "dir": "rtl",
+        "script": "Hebr"
+      }
+    },
+    {
+      "code": "hr",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Croatian",
+        "code": "hr",
+        "language": "hr",
+        "endonym": "Hrvatski",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "hu",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Hungarian",
+        "code": "hu",
+        "language": "hu",
+        "endonym": "magyar",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "hy",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Armenian",
+        "code": "hy",
+        "language": "hy",
+        "endonym": "Հայերեն",
+        "dir": "ltr",
+        "script": "Armn"
+      }
+    },
+    {
+      "code": "id_ID",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Indonesian (Indonesia)",
+        "code": "id_ID",
+        "country": "ID",
+        "language": "id",
+        "endonym": "Bahasa Indonesia (Indonesia)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "it",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Italian",
+        "code": "it",
+        "language": "it",
+        "endonym": "Italiano",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "ja",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Japanese",
+        "code": "ja",
+        "language": "ja",
+        "endonym": "日本語",
+        "dir": "ltr",
+        "script": "Jpan"
+      }
+    },
+    {
+      "code": "ka_GE",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Georgian (Georgia)",
+        "code": "ka_GE",
+        "country": "GE",
+        "language": "ka",
+        "endonym": "ქართული (საქართველო)",
+        "dir": "ltr",
+        "script": "Geor"
+      }
+    },
+    {
+      "code": "ko",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Korean",
+        "code": "ko",
+        "language": "ko",
+        "endonym": "한국어",
+        "dir": "ltr",
+        "script": "Kore"
+      }
+    },
+    {
+      "code": "ku_ckb",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Kurdish (Sorani)",
+        "code": "ku_ckb",
+        "language": "ku",
+        "variant": "ckb",
+        "endonym": "کوردی (سۆرانی)",
+        "dir": "rtl",
+        "script": "Arab"
+      }
+    },
+    {
+      "code": "ku_kmr_latin",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Kurdish (Kurmanji, Latin)",
+        "code": "ku_kmr_latin",
+        "language": "ku",
+        "variant": "kmr_latin",
+        "endonym": "Kurdî (Kurmancî)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "lv",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Latvian",
+        "code": "lv",
+        "language": "lv",
+        "endonym": "latviešu valoda",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "mk",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Macedonian",
+        "code": "mk",
+        "language": "mk",
+        "endonym": "македонски јазик",
+        "dir": "ltr",
+        "script": "Cyrl"
+      }
+    },
+    {
+      "code": "mn_MN_cyrl",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Mongolian (Mongolia, Cyrillic)",
+        "code": "mn_MN_cyrl",
+        "country": "MN",
+        "language": "mn",
+        "variant": "cyrl",
+        "endonym": "Монгол (Монгол Улс, Кирилл)",
+        "dir": "ltr",
+        "script": "Cyrl"
+      }
+    },
+    {
+      "code": "nb_NO",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Norwegian (Norway)",
+        "code": "nb_NO",
+        "country": "NO",
+        "language": "nb",
+        "endonym": "Norsk bokmål (Norge)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "ne",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Nepali",
+        "code": "ne",
+        "language": "ne",
+        "endonym": "नेपाली",
+        "dir": "ltr",
+        "script": "Deva"
+      }
+    },
+    {
+      "code": "nl",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Dutch",
+        "code": "nl",
+        "language": "nl",
+        "endonym": "Nederlands",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "nl_BE",
+      "fallback": [
+        "nl",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Dutch (Belgium)",
+        "code": "nl_BE",
+        "country": "BE",
+        "language": "nl",
+        "endonym": "Nederlands (België)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "pl",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Polish",
+        "code": "pl",
+        "language": "pl",
+        "endonym": "Polski",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "pt_BR",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Portuguese (Brazil)",
+        "code": "pt_BR",
+        "country": "BR",
+        "language": "pt",
+        "endonym": "Português (Brasil)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "pt_PT",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Portuguese (Portugal)",
+        "code": "pt_PT",
+        "country": "PT",
+        "language": "pt",
+        "endonym": "Português (Portugal)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "ro",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Romanian",
+        "code": "ro",
+        "language": "ro",
+        "endonym": "Română",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "ro_MD",
+      "fallback": [
+        "ro",
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Romanian (Moldova)",
+        "code": "ro_MD",
+        "country": "MD",
+        "language": "ro",
+        "endonym": "Română (Moldova)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "ru",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Russian",
+        "code": "ru",
+        "language": "ru",
+        "endonym": "Русский",
+        "dir": "ltr",
+        "script": "Cyrl"
+      }
+    },
+    {
+      "code": "sk",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Slovak",
+        "code": "sk",
+        "language": "sk",
+        "endonym": "slovenčina",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "sl_SI",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Slovenian (Slovenia)",
+        "code": "sl_SI",
+        "country": "SI",
+        "language": "sl",
+        "endonym": "Slovensko (Slovenia)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "sr_RS_latin",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Serbian (Serbia, Latin)",
+        "code": "sr_RS_latin",
+        "country": "RS",
+        "language": "sr",
+        "variant": "latin",
+        "endonym": "srpski (Srbija, latinica)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "sv",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Swedish",
+        "code": "sv",
+        "language": "sv",
+        "endonym": "Svenska",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "ta_IN",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Tamil (India)",
+        "code": "ta_IN",
+        "language": "ta",
+        "country": "IN",
+        "endonym": "தமிழ் (இந்தியா)",
+        "dir": "ltr",
+        "script": "Taml"
+      }
+    },
+    {
+      "code": "th",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Thai",
+        "code": "th",
+        "language": "th",
+        "endonym": "ไทย",
+        "dir": "ltr",
+        "script": "Thai"
+      }
+    },
+    {
+      "code": "tr",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Turkish",
+        "code": "tr",
+        "language": "tr",
+        "endonym": "Türkçe",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "uk",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Ukrainian",
+        "code": "uk",
+        "language": "uk",
+        "endonym": "Українська",
+        "dir": "ltr",
+        "script": "Cyrl"
+      }
+    },
+    {
+      "code": "ur",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Urdu",
+        "code": "ur",
+        "language": "ur",
+        "endonym": "اردو",
+        "dir": "rtl",
+        "script": "Arab"
+      }
+    },
+    {
+      "code": "uz_UZ_latin",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Uzbek (Uzbekistan, Latin)",
+        "code": "uz_UZ_latin",
+        "country": "UZ",
+        "language": "uz",
+        "variant": "latin",
+        "endonym": "O'zbekcha",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "vi",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Vietnamese",
+        "code": "vi",
+        "language": "vi",
+        "endonym": "Tiếng Việt",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "yo_NG",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Yoruba (Nigeria)",
+        "code": "yo_NG",
+        "country": "NG",
+        "language": "yo",
+        "endonym": "Yoruba (Naijiria)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    },
+    {
+      "code": "zh_CN",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Chinese (China)",
+        "code": "zh_CN",
+        "country": "CN",
+        "language": "zh",
+        "endonym": "中文 (中国)",
+        "dir": "ltr",
+        "script": "Hans"
+      }
+    },
+    {
+      "code": "zh_TW",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Chinese (Taiwan)",
+        "code": "zh_TW",
+        "country": "TW",
+        "language": "zh",
+        "endonym": "中文 (臺灣)",
+        "dir": "ltr",
+        "script": "Hant"
+      }
+    },
+    {
+      "code": "zu_ZA",
+      "fallback": [
+        "en",
+        "base"
+      ],
+      "metadata": {
+        "title": "Zulu (South Africa)",
+        "code": "zu_ZA",
+        "country": "ZA",
+        "language": "zu",
+        "endonym": "isiZulu (Iningizimu Afrika)",
+        "dir": "ltr",
+        "script": "Latn"
+      }
+    }
+  ],
+  "methods": [
+    "airline.aircraftType",
+    "airline.airline",
+    "airline.airplane",
+    "airline.airport",
+    "airline.flightNumber",
+    "airline.recordLocator",
+    "airline.seat",
+    "animal.bear",
+    "animal.bird",
+    "animal.cat",
+    "animal.cetacean",
+    "animal.cow",
+    "animal.crocodilia",
+    "animal.dog",
+    "animal.fish",
+    "animal.horse",
+    "animal.insect",
+    "animal.lion",
+    "animal.petName",
+    "animal.rabbit",
+    "animal.rodent",
+    "animal.snake",
+    "animal.type",
+    "book.author",
+    "book.format",
+    "book.genre",
+    "book.publisher",
+    "book.series",
+    "book.title",
+    "color.cmyk",
+    "color.colorByCSSColorSpace",
+    "color.cssSupportedFunction",
+    "color.cssSupportedSpace",
+    "color.hsl",
+    "color.human",
+    "color.hwb",
+    "color.lab",
+    "color.lch",
+    "color.rgb",
+    "color.space",
+    "commerce.department",
+    "commerce.isbn",
+    "commerce.price",
+    "commerce.product",
+    "commerce.productAdjective",
+    "commerce.productDescription",
+    "commerce.productMaterial",
+    "commerce.productName",
+    "commerce.upc",
+    "company.buzzAdjective",
+    "company.buzzNoun",
+    "company.buzzPhrase",
+    "company.buzzVerb",
+    "company.catchPhrase",
+    "company.catchPhraseAdjective",
+    "company.catchPhraseDescriptor",
+    "company.catchPhraseNoun",
+    "company.name",
+    "database.collation",
+    "database.column",
+    "database.engine",
+    "database.mongodbObjectId",
+    "database.type",
+    "datatype.boolean",
+    "date.anytime",
+    "date.between",
+    "date.betweens",
+    "date.birthdate",
+    "date.future",
+    "date.month",
+    "date.past",
+    "date.recent",
+    "date.soon",
+    "date.timeZone",
+    "date.weekday",
+    "finance.accountName",
+    "finance.accountNumber",
+    "finance.amount",
+    "finance.bic",
+    "finance.bitcoinAddress",
+    "finance.creditCardCVV",
+    "finance.creditCardIssuer",
+    "finance.creditCardNumber",
+    "finance.currency",
+    "finance.currencyCode",
+    "finance.currencyName",
+    "finance.currencyNumericCode",
+    "finance.currencySymbol",
+    "finance.ethereumAddress",
+    "finance.iban",
+    "finance.litecoinAddress",
+    "finance.pin",
+    "finance.routingNumber",
+    "finance.transactionDescription",
+    "finance.transactionType",
+    "food.adjective",
+    "food.description",
+    "food.dish",
+    "food.ethnicCategory",
+    "food.fruit",
+    "food.ingredient",
+    "food.meat",
+    "food.spice",
+    "food.vegetable",
+    "git.branch",
+    "git.commitDate",
+    "git.commitEntry",
+    "git.commitMessage",
+    "git.commitSha",
+    "hacker.abbreviation",
+    "hacker.adjective",
+    "hacker.ingverb",
+    "hacker.noun",
+    "hacker.phrase",
+    "hacker.verb",
+    "helpers.arrayElement",
+    "helpers.arrayElements",
+    "helpers.enumValue",
+    "helpers.fake",
+    "helpers.fromRegExp",
+    "helpers.maybe",
+    "helpers.multiple",
+    "helpers.mustache",
+    "helpers.objectEntry",
+    "helpers.objectKey",
+    "helpers.objectValue",
+    "helpers.rangeToNumber",
+    "helpers.replaceCreditCardSymbols",
+    "helpers.replaceSymbols",
+    "helpers.shuffle",
+    "helpers.slugify",
+    "helpers.uniqueArray",
+    "helpers.weightedArrayElement",
+    "image.avatar",
+    "image.avatarGitHub",
+    "image.dataUri",
+    "image.personPortrait",
+    "image.url",
+    "image.urlLoremFlickr",
+    "image.urlPicsumPhotos",
+    "internet.displayName",
+    "internet.domainName",
+    "internet.domainSuffix",
+    "internet.domainWord",
+    "internet.email",
+    "internet.emoji",
+    "internet.exampleEmail",
+    "internet.httpMethod",
+    "internet.httpStatusCode",
+    "internet.ip",
+    "internet.ipv4",
+    "internet.ipv6",
+    "internet.jwt",
+    "internet.jwtAlgorithm",
+    "internet.mac",
+    "internet.password",
+    "internet.port",
+    "internet.protocol",
+    "internet.url",
+    "internet.userAgent",
+    "internet.username",
+    "location.buildingNumber",
+    "location.cardinalDirection",
+    "location.city",
+    "location.continent",
+    "location.country",
+    "location.countryCode",
+    "location.county",
+    "location.direction",
+    "location.language",
+    "location.latitude",
+    "location.longitude",
+    "location.nearbyGPSCoordinate",
+    "location.ordinalDirection",
+    "location.postalAddress",
+    "location.secondaryAddress",
+    "location.state",
+    "location.street",
+    "location.streetAddress",
+    "location.timeZone",
+    "location.zipCode",
+    "lorem.lines",
+    "lorem.paragraph",
+    "lorem.paragraphs",
+    "lorem.sentence",
+    "lorem.sentences",
+    "lorem.slug",
+    "lorem.text",
+    "lorem.word",
+    "lorem.words",
+    "music.album",
+    "music.artist",
+    "music.genre",
+    "music.songName",
+    "number.bigInt",
+    "number.binary",
+    "number.float",
+    "number.hex",
+    "number.int",
+    "number.octal",
+    "number.romanNumeral",
+    "person.bio",
+    "person.firstName",
+    "person.fullName",
+    "person.gender",
+    "person.jobArea",
+    "person.jobDescriptor",
+    "person.jobTitle",
+    "person.jobType",
+    "person.lastName",
+    "person.middleName",
+    "person.prefix",
+    "person.sex",
+    "person.sexType",
+    "person.suffix",
+    "person.zodiacSign",
+    "phone.imei",
+    "phone.number",
+    "science.chemicalElement",
+    "science.unit",
+    "string.alpha",
+    "string.alphanumeric",
+    "string.binary",
+    "string.fromCharacters",
+    "string.hexadecimal",
+    "string.nanoid",
+    "string.numeric",
+    "string.octal",
+    "string.sample",
+    "string.symbol",
+    "string.ulid",
+    "string.uuid",
+    "system.commonFileExt",
+    "system.commonFileName",
+    "system.commonFileType",
+    "system.cron",
+    "system.directoryPath",
+    "system.fileExt",
+    "system.fileName",
+    "system.filePath",
+    "system.fileType",
+    "system.mimeType",
+    "system.networkInterface",
+    "system.semver",
+    "vehicle.bicycle",
+    "vehicle.color",
+    "vehicle.fuel",
+    "vehicle.manufacturer",
+    "vehicle.model",
+    "vehicle.type",
+    "vehicle.vehicle",
+    "vehicle.vin",
+    "vehicle.vrm",
+    "word.adjective",
+    "word.adverb",
+    "word.conjunction",
+    "word.interjection",
+    "word.noun",
+    "word.preposition",
+    "word.sample",
+    "word.verb",
+    "word.words"
+  ]
+}

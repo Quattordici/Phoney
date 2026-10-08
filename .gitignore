@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+node_modules/
+BenchmarkDotNet.Artifacts/
+TestResults/
+artifacts/
+*.received.*

@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet build -c Release
+      # Tests run on net8.0 and net10.0 in CI (see tests/Phony.Tests/Phony.Tests.csproj).
+      - run: dotnet test -c Release --no-build
+
+  aot:
+    name: Native AOT smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish with Native AOT (trim/AOT warnings fail the build)
+        run: dotnet publish tests/Phony.AotSmoke -c Release -o artifacts/aot -p:TreatWarningsAsErrors=true
+      - run: ./artifacts/aot/Phony.AotSmoke
+
+  data:
+    name: Locale data is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Re-import the pinned faker.js version
+        working-directory: tools/extract
+        run: |
+          npm ci --ignore-scripts
+          node export-locales.mjs ../../data/raw
+      - run: dotnet run --project tools/Phony.DataCompiler -c Release
+      - name: Fail if committed data differs from a fresh import
+        run: git diff --exit-code -- data src/Phony/Resources src/Phony/Data/Generated
+
+  pack:
+    name: Pack
+    needs: [build, aot, data]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Pack (version from tag, or a CI pre-release)
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
+          dotnet pack src/Phony -c Release -o artifacts/packages -p:Version="$VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages
+
+  publish:
+    name: Publish to NuGet
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: nuget
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: packages
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet nuget push "packages/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate

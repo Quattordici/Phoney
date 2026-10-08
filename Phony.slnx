@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Phony.Benchmarks/Phony.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Phony.Samples/Phony.Samples.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Phony/Phony.csproj" />
+    <Project Path="src/Phony.SourceGenerator/Phony.SourceGenerator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Phony.AotSmoke/Phony.AotSmoke.csproj" />
+    <Project Path="tests/Phony.SourceGenerator.Tests/Phony.SourceGenerator.Tests.csproj" />
+    <Project Path="tests/Phony.Tests/Phony.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Phony.DataCompiler/Phony.DataCompiler.csproj" />
+  </Folder>
+</Solution>

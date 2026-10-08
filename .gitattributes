@@ -1,0 +1,5 @@
+* text=auto
+*.br binary
+*.verified.cs text eol=lf
+data/raw/*.json text eol=lf linguist-generated
+src/Phony/Data/*.g.cs linguist-generated
