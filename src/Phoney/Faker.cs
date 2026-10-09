@@ -20,12 +20,23 @@ public sealed partial class Faker
 {
     private DateTimeOffset? _referenceDate;
 
+    /// <summary>
+    /// The <see cref="ReferenceDate"/> of seeded fakers and generators that don't set one: a fixed point in time, so
+    /// relative dates (past, recent, birthdates, ages) are as reproducible as everything else. 2025-01-01T00:00:00Z.
+    /// </summary>
+    public static readonly DateTimeOffset DefaultSeededReferenceDate = new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     /// <summary>Creates a faker for <paramref name="locale"/> (e.g. <c>en</c>, <c>sv</c>, <c>de-AT</c>).</summary>
     /// <param name="locale">Locale code or culture name; see <see cref="Locales.All"/>.</param>
-    /// <param name="seed">Seed for reproducible values; random when <see langword="null"/>.</param>
+    /// <param name="seed">
+    /// Seed for reproducible values; random when <see langword="null"/>. A seeded faker also fixes
+    /// <see cref="ReferenceDate"/> to <see cref="DefaultSeededReferenceDate"/> unless you set it.
+    /// </param>
     public Faker(string locale = Locales.Default, long? seed = null)
         : this(LocaleStore.Get(locale), seed is { } s ? new Randomizer(s) : new Randomizer())
     {
+        if (seed is not null)
+            _referenceDate = DefaultSeededReferenceDate;
     }
 
     /// <summary>Creates a faker for the locale matching <paramref name="culture"/> (e.g. <c>sv-SE</c> → <c>sv</c>).</summary>
@@ -51,8 +62,8 @@ public sealed partial class Faker
     public Randomizer Random { get; }
 
     /// <summary>
-    /// The point in time that relative dates (past, future, recent, birthdates…) are computed from.
-    /// Defaults to the current time; set it together with a seed for fully reproducible dates.
+    /// The point in time that relative dates (past, future, recent, birthdates…) are computed from. Defaults to the
+    /// current time, or to <see cref="DefaultSeededReferenceDate"/> once the faker is seeded.
     /// </summary>
     public DateTimeOffset ReferenceDate
     {
@@ -60,10 +71,14 @@ public sealed partial class Faker
         set => _referenceDate = value;
     }
 
-    /// <summary>Restarts the random sequence from <paramref name="seed"/>.</summary>
+    /// <summary>
+    /// Restarts the random sequence from <paramref name="seed"/>. Unless a <see cref="ReferenceDate"/> was set, it
+    /// becomes <see cref="DefaultSeededReferenceDate"/> so dates are reproducible too.
+    /// </summary>
     public Faker Seed(long seed)
     {
         Random.Reseed(seed);
+        _referenceDate ??= DefaultSeededReferenceDate;
         return this;
     }
 

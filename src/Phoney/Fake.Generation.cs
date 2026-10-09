@@ -26,7 +26,8 @@ public static partial class Fake
 
     /// <summary>
     /// Starts configuring a generator for <typeparamref name="T"/>. Uses a source-generated model when one is
-    /// registered (see <see cref="FakeForAttribute{T}"/>), otherwise reflection.
+    /// registered (see <see cref="FakeForAttribute{T}"/>), otherwise reflection. When the facade is seeded
+    /// (<see cref="Seeded"/>, <see cref="Seed"/>), the generator is seeded from it.
     /// </summary>
     /// <example>
     /// <code>
@@ -38,5 +39,14 @@ public static partial class Fake
     /// </example>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static Generator<T> For<T>() => new(ModelRegistry.For<T>());
+    public static Generator<T> For<T>()
+    {
+        var generator = new Generator<T>(ModelRegistry.For<T>());
+        if (!IsSeeded)
+            return generator;
+
+        // A seeded facade seeds its generators from its own sequence, so they are reproducible too.
+        var faker = Faker;
+        return generator.Seed(faker.Random.Long(long.MinValue, long.MaxValue)).ReferenceDate(faker.ReferenceDate).Locale(faker.Locale);
+    }
 }

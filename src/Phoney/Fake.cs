@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Phoney.Modules;
 
 namespace Phoney;
@@ -9,12 +10,16 @@ namespace Phoney;
 /// <code>
 /// string name = Fake.Person.FullName();
 /// string city = Fake.Location.City();
-/// Fake.Locale = "sv";          // switch the default locale for all threads
+/// Fake.Locale = "sv";                 // switch the default locale for all threads
+///
+/// using var _ = Fake.Seeded(42);      // reproducible Fake.* and Fake.One/Many/For in this test
 /// </code>
 /// </example>
 public static partial class Fake
 {
+    private static readonly AsyncLocal<Faker?> s_scoped = new();
     private static string s_locale = Locales.Default;
+    private static StrongBox<long>? s_seed; // a reference, so threads read it atomically
     private static int s_version;
 
     [ThreadStatic]
@@ -36,8 +41,16 @@ public static partial class Fake
         }
     }
 
-    /// <summary>The current thread's faker. Not seeded; use <c>new Faker(seed: …)</c> for reproducible values.</summary>
-    public static Faker Faker
+    /// <summary>
+    /// The faker behind the facade: the one from an enclosing <see cref="Seeded"/> scope, otherwise the current
+    /// thread's (seeded when <see cref="Seed"/> was called).
+    /// </summary>
+    public static Faker Faker => s_scoped.Value ?? ThreadFaker;
+
+    /// <summary>Whether the facade currently produces reproducible values (a <see cref="Seeded"/> scope or <see cref="Seed"/>).</summary>
+    public static bool IsSeeded => s_scoped.Value is not null || Volatile.Read(ref s_seed) is not null;
+
+    private static Faker ThreadFaker
     {
         get
         {
@@ -45,10 +58,58 @@ public static partial class Fake
             if (faker is null || t_version != Volatile.Read(ref s_version))
             {
                 t_version = Volatile.Read(ref s_version);
-                faker = t_faker = new Faker(s_locale);
+                faker = t_faker = new Faker(s_locale, Volatile.Read(ref s_seed)?.Value);
             }
 
             return faker;
+        }
+    }
+
+    /// <summary>
+    /// Seeds the facade for the whole app, or makes it random again with <see langword="null"/>. Each thread restarts
+    /// the same sequence, so single-threaded code becomes reproducible. For parallel tests prefer <see cref="Seeded"/>.
+    /// </summary>
+    public static void Seed(long? seed)
+    {
+        Volatile.Write(ref s_seed, seed is { } value ? new StrongBox<long>(value) : null);
+        Interlocked.Increment(ref s_version);
+    }
+
+    /// <summary>
+    /// Makes <c>Fake.*</c>, <see cref="One{T}"/>, <see cref="Many{T}"/> and <see cref="For{T}"/> reproducible until the
+    /// returned scope is disposed. The scope follows the current async flow, so parallel tests don't affect each other.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// [Fact]
+    /// public void Test()
+    /// {
+    ///     using var _ = Fake.Seeded(42);
+    ///     var customer = Fake.One&lt;Customer&gt;();   // the same customer on every run
+    /// }
+    /// </code>
+    /// </example>
+    /// <param name="seed">The seed.</param>
+    /// <param name="locale">Locale for the scope; defaults to <see cref="Locale"/>.</param>
+    public static IDisposable Seeded(long seed, string? locale = null)
+    {
+        var previous = s_scoped.Value;
+        s_scoped.Value = new Faker(locale ?? s_locale, seed);
+        return new Scope(previous);
+    }
+
+    /// <summary>Restores the facade's previous faker when a <see cref="Seeded"/> scope ends.</summary>
+    private sealed class Scope(Faker? previous) : IDisposable
+    {
+        private bool _disposed;
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            s_scoped.Value = previous;
         }
     }
 

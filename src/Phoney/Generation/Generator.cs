@@ -44,10 +44,13 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>Uses <paramref name="locale"/> instead of <see cref="Fake.Locale"/>.</summary>
     public Generator<T> Locale(string locale) => Derive(_config with { Locale = Locales.Get(locale).Code });
 
-    /// <summary>Makes generation reproducible: the same seed always yields the same sequence of objects.</summary>
+    /// <summary>
+    /// Makes generation reproducible: the same seed always yields the same sequence of objects. Relative dates use
+    /// <see cref="Faker.DefaultSeededReferenceDate"/> unless <see cref="ReferenceDate"/> is set, so they are stable over time.
+    /// </summary>
     public Generator<T> Seed(long seed) => Derive(_config with { Seed = seed });
 
-    /// <summary>Sets the point in time relative dates are computed from; combine with <see cref="Seed"/> for fully stable output.</summary>
+    /// <summary>Sets the point in time relative dates are computed from (default: now, or a fixed date when seeded).</summary>
     public Generator<T> ReferenceDate(DateTimeOffset referenceDate) => Derive(_config with { ReferenceDate = referenceDate });
 
     /// <summary>Sets a member to a fixed value.</summary>
@@ -169,7 +172,8 @@ public sealed class Generator<T> : INestedGenerator
 
     /// <summary>
     /// Generates <paramref name="count"/> objects on all cores. With a <see cref="Seed"/> the result equals
-    /// <see cref="Generate(int)"/> (unless members are <see cref="Unique{TValue}"/>, which depends on order).
+    /// <see cref="Generate(int)"/>, except for <see cref="Unique{TValue}"/> members: which object retries a duplicate
+    /// depends on thread timing, so combine uniqueness with sequential generation when results must be stable.
     /// </summary>
     public T[] GenerateParallel(int count)
     {
@@ -209,7 +213,10 @@ public sealed class Generator<T> : INestedGenerator
         var compiled = _state.Compiled ??= Compile();
         var data = parentFaker is not null && _config.Locale is null ? parentFaker.Data : LocaleStore.Get(_config.Locale ?? Fake.Locale);
         var faker = new Faker(data, new Randomizer(0));
-        var referenceDate = _config.ReferenceDate ?? parentFaker?.ReferenceDate;
+        // Explicit date, else the parent's (nested generators), else a fixed date for seeded generators so their
+        // relative dates don't drift with the clock; unseeded generators use the current time.
+        var referenceDate = _config.ReferenceDate ?? parentFaker?.ReferenceDate
+            ?? (_config.Seed is not null ? Faker.DefaultSeededReferenceDate : null);
         if (referenceDate is { } date)
             faker.ReferenceDate = date;
         return new Run(this, compiled, faker, seed ?? BaseSeed);

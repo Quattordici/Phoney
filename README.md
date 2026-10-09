@@ -11,7 +11,7 @@
 - **Convention-based population** of classes, records and structs: `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… just work, and names, emails and avatars of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode, custom conventions, custom locales, faker.js-style templates.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
-- **Deterministic**: same seed means same data on every OS and .NET version, item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
+- **Deterministic**: same seed means same data, dates included, on every OS and .NET version and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
 - **Trim and Native AOT safe** with the source generator.
 
 Targets .NET 8 and .NET 10.
@@ -80,11 +80,7 @@ A `Faker` groups values by topic:
 
 Checksums are real: credit cards and IMEIs pass Luhn, IBANs pass MOD 97, ISBN, UPC, VIN and ABA routing numbers have valid check digits.
 
-`Fake.*` is a thread-safe static facade over a per-thread `Faker`. For reproducible values create a `Faker` with a seed, and set `ReferenceDate` if you use relative dates:
-
-```csharp
-var faker = new Faker("de", seed: 2024) { ReferenceDate = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero) };
-```
+`Fake.*` is a thread-safe static facade over a per-thread `Faker`.
 
 `faker.Random` is the seeded source of randomness (xoshiro256\*\*) for your own values: `Int`, `Long`, `Double`, `Decimal`, `Bool(0.2)`, `Element(list)`, `Elements(list, 3)`, `Weighted(("gold", 1), ("silver", 3))`, `Enum<T>()`, `Guid()`, `Replace("##??")`.
 
@@ -94,6 +90,26 @@ Image URLs come from replaceable templates, so generated data doesn't have to po
 ImageSources.UseHost("https://images.test");                 // …/photos/{seed}/{width}x{height}, …/avatars/{sex}/{size}/{index}.jpg
 ImageSources.Photo = "https://cdn.example.com/{width}x{height}?s={seed}";
 ```
+
+### Reproducible data
+
+A seed fixes values *and* dates: seeded fakers and generators compute relative dates (past, recent, birthdates, ages) from `Faker.DefaultSeededReferenceDate` (2025-01-01 UTC) unless you set `ReferenceDate`, so seeded output doesn't change from one day to the next.
+
+```csharp
+var faker = new Faker("de", seed: 2024);                         // same values and dates on every run
+var later = new Faker("de", seed: 2024) { ReferenceDate = DateTimeOffset.UtcNow }; // opt back into "now"
+
+[Fact]
+public void Creates_an_invoice()
+{
+    using var _ = Fake.Seeded(42);           // Fake.*, Fake.One/Many/For are reproducible in this test only
+    var customer = Fake.One<Customer>();     // the same customer on every run, even with tests in parallel
+}
+
+Fake.Seed(42);                                // or seed the facade app-wide (every thread starts the same sequence)
+```
+
+`Generator<T>.Seed(n)` does the same for a generator. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
 
 ## Templates
 
