@@ -28,6 +28,6 @@ internal static class Snapshot
         }
 
         File.WriteAllText(received, actual);
-        Assert.Fail($"Snapshot '{name}' does not match. Review {received} and rename it to {Path.GetFileName(verified)} to accept.");
+        throw new ShouldAssertException($"Snapshot '{name}' does not match. Review {received} and rename it to {Path.GetFileName(verified)} to accept.");
     }
 }

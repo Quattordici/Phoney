@@ -127,7 +127,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
     }
 
     /// <summary>Builds the value producer for a member type: scalar conventions, collections, nested objects.</summary>
-    private static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints = null)
+    internal static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints = null)
     {
         var underlying = Nullable.GetUnderlyingType(type);
         if (underlying is not null)
@@ -342,5 +342,5 @@ internal sealed class ReflectionTypeModel : IFakeModel
         property.SetMethod?.ReturnParameter.GetRequiredCustomModifiers().Contains(typeof(IsExternalInit)) == true;
 
     /// <summary>Upper-cases the first character (constructor parameter → property name).</summary>
-    private static string Capitalize(string name) => name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
+    internal static string Capitalize(string name) => name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
 }

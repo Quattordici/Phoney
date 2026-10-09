@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Phoney.TUnit</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>Phoney.TUnit</PackageId>
+    <Description>Phoney fake data for TUnit tests: [FakeData] fills test method parameters, constructor parameters and properties with realistic, reproducible values that agree with each other.</Description>
+    <PackageTags>$(PackageTags);tunit;autodata;testing</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Phoney.TUnit.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PrivateAssets=none: installing only Phoney.TUnit still brings Phoney's [FakeFor<T>] source generator. -->
+    <ProjectReference Include="../Phoney/Phoney.csproj" PrivateAssets="none" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

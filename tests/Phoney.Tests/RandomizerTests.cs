@@ -2,7 +2,7 @@ namespace Phoney.Tests;
 
 public sealed class RandomizerTests
 {
-    [Fact]
+    [Test]
     public void Same_seed_gives_the_same_sequence()
     {
         var a = new Randomizer(42);
@@ -11,7 +11,7 @@ public sealed class RandomizerTests
             a.NextUInt64().ShouldBe(b.NextUInt64());
     }
 
-    [Fact]
+    [Test]
     public void Sequence_is_stable_across_platforms_and_versions()
     {
         // Golden values: xoshiro256** seeded through SplitMix64. Changing them breaks every seeded user test.
@@ -20,7 +20,7 @@ public sealed class RandomizerTests
         values.ShouldBe(GoldenValues);
     }
 
-    [Fact]
+    [Test]
     public void Reseed_restarts_the_sequence()
     {
         var random = new Randomizer(7);
@@ -30,7 +30,7 @@ public sealed class RandomizerTests
         random.Seed.ShouldBe(7);
     }
 
-    [Fact]
+    [Test]
     public void Int_is_inclusive_and_covers_the_whole_range()
     {
         var random = new Randomizer(1);
@@ -45,7 +45,7 @@ public sealed class RandomizerTests
         seen.Count.ShouldBe(7);
     }
 
-    [Fact]
+    [Test]
     public void Extreme_ranges_do_not_overflow()
     {
         var random = new Randomizer(1);
@@ -55,7 +55,7 @@ public sealed class RandomizerTests
         Should.Throw<ArgumentException>(() => random.Int(2, 1));
     }
 
-    [Fact]
+    [Test]
     public void Double_is_in_the_half_open_unit_interval()
     {
         var random = new Randomizer(3);
@@ -63,7 +63,7 @@ public sealed class RandomizerTests
             random.Double().ShouldBeInRange(0, 0.9999999999999999);
     }
 
-    [Fact]
+    [Test]
     public void Weighted_index_follows_the_weights()
     {
         var random = new Randomizer(5);
@@ -76,7 +76,7 @@ public sealed class RandomizerTests
         counts[2].ShouldBeGreaterThan(counts[0] * 5);
     }
 
-    [Fact]
+    [Test]
     public void Guid_is_version_4()
     {
         var guid = new Randomizer(9).Guid().ToString();
@@ -84,7 +84,7 @@ public sealed class RandomizerTests
         "89ab".ShouldContain(guid[19]);
     }
 
-    [Fact]
+    [Test]
     public void Derived_seeds_are_distinct_and_deterministic()
     {
         var seeds = Enumerable.Range(0, 1000).Select(i => Randomizer.DeriveSeed(42, i)).ToList();
@@ -92,7 +92,7 @@ public sealed class RandomizerTests
         Randomizer.DeriveSeed(42, 10).ShouldBe(seeds[10]);
     }
 
-    [Fact]
+    [Test]
     public void Replace_substitutes_symbols()
     {
         var value = new Randomizer(2).Replace("##-??-**");

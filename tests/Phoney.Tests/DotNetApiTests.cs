@@ -7,12 +7,12 @@ public sealed class DotNetApiTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 15, 0, 0, 0, TimeSpan.Zero);
 
-    [Theory]
-    [InlineData("en")]
-    [InlineData("sv")]
-    [InlineData("de_AT")]
-    [InlineData("ru")]
-    [InlineData("en_HK")] // no postal codes in this locale
+    [Test]
+    [Arguments("en")]
+    [Arguments("sv")]
+    [Arguments("de_AT")]
+    [Arguments("ru")]
+    [Arguments("en_HK")] // no postal codes in this locale
     public void Profiles_are_coherent(string locale)
     {
         var faker = new Faker(locale, seed: 3) { ReferenceDate = Reference };
@@ -31,7 +31,7 @@ public sealed class DotNetApiTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Profile_names_follow_the_requested_sex()
     {
         var faker = new Faker("sv", seed: 1);
@@ -45,7 +45,7 @@ public sealed class DotNetApiTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Templates_accept_dotnet_style_names()
     {
         var faker = new Faker(seed: 2);
@@ -58,7 +58,7 @@ public sealed class DotNetApiTests
         faker.Parse("{{person.firstName}}").ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [Test]
     public void Typed_locale_data_replaces_only_what_is_set()
     {
         Locales.Register("sv_typed", l => l
@@ -80,7 +80,7 @@ public sealed class DotNetApiTests
         }
     }
 
-    [Fact]
+    [Test]
     public void First_names_without_sex_replace_all_first_names()
     {
         Locales.Register("sv_only", l => l.FallbackTo("sv").FirstNames("Kim"));
@@ -90,7 +90,7 @@ public sealed class DotNetApiTests
         faker.Person.FirstName(Sex.Male).ShouldBe("Kim");
     }
 
-    [Fact]
+    [Test]
     public void Extending_a_locale_keeps_the_rest_of_the_group()
     {
         Locales.Register("en_extend", l => l.FallbackTo("en"));
@@ -104,7 +104,8 @@ public sealed class DotNetApiTests
         female.Distinct().Count().ShouldBeGreaterThan(1); // …and English sex-neutral names still mix in
     }
 
-    [Fact]
+    [Test]
+    [NotInParallel] // changes the process-wide image hosts
     public void Image_urls_use_replaceable_templates()
     {
         var faker = new Faker(seed: 6);
@@ -123,7 +124,7 @@ public sealed class DotNetApiTests
         faker.Image.DataUri(10, 10, base64: true).ShouldStartWith("data:image/svg+xml;base64,");
     }
 
-    [Fact]
+    [Test]
     public void Card_numbers_are_valid_for_every_issuer_in_every_locale()
     {
         foreach (var locale in new[] { "en", "sv", "zh_CN", "el" })
@@ -134,7 +135,7 @@ public sealed class DotNetApiTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Weighted_picks_follow_the_weights()
     {
         var random = new Randomizer(8);

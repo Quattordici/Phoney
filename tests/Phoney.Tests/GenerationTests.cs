@@ -66,7 +66,7 @@ public sealed class GenerationTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-    [Fact]
+    [Test]
     public void One_populates_by_convention()
     {
         var c = Fake.For<Customer>().Seed(1).ReferenceDate(Reference).Generate();
@@ -85,7 +85,7 @@ public sealed class GenerationTests
         c.Tags.Count.ShouldBeInRange(1, 3);
     }
 
-    [Fact]
+    [Test]
     public void Identity_members_are_coherent()
     {
         foreach (var c in Fake.For<Customer>().Seed(2).Generate(50))
@@ -100,7 +100,7 @@ public sealed class GenerationTests
         static string Ascii(string s) => new(s.Normalize(System.Text.NormalizationForm.FormKD).Where(char.IsAsciiLetter).ToArray());
     }
 
-    [Fact]
+    [Test]
     public void Records_init_only_members_and_nested_arrays_are_populated()
     {
         var order = Fake.For<Order>().Seed(3).Generate();
@@ -112,18 +112,18 @@ public sealed class GenerationTests
         Enum.IsDefined(order.Status).ShouldBeTrue();
     }
 
-    [Fact]
+    [Test]
     public void Cycles_stop_instead_of_recursing_forever()
     {
         var customer = Fake.For<Customer>().Seed(4).Generate();
         customer.Orders.ShouldAllBe(o => o.Customer == null);
     }
 
-    [Fact]
+    [Test]
     public void Structs_are_supported() =>
         Fake.One<Point>().Latitude.ShouldBeInRange(-90, 90);
 
-    [Fact]
+    [Test]
     public void Seeded_generation_is_reproducible_and_order_independent()
     {
         var generator = Fake.For<Customer>().Seed(42).ReferenceDate(Reference);
@@ -142,7 +142,7 @@ public sealed class GenerationTests
         static string Describe(Customer c) => $"{c.Id}|{c.FirstName}|{c.LastName}|{c.Email}|{c.HomeAddress.City}|{c.CreatedAt:O}|{c.Orders.Count}";
     }
 
-    [Fact]
+    [Test]
     public void Rules_override_conventions()
     {
         var customers = Fake.For<Customer>()
@@ -158,7 +158,7 @@ public sealed class GenerationTests
         customers.ShouldAllBe(c => c.Orders.Count == 0); // ignored: keeps its initializer
     }
 
-    [Fact]
+    [Test]
     public void Nested_generators_configure_nested_objects()
     {
         var customer = Fake.For<Customer>()
@@ -167,7 +167,7 @@ public sealed class GenerationTests
         customer.HomeAddress.Country.ShouldBe("Sweden");
     }
 
-    [Fact]
+    [Test]
     public void Generators_are_immutable_and_derivable()
     {
         var baseGenerator = Fake.For<Customer>().With(x => x.IsActive, true);
@@ -177,7 +177,7 @@ public sealed class GenerationTests
         inactive.Generate(5).ShouldAllBe(c => !c.IsActive);
     }
 
-    [Fact]
+    [Test]
     public void Unique_members_never_repeat()
     {
         var values = Fake.For<Customer>()
@@ -192,7 +192,7 @@ public sealed class GenerationTests
             Fake.For<Customer>().With(x => x.Age, f => f.Random.Int(1, 3)).Unique(x => x.Age, maxAttempts: 50).Generate(4));
     }
 
-    [Fact]
+    [Test]
     public void Strict_mode_reports_members_without_rules_or_conventions()
     {
         var ex = Should.Throw<InvalidOperationException>(() => Fake.For<Unconventional>().Strict().Generate());
@@ -203,7 +203,7 @@ public sealed class GenerationTests
         Fake.For<Unconventional>().Strict().With(x => x.Foo, "x").Ignore(x => x.Bar).Generate().Foo.ShouldBe("x");
     }
 
-    [Fact]
+    [Test]
     public void Custom_conventions_apply_to_matching_members()
     {
         var item = Fake.For<Unconventional>()
@@ -212,7 +212,7 @@ public sealed class GenerationTests
         item.Foo.ShouldBe("custom");
     }
 
-    [Fact]
+    [Test]
     public void Collection_size_null_probability_and_locale_are_configurable()
     {
         var customers = Fake.For<Customer>()
@@ -224,14 +224,14 @@ public sealed class GenerationTests
         customers.ShouldAllBe(c => c.Tags.Count == 4 && c.Phone == null);
     }
 
-    [Fact]
+    [Test]
     public void Unknown_members_in_rules_fail_clearly()
     {
         var ex = Should.Throw<ArgumentException>(() => Fake.For<Customer>().With(x => x.HomeAddress.City, "x"));
         ex.Message.ShouldContain("must select a member");
     }
 
-    [Fact]
+    [Test]
     public void After_create_and_create_with_hooks()
     {
         var c = Fake.For<Customer>()
@@ -245,29 +245,29 @@ public sealed class GenerationTests
         c.Tags.ShouldBe(["after"]);
     }
 
-    [Fact]
+    [Test]
     public void Stream_is_lazy_and_ids_are_sequential() =>
         Fake.For<Customer>().Stream().Take(3).Select(c => c.Id).ShouldBe([1, 2, 3]);
 
-    [Theory]
-    [InlineData("FirstName", TypeCategory.String, ConventionKind.FirstName)]
-    [InlineData("first_name", TypeCategory.String, ConventionKind.FirstName)]
-    [InlineData("BillingCity", TypeCategory.String, ConventionKind.City)]
-    [InlineData("HomeEmailAddress", TypeCategory.String, ConventionKind.Email)]
-    [InlineData("Monkey", TypeCategory.String, ConventionKind.None)]
-    [InlineData("CustomerId", TypeCategory.Int32, ConventionKind.ReferenceId)]
-    [InlineData("Id", TypeCategory.Int64, ConventionKind.Id)]
-    [InlineData("Age", TypeCategory.String, ConventionKind.None)]
-    [InlineData("UpdatedAt", TypeCategory.DateTime, ConventionKind.RecentDate)]
-    [InlineData("UnitPrice", TypeCategory.Decimal, ConventionKind.Price)]
+    [Test]
+    [Arguments("FirstName", TypeCategory.String, ConventionKind.FirstName)]
+    [Arguments("first_name", TypeCategory.String, ConventionKind.FirstName)]
+    [Arguments("BillingCity", TypeCategory.String, ConventionKind.City)]
+    [Arguments("HomeEmailAddress", TypeCategory.String, ConventionKind.Email)]
+    [Arguments("Monkey", TypeCategory.String, ConventionKind.None)]
+    [Arguments("CustomerId", TypeCategory.Int32, ConventionKind.ReferenceId)]
+    [Arguments("Id", TypeCategory.Int64, ConventionKind.Id)]
+    [Arguments("Age", TypeCategory.String, ConventionKind.None)]
+    [Arguments("UpdatedAt", TypeCategory.DateTime, ConventionKind.RecentDate)]
+    [Arguments("UnitPrice", TypeCategory.Decimal, ConventionKind.Price)]
     public void Convention_rules(string name, TypeCategory category, ConventionKind expected) =>
         ConventionRules.Match(name, category, "Thing").ShouldBe(expected);
 
-    [Theory]
-    [InlineData("Company", ConventionKind.CompanyName)]
-    [InlineData("Product", ConventionKind.ProductName)]
-    [InlineData("Customer", ConventionKind.FullName)]
-    [InlineData("Category", ConventionKind.Department)]
+    [Test]
+    [Arguments("Company", ConventionKind.CompanyName)]
+    [Arguments("Product", ConventionKind.ProductName)]
+    [Arguments("Customer", ConventionKind.FullName)]
+    [Arguments("Category", ConventionKind.Department)]
     public void Name_depends_on_the_declaring_type(string typeName, ConventionKind expected) =>
         ConventionRules.Match("Name", TypeCategory.String, typeName).ShouldBe(expected);
 }

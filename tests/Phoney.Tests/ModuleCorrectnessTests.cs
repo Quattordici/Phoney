@@ -10,28 +10,28 @@ public sealed class ModuleCorrectnessTests
 {
     private readonly Faker _faker = new("en", seed: 12345);
 
-    [Theory]
-    [InlineData("[A-Z]{3}-\\d{4}", "^[A-Z]{3}-[0-9]{4}$")]
-    [InlineData("(foo|bar)baz", "^(foo|bar)baz$")]
-    [InlineData("a{2,4}b?c+", "^a{2,4}b?c+$")]
-    [InlineData("[^0-9a-z]{5}", "^[A-Z]{5}$")]
-    [InlineData("\\w+@\\w+\\.com", "^\\w+@\\w+\\.com$")]
-    [InlineData("/[a-c]{3}/i", "^[a-cA-C]{3}$")]
-    [InlineData("T[0-9][ABCEGHJ-NPRSTVW-Z] [0-9][ABCEGHJ-NPRSTVW-Z][0-9]", "^T[0-9][ABCEGHJ-NPRSTVW-Z] [0-9][ABCEGHJ-NPRSTVW-Z][0-9]$")]
+    [Test]
+    [Arguments("[A-Z]{3}-\\d{4}", "^[A-Z]{3}-[0-9]{4}$")]
+    [Arguments("(foo|bar)baz", "^(foo|bar)baz$")]
+    [Arguments("a{2,4}b?c+", "^a{2,4}b?c+$")]
+    [Arguments("[^0-9a-z]{5}", "^[A-Z]{5}$")]
+    [Arguments("\\w+@\\w+\\.com", "^\\w+@\\w+\\.com$")]
+    [Arguments("/[a-c]{3}/i", "^[a-cA-C]{3}$")]
+    [Arguments("T[0-9][ABCEGHJ-NPRSTVW-Z] [0-9][ABCEGHJ-NPRSTVW-Z][0-9]", "^T[0-9][ABCEGHJ-NPRSTVW-Z] [0-9][ABCEGHJ-NPRSTVW-Z][0-9]$")]
     public void FromRegExp_matches_its_pattern(string pattern, string check)
     {
         for (var i = 0; i < 200; i++)
             _faker.Helpers.FromRegExp(pattern).ShouldMatch(check);
     }
 
-    [Theory]
-    [InlineData("[b-a]")]
-    [InlineData("(abc")]
-    [InlineData("abc\\")]
+    [Test]
+    [Arguments("[b-a]")]
+    [Arguments("(abc")]
+    [Arguments("abc\\")]
     public void FromRegExp_reports_invalid_patterns(string pattern) =>
         Should.Throw<FormatException>(() => _faker.Helpers.FromRegExp(pattern));
 
-    [Fact]
+    [Test]
     public void Credit_card_numbers_pass_the_Luhn_check()
     {
         foreach (var issuer in Enum.GetValues<CardIssuer>().Cast<CardIssuer?>().Append(null))
@@ -41,15 +41,15 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Credit_card_formats_with_ranges_are_expanded() =>
         _faker.Finance.CreditCardNumber("2[221-720]-####-####-###L").ShouldMatch("^2(22[1-9]|2[3-9]\\d|[3-6]\\d\\d|7[01]\\d|720)-\\d{4}-\\d{4}-\\d{4}$");
 
-    [Fact]
+    [Test]
     public void Imei_is_valid() =>
         HelpersModule.LuhnCheck(_faker.Phone.Imei()).ShouldBeTrue();
 
-    [Fact]
+    [Test]
     public void Ibans_have_valid_check_digits()
     {
         for (var i = 0; i < 200; i++)
@@ -62,7 +62,7 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Iban_for_a_country_has_that_country_and_length()
     {
         var iban = _faker.Finance.Iban("SE");
@@ -71,7 +71,7 @@ public sealed class ModuleCorrectnessTests
         _faker.Finance.Iban("SE", formatted: true).ShouldMatch("^SE\\d{2}( \\d{4}){5}$");
     }
 
-    [Fact]
+    [Test]
     public void Isbns_have_valid_check_digits()
     {
         for (var i = 0; i < 100; i++)
@@ -87,7 +87,7 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Upc_has_a_valid_check_digit()
     {
         var upc = _faker.Commerce.Upc("0123");
@@ -97,7 +97,7 @@ public sealed class ModuleCorrectnessTests
         (sum % 10).ShouldBe(0);
     }
 
-    [Fact]
+    [Test]
     public void Routing_numbers_have_valid_checksums()
     {
         for (var i = 0; i < 100; i++)
@@ -109,7 +109,7 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Vin_has_valid_check_digit()
     {
         var vin = _faker.Vehicle.Vin();
@@ -118,7 +118,7 @@ public sealed class ModuleCorrectnessTests
         vin[8].ToString().ShouldBe(VehicleModule.VinCheckDigit(vin));
     }
 
-    [Fact]
+    [Test]
     public void Ipv4_respects_networks_and_cidr_blocks()
     {
         for (var i = 0; i < 100; i++)
@@ -130,7 +130,7 @@ public sealed class ModuleCorrectnessTests
         _faker.Internet.Ipv4("1.2.3.4/32").ShouldBe("1.2.3.4");
     }
 
-    [Fact]
+    [Test]
     public void Emails_are_well_formed()
     {
         var email = new Regex("^[A-Za-z0-9._+-]+@[a-z0-9.-]+$");
@@ -142,7 +142,7 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Email_uses_given_names()
     {
         var email = _faker.Internet.Email("Åsa", "Öberg", provider: "example.com");
@@ -150,7 +150,7 @@ public sealed class ModuleCorrectnessTests
         email.ShouldContain("Asa");
     }
 
-    [Fact]
+    [Test]
     public void Number_ranges_and_multiples()
     {
         for (var i = 0; i < 1000; i++)
@@ -166,7 +166,7 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Price_has_charm_endings_and_stays_in_range()
     {
         var prices = Enumerable.Range(0, 500).Select(_ => _faker.Commerce.Price(1, 100)).ToList();
@@ -174,7 +174,7 @@ public sealed class ModuleCorrectnessTests
         prices.Count(p => decimal.Truncate(p * 100) % 10 == 9).ShouldBeGreaterThan(150);
     }
 
-    [Fact]
+    [Test]
     public void Dates_are_relative_to_the_reference_date()
     {
         var reference = new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero);
@@ -190,7 +190,7 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Ulid_and_uuid_v7_encode_the_timestamp()
     {
         var at = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -198,7 +198,7 @@ public sealed class ModuleCorrectnessTests
         _faker.String.UuidV7(at).ShouldMatch("^018cc251-f400-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$");
     }
 
-    [Fact]
+    [Test]
     public void Word_length_filters_and_strategies()
     {
         _faker.Word.Noun(5, 5).Length.ShouldBe(5);
@@ -207,7 +207,7 @@ public sealed class ModuleCorrectnessTests
         _faker.Word.Noun(100, 100, WordLengthStrategy.Closest).Length.ShouldBeGreaterThan(5);
     }
 
-    [Fact]
+    [Test]
     public void Full_name_honours_given_parts()
     {
         for (var i = 0; i < 50; i++)
@@ -218,7 +218,7 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Gendered_names_come_from_the_gendered_lists()
     {
         var sv = new Faker("sv", seed: 3);
@@ -227,7 +227,7 @@ public sealed class ModuleCorrectnessTests
             female.ShouldContain(sv.Person.FirstName(Sex.Female));
     }
 
-    [Fact]
+    [Test]
     public void Color_values_format_as_css()
     {
         _faker.Color.Hex().ShouldMatch("^#[0-9a-f]{6}$");
@@ -236,11 +236,11 @@ public sealed class ModuleCorrectnessTests
         _faker.Color.ColorByCssColorSpace(CssSpace.DisplayP3).ShouldStartWith("color(display-p3 ");
     }
 
-    [Fact]
+    [Test]
     public void Jwt_has_three_base64url_parts() =>
         _faker.Internet.Jwt().ShouldMatch("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9]{64}$");
 
-    [Fact]
+    [Test]
     public void Mime_types_and_extensions_are_consistent()
     {
         var mime = _faker.System.MimeType();

@@ -77,8 +77,8 @@ public sealed class SmokeTests
         ("git.branch", f => f.Git.Branch()),
     ];
 
-    [Theory]
-    [ClassData(typeof(AllLocales))]
+    [Test]
+    [MethodDataSource(typeof(TestLocales), nameof(TestLocales.All))]
     public void Every_generator_works_in_every_locale(string locale)
     {
         var faker = new Faker(locale, seed: 1);

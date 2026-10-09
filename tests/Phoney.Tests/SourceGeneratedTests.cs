@@ -42,7 +42,7 @@ public sealed class SourceGeneratedTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-    [Fact]
+    [Test]
     public void Generated_generators_populate_objects()
     {
         var member = TestFakes.Member.Seed(1).ReferenceDate(Reference).Generate();
@@ -57,7 +57,7 @@ public sealed class SourceGeneratedTests
         member.Avatar.Length.ShouldBe(16);
     }
 
-    [Fact]
+    [Test]
     public void Generated_models_are_registered_for_Fake_For_and_nested_types()
     {
         ModelRegistry.IsRegistered<Member>().ShouldBeTrue();
@@ -66,7 +66,7 @@ public sealed class SourceGeneratedTests
         ModelRegistry.For<Member>().GetType().Name.ShouldStartWith("__PhoneyModel_");
     }
 
-    [Fact]
+    [Test]
     public void Generated_and_reflection_models_produce_identical_data()
     {
         var generated = TestFakes.Member.Seed(7).ReferenceDate(Reference).Generate(25);
@@ -80,7 +80,7 @@ public sealed class SourceGeneratedTests
             $"{string.Join(",", m.Scores.Select(x => x.Key + "=" + x.Value))}|{string.Join(",", m.Tags)}|{Convert.ToHexString(m.Avatar)}";
     }
 
-    [Fact]
+    [Test]
     public void Rules_work_with_generated_models_including_init_only_dependents()
     {
         var members = TestFakes.Member
@@ -94,7 +94,7 @@ public sealed class SourceGeneratedTests
         members.ShouldAllBe(m => m.Memberships.Count == 0);
     }
 
-    [Fact]
+    [Test]
     public void Structs_with_init_members_are_generated()
     {
         var c = TestFakes.Coordinates.Generate();

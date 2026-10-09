@@ -3,6 +3,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Phoney.svg?label=NuGet)](https://www.nuget.org/packages/Phoney)
 [![NuGet prerelease](https://img.shields.io/nuget/vpre/Phoney.svg?label=NuGet%20prerelease)](https://www.nuget.org/packages/Phoney)
 [![NuGet downloads](https://img.shields.io/nuget/dt/Phoney.svg?label=Downloads)](https://www.nuget.org/packages/Phoney)
+[![Phoney.TUnit](https://img.shields.io/nuget/vpre/Phoney.TUnit.svg?label=Phoney.TUnit)](https://www.nuget.org/packages/Phoney.TUnit)
 
 **Fast, easy and flexible fake data for .NET**, powered by the locale data of [faker.js](https://github.com/faker-js/faker).
 
@@ -13,6 +14,7 @@
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
 - **Deterministic**: same seed means same data, dates included, on every OS and .NET version and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
 - **Trim and Native AOT safe** with the source generator.
+- **Test data in TUnit**: `[FakeData]` fills test parameters (package `Phoney.TUnit`).
 
 Targets .NET 8 and .NET 10.
 
@@ -212,6 +214,30 @@ var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer
 ```
 
 The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
+
+## Test data in TUnit
+
+The `Phoney.TUnit` package adds `[FakeData]`, which fills [TUnit](https://tunit.dev) test parameters the way Phoney fills the members of an object:
+
+```bash
+dotnet add package Phoney.TUnit
+```
+
+```csharp
+[Test, FakeData]
+public async Task Places_order(Customer customer, string email, [Range(1, 10)] int quantity) { … }
+
+[Test, FakeData(Count = 5, Locale = "sv")] // five test cases with Swedish data
+public async Task Formats_address(string street, string city, string zipCode) { … }
+```
+
+- Parameters are filled by name and type, objects and collections recursively, and data annotations on parameters are honoured.
+- The parameters of one test case agree like the members of one object: `firstName`, `email`, `birthDate` and `age` describe the same person, `street`, `city` and `zipCode` one address.
+- **Reproducible by default**: the seed is derived from the test's class, method and parameters, so every run and machine gets the same values (and the same test names). Set `Seed = 42` for other values.
+- Options: `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`. It also works on the test class (constructor parameters) and on `required` properties.
+- Test data is created while TUnit discovers tests, so register custom conventions (`Fake.Conventions.Add`) in a `[ModuleInitializer]`, not in a TUnit hook.
+
+The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 
 ## Locales
 

@@ -97,10 +97,9 @@ public sealed class ConsistencyAndValidationTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-    public static TheoryData<string> Paths => new() { "reflection", "generated" };
-
-    [Theory]
-    [MemberData(nameof(Paths))]
+    [Test]
+    [Arguments("reflection")]
+    [Arguments("generated")]
     public void Values_within_an_object_agree(string path)
     {
         var generator = path == "generated"
@@ -127,7 +126,7 @@ public sealed class ConsistencyAndValidationTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Generated_and_reflection_models_agree_with_annotations_and_consistency()
     {
         var generated = ValidationFakes.SignUp.Seed(3).Generate(20);
@@ -144,8 +143,9 @@ public sealed class ConsistencyAndValidationTests
                 s.Joined.ToString("O"), s.Color, s.Plan, s.Flag, s.Token, string.Join(",", s.Tags), s.Nickname, s.Bio);
     }
 
-    [Theory]
-    [MemberData(nameof(Paths))]
+    [Test]
+    [Arguments("reflection")]
+    [Arguments("generated")]
     public void Generated_objects_pass_their_data_annotations(string path)
     {
         var generator = path == "generated"
@@ -167,18 +167,18 @@ public sealed class ConsistencyAndValidationTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Annotations_on_record_parameters_are_honoured() =>
         Fake.For<Invoice>().Generate(50).ShouldAllBe(i => i.Priority >= 1 && i.Priority <= 5);
 
-    [Fact]
+    [Test]
     public void Annotations_count_as_covered_in_strict_mode()
     {
         // Contact has no name convention but [EmailAddress]; Code has [RegularExpression]; neither needs a rule.
         Should.NotThrow(() => Fake.For<SignUp>().Strict().Generate());
     }
 
-    [Fact]
+    [Test]
     public void WithOneOf_links_object_graphs()
     {
         var customers = Fake.For<Customer>().Generate(5);
@@ -192,7 +192,7 @@ public sealed class ConsistencyAndValidationTests
         Should.Throw<ArgumentException>(() => Fake.For<Order>().WithOneOf(o => o.CustomerId, Array.Empty<int>()));
     }
 
-    [Fact]
+    [Test]
     public void Address_profile_names_the_locales_country()
     {
         var address = new Faker("de_AT", seed: 1).Location.Address();

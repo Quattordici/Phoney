@@ -6,7 +6,7 @@ public sealed class TemplateAndCustomizationTests
 {
     private readonly Faker _faker = new("en", seed: 99);
 
-    [Fact]
+    [Test]
     public void Parse_resolves_methods_data_paths_and_record_fields()
     {
         _faker.Parse("Hi {{person.firstName}}!").ShouldMatch("^Hi .+!$");
@@ -16,7 +16,7 @@ public sealed class TemplateAndCustomizationTests
         _faker.Parse("{{ not a template").ShouldBe("{{ not a template");
     }
 
-    [Fact]
+    [Test]
     public void Parse_passes_arguments_like_faker_js()
     {
         _faker.Parse("{{string.numeric(6)}}").ShouldMatch("^\\d{6}$");
@@ -25,18 +25,18 @@ public sealed class TemplateAndCustomizationTests
         _faker.Parse("{{helpers.fromRegExp([A-Z]{2}[0-9]{2})}}").ShouldMatch("^[A-Z]{2}\\d{2}$");
     }
 
-    [Fact]
+    [Test]
     public void Unknown_expressions_fail_with_a_clear_message() =>
         Should.Throw<PhoneyDataException>(() => _faker.Parse("{{nothing.here}}")).Message.ShouldContain("nothing.here");
 
-    [Fact]
+    [Test]
     public void Custom_template_functions_can_be_registered()
     {
         TemplateFunctions.Register("test.sku", (f, _) => f.Random.Replace("SKU-####"));
         _faker.Parse("{{test.sku}}").ShouldMatch("^SKU-\\d{4}$");
     }
 
-    [Fact]
+    [Test]
     public void Custom_locales_fall_back_to_their_parent()
     {
         Locales.Register("sv_test", l => l
@@ -54,7 +54,7 @@ public sealed class TemplateAndCustomizationTests
         Locales.Data("sv").Get("location.city_name").ShouldBeSameAs(faker.Data.Get("location.city_name"));
     }
 
-    [Fact]
+    [Test]
     public void Custom_locales_can_be_imported_from_faker_js_json()
     {
         const string json = """
@@ -75,7 +75,7 @@ public sealed class TemplateAndCustomizationTests
         Locales.Get("en_PIRATE").Title.ShouldBe("Pirate");
     }
 
-    [Fact]
+    [Test]
     public void Seeded_fakers_are_reproducible()
     {
         static string Sample(Faker f) =>
@@ -88,7 +88,7 @@ public sealed class TemplateAndCustomizationTests
             Sample(a).ShouldBe(Sample(b));
     }
 
-    [Fact]
+    [Test]
     public void Static_facade_is_thread_safe()
     {
         var names = new System.Collections.Concurrent.ConcurrentBag<string>();

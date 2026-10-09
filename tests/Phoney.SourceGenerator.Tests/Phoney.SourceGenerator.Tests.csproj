@@ -8,7 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Shouldly" />
-    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="TUnit" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,7 +27,6 @@
 
   <ItemGroup>
     <Using Include="Shouldly" />
-    <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>

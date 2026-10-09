@@ -49,4 +49,30 @@ public static partial class Fake
         var faker = Faker;
         return generator.Seed(faker.Random.Long(long.MinValue, long.MaxValue)).ReferenceDate(faker.ReferenceDate).Locale(faker.Locale);
     }
+
+    /// <summary>
+    /// Starts a generator for the parameters of <paramref name="method"/>, e.g. to feed a test method. The values of a
+    /// row agree with each other like the members of one object (<c>firstName</c> and <c>email</c> describe the same person).
+    /// </summary>
+    /// <example><code>object?[] args = Fake.Arguments(typeof(OrderTests).GetMethod("Places_order")!).Generate();</code></example>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static ArgumentGenerator Arguments(System.Reflection.MethodBase method)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        return Arguments(method.GetParameters().Select(FakeArgument.From));
+    }
+
+    /// <summary>Starts a generator for <paramref name="arguments"/>; seeded from the facade when it is seeded.</summary>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static ArgumentGenerator Arguments(IEnumerable<FakeArgument> arguments)
+    {
+        var generator = new ArgumentGenerator(arguments);
+        if (!IsSeeded)
+            return generator;
+
+        var faker = Faker;
+        return generator.Seed(faker.Random.Long(long.MinValue, long.MaxValue)).ReferenceDate(faker.ReferenceDate).Locale(faker.Locale);
+    }
 }

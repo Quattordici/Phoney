@@ -80,6 +80,7 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
           dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION"
+          dotnet pack src/Phoney.TUnit -c Release -o artifacts/packages -p:Version="$VERSION"
       - uses: actions/upload-artifact@v7
         with:
           name: packages

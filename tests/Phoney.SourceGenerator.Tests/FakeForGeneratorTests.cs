@@ -42,7 +42,7 @@ public sealed class FakeForGeneratorTests
         public static partial class TestData;
         """;
 
-    [Fact]
+    [Test]
     public void Generates_models_for_requested_and_nested_types()
     {
         var (driver, _, _) = GeneratorHarness.Run(Models);
@@ -50,15 +50,15 @@ public sealed class FakeForGeneratorTests
         Snapshot.Match(generated.ToString(), "Shop.TestData");
     }
 
-    [Fact]
-    public void Generated_code_compiles_without_errors()
+    [Test]
+    public void Generated_code_compiles_without_errors(CancellationToken cancellationToken)
     {
         var (_, output, diagnostics) = GeneratorHarness.Run(Models);
         diagnostics.ShouldBeEmpty();
-        output.GetDiagnostics(TestContext.Current.CancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
     }
 
-    [Fact]
+    [Test]
     public void Non_partial_classes_are_reported()
     {
         var (_, _, diagnostics) = GeneratorHarness.Run("""
@@ -69,7 +69,7 @@ public sealed class FakeForGeneratorTests
         diagnostics.ShouldContain(d => d.Id == "PHONEY001");
     }
 
-    [Fact]
+    [Test]
     public void Types_that_cannot_be_created_are_reported()
     {
         var (_, _, diagnostics) = GeneratorHarness.Run("""
@@ -80,7 +80,7 @@ public sealed class FakeForGeneratorTests
         diagnostics.ShouldContain(d => d.Id == "PHONEY002");
     }
 
-    [Fact]
+    [Test]
     public void Generic_containers_are_reported()
     {
         var (_, _, diagnostics) = GeneratorHarness.Run("""

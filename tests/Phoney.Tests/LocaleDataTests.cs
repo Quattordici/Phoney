@@ -6,22 +6,22 @@ namespace Phoney.Tests;
 /// <summary>Validates the imported faker.js data itself: loading, fallback and every template.</summary>
 public sealed class LocaleDataTests
 {
-    [Fact]
+    [Test]
     public void All_faker_locales_are_embedded()
     {
         Locales.All.Count.ShouldBeGreaterThanOrEqualTo(77);
         Locales.FakerVersion.ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [Test]
     public void Every_method_referenced_by_locale_templates_is_registered()
     {
         var missing = LocaleCatalog.TemplateMethodReferences.Where(m => !TemplateFunctions.Contains(m)).ToList();
         missing.ShouldBeEmpty();
     }
 
-    [Theory]
-    [ClassData(typeof(AllLocales))]
+    [Test]
+    [MethodDataSource(typeof(TestLocales), nameof(TestLocales.All))]
     public void Every_template_in_the_locale_data_evaluates(string locale)
     {
         var faker = new Faker(locale, seed: 7);
@@ -54,7 +54,7 @@ public sealed class LocaleDataTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Fallback_is_resolved_per_entry_group_like_faker_js()
     {
         // de_AT defines its own person.first_name group, so none of it may come from de or en.
@@ -67,7 +67,7 @@ public sealed class LocaleDataTests
         deAt.Get("person.sex").ShouldNotBeSameAs(en.Get("person.sex"));
     }
 
-    [Fact]
+    [Test]
     public void Explicitly_unavailable_data_is_not_filled_from_fallback_locales()
     {
         // faker.js marks az person.prefix as null: "not applicable", not "missing".
@@ -76,50 +76,50 @@ public sealed class LocaleDataTests
         Should.Throw<PhoneyDataException>(() => new Faker("az").Person.Prefix()).Message.ShouldContain("isn't applicable");
     }
 
-    [Theory]
-    [InlineData("de-AT", "de_AT")]
-    [InlineData("DE_at", "de_AT")]
-    [InlineData("sv-SE", "sv")]
-    [InlineData("en_US", "en_US")]
-    [InlineData("pt-BR", "pt_BR")]
-    [InlineData("en_AU_ocker", "en_AU_ocker")]
-    [InlineData("de-AT-u-ca-gregory", "de_AT")]
+    [Test]
+    [Arguments("de-AT", "de_AT")]
+    [Arguments("DE_at", "de_AT")]
+    [Arguments("sv-SE", "sv")]
+    [Arguments("en_US", "en_US")]
+    [Arguments("pt-BR", "pt_BR")]
+    [Arguments("en_AU_ocker", "en_AU_ocker")]
+    [Arguments("de-AT-u-ca-gregory", "de_AT")]
     // Script-tagged and alias culture names (as .NET's CultureInfo.Name produces them)
-    [InlineData("sr-Latn-RS", "sr_RS_latin")]
-    [InlineData("sr-Latn", "sr_RS_latin")]
-    [InlineData("uz-Latn-UZ", "uz_UZ_latin")]
-    [InlineData("mn-MN", "mn_MN_cyrl")]
-    [InlineData("mn-Cyrl-MN", "mn_MN_cyrl")]
-    [InlineData("zh-Hans-CN", "zh_CN")]
-    [InlineData("zh-Hant-TW", "zh_TW")]
-    [InlineData("zh-TW", "zh_TW")]
-    [InlineData("zh", "zh_CN")]
-    [InlineData("en-Latn-US", "en_US")]
-    [InlineData("ckb-IQ", "ku_ckb")]
-    [InlineData("ku-Arab-IQ", "ku_ckb")]
-    [InlineData("ku", "ku_kmr_latin")]
-    [InlineData("kmr", "ku_kmr_latin")]
+    [Arguments("sr-Latn-RS", "sr_RS_latin")]
+    [Arguments("sr-Latn", "sr_RS_latin")]
+    [Arguments("uz-Latn-UZ", "uz_UZ_latin")]
+    [Arguments("mn-MN", "mn_MN_cyrl")]
+    [Arguments("mn-Cyrl-MN", "mn_MN_cyrl")]
+    [Arguments("zh-Hans-CN", "zh_CN")]
+    [Arguments("zh-Hant-TW", "zh_TW")]
+    [Arguments("zh-TW", "zh_TW")]
+    [Arguments("zh", "zh_CN")]
+    [Arguments("en-Latn-US", "en_US")]
+    [Arguments("ckb-IQ", "ku_ckb")]
+    [Arguments("ku-Arab-IQ", "ku_ckb")]
+    [Arguments("ku", "ku_kmr_latin")]
+    [Arguments("kmr", "ku_kmr_latin")]
     // Closest locale of the language
-    [InlineData("en-AU", "en_AU")]
-    [InlineData("en-NZ", "en")]
-    [InlineData("de-LU", "de")]
-    [InlineData("pt-AO", "pt_BR")]
+    [Arguments("en-AU", "en_AU")]
+    [Arguments("en-NZ", "en")]
+    [Arguments("de-LU", "de")]
+    [Arguments("pt-AO", "pt_BR")]
     public void Locale_codes_and_culture_names_resolve(string input, string expected) =>
         Locales.Get(input).Code.ShouldBe(expected);
 
-    [Theory]
-    [InlineData("sr-Cyrl-RS")] // only Latin Serbian exists; never substitute another script
-    [InlineData("uz-Cyrl")]
-    [InlineData("mn-Mong-CN")]
-    [InlineData("tlh")]
+    [Test]
+    [Arguments("sr-Cyrl-RS")] // only Latin Serbian exists; never substitute another script
+    [Arguments("uz-Cyrl")]
+    [Arguments("mn-Mong-CN")]
+    [Arguments("tlh")]
     public void Culture_names_without_a_matching_locale_are_rejected(string input) =>
         Locales.Exists(input).ShouldBeFalse();
 
-    [Fact]
+    [Test]
     public void Faker_accepts_script_tagged_cultures() =>
         new Faker(new System.Globalization.CultureInfo("sr-Latn-RS")).Locale.ShouldBe("sr_RS_latin");
 
-    [Fact]
+    [Test]
     public void Unknown_locale_lists_the_available_ones()
     {
         var ex = Should.Throw<ArgumentException>(() => new Faker("xx"));

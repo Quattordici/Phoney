@@ -5,6 +5,8 @@
     <!-- Kept at the Roslyn version shipped with the .NET 8 SDK so the generator runs on every supported toolchain. -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
-    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <!-- TUnit.Core is the dependency of the Phoney.TUnit package; TUnit is the test framework of every test project. -->
+    <PackageVersion Include="TUnit" Version="1.72.16" />
+    <PackageVersion Include="TUnit.Core" Version="1.72.16" />
   </ItemGroup>
 </Project>

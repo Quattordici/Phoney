@@ -3,7 +3,7 @@ namespace Phoney.Tests;
 /// <summary>Reproducibility: seeds fix dates as well as values, and the static facade can be seeded.</summary>
 public sealed class SeedingTests
 {
-    [Fact]
+    [Test]
     public void Seeded_fakers_use_a_fixed_reference_date()
     {
         var a = new Faker("en", seed: 1);
@@ -15,7 +15,7 @@ public sealed class SeedingTests
         a.Date.Recent(3).ShouldBeLessThanOrEqualTo(Faker.DefaultSeededReferenceDate);
     }
 
-    [Fact]
+    [Test]
     public void Unseeded_fakers_use_the_current_time_and_explicit_dates_win()
     {
         new Faker().ReferenceDate.ShouldBe(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
@@ -28,7 +28,7 @@ public sealed class SeedingTests
         new Faker().Seed(3).ReferenceDate.ShouldBe(Faker.DefaultSeededReferenceDate);
     }
 
-    [Fact]
+    [Test]
     public void Seeded_generators_produce_the_same_dates_regardless_of_the_clock()
     {
         var first = Fake.For<Customer>().Seed(9).Generate(10);
@@ -42,7 +42,7 @@ public sealed class SeedingTests
             .CreatedAt.ShouldBeGreaterThan(Faker.DefaultSeededReferenceDate.UtcDateTime);
     }
 
-    [Fact]
+    [Test]
     public void Seeded_scopes_make_the_facade_reproducible()
     {
         static string Sample() =>
@@ -62,7 +62,7 @@ public sealed class SeedingTests
         Fake.IsSeeded.ShouldBeFalse();
     }
 
-    [Fact]
+    [Test]
     public void Seeded_scopes_nest_and_take_a_locale()
     {
         using (Fake.Seeded(1, "sv"))
@@ -76,7 +76,7 @@ public sealed class SeedingTests
         Fake.IsSeeded.ShouldBeFalse();
     }
 
-    [Fact]
+    [Test]
     public async Task Seeded_scopes_are_isolated_between_parallel_flows()
     {
         static List<string> Names(long seed)
@@ -96,14 +96,11 @@ public sealed class SeedingTests
 }
 
 /// <summary>Tests that change process-wide facade state run alone.</summary>
-[CollectionDefinition(nameof(GlobalFakeState), DisableParallelization = true)]
-public sealed class GlobalFakeState;
-
-[Collection(nameof(GlobalFakeState))]
+[NotInParallel]
 public sealed class GlobalSeedTests
 {
-    [Fact]
-    public async Task Global_seed_makes_every_thread_reproducible()
+    [Test]
+    public async Task Global_seed_makes_every_thread_reproducible(CancellationToken cancellationToken)
     {
         try
         {
@@ -114,7 +111,7 @@ public sealed class GlobalSeedTests
             Fake.Seed(5); // re-seeding restarts the sequence
             (Fake.Person.FullName(), Fake.One<Customer>().Email).ShouldBe(first);
 
-            var onOtherThread = await Task.Run(() => { Fake.Seed(5); return Fake.Person.FullName(); }, TestContext.Current.CancellationToken);
+            var onOtherThread = await Task.Run(() => { Fake.Seed(5); return Fake.Person.FullName(); }, cancellationToken);
             onOtherThread.ShouldBe(first.Item1);
         }
         finally
