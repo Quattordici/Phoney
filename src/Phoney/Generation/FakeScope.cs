@@ -106,8 +106,19 @@ public sealed class FakeScope
     /// <summary>Collection sizes, null probability, depth limit and convention switch.</summary>
     internal GenerationSettings Settings { get; }
 
-    /// <summary>The person this object describes; shared by name, email, username and avatar conventions.</summary>
+    /// <summary>The person or place this object describes; shared by name, email, avatar, birthdate, age and address conventions.</summary>
     internal Identity Identity => _identity ??= new Identity(Faker);
+
+    /// <summary>
+    /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
+    /// between it and the reference date, so <c>UpdatedAt</c> is never before <c>CreatedAt</c>.
+    /// </summary>
+    internal DateTimeOffset Created => _created ??= Faker.Date.Past();
+
+    /// <summary>Whether a "created"-style member already received <see cref="Created"/>.</summary>
+    internal bool CreatedClaimed { get; set; }
+
+    private DateTimeOffset? _created;
 
     /// <summary>Whether the model should set <paramref name="member"/> while creating the object.</summary>
     /// <remarks>False for ignored members and for members set afterwards by dependent rules.</remarks>
@@ -141,9 +152,9 @@ public sealed class FakeScope
     public TValue? Nested<TValue>() => (TValue?)NestedObject(typeof(TValue));
 
     /// <summary>Creates a list of <see cref="CollectionCount"/> elements.</summary>
-    public List<TElement> List<TElement>(Func<FakeScope, TElement> element)
+    public List<TElement> List<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)
     {
-        var count = CollectionCount();
+        var count = CollectionCount(constraints);
         var list = new List<TElement>(count);
         for (var i = 0; i < count; i++)
             list.Add(element(this));
@@ -151,18 +162,18 @@ public sealed class FakeScope
     }
 
     /// <summary>Creates an array of <see cref="CollectionCount"/> elements.</summary>
-    public TElement[] Array<TElement>(Func<FakeScope, TElement> element)
+    public TElement[] Array<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)
     {
-        var array = new TElement[CollectionCount()];
+        var array = new TElement[CollectionCount(constraints)];
         for (var i = 0; i < array.Length; i++)
             array[i] = element(this);
         return array;
     }
 
     /// <summary>Creates a set of up to <see cref="CollectionCount"/> distinct elements.</summary>
-    public HashSet<TElement> Set<TElement>(Func<FakeScope, TElement> element)
+    public HashSet<TElement> Set<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)
     {
-        var count = CollectionCount();
+        var count = CollectionCount(constraints);
         var set = new HashSet<TElement>();
         for (var i = 0; i < count * 10 && set.Count < count; i++)
             set.Add(element(this));
@@ -170,13 +181,18 @@ public sealed class FakeScope
     }
 
     /// <summary>Creates a dictionary of up to <see cref="CollectionCount"/> entries (duplicate keys are skipped).</summary>
-    public Dictionary<TKey, TValue> Dictionary<TKey, TValue>(Func<FakeScope, TKey> key, Func<FakeScope, TValue> value)
+    public Dictionary<TKey, TValue> Dictionary<TKey, TValue>(Func<FakeScope, TKey> key, Func<FakeScope, TValue> value, MemberConstraints? constraints = null)
         where TKey : notnull
     {
-        var count = CollectionCount();
+        var count = CollectionCount(constraints);
         var dictionary = new Dictionary<TKey, TValue>(count);
         for (var i = 0; i < count * 10 && dictionary.Count < count; i++)
-            dictionary.TryAdd(key(this), value(this));
+        {
+            // The value is only produced for a new key, like the reflection model, so both consume randomness alike.
+            var k = key(this);
+            if (!dictionary.ContainsKey(k))
+                dictionary.Add(k, value(this));
+        }
         return dictionary;
     }
 
@@ -188,8 +204,24 @@ public sealed class FakeScope
         return bytes;
     }
 
-    /// <summary>A random collection size within the generator's configured range.</summary>
-    public int CollectionCount() => Faker.Random.Int(Settings.MinCollectionSize, Settings.MaxCollectionSize);
+    /// <summary>
+    /// A random collection size within the generator's configured range, narrowed to the member's
+    /// <c>[MinLength]</c>/<c>[MaxLength]</c>/<c>[Length]</c> when it has them.
+    /// </summary>
+    public int CollectionCount(MemberConstraints? constraints = null)
+    {
+        var min = Settings.MinCollectionSize;
+        var max = Settings.MaxCollectionSize;
+        if (constraints is { MinLength: { } atLeast })
+            min = Math.Max(min, atLeast);
+        if (constraints is { MaxLength: { } atMost })
+            max = Math.Min(max, atMost);
+        if (max < min)
+            max = constraints?.MaxLength ?? min; // the annotation wins over the generator's default range
+        if (max < min)
+            min = max;
+        return Faker.Random.Int(min, max);
+    }
 
     /// <summary>Whether a nullable member should be left <see langword="null"/>, per the generator's null probability.</summary>
     public bool MaybeNull() => Settings.NullProbability > 0 && Faker.Random.Bool(Settings.NullProbability);
@@ -230,13 +262,18 @@ internal interface INestedGenerator
     object? CreateNested(FakeScope parent);
 }
 
-/// <summary>The person an object describes, created on first use so unrelated objects pay nothing.</summary>
+/// <summary>
+/// The person (and home) an object describes, created on first use so unrelated objects pay nothing. Each part is
+/// generated when first needed, so conventions only consume randomness for members the type actually has.
+/// </summary>
 internal sealed class Identity(Faker faker)
 {
     private string? _firstName;
     private string? _lastName;
     private string? _username;
     private string? _email;
+    private DateOnly? _birthDate;
+    private AddressProfile? _address;
 
     /// <summary>The person's sex; drives gendered names, avatars and sex/gender enums.</summary>
     public Sex Sex { get; } = faker.Person.Sex();
@@ -252,4 +289,17 @@ internal sealed class Identity(Faker faker)
 
     /// <summary>Email address derived from the names.</summary>
     public string Email => _email ??= faker.Internet.Email(FirstName, LastName);
+
+    /// <summary>Date of birth (18–80 years before the reference date).</summary>
+    public DateOnly BirthDate => _birthDate ??= faker.Date.Birthdate();
+
+    /// <summary>Age in whole years at the reference date, matching <see cref="BirthDate"/>.</summary>
+    public int Age => AgeAt(BirthDate, DateOnly.FromDateTime(faker.ReferenceDate.UtcDateTime));
+
+    /// <summary>One address, so street, city, zip code, state and country agree.</summary>
+    public AddressProfile Address => _address ??= faker.Location.Address();
+
+    /// <summary>Whole years between <paramref name="birthDate"/> and <paramref name="today"/>.</summary>
+    internal static int AgeAt(DateOnly birthDate, DateOnly today) =>
+        today.Year - birthDate.Year - (today < birthDate.AddYears(today.Year - birthDate.Year) ? 1 : 0);
 }

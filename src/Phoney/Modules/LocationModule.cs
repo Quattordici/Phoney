@@ -24,14 +24,32 @@ public sealed class LocationModule : FakerModule
 
     /// <summary>
     /// Returns an address as separate parts. Parts the locale has no data for (e.g. states in Swedish) are
-    /// <see langword="null"/>; <see cref="AddressProfile.CountryCode"/> is the locale's country when it has one.
+    /// <see langword="null"/>. Country-specific locales (<c>de_AT</c>, <c>en_US</c>…) put the address in their country,
+    /// named in the locale's language (<c>Österreich</c>); language-wide locales (<c>de</c>, <c>sv</c>) leave it out.
     /// </summary>
     public AddressProfile Address() => new(
         StreetAddress(),
         City(),
         OrNull(() => ZipCode()),
         OrNull(() => State()),
+        LocaleCountryName(Faker.Data.Info),
         Faker.Data.Info.Country);
+
+    /// <summary>
+    /// The locale's country in its own language, taken from faker.js' native locale name: <c>Deutsch (Österreich)</c>
+    /// gives <c>Österreich</c>. <see langword="null"/> for language-wide locales.
+    /// </summary>
+    internal static string? LocaleCountryName(LocaleInfo info)
+    {
+        if (info.Country is null || info.Endonym is not { } endonym)
+            return null;
+        var open = endonym.IndexOf('(');
+        var close = endonym.LastIndexOf(')');
+        if (open < 0 || close <= open)
+            return null;
+        var name = endonym[(open + 1)..close].Split(',')[0].Trim();
+        return name.Length > 0 ? name : null;
+    }
 
     /// <summary>Returns a postal code in one of the locale's formats, e.g. <c>91745</c>.</summary>
     /// <param name="format">Custom format (<c>#</c> digit, <c>?</c> letter, <c>*</c> either); defaults to the locale's formats.</param>
@@ -151,12 +169,13 @@ public sealed class LocationModule : FakerModule
 /// <param name="City">City.</param>
 /// <param name="ZipCode">Postal code, or <see langword="null"/> where the locale has none.</param>
 /// <param name="State">State, province or region, or <see langword="null"/> where the locale has none.</param>
-/// <param name="CountryCode">ISO 3166 alpha-2 code of the locale's country, or <see langword="null"/> for language-wide locales such as <c>sv</c>.</param>
-public sealed record AddressProfile(string Street, string City, string? ZipCode, string? State, string? CountryCode)
+/// <param name="Country">The locale's country in its own language (e.g. <c>Österreich</c>), or <see langword="null"/> for language-wide locales such as <c>sv</c>.</param>
+/// <param name="CountryCode">ISO 3166 alpha-2 code of the locale's country, or <see langword="null"/> for language-wide locales.</param>
+public sealed record AddressProfile(string Street, string City, string? ZipCode, string? State, string? Country, string? CountryCode)
 {
-    /// <summary>Formats the address on one line, e.g. <c>0917 O'Conner Estates, 91745 Lake Rosemary</c>.</summary>
+    /// <summary>Formats the address on one line, e.g. <c>Hauptstraße 5, 1010 Wien, Österreich</c>.</summary>
     public override string ToString() =>
-        string.Join(", ", new[] { Street, string.Join(' ', new[] { ZipCode, City }.Where(p => p is not null)), State }.Where(p => !string.IsNullOrEmpty(p)));
+        string.Join(", ", new[] { Street, string.Join(' ', new[] { ZipCode, City }.Where(p => p is not null)), State, Country }.Where(p => !string.IsNullOrEmpty(p)));
 }
 
 /// <summary>ISO 3166 country code formats.</summary>

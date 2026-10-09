@@ -78,6 +78,31 @@ public sealed class Generator<T> : INestedGenerator
     public Generator<T> With<TValue>(Expression<Func<T, TValue>> member, Generator<TValue> generator) =>
         AddRule(member, new Rule(RuleKind.Generator, generator ?? throw new ArgumentNullException(nameof(generator))));
 
+    /// <summary>
+    /// Sets a member to one of <paramref name="values"/>, e.g. existing ids or objects:
+    /// <c>.WithOneOf(o =&gt; o.Customer, customers)</c>.
+    /// </summary>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, TValue>> member, IReadOnlyList<TValue> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Count == 0)
+            throw new ArgumentException("Provide at least one value.", nameof(values));
+        return With(member, f => f.Random.Element(values));
+    }
+
+    /// <summary>
+    /// Sets a member from a random item of <paramref name="source"/>, so object graphs line up:
+    /// <c>.WithOneOf(o =&gt; o.CustomerId, customers, c =&gt; c.Id)</c>.
+    /// </summary>
+    public Generator<T> WithOneOf<TSource, TValue>(Expression<Func<T, TValue>> member, IReadOnlyList<TSource> source, Func<TSource, TValue> select)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(select);
+        if (source.Count == 0)
+            throw new ArgumentException("Provide at least one item.", nameof(source));
+        return With(member, f => select(f.Random.Element(source)));
+    }
+
     /// <summary>Leaves a member at its default value.</summary>
     public Generator<T> Ignore<TValue>(Expression<Func<T, TValue>> member) => AddRule(member, new Rule(RuleKind.Ignore, null));
 
@@ -104,8 +129,9 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>
-    /// Fails when a scalar member (string, number, date…) has neither a rule nor a name convention, so new members
-    /// can't silently get meaningless data. Objects and collections are populated recursively and don't count.
+    /// Fails when a scalar member (string, number, date…) has neither a rule, a name convention nor data annotations
+    /// that define its value (<c>[EmailAddress]</c>, <c>[Range]</c>, <c>[RegularExpression]</c>, <c>[AllowedValues]</c>), so new
+    /// members can't silently get meaningless data. Objects and collections are populated recursively and don't count.
     /// </summary>
     public Generator<T> Strict(bool strict = true) => Derive(_config with { Strict = strict });
 
@@ -268,7 +294,8 @@ public sealed class Generator<T> : INestedGenerator
         if (_config.Strict)
         {
             var uncovered = members
-                .Where((m, i) => slots[i] is null && m.IsScalar && (m.Convention == ConventionKind.None || !_config.Settings.UseConventions))
+                .Where((m, i) => slots[i] is null && m.IsScalar && m.Constraints?.DefinesValue != true
+                    && (m.Convention == ConventionKind.None || !_config.Settings.UseConventions))
                 .Select(m => m.Name)
                 .ToList();
             if (uncovered.Count > 0)

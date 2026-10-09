@@ -59,7 +59,8 @@ internal sealed class ReflectionTypeModel : IFakeModel
                 writable.Remove(match);
             var name = match?.Name ?? Capitalize(parameter.Name ?? "Arg");
             var nullable = nullability.Create(parameter).ReadState == NullabilityState.Nullable;
-            AddMember(name, parameter.ParameterType, nullable, isConstructorParameter: true, isInitOnly: false, setter: null);
+            var constraints = MemberConstraints.Read(parameter, match);
+            AddMember(name, parameter.ParameterType, nullable, isConstructorParameter: true, isInitOnly: false, setter: null, constraints);
         }
 
         _constructorParameterCount = parameters.Length;
@@ -71,7 +72,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
                 FieldInfo f => (f.FieldType, nullability.Create(f).WriteState == NullabilityState.Nullable, false),
                 _ => throw new InvalidOperationException(),
             };
-            AddMember(member.Name, memberType, nullable, isConstructorParameter: false, initOnly, CreateSetter(type, member));
+            AddMember(member.Name, memberType, nullable, isConstructorParameter: false, initOnly, CreateSetter(type, member), MemberConstraints.Read(member));
         }
 
         Members = [.. members];
@@ -79,13 +80,14 @@ internal sealed class ReflectionTypeModel : IFakeModel
         _fallbacks = [.. fallbacks];
         _construct = CreateConstructor(type, constructor);
 
-        void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, Action<object, object?>? setter)
+        void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, Action<object, object?>? setter, MemberConstraints? constraints)
         {
+            // A format annotation ([EmailAddress]…) says more than the member name; [Required] members are never null.
             var category = FakeMember.ScalarCategory(memberType);
-            var convention = ConventionRules.Match(name, category, type.Name);
-            members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly));
+            var convention = constraints?.Format ?? ConventionRules.Match(name, category, type.Name);
+            members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly, constraints));
             setters.Add(setter);
-            fallbacks.Add(Producer(memberType, name, convention, nullable));
+            fallbacks.Add(Producer(memberType, name, convention, nullable && constraints?.Required != true, constraints));
         }
     }
 
@@ -125,25 +127,27 @@ internal sealed class ReflectionTypeModel : IFakeModel
     }
 
     /// <summary>Builds the value producer for a member type: scalar conventions, collections, nested objects.</summary>
-    private static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference)
+    private static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints = null)
     {
         var underlying = Nullable.GetUnderlyingType(type);
         if (underlying is not null)
         {
-            var inner = Producer(underlying, memberName, convention, false);
+            var inner = Producer(underlying, memberName, convention, false, constraints);
+            if (constraints?.Required == true)
+                return inner;
             return s => s.MaybeNull() ? null : inner(s);
         }
 
-        var produce = NonNullProducer(type, memberName, convention);
+        var produce = NonNullProducer(type, memberName, convention, constraints);
         return nullableReference ? s => s.MaybeNull() ? null : produce(s) : produce;
     }
 
     /// <summary>Producer for a non-nullable type: scalars, byte arrays, collections, then nested objects.</summary>
-    private static Func<FakeScope, object?> NonNullProducer(Type type, string memberName, ConventionKind convention)
+    private static Func<FakeScope, object?> NonNullProducer(Type type, string memberName, ConventionKind convention, MemberConstraints? constraints)
     {
         var category = FakeMember.ScalarCategory(type);
         if (category != TypeCategory.Other)
-            return s => ConventionValues.Boxed(s, type, category, convention);
+            return s => ConventionValues.Boxed(s, type, category, convention, constraints);
 
         if (type == typeof(byte[]))
             return s => s.Bytes();
@@ -158,14 +162,14 @@ internal sealed class ReflectionTypeModel : IFakeModel
             {
                 var keyProducer = Producer(key, singular + "Key", ConventionKind.None, false);
                 var dictionaryType = typeof(Dictionary<,>).MakeGenericType(key, element);
-                return s => FillDictionary(s, (IDictionary)Activator.CreateInstance(dictionaryType)!, keyProducer, elementProducer);
+                return s => FillDictionary(s, (IDictionary)Activator.CreateInstance(dictionaryType)!, keyProducer, elementProducer, constraints);
             }
 
             if (type.IsArray)
             {
                 return s =>
                 {
-                    var count = s.CollectionCount();
+                    var count = s.CollectionCount(constraints);
                     var array = System.Array.CreateInstance(element, count);
                     for (var i = 0; i < count; i++)
                         array.SetValue(elementProducer(s), i);
@@ -177,11 +181,13 @@ internal sealed class ReflectionTypeModel : IFakeModel
             {
                 var setType = typeof(HashSet<>).MakeGenericType(element);
                 var add = setType.GetMethod("Add")!;
+                var countProperty = setType.GetProperty("Count")!;
                 return s =>
                 {
+                    // Same as FakeScope.Set: retry duplicates (up to 10x) so the set reaches the requested size.
                     var set = Activator.CreateInstance(setType)!;
-                    var count = s.CollectionCount();
-                    for (var i = 0; i < count; i++)
+                    var count = s.CollectionCount(constraints);
+                    for (var i = 0; i < count * 10 && (int)countProperty.GetValue(set)! < count; i++)
                         add.Invoke(set, [elementProducer(s)]);
                     return set;
                 };
@@ -191,7 +197,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
             return s =>
             {
                 var list = (IList)Activator.CreateInstance(listType)!;
-                var count = s.CollectionCount();
+                var count = s.CollectionCount(constraints);
                 for (var i = 0; i < count; i++)
                     list.Add(elementProducer(s));
                 return list;
@@ -207,9 +213,9 @@ internal sealed class ReflectionTypeModel : IFakeModel
     }
 
     /// <summary>Adds up to the collection size of distinct keys to <paramref name="dictionary"/>.</summary>
-    private static object FillDictionary(FakeScope s, IDictionary dictionary, Func<FakeScope, object?> key, Func<FakeScope, object?> value)
+    private static object FillDictionary(FakeScope s, IDictionary dictionary, Func<FakeScope, object?> key, Func<FakeScope, object?> value, MemberConstraints? constraints)
     {
-        var count = s.CollectionCount();
+        var count = s.CollectionCount(constraints);
         for (var i = 0; i < count * 10 && dictionary.Count < count; i++)
         {
             var k = key(s);

@@ -64,6 +64,12 @@ internal sealed class MemberModel
 
     /// <summary>Whether the member is a field rather than a property.</summary>
     public bool IsField { get; set; }
+
+    /// <summary>Object initializer body for the member's <c>MemberConstraints</c> (from data annotations), or <see langword="null"/>.</summary>
+    public string? Constraints { get; set; }
+
+    /// <summary>Name of the static field holding those constraints, or <see langword="null"/>.</summary>
+    public string? ConstraintsField { get; set; }
 }
 
 /// <summary>
@@ -132,7 +138,9 @@ internal sealed class ModelBuilder
             if (match is not null)
                 writable.Remove(match);
             var name = match?.Name ?? Capitalize(parameter.Name);
-            members.Add(Member(type, name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), isConstructorParameter: true, isInitOnly: false, inInitializer: false, declaringType: type, isField: false));
+            // Annotations may sit on the parameter or (with [property: …]) on the generated property.
+            var attributes = parameter.GetAttributes().Concat(match?.GetAttributes() ?? Enumerable.Empty<AttributeData>());
+            members.Add(Member(type, name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), isConstructorParameter: true, isInitOnly: false, inInitializer: false, declaringType: type, isField: false, attributes, members.Count));
         }
 
         foreach (var member in writable)
@@ -140,11 +148,11 @@ internal sealed class ModelBuilder
             if (member is IPropertySymbol p)
             {
                 var initOnly = p.SetMethod!.IsInitOnly;
-                members.Add(Member(type, p.Name, p.Type, IsNullableReference(p.Type, p.NullableAnnotation), false, initOnly, initOnly || p.IsRequired, p.ContainingType, isField: false));
+                members.Add(Member(type, p.Name, p.Type, IsNullableReference(p.Type, p.NullableAnnotation), false, initOnly, initOnly || p.IsRequired, p.ContainingType, isField: false, p.GetAttributes(), members.Count));
             }
             else if (member is IFieldSymbol f)
             {
-                members.Add(Member(type, f.Name, f.Type, IsNullableReference(f.Type, f.NullableAnnotation), false, false, f.IsRequired, f.ContainingType, isField: true));
+                members.Add(Member(type, f.Name, f.Type, IsNullableReference(f.Type, f.NullableAnnotation), false, false, f.IsRequired, f.ContainingType, isField: true, f.GetAttributes(), members.Count));
             }
         }
 
@@ -163,41 +171,54 @@ internal sealed class ModelBuilder
     }
 
     /// <summary>Describes a member and computes its value expression.</summary>
-    private MemberModel Member(INamedTypeSymbol owner, string name, ITypeSymbol type, bool nullableReference, bool isConstructorParameter, bool isInitOnly, bool inInitializer, INamedTypeSymbol declaringType, bool isField)
+    private MemberModel Member(INamedTypeSymbol owner, string name, ITypeSymbol type, bool nullableReference, bool isConstructorParameter, bool isInitOnly, bool inInitializer, INamedTypeSymbol declaringType, bool isField, IEnumerable<AttributeData> attributes, int index)
     {
-        var category = Category(type);
+        // Same rules as the reflection model: a format annotation overrides the name convention, [Required] is never null.
+        var constraints = ConstraintReader.Read(attributes);
+        var convention = constraints.Format is { } format
+            ? (ConventionKind)Enum.Parse(typeof(ConventionKind), format)
+            : ConventionRules.Match(name, Category(type), owner.Name);
+        var constraintsField = constraints.Initializer is null ? null : "__c" + index;
         return new MemberModel
         {
             Name = name,
             TypeName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            Convention = ConventionRules.Match(name, category, owner.Name).ToString(),
+            Convention = convention.ToString(),
             IsConstructorParameter = isConstructorParameter,
             IsInitOnly = isInitOnly,
             InInitializer = inInitializer,
-            Value = Value(type, name, ConventionRules.Match(name, category, owner.Name), nullableReference, 0),
+            Value = Value(type, name, convention, nullableReference && !constraints.Required, 0, constraintsField, constraints.Required),
             DeclaringType = declaringType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             IsField = isField,
+            Constraints = constraints.Initializer,
+            ConstraintsField = constraintsField,
         };
     }
 
     /// <summary>The value expression for a member of <paramref name="type"/>; mirrors <c>ReflectionTypeModel.Producer</c>.</summary>
-    private string Value(ITypeSymbol type, string memberName, ConventionKind kind, bool nullableReference, int depth)
+    private string Value(ITypeSymbol type, string memberName, ConventionKind kind, bool nullableReference, int depth, string? constraints = null, bool required = false)
     {
         var s = "s" + depth;
         var fq = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
         {
-            var inner = NonNull(nullable.TypeArguments[0], memberName, kind, depth);
-            return $"({s}.MaybeNull() ? default({fq}) : ({fq}){inner})";
+            var inner = NonNull(nullable.TypeArguments[0], memberName, kind, depth, constraints);
+            return required ? $"({fq}){inner}" : $"({s}.MaybeNull() ? default({fq}) : ({fq}){inner})";
         }
 
-        var value = NonNull(type, memberName, kind, depth);
+        var value = NonNull(type, memberName, kind, depth, constraints);
         return nullableReference ? $"({s}.MaybeNull() ? null : {value})" : value;
     }
 
     /// <summary>Value expression for a non-nullable <paramref name="type"/>: scalars, byte arrays, collections, nested objects.</summary>
-    private string NonNull(ITypeSymbol type, string memberName, ConventionKind kind, int depth)
+    /// <param name="type">The member type.</param>
+    /// <param name="memberName">The member name (singularized for collection elements).</param>
+    /// <param name="kind">The convention.</param>
+    /// <param name="depth">Lambda nesting depth, used to name the scope parameter (<c>s0</c>, <c>s1</c>…).</param>
+    /// <param name="constraints">Name of the member's <c>MemberConstraints</c> field, or <see langword="null"/>.</param>
+    private string NonNull(ITypeSymbol type, string memberName, ConventionKind kind, int depth, string? constraints = null)
     {
+        var extra = constraints is null ? "" : ", " + constraints;
         var s = "s" + depth;
         var fq = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var k = "global::Phoney.Generation.ConventionKind." + kind;
@@ -205,18 +226,18 @@ internal sealed class ModelBuilder
         var category = Category(type);
         switch (category)
         {
-            case TypeCategory.String: return $"{Values}String({s}, {k})";
-            case TypeCategory.Char: return $"{Values}Char({s}, {k})";
-            case TypeCategory.Bool: return $"{Values}Bool({s}, {k})";
-            case TypeCategory.Guid: return $"{Values}Guid({s}, {k})";
-            case TypeCategory.DateTime: return $"{Values}DateTime({s}, {k})";
-            case TypeCategory.DateTimeOffset: return $"{Values}DateTimeOffset({s}, {k})";
-            case TypeCategory.DateOnly: return $"{Values}DateOnly({s}, {k})";
-            case TypeCategory.TimeOnly: return $"{Values}TimeOnly({s}, {k})";
-            case TypeCategory.TimeSpan: return $"{Values}TimeSpan({s}, {k})";
-            case TypeCategory.Uri: return $"{Values}Uri({s}, {k})";
-            case TypeCategory.Enum: return $"{Values}Enum<{fq}>({s}, {k})";
-            case var c when ConventionRules.IsNumber(c): return $"{Values}Number<{fq}>({s}, {k})";
+            case TypeCategory.String: return $"{Values}String({s}, {k}{extra})";
+            case TypeCategory.Char: return $"{Values}Char({s}, {k}{extra})";
+            case TypeCategory.Bool: return $"{Values}Bool({s}, {k}{extra})";
+            case TypeCategory.Guid: return $"{Values}Guid({s}, {k}{extra})";
+            case TypeCategory.DateTime: return $"{Values}DateTime({s}, {k}{extra})";
+            case TypeCategory.DateTimeOffset: return $"{Values}DateTimeOffset({s}, {k}{extra})";
+            case TypeCategory.DateOnly: return $"{Values}DateOnly({s}, {k}{extra})";
+            case TypeCategory.TimeOnly: return $"{Values}TimeOnly({s}, {k}{extra})";
+            case TypeCategory.TimeSpan: return $"{Values}TimeSpan({s}, {k}{extra})";
+            case TypeCategory.Uri: return $"{Values}Uri({s}, {k}{extra})";
+            case TypeCategory.Enum: return $"{Values}Enum<{fq}>({s}, {k}{extra})";
+            case var c when ConventionRules.IsNumber(c): return $"{Values}Number<{fq}>({s}, {k}{extra})";
         }
 
         if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, Rank: 1 })
@@ -229,7 +250,7 @@ internal sealed class ModelBuilder
         var next = "s" + (depth + 1);
 
         if (type is IArrayTypeSymbol { Rank: 1 } array)
-            return $"{s}.Array<{Fq(array.ElementType)}>(static {next} => {Element(array.ElementType)})";
+            return $"{s}.Array<{Fq(array.ElementType)}>(static {next} => {Element(array.ElementType)}{extra})";
 
         if (type is INamedTypeSymbol { IsGenericType: true } generic)
         {
@@ -239,12 +260,12 @@ internal sealed class ModelBuilder
             {
                 case "System.Collections.Generic.List<T>" or "System.Collections.Generic.IList<T>" or "System.Collections.Generic.ICollection<T>"
                     or "System.Collections.Generic.IEnumerable<T>" or "System.Collections.Generic.IReadOnlyList<T>" or "System.Collections.Generic.IReadOnlyCollection<T>":
-                    return $"{s}.List<{Fq(args[0])}>(static {next} => {Element(args[0])})";
+                    return $"{s}.List<{Fq(args[0])}>(static {next} => {Element(args[0])}{extra})";
                 case "System.Collections.Generic.HashSet<T>" or "System.Collections.Generic.ISet<T>" or "System.Collections.Generic.IReadOnlySet<T>":
-                    return $"{s}.Set<{Fq(args[0])}>(static {next} => {Element(args[0])})";
+                    return $"{s}.Set<{Fq(args[0])}>(static {next} => {Element(args[0])}{extra})";
                 case "System.Collections.Generic.Dictionary<TKey, TValue>" or "System.Collections.Generic.IDictionary<TKey, TValue>" or "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>":
                     var key = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
-                    return $"{s}.Dictionary<{Fq(args[0])}, {Fq(args[1])}>(static {next} => {key}, static {next} => {Element(args[1])})";
+                    return $"{s}.Dictionary<{Fq(args[0])}, {Fq(args[1])}>(static {next} => {key}, static {next} => {Element(args[1])}{extra})";
             }
         }
 

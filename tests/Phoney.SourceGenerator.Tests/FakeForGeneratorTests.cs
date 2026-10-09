@@ -7,6 +7,7 @@ public sealed class FakeForGeneratorTests
     private const string Models = """
         using System;
         using System.Collections.Generic;
+        using System.ComponentModel.DataAnnotations;
         using Phoney.Generation;
 
         namespace Shop;
@@ -16,16 +17,21 @@ public sealed class FakeForGeneratorTests
         public class Customer
         {
             public int Id { get; set; }
+            [StringLength(20, MinimumLength = 2)]
             public string FirstName { get; set; } = "";
+            [RegularExpression("[A-Z]{3}")]
             public string? Nickname { get; set; }
+            [Range(0, 10_000), Required]
             public decimal? Balance { get; set; }
             public required string Email { get; init; }
             public Address Address { get; init; } = null!;
+            [MaxLength(2)]
             public List<Order> Orders { get; set; } = new();
+            [AllowedValues(Status.Active)]
             public Status Status;
         }
 
-        public record Address(string Street, string City);
+        public record Address([property: Required] string Street, [EmailAddress] string City);
 
         public record Order(Guid Id, DateTime CreatedAt)
         {

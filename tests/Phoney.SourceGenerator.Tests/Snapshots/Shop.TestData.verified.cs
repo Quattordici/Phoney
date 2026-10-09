@@ -25,16 +25,22 @@ static partial class TestData
 
     private sealed class __PhoneyModel_Shop_Customer : global::Phoney.Generation.FakeModel<global::Shop.Customer>
     {
+        private static readonly global::Phoney.Generation.MemberConstraints __c1 = new() { MaxLength = 20, MinLength = 2 };
+        private static readonly global::Phoney.Generation.MemberConstraints __c2 = new() { Pattern = "[A-Z]{3}" };
+        private static readonly global::Phoney.Generation.MemberConstraints __c3 = new() { RangeMin = "0", RangeMax = "10000", Required = true };
+        private static readonly global::Phoney.Generation.MemberConstraints __c6 = new() { MaxLength = 2 };
+        private static readonly global::Phoney.Generation.MemberConstraints __c7 = new() { AllowedValues = new object[] { (global::Shop.Status)0 } };
+
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Id", typeof(int), global::Phoney.Generation.ConventionKind.Id, false, false),
-            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName, false, false),
-            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username, false, false),
-            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price, false, false),
-            new global::Phoney.Generation.FakeMember("Email", typeof(string), global::Phoney.Generation.ConventionKind.Email, false, true),
-            new global::Phoney.Generation.FakeMember("Address", typeof(global::Shop.Address), global::Phoney.Generation.ConventionKind.None, false, true),
-            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None, false, false),
-            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None, false, false),
+            new global::Phoney.Generation.FakeMember("Id", typeof(int), global::Phoney.Generation.ConventionKind.Id, false, false, null),
+            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName, false, false, __c1),
+            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username, false, false, __c2),
+            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price, false, false, __c3),
+            new global::Phoney.Generation.FakeMember("Email", typeof(string), global::Phoney.Generation.ConventionKind.Email, false, true, null),
+            new global::Phoney.Generation.FakeMember("Address", typeof(global::Shop.Address), global::Phoney.Generation.ConventionKind.None, false, true, null),
+            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None, false, false, __c6),
+            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None, false, false, __c7),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -42,13 +48,13 @@ static partial class TestData
         public override global::Shop.Customer Create(global::Phoney.Generation.FakeScope scope)
         {
             var v0 = scope.Include(0) ? scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id)) : default(int);
-            var v1 = scope.Include(1) ? scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName)) : default(string);
-            var v2 = scope.Include(2) ? scope.Get(2, static s0 => (s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username))) : default(string);
-            var v3 = scope.Include(3) ? scope.Get(3, static s0 => (s0.MaybeNull() ? default(decimal?) : (decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price))) : default(decimal?);
+            var v1 = scope.Include(1) ? scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c1)) : default(string);
+            var v2 = scope.Include(2) ? scope.Get(2, static s0 => (s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c2))) : default(string);
+            var v3 = scope.Include(3) ? scope.Get(3, static s0 => (decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c3)) : default(decimal?);
             var v4 = scope.Include(4) ? scope.Get(4, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email)) : default(string);
             var v5 = scope.Include(5) ? scope.Get(5, static s0 => s0.Nested<global::Shop.Address>()) : default(global::Shop.Address);
-            var v6 = scope.Include(6) ? scope.Get(6, static s0 => s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>())) : default(global::System.Collections.Generic.List<global::Shop.Order>);
-            var v7 = scope.Include(7) ? scope.Get(7, static s0 => global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None)) : default(global::Shop.Status);
+            var v6 = scope.Include(6) ? scope.Get(6, static s0 => s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c6)) : default(global::System.Collections.Generic.List<global::Shop.Order>);
+            var v7 = scope.Include(7) ? scope.Get(7, static s0 => global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c7)) : default(global::Shop.Status);
             var o = new global::Shop.Customer()
             {
                 Email = v4,
@@ -88,18 +94,21 @@ static partial class TestData
 
     private sealed class __PhoneyModel_Shop_Address : global::Phoney.Generation.FakeModel<global::Shop.Address>
     {
+        private static readonly global::Phoney.Generation.MemberConstraints __c0 = new() { Required = true };
+        private static readonly global::Phoney.Generation.MemberConstraints __c1 = new() { Format = global::Phoney.Generation.ConventionKind.Email };
+
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Street", typeof(string), global::Phoney.Generation.ConventionKind.StreetAddress, true, false),
-            new global::Phoney.Generation.FakeMember("City", typeof(string), global::Phoney.Generation.ConventionKind.City, true, false),
+            new global::Phoney.Generation.FakeMember("Street", typeof(string), global::Phoney.Generation.ConventionKind.StreetAddress, true, false, __c0),
+            new global::Phoney.Generation.FakeMember("City", typeof(string), global::Phoney.Generation.ConventionKind.Email, true, false, __c1),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
 
         public override global::Shop.Address Create(global::Phoney.Generation.FakeScope scope)
         {
-            var v0 = scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.StreetAddress));
-            var v1 = scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.City));
+            var v0 = scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.StreetAddress, __c0));
+            var v1 = scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email, __c1));
             var o = new global::Shop.Address(v0, v1);
             return o;
         }
@@ -117,9 +126,9 @@ static partial class TestData
     {
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Id", typeof(global::System.Guid), global::Phoney.Generation.ConventionKind.Id, true, false),
-            new global::Phoney.Generation.FakeMember("CreatedAt", typeof(global::System.DateTime), global::Phoney.Generation.ConventionKind.PastDate, true, false),
-            new global::Phoney.Generation.FakeMember("Customer", typeof(global::Shop.Customer), global::Phoney.Generation.ConventionKind.None, false, false),
+            new global::Phoney.Generation.FakeMember("Id", typeof(global::System.Guid), global::Phoney.Generation.ConventionKind.Id, true, false, null),
+            new global::Phoney.Generation.FakeMember("CreatedAt", typeof(global::System.DateTime), global::Phoney.Generation.ConventionKind.PastDate, true, false, null),
+            new global::Phoney.Generation.FakeMember("Customer", typeof(global::Shop.Customer), global::Phoney.Generation.ConventionKind.None, false, false, null),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;

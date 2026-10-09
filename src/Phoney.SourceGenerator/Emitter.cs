@@ -104,13 +104,19 @@ internal static class Emitter
         sb.Append(indent).AppendLine($"private sealed class __PhoneyModel_{model.Key} : global::Phoney.Generation.FakeModel<{t}>");
         sb.Append(indent).AppendLine("{");
 
+        // Validation rules from data annotations, one field per annotated member (declared before __members uses them).
+        foreach (var m in model.Members.Where(m => m.Constraints is not null))
+            sb.Append(i1).AppendLine($"private static readonly global::Phoney.Generation.MemberConstraints {m.ConstraintsField} = new() {{ {m.Constraints} }};");
+        if (model.Members.Any(m => m.Constraints is not null))
+            sb.AppendLine();
+
         // Member descriptions (index = position).
         sb.Append(i1).AppendLine("private static readonly global::Phoney.Generation.FakeMember[] __members =");
         sb.Append(i1).AppendLine("{");
         foreach (var m in model.Members)
         {
             sb.Append(i2).AppendLine(
-                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}),");
+                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}),");
         }
 
         sb.Append(i1).AppendLine("};");

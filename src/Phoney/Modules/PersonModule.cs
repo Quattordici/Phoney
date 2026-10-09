@@ -22,8 +22,7 @@ public sealed class PersonModule : FakerModule
         var firstName = FirstName(s);
         var lastName = LastName(s);
         var birthDate = Faker.Date.Birthdate(minAge, maxAge);
-        var today = DateOnly.FromDateTime(Faker.ReferenceDate.UtcDateTime);
-        var age = today.Year - birthDate.Year - (today < birthDate.AddYears(today.Year - birthDate.Year) ? 1 : 0);
+        var age = Generation.Identity.AgeAt(birthDate, DateOnly.FromDateTime(Faker.ReferenceDate.UtcDateTime));
         return new PersonProfile(
             s,
             firstName,

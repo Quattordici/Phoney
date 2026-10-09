@@ -142,7 +142,40 @@ var customers = Fake.For<Customer>()
 - **Cycles** (`Customer → Order → Customer`) stop with `null`. `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
-- **Strict mode**: `.Strict()` throws when a scalar member has neither a rule nor a convention, so new members can't silently get meaningless data.
+- **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data.
+
+### Values that agree
+
+Within one object, related members describe the same thing:
+
+- **One person**: `FirstName`, `LastName`, `Email`, `Username`, `Avatar` and `Gender`/`Sex` enums belong together, and `Age` matches `BirthDate`/`DateOfBirth`.
+- **One address**: `Street`, `City`, `ZipCode`, `State`, `Country` and `CountryCode` come from one address. For country locales (`de_AT`, `en_US`…) the country is the locale's own (`Österreich`, `AT`).
+- **One timeline**: the first "created" date (`CreatedAt`, `RegisteredAt`, `StartDate`…) is when the object was created, "updated" dates (`UpdatedAt`, `LastLogin`…) fall between it and the reference date, and future dates (`ExpiresAt`, `DueDate`, `EndDate`) come after both.
+
+Across objects, `WithOneOf` links graphs to data you generated already:
+
+```csharp
+var customers = Fake.Many<Customer>(10);
+var orders = Fake.For<Order>()
+    .WithOneOf(o => o.CustomerId, customers, c => c.Id)   // an existing customer's id
+    .WithOneOf(o => o.Status, [OrderStatus.Paid, OrderStatus.Shipped])
+    .Generate(100);
+```
+
+### Validation attributes
+
+Generated objects satisfy their data annotations, so they pass `Validator.TryValidateObject`, EF Core and ASP.NET Core validation:
+
+| Annotation | Effect |
+|---|---|
+| `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` | string length; element count for collections |
+| `[Range]` | numbers and dates within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`) |
+| `[RegularExpression]` | a value matching the pattern |
+| `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | a value of that format, whatever the member is called |
+| `[AllowedValues]`, `[DeniedValues]` | one of / none of the listed values |
+| `[Required]` | never `null` (even with `NullProbability`) and never empty |
+
+Annotations work the same with reflection and with the source generator, on properties, fields and record parameters (`[property: Range(1, 5)]`).
 
 ### Conventions
 
@@ -152,12 +185,13 @@ Member names (case and `_` ignored, trailing words matched, so `BillingCity` is 
 |---|---|
 | `FirstName`, `LastName`, `FullName`, `Name` on a person-like type | names of one generated identity |
 | `Email`, `Username`, `Avatar`, `Gender`/`Sex` enums | consistent with that identity |
-| `Street`, `Address1`, `City`, `Zip`/`PostalCode`, `State`, `Country`, `CountryCode`, `Latitude` | location data of the locale |
+| `Street`, `Address1`, `City`, `Zip`/`PostalCode`, `State`, `Country`, `CountryCode` | one address in the locale |
 | `Phone`, `Mobile`, `Company`, `JobTitle`, `Department`, `ProductName`, `Description`, `Notes` | matching module |
 | `Url`, `Website`, `Ip`, `Mac`, `UserAgent`, `Iban`, `Bic`, `CreditCard`, `Isbn`, `Vin`, `Sku`, `Token`, `Version` | matching module |
 | `Id` (`int`/`long`) | 1, 2, 3… in generation order; `CustomerId` is a random reference |
-| `Age`, `Price`/`Amount`/`Total`, `Quantity`, `Rating`, `Year`, `Percentage` | sensible ranges |
-| `BirthDate`/`DateOfBirth`, `CreatedAt`, `UpdatedAt`, `ExpiresAt`/`DueDate` | birthdate, past, recent, future |
+| `Age` and `BirthDate`/`DateOfBirth` | matching each other |
+| `Price`/`Amount`/`Total`, `Quantity`, `Rating`, `Year`, `Percentage`, `Latitude` | sensible ranges |
+| `CreatedAt`, `UpdatedAt`, `ExpiresAt`/`DueDate` | an ordered timeline: past, recent, future |
 
 `Name` and `Title` look at the declaring type (`Company.Name` is a company name, `Product.Name` a product, `Book.Title` a title). Anything else gets a value based on its type. Add your own:
 

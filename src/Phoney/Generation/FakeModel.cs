@@ -11,8 +11,10 @@ public sealed class FakeMember
     /// <param name="convention">Name convention chosen for the member.</param>
     /// <param name="isConstructorParameter">Whether the value is passed to the constructor.</param>
     /// <param name="isInitOnly">Whether the member can only be set during construction (<c>init</c>).</param>
-    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter = false, bool isInitOnly = false)
+    /// <param name="constraints">Validation rules from the member's data annotations, if any.</param>
+    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter = false, bool isInitOnly = false, MemberConstraints? constraints = null)
     {
+        Constraints = constraints;
         Name = name;
         Type = type;
         Convention = convention;
@@ -34,6 +36,9 @@ public sealed class FakeMember
 
     /// <summary>Whether the member can only be set during construction.</summary>
     public bool IsInitOnly { get; }
+
+    /// <summary>Validation rules from data annotations (<c>[StringLength]</c>, <c>[Range]</c>…), or <see langword="null"/>.</summary>
+    public MemberConstraints? Constraints { get; }
 
     /// <summary>Whether the member holds a scalar value (string, number, date…) rather than an object or collection.</summary>
     public bool IsScalar => ScalarCategory(Type) != TypeCategory.Other;
