@@ -22,7 +22,8 @@ namespace Phoney.TUnit;
 /// </para>
 /// <para>
 /// Custom conventions registered with <see cref="Fake.Conventions"/> and source-generated models
-/// (<see cref="FakeForAttribute{T}"/>) are used for matching parameters and types.
+/// (<see cref="FakeForAttribute{T}"/>) are used for matching parameters and types. Values are generated while TUnit
+/// discovers tests, so register conventions in a <c>[Before(TestDiscovery)]</c> hook; later hooks run too late.
 /// </para>
 /// </remarks>
 /// <example>

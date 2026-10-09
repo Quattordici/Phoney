@@ -79,13 +79,13 @@ public sealed class FakeDataTests
 }
 
 /// <summary>
-/// Test data is generated while tests are discovered, before any TUnit hook runs, so conventions are registered in a
-/// module initializer.
+/// Test data is generated while tests are discovered, so conventions are registered in a hook that runs before
+/// discovery; later hooks (such as <c>[Before(Assembly)]</c>) would be too late.
 /// </summary>
-internal static class Conventions
+public static class TestSetup
 {
-    [System.Runtime.CompilerServices.ModuleInitializer]
-    internal static void Register() => Fake.Conventions.Add("Sku", f => f.Random.Replace("SKU-####"));
+    [Before(TestDiscovery)]
+    public static void RegisterConventions() => Fake.Conventions.Add("Sku", f => f.Random.Replace("SKU-####"));
 }
 
 /// <summary>Seeds, independent of a running test.</summary>

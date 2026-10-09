@@ -235,7 +235,7 @@ public async Task Formats_address(string street, string city, string zipCode) { 
 - The parameters of one test case agree like the members of one object: `firstName`, `email`, `birthDate` and `age` describe the same person, `street`, `city` and `zipCode` one address.
 - **Reproducible by default**: the seed is derived from the test's class, method and parameters, so every run and machine gets the same values (and the same test names). Set `Seed = 42` for other values.
 - Options: `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`. It also works on the test class (constructor parameters) and on `required` properties.
-- Test data is created while TUnit discovers tests, so register custom conventions (`Fake.Conventions.Add`) in a `[ModuleInitializer]`, not in a TUnit hook.
+- Test data is created while TUnit discovers tests, so register custom conventions (`Fake.Conventions.Add`) in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late.
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 

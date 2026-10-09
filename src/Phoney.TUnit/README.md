@@ -24,4 +24,13 @@ public class OrderTests
 - **Options:** `Count`, `Seed`, `Locale`, `NullProbability` (for nullable parameters) and `ReferenceDate` (ISO 8601).
 - Also works on the test class (constructor parameters) and on `required` properties.
 - Custom conventions (`Fake.Conventions.Add(...)`) and source-generated models (`[FakeFor<T>]`) apply.
-- Test data is created while TUnit discovers tests, so register custom conventions in a `[ModuleInitializer]`, not in a TUnit hook.
+- Test data is created while TUnit discovers tests, so register custom conventions in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late:
+
+  ```csharp
+  public static class TestSetup
+  {
+      [Before(TestDiscovery)]
+      public static void RegisterConventions() =>
+          Fake.Conventions.Add("Sku", f => f.Random.Replace("SKU-####"));
+  }
+  ```
