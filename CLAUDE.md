@@ -2,7 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Phoney is a .NET fake-data library (targets net8.0 and net10.0) built on the locale data of faker.js. Priorities, in this order of concern: **performance, ease of use, robustness**, with generation that works through **source generation and Native AOT** wherever possible. Follow SOLID and DRY, and work **test first**: write the failing test, make it pass, then refactor.
+Phoney is a .NET fake-data library (targets net8.0 and net10.0) built on the locale data of faker.js.
+
+## Guidelines
+
+The solution should strive to follow best practices and follow well established patterns like SOLID and DRY. It should use a TDD workflow. Focus should be on performance, easiness of use and robustness. Functionality should support source generation and AOT as much as possible.
+
+In practice here:
+
+- **TDD:** write the failing test first, make it pass, then refactor. Run the one test (see Commands) before the whole suite.
+- **Source generation and AOT:** every feature that touches object generation must work through both the reflection model and the source-generated one, with identical data for a seed, and must not add trim/AOT warnings. Reflection-only entry points carry `RequiresUnreferencedCode`/`RequiresDynamicCode`.
+- **Performance:** lookups are array-indexed, hot paths are allocation-free, templates are parsed once. Check `benchmarks/` when touching them.
+- **Ease of use:** one obvious call for the common case (`Fake.Populate(x)`, `faker.NationalId.Person()`), sensible defaults, and a clear exception message that says how to fix the problem.
+- **Robustness:** validate arguments, never fail silently, and make results reproducible for a seed.
 
 ## Commands
 
@@ -38,5 +50,4 @@ dotnet run -c Release --project benchmarks/Phoney.Benchmarks -- --filter '*'
 
 - Tests use TUnit (`[Test]`, `[Arguments]`) with Shouldly. New checksum/format logic should be verified against an independent implementation (the national id schemes were cross-checked with `python-stdnum`), not only against itself.
 - Generated values must be reproducible: no `System.Random`, `DateTime.Now`, `Guid.NewGuid` or unordered iteration in generation paths; use the faker's `Randomizer` and `ReferenceDate`.
-- Keep hot paths allocation-free (array-indexed lookups, templates parsed once and cached); check `benchmarks/` when touching them.
 - README is user-facing documentation for every feature and also contains the generated locale table between `<!-- locales:start/end -->` markers.
