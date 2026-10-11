@@ -15,7 +15,7 @@ dotnet publish tests/Phoney.AotSmoke -c Release -p:TreatWarningsAsErrors=true   
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks -- --filter '*'
 ```
 
-- Tests target only net10.0 locally; CI (`GITHUB_ACTIONS=true`) adds net8.0. CI also runs the AOT publish and executes the binary. The link step can fail on a Mac without OpenSSL libs (`library 'ssl' not found`); the compile step before it is still what reports AOT warnings.
+- Tests target only net10.0 locally; CI (`GITHUB_ACTIONS=true`) adds net8.0. CI also runs the AOT publish and executes the binary. On a Mac the link step can fail with `library 'ssl' not found` (then `brotlienc`) because Homebrew's libs are not on the linker path; prefix the publish with `LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib:/opt/homebrew/opt/brotli/lib` (needs `brew install openssl@3 brotli`) and run `artifacts/aot/Phoney.AotSmoke`. The compile step before the link is what reports AOT warnings.
 - Locale data is refreshed with `cd tools/extract && npm install --save-exact @faker-js/faker@latest && node export-locales.mjs ../../data/raw`, then `dotnet run --project tools/Phoney.DataCompiler`, then `dotnet test`. CI fails if `data/`, `src/Phoney/Resources`, `src/Phoney/Data/Generated` or the README locale table differ from a fresh import, so never hand-edit those.
 
 ## Architecture
