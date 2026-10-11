@@ -65,6 +65,18 @@ internal sealed class MemberModel
     /// <summary>Whether the member is a field rather than a property.</summary>
     public bool IsField { get; set; }
 
+    /// <summary>Whether the member can be set on an existing object: it has a public setter or <c>init</c> accessor, also behind a constructor parameter.</summary>
+    public bool Settable { get; set; }
+
+    /// <summary>Whether that accessor is <c>init</c>, which is reached through an <c>UnsafeAccessor</c> after construction.</summary>
+    public bool SetterInitOnly { get; set; }
+
+    /// <summary>Type declaring the member that is set on an existing object.</summary>
+    public string SetterDeclaringType { get; set; } = "";
+
+    /// <summary>Whether the member is an object the generator creates and populates recursively.</summary>
+    public bool IsNested { get; set; }
+
     /// <summary>Object initializer body for the member's <c>MemberConstraints</c> (from data annotations), or <see langword="null"/>.</summary>
     public string? Constraints { get; set; }
 
@@ -140,7 +152,21 @@ internal sealed class ModelBuilder
             var name = match?.Name ?? Capitalize(parameter.Name);
             // Annotations may sit on the parameter or (with [property: …]) on the generated property.
             var attributes = parameter.GetAttributes().Concat(match?.GetAttributes() ?? Enumerable.Empty<AttributeData>());
-            members.Add(Member(type, name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), isConstructorParameter: true, isInitOnly: false, inInitializer: false, declaringType: type, isField: false, attributes, members.Count));
+            var parameterMember = Member(type, name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), isConstructorParameter: true, isInitOnly: false, inInitializer: false, declaringType: type, isField: false, attributes, members.Count);
+            // A record's positional property behind the parameter can be set on an existing object.
+            if (match is IPropertySymbol parameterProperty)
+            {
+                parameterMember.Settable = true;
+                parameterMember.SetterInitOnly = parameterProperty.SetMethod!.IsInitOnly;
+                parameterMember.SetterDeclaringType = Fq(parameterProperty.ContainingType);
+            }
+            else if (match is IFieldSymbol parameterField)
+            {
+                parameterMember.Settable = true;
+                parameterMember.SetterDeclaringType = Fq(parameterField.ContainingType);
+            }
+
+            members.Add(parameterMember);
         }
 
         foreach (var member in writable)
@@ -192,6 +218,10 @@ internal sealed class ModelBuilder
             IsField = isField,
             Constraints = constraints.Initializer,
             ConstraintsField = constraintsField,
+            Settable = !isConstructorParameter,
+            SetterInitOnly = isInitOnly,
+            SetterDeclaringType = declaringType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            IsNested = IsNestable(type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType ? nullableType.TypeArguments[0] : type),
         };
     }
 

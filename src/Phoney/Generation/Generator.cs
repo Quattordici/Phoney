@@ -220,6 +220,56 @@ public sealed class Generator<T> : INestedGenerator
         return results;
     }
 
+    /// <summary>
+    /// Fills in an object you already have, using the same conventions, rules and annotations as <see cref="Generate()"/>:
+    /// <c>new Order { CustomerId = 42 }</c> keeps its customer id and gets everything else.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The <paramref name="mode"/> decides which members are touched; the rules decide their values. Members that are ignored
+    /// (<see cref="Ignore{TValue}"/>) are never touched. Rules that depend on the object and <see cref="AfterCreate"/> actions
+    /// run afterwards; <see cref="CreateWith"/> is ignored because nothing is created.
+    /// </para>
+    /// <para>
+    /// Kept values shape the generated ones: with a set <c>FirstName</c>, <c>LastName</c>, <c>BirthDate</c> or sex/gender enum, the email,
+    /// username, age and avatar are generated to match.
+    /// </para>
+    /// <para>
+    /// Populating draws from the same seeded sequence as generating, so with a <see cref="Seed"/> the result is reproducible.
+    /// A member holding <c>false</c> or <c>0</c> counts as unset in <see cref="PopulateMode.MissingOnly"/>; protect such a value with <see cref="Ignore{TValue}"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="instance">The object to fill in.</param>
+    /// <param name="mode">Which members to fill in; by default only the ones that are still unset.</param>
+    /// <returns><paramref name="instance"/>, or a populated copy when <typeparamref name="T"/> is a struct.</returns>
+    public T Populate(T instance, PopulateMode mode = PopulateMode.MissingOnly)
+    {
+        if (instance is null)
+            throw new ArgumentNullException(nameof(instance));
+        var run = Start();
+        return run.Populate(instance, _state.NextIndex(1), mode);
+    }
+
+    /// <summary>Fills in every object of <paramref name="instances"/> like <see cref="Populate(T, PopulateMode)"/>, each from its own place in the seeded sequence.</summary>
+    /// <returns>The populated objects in the same order (copies for structs).</returns>
+    public List<T> Populate(IEnumerable<T> instances, PopulateMode mode = PopulateMode.MissingOnly)
+    {
+        ArgumentNullException.ThrowIfNull(instances);
+        var items = instances as IReadOnlyCollection<T> ?? [.. instances];
+        var run = Start();
+        var first = _state.NextIndex(items.Count);
+        var result = new List<T>(items.Count);
+        var index = 0;
+        foreach (var item in items)
+        {
+            if (item is null)
+                throw new ArgumentException("The collection contains a null element.", nameof(instances));
+            result.Add(run.Populate(item, first + index++, mode));
+        }
+
+        return result;
+    }
+
     /// <inheritdoc />
     object? INestedGenerator.CreateNested(FakeScope parent) =>
         Start(parent.Faker.Random.Long(), parent.Faker).Create(0, parent);
@@ -337,6 +387,26 @@ public sealed class Generator<T> : INestedGenerator
 
             foreach (var (member, rule) in compiled.Dependent)
                 item = model.Set(item, member, rule(faker, item));
+            foreach (var action in config.AfterCreate)
+                action(faker, item);
+            return item;
+        }
+
+        /// <summary>Populates <paramref name="instance"/> as item <paramref name="index"/> of the sequence.</summary>
+        public T Populate(T instance, long index, PopulateMode mode)
+        {
+            faker.Random.Reseed(Randomizer.DeriveSeed(seed, index));
+            var config = generator._config;
+            var model = generator._model;
+            var scope = new FakeScope(faker, config.Settings, compiled.Slots, index, typeof(T));
+
+            var item = model.Populate(instance, scope, mode);
+            foreach (var (member, rule) in compiled.Dependent)
+            {
+                if (mode == PopulateMode.All || model.IsUnset(item, member))
+                    item = model.Set(item, member, rule(faker, item));
+            }
+
             foreach (var action in config.AfterCreate)
                 action(faker, item);
             return item;

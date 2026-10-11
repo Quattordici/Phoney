@@ -186,6 +186,23 @@ var customers = Fake.For<Customer>()
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data.
 
+### Filling in existing objects
+
+`Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:
+
+```csharp
+var order = Fake.Populate(new Order { CustomerId = 42 });         // CustomerId stays 42, everything else is filled
+Fake.For<Customer>().Seed(1).With(x => x.Status, "VIP").Populate(existing);
+generator.Populate(existing, PopulateMode.All);                   // regenerate every member
+List<Customer> filled = generator.Populate(customers);            // many at once, each from its own place in the seeded sequence
+```
+
+- **`PopulateMode.MissingOnly`** (the default) fills members that hold their default (`null`, `0`, `false`, `Guid.Empty`, an empty string or collection) and keeps the others. A set nested object is populated member by member. `PopulateMode.All` replaces everything that is not ignored.
+- Kept values shape the generated ones: with a set `FirstName`, `LastName`, `BirthDate` or sex/gender enum, the email, username, age and avatar are generated to match.
+- Members you `Ignore` are never touched; rules that depend on the object and `AfterCreate` run afterwards; `CreateWith` is ignored because nothing is created. Records are filled through their `init` properties, and a struct is populated as a copy (use the return value).
+- A `false` or `0` that you set on purpose counts as unset in `MissingOnly`: protect it with `.Ignore(x => x.IsActive)`.
+- With a seed, `Populate(new T(), PopulateMode.All)` gives exactly what `Generate()` gives.
+
 ### Values that agree
 
 Within one object, related members describe the same thing:

@@ -1,3 +1,4 @@
+using System.Collections;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using Phoney.Modules;
@@ -79,6 +80,7 @@ public sealed class FakeScope
     private readonly FakeScope? _parent;
     private readonly Type _type;
     private Identity? _identity;
+    private IdentityHints? _hints;
 
     internal FakeScope(Faker faker, GenerationSettings settings, RuleSlot?[]? slots, long index, Type type, FakeScope? parent = null)
     {
@@ -107,7 +109,7 @@ public sealed class FakeScope
     internal GenerationSettings Settings { get; }
 
     /// <summary>The person or place this object describes; shared by name, email, avatar, birthdate, age and address conventions.</summary>
-    internal Identity Identity => _identity ??= new Identity(Faker);
+    internal Identity Identity => _identity ??= new Identity(Faker, _hints);
 
     /// <summary>
     /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
@@ -119,6 +121,104 @@ public sealed class FakeScope
     internal bool CreatedClaimed { get; set; }
 
     private DateTimeOffset? _created;
+
+    /// <summary>
+    /// Whether <paramref name="value"/> still holds its default: <see langword="null"/>, <c>default(T)</c> (0, <see langword="false"/>,
+    /// <see cref="Guid.Empty"/>…), an empty string or an empty collection. <see cref="PopulateMode.MissingOnly"/> fills such members.
+    /// </summary>
+    public static bool IsUnset<TValue>(TValue value)
+    {
+        if (value is null)
+            return true;
+        if (value is string text)
+            return text.Length == 0;
+        if (value is IEnumerable sequence)
+            return IsEmpty(sequence);
+        return typeof(TValue).IsValueType && EqualityComparer<TValue>.Default.Equals(value, default!);
+    }
+
+    /// <summary>Like <see cref="IsUnset{TValue}"/> for a boxed value; <paramref name="defaultValue"/> is <c>default</c> of the member's type (<see langword="null"/> for reference and nullable types).</summary>
+    internal static bool IsUnsetBoxed(object? value, object? defaultValue) => value switch
+    {
+        null => true,
+        string text => text.Length == 0,
+        IEnumerable sequence => IsEmpty(sequence),
+        _ => defaultValue is not null && value.Equals(defaultValue),
+    };
+
+    private static bool IsEmpty(IEnumerable sequence)
+    {
+        var enumerator = sequence.GetEnumerator();
+        try
+        {
+            return !enumerator.MoveNext();
+        }
+        finally
+        {
+            (enumerator as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Tells the object's identity about a value that is kept as it is while populating (a set <c>FirstName</c>, birthdate or
+    /// sex/gender enum), so generated values that belong to the same person (email, username, age) agree with it.
+    /// Must be called before any value is generated.
+    /// </summary>
+    internal void Adopt(FakeMember member, object? value)
+    {
+        if (value is null)
+            return;
+        var hints = _hints ??= new IdentityHints();
+        switch (member.Convention)
+        {
+            case ConventionKind.FirstName when value is string first:
+                hints.FirstName = first;
+                break;
+            case ConventionKind.LastName when value is string last:
+                hints.LastName = last;
+                break;
+            case ConventionKind.BirthDate:
+                hints.BirthDate = value switch
+                {
+                    DateOnly d => d,
+                    DateTime t => DateOnly.FromDateTime(t),
+                    DateTimeOffset o => DateOnly.FromDateTime(o.UtcDateTime),
+                    _ => hints.BirthDate,
+                };
+                break;
+            default:
+                // A sex/gender enum with Female and Male members says which names and avatar fit the person.
+                if (value is Enum e && (member.Convention is ConventionKind.Sex or ConventionKind.Gender || IsSexEnum(e.GetType())))
+                {
+                    var name = e.ToString();
+                    if (name.Equals("Female", StringComparison.OrdinalIgnoreCase))
+                        hints.Sex = Modules.Sex.Female;
+                    else if (name.Equals("Male", StringComparison.OrdinalIgnoreCase))
+                        hints.Sex = Modules.Sex.Male;
+                }
+
+                break;
+        }
+    }
+
+    private static bool IsSexEnum(Type type) =>
+        type.Name.Contains("Gender", StringComparison.OrdinalIgnoreCase) || type.Name.Contains("Sex", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Populates an existing nested object through its model, stopping at the depth limit and on cycles (the object is then left as it is).</summary>
+    internal object PopulateNested(Type type, object existing, PopulateMode mode)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (Depth + 1 > Settings.MaxDepth)
+            return existing;
+        for (var scope = this; scope is not null; scope = scope._parent)
+        {
+            if (scope._type == type)
+                return existing;
+        }
+
+        var model = ModelRegistry.Get(type);
+        return model?.PopulateObject(existing, new FakeScope(Faker, Settings, null, Faker.Random.Long(0, int.MaxValue), type, this), mode) ?? existing;
+    }
 
     /// <summary>Whether the model should set <paramref name="member"/> while creating the object.</summary>
     /// <remarks>False for ignored members and for members set afterwards by dependent rules.</remarks>
@@ -266,18 +366,18 @@ internal interface INestedGenerator
 /// The person (and home) an object describes, created on first use so unrelated objects pay nothing. Each part is
 /// generated when first needed, so conventions only consume randomness for members the type actually has.
 /// </summary>
-internal sealed class Identity(Faker faker)
+internal sealed class Identity(Faker faker, IdentityHints? hints)
 {
-    private string? _firstName;
-    private string? _lastName;
+    private string? _firstName = hints?.FirstName;
+    private string? _lastName = hints?.LastName;
     private string? _username;
     private string? _email;
-    private DateOnly? _birthDate;
+    private DateOnly? _birthDate = hints?.BirthDate;
     private AddressProfile? _address;
     private string? _nationalId;
 
     /// <summary>The person's sex; drives gendered names, avatars and sex/gender enums.</summary>
-    public Sex Sex { get; } = faker.Person.Sex();
+    public Sex Sex { get; } = hints?.Sex ?? faker.Person.Sex();
 
     /// <summary>First name, matching <see cref="Sex"/>.</summary>
     public string FirstName => _firstName ??= faker.Person.FirstName(Sex);
@@ -306,4 +406,16 @@ internal sealed class Identity(Faker faker)
     /// <summary>Whole years between <paramref name="birthDate"/> and <paramref name="today"/>.</summary>
     internal static int AgeAt(DateOnly birthDate, DateOnly today) =>
         today.Year - birthDate.Year - (today < birthDate.AddYears(today.Year - birthDate.Year) ? 1 : 0);
+}
+
+/// <summary>Values of an object that is being populated and already has them, which its identity must agree with.</summary>
+internal sealed class IdentityHints
+{
+    public string? FirstName { get; set; }
+
+    public string? LastName { get; set; }
+
+    public DateOnly? BirthDate { get; set; }
+
+    public Sex? Sex { get; set; }
 }

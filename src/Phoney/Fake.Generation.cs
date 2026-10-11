@@ -25,6 +25,17 @@ public static partial class Fake
     public static List<T> Many<T>(int count) => For<T>().Generate(count);
 
     /// <summary>
+    /// Fills in the members of <paramref name="instance"/> that are still unset (or all of them, see <paramref name="mode"/>),
+    /// keeping what you already set: <c>Fake.Populate(new Order { CustomerId = 42 })</c>.
+    /// </summary>
+    /// <returns><paramref name="instance"/>, or a populated copy when <typeparamref name="T"/> is a struct.</returns>
+    /// <example><code>var order = Fake.Populate(new Order { CustomerId = 42 });</code></example>
+    /// <seealso cref="Generator{T}.Populate(T, PopulateMode)"/>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static T Populate<T>(T instance, PopulateMode mode = PopulateMode.MissingOnly) => For<T>().Populate(instance, mode);
+
+    /// <summary>
     /// Starts configuring a generator for <typeparamref name="T"/>. Uses a source-generated model when one is
     /// registered (see <see cref="FakeForAttribute{T}"/>), otherwise reflection. When the facade is seeded
     /// (<see cref="Seeded"/>, <see cref="Seed"/>), the generator is seeded from it.
