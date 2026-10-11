@@ -31,6 +31,7 @@ public sealed partial class Faker
     private SystemModule? _system;
     private GitModule? _git;
     private ImageModule? _image;
+    private NationalIdModule? _nationalId;
 
     /// <summary>Patterns, symbols, checksums and collection helpers.</summary>
     public HelpersModule Helpers => _helpers ??= new(this);
@@ -109,4 +110,7 @@ public sealed partial class Faker
 
     /// <summary>Image URLs and data URIs.</summary>
     public ImageModule Image => _image ??= new(this);
+
+    /// <summary>Personal identity numbers, company registration numbers and VAT numbers with valid check digits.</summary>
+    public NationalIdModule NationalId => _nationalId ??= new(this);
 }

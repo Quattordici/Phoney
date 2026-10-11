@@ -44,6 +44,8 @@ enum ConventionKind
     Uuid, Token, Version, FileName, FilePath, MimeType, FileExtension,
     Id, ReferenceId, Age, Price, Quantity, Rating, Year, Percentage, Port,
     BirthDate, PastDate, RecentDate, FutureDate,
+    // New kinds are appended so the numeric values of the kinds above stay stable for already compiled generated models.
+    NationalId, CompanyId, VatNumber,
 #pragma warning restore CS1591
 }
 
@@ -303,6 +305,9 @@ static class ConventionRules
         Text(ConventionKind.FilePath, "filepath", "path", "directory", "folder");
         Text(ConventionKind.MimeType, "mimetype", "contenttype", "mediatype");
         Text(ConventionKind.FileExtension, "extension", "fileextension", "ext");
+        Text(ConventionKind.NationalId, "nationalid", "nationalidnumber", "ssn", "socialsecuritynumber", "personnummer", "personalidentitynumber", "personalnumber", "nino", "nationalinsurancenumber", "cpf", "pesel", "cpr", "cprnumber", "hetu", "bsn", "taxid", "taxidentificationnumber");
+        Text(ConventionKind.CompanyId, "orgnr", "orgno", "organizationnumber", "organisationnumber", "organizationid", "organisationid", "companynumber", "companyregistrationnumber", "cnpj", "ein", "cvr", "siren");
+        Text(ConventionKind.VatNumber, "vat", "vatnumber", "vatid", "vatno", "vatnr");
 
         Add(map, ConventionKind.Latitude, Accepts.Number, "latitude", "lat");
         Add(map, ConventionKind.Longitude, Accepts.Number, "longitude", "lng", "lon", "long");

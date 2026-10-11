@@ -27,6 +27,12 @@ var parallel = Fakes.Person.Seed(1).Locale("de").GenerateParallel(1_000);
 if (!parallel.Select(p => p.Email).SequenceEqual(people.Select(p => p.Email)))
     throw new InvalidOperationException("parallel generation differs from sequential generation");
 
+// National ids: valid check digits, no reflection.
+var personnummer = faker.NationalId.Person();
+if (!NationalIds.IsValid(NationalIdKind.Person, "SE", personnummer))
+    throw new InvalidOperationException($"invalid personnummer '{personnummer}'");
+Check(faker.NationalId.Vat("GB"), "vat number");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 

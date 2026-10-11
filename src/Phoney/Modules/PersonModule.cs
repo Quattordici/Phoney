@@ -23,18 +23,15 @@ public sealed class PersonModule : FakerModule
         var lastName = LastName(s);
         var birthDate = Faker.Date.Birthdate(minAge, maxAge);
         var age = Generation.Identity.AgeAt(birthDate, DateOnly.FromDateTime(Faker.ReferenceDate.UtcDateTime));
-        return new PersonProfile(
-            s,
-            firstName,
-            lastName,
-            FullName(firstName, lastName, s),
-            Faker.Internet.Email(firstName, lastName),
-            Faker.Internet.Username(firstName, lastName),
-            Faker.Phone.Number(),
-            birthDate,
-            age,
-            JobTitle(),
-            Faker.Location.Address());
+        var fullName = FullName(firstName, lastName, s);
+        var email = Faker.Internet.Email(firstName, lastName);
+        var username = Faker.Internet.Username(firstName, lastName);
+        var phone = Faker.Phone.Number();
+        var jobTitle = JobTitle();
+        var address = Faker.Location.Address();
+        // Last, so the values above are the same as before the identity number existed.
+        var nationalId = Faker.NationalId.TryPerson(birthDate, s);
+        return new PersonProfile(s, firstName, lastName, fullName, email, username, phone, birthDate, age, jobTitle, address, nationalId);
     }
 
     /// <summary>Returns a first name; gendered when <paramref name="sex"/> is given and the locale has gendered names.</summary>
@@ -167,6 +164,10 @@ public sealed class PersonModule : FakerModule
 /// <param name="Age">Age in whole years at the faker's reference date.</param>
 /// <param name="JobTitle">Job title.</param>
 /// <param name="Address">Home address.</param>
+/// <param name="NationalId">
+/// Personal identity number of the locale's country that encodes <paramref name="BirthDate"/> and <paramref name="Sex"/>
+/// where the country's scheme does so; <see langword="null"/> when the country has no scheme (see <see cref="NationalIds"/>).
+/// </param>
 public sealed record PersonProfile(
     Sex Sex,
     string FirstName,
@@ -178,4 +179,5 @@ public sealed record PersonProfile(
     DateOnly BirthDate,
     int Age,
     string JobTitle,
-    AddressProfile Address);
+    AddressProfile Address,
+    string? NationalId = null);

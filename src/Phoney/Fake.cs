@@ -194,6 +194,9 @@ public static partial class Fake
     /// <inheritdoc cref="Faker.Image"/>
     public static ImageModule Image => Faker.Image;
 
+    /// <inheritdoc cref="Faker.NationalId"/>
+    public static NationalIdModule NationalId => Faker.NationalId;
+
     /// <inheritdoc cref="Faker.Parse"/>
     public static string Parse(string template) => Faker.Parse(template);
 }

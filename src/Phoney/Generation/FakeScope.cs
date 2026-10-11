@@ -274,6 +274,7 @@ internal sealed class Identity(Faker faker)
     private string? _email;
     private DateOnly? _birthDate;
     private AddressProfile? _address;
+    private string? _nationalId;
 
     /// <summary>The person's sex; drives gendered names, avatars and sex/gender enums.</summary>
     public Sex Sex { get; } = faker.Person.Sex();
@@ -298,6 +299,9 @@ internal sealed class Identity(Faker faker)
 
     /// <summary>One address, so street, city, zip code, state and country agree.</summary>
     public AddressProfile Address => _address ??= faker.Location.Address();
+
+    /// <summary>The locale country's personal identity number, encoding <see cref="BirthDate"/> and <see cref="Sex"/>; empty when the country has no scheme.</summary>
+    public string NationalId => _nationalId ??= faker.NationalId.TryPerson(BirthDate, Sex) ?? "";
 
     /// <summary>Whole years between <paramref name="birthDate"/> and <paramref name="today"/>.</summary>
     internal static int AgeAt(DateOnly birthDate, DateOnly today) =>

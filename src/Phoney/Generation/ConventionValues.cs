@@ -115,6 +115,9 @@ public static class ConventionValues
                 ConventionKind.FilePath => f.System.FilePath(),
                 ConventionKind.MimeType => f.System.MimeType(),
                 ConventionKind.FileExtension => f.System.CommonFileExt(),
+                ConventionKind.NationalId => scope.Identity.NationalId,
+                ConventionKind.CompanyId => f.NationalId.Company(),
+                ConventionKind.VatNumber => f.NationalId.Vat(),
                 _ => f.Lorem.Word(),
             };
         }

@@ -39,6 +39,11 @@ public static partial class TemplateFunctions
         Add("internet.jwtAlgorithm", x => x.Internet.JwtAlgorithm());
         Add("internet.jwt", x => x.Internet.Jwt());
 
+        // national ids (not a faker.js module)
+        f["nationalId.person"] = (faker, a) => faker.NationalId.Person(a.String(0), formatted: a.Bool(1, "formatted") ?? true);
+        f["nationalId.company"] = (faker, a) => faker.NationalId.Company(a.String(0), a.Bool(1, "formatted") ?? true);
+        f["nationalId.vat"] = (faker, a) => faker.NationalId.Vat(a.String(0), a.Bool(1, "formatted") ?? true);
+
         // phone
         Add("phone.number", x => x.Phone.Number());
         Add("phone.imei", x => x.Phone.Imei());
