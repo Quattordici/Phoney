@@ -116,7 +116,7 @@ internal static class Emitter
         foreach (var m in model.Members)
         {
             sb.Append(i2).AppendLine(
-                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}),");
+                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}, {Bool(m.Settable)}, {Bool(m.IsNested)}),");
         }
 
         sb.Append(i1).AppendLine("};");
@@ -178,9 +178,9 @@ internal static class Emitter
         for (var index = 0; index < model.Members.Count; index++)
         {
             var m = model.Members[index];
-            if (m.IsConstructorParameter)
+            if (!m.Settable)
                 continue;
-            var assignment = m.IsInitOnly
+            var assignment = m.SetterInitOnly
                 ? $"__set_{index}({(model.IsValueType ? "ref " : "")}instance, ({m.TypeName})value)"
                 : $"instance.{m.Name} = ({m.TypeName})value";
             sb.Append(i3).AppendLine($"case {index}: {assignment}; return instance;");
@@ -189,16 +189,58 @@ internal static class Emitter
         sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" is a constructor parameter and cannot be set after creation.\");");
         sb.Append(i2).AppendLine("}");
         sb.Append(i1).AppendLine("}");
+        sb.AppendLine();
+
+        // Get, IsUnset: read access for populating an existing object.
+        sb.Append(i1).AppendLine($"public override object Get({t} instance, int member)");
+        sb.Append(i1).AppendLine("{");
+        sb.Append(i2).AppendLine("switch (member)");
+        sb.Append(i2).AppendLine("{");
+        for (var index = 0; index < model.Members.Count; index++)
+        {
+            if (model.Members[index].Settable)
+                sb.Append(i3).AppendLine($"case {index}: return (object)instance.{model.Members[index].Name};");
+        }
+
+        sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" cannot be read from an existing object.\");");
+        sb.Append(i2).AppendLine("}");
+        sb.Append(i1).AppendLine("}");
+        sb.AppendLine();
+        sb.Append(i1).AppendLine($"public override bool IsUnset({t} instance, int member)");
+        sb.Append(i1).AppendLine("{");
+        sb.Append(i2).AppendLine("switch (member)");
+        sb.Append(i2).AppendLine("{");
+        for (var index = 0; index < model.Members.Count; index++)
+        {
+            if (model.Members[index].Settable)
+                sb.Append(i3).AppendLine($"case {index}: return global::Phoney.Generation.FakeScope.IsUnset(instance.{model.Members[index].Name});");
+        }
+
+        sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" cannot be read from an existing object.\");");
+        sb.Append(i2).AppendLine("}");
+        sb.Append(i1).AppendLine("}");
+        sb.AppendLine();
+
+        // Fallback: the value producers of Create, as delegates for populating.
+        sb.Append(i1).AppendLine($"public override global::System.Func<{Scope}, object> Fallback(int member)");
+        sb.Append(i1).AppendLine("{");
+        sb.Append(i2).AppendLine("switch (member)");
+        sb.Append(i2).AppendLine("{");
+        for (var index = 0; index < model.Members.Count; index++)
+            sb.Append(i3).AppendLine($"case {index}: return static s0 => (object)({model.Members[index].Value});");
+        sb.Append(i3).AppendLine("default: throw new global::System.ArgumentOutOfRangeException(nameof(member));");
+        sb.Append(i2).AppendLine("}");
+        sb.Append(i1).AppendLine("}");
 
         // init-only setters are reachable after construction only through UnsafeAccessor (.NET 8+, AOT-safe).
         for (var index = 0; index < model.Members.Count; index++)
         {
             var m = model.Members[index];
-            if (!m.IsInitOnly || m.IsConstructorParameter)
+            if (!m.Settable || !m.SetterInitOnly)
                 continue;
             sb.AppendLine();
             sb.Append(i1).AppendLine($"[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"set_{m.Name}\")]");
-            sb.Append(i1).AppendLine($"private static extern void __set_{index}({(model.IsValueType ? "ref " : "")}{m.DeclaringType} target, {m.TypeName} value);");
+            sb.Append(i1).AppendLine($"private static extern void __set_{index}({(model.IsValueType ? "ref " : "")}{m.SetterDeclaringType} target, {m.TypeName} value);");
         }
 
         sb.Append(indent).AppendLine("}");

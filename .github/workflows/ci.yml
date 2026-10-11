@@ -3,11 +3,16 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
+
+# Cancel superseded runs on pull requests only; never cancel main or tag (release) runs.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   DOTNET_NOLOGO: true
@@ -17,13 +22,16 @@ jobs:
   build:
     name: Build & test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             8.0.x
@@ -35,9 +43,12 @@ jobs:
   aot:
     name: Native AOT smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
       - name: Publish with Native AOT (trim/AOT warnings fail the build)
@@ -47,12 +58,15 @@ jobs:
   data:
     name: Locale data is up to date
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
       - name: Re-import the pinned faker.js version
@@ -68,20 +82,30 @@ jobs:
     name: Pack
     needs: [build, aot, data]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v6
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
+      # Defence in depth: only tags that point at a commit reachable from main may produce a release.
+      - name: Verify release tag is on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::Tag $GITHUB_REF_NAME is not on main; refusing to pack a release."; exit 1; }
       - name: Pack (version from tag, or a CI pre-release)
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
           dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.TUnit -c Release -o artifacts/packages -p:Version="$VERSION"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: packages
           path: artifacts/packages
@@ -94,20 +118,25 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: pack
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: nuget
     permissions:
       id-token: write # lets the job request the OIDC token
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: packages
           path: packages
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
       - name: NuGet login (OIDC → short-lived API key)
         id: login
-        uses: NuGet/login@v1
+        # NuGet/login v1 is an annotated tag: this is the peeled commit SHA, not the tag object SHA.
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
         with:
           user: ${{ secrets.NUGET_USER }} # nuget.org profile name, not the email address
-      - run: dotnet nuget push "packages/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: Push packages
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

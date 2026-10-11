@@ -27,6 +27,21 @@ var parallel = Fakes.Person.Seed(1).Locale("de").GenerateParallel(1_000);
 if (!parallel.Select(p => p.Email).SequenceEqual(people.Select(p => p.Email)))
     throw new InvalidOperationException("parallel generation differs from sequential generation");
 
+// Populating an existing object keeps what is set, also through the init-only members of a record.
+var partial = Fakes.Person.Seed(2).Locale("sv").Populate(new Person { FirstName = "Anna", Home = new Address("Storgatan 1", "", "", "") });
+if (partial.FirstName != "Anna" || partial.Home.Street != "Storgatan 1")
+    throw new InvalidOperationException("populate overwrote existing values");
+Check(partial.LastName, "populated last name");
+Check(partial.Home.City, "populated nested record");
+if (partial.Pets.Count == 0)
+    throw new InvalidOperationException("populate did not fill collections");
+
+// National ids: valid check digits, no reflection.
+var personnummer = faker.NationalId.Person();
+if (!NationalIds.IsValid(NationalIdKind.Person, "SE", personnummer))
+    throw new InvalidOperationException($"invalid personnummer '{personnummer}'");
+Check(faker.NationalId.Vat("GB"), "vat number");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 

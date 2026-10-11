@@ -22,6 +22,15 @@ internal sealed class ReflectionModel<T> : FakeModel<T>
 
     /// <inheritdoc />
     public override T Set(T instance, int member, object? value) => (T)_inner.SetObject(instance!, member, value);
+
+    /// <inheritdoc />
+    public override object? Get(T instance, int member) => _inner.GetObject(instance!, member);
+
+    /// <inheritdoc />
+    public override bool IsUnset(T instance, int member) => _inner.IsUnsetObject(instance!, member);
+
+    /// <inheritdoc />
+    public override Func<FakeScope, object?> Fallback(int member) => _inner.FallbackOf(member);
 }
 
 /// <summary>
@@ -38,6 +47,8 @@ internal sealed class ReflectionTypeModel : IFakeModel
     private readonly Func<object?[], object> _construct;
     private readonly int _constructorParameterCount;
     private readonly Action<object, object?>?[] _setters;
+    private readonly Func<object, object?>?[] _getters;
+    private readonly object?[] _defaults;
     private readonly Func<FakeScope, object?>[] _fallbacks;
 
     private ReflectionTypeModel(Type type)
@@ -46,6 +57,8 @@ internal sealed class ReflectionTypeModel : IFakeModel
         var nullability = new NullabilityInfoContext();
         var members = new List<FakeMember>();
         var setters = new List<Action<object, object?>?>();
+        var getters = new List<Func<object, object?>?>();
+        var defaults = new List<object?>();
         var fallbacks = new List<Func<FakeScope, object?>>();
         var writable = WritableMembers(type);
 
@@ -60,7 +73,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
             var name = match?.Name ?? Capitalize(parameter.Name ?? "Arg");
             var nullable = nullability.Create(parameter).ReadState == NullabilityState.Nullable;
             var constraints = MemberConstraints.Read(parameter, match);
-            AddMember(name, parameter.ParameterType, nullable, isConstructorParameter: true, isInitOnly: false, setter: null, constraints);
+            AddMember(name, parameter.ParameterType, nullable, isConstructorParameter: true, isInitOnly: false, accessor: match, constraints);
         }
 
         _constructorParameterCount = parameters.Length;
@@ -72,21 +85,26 @@ internal sealed class ReflectionTypeModel : IFakeModel
                 FieldInfo f => (f.FieldType, nullability.Create(f).WriteState == NullabilityState.Nullable, false),
                 _ => throw new InvalidOperationException(),
             };
-            AddMember(member.Name, memberType, nullable, isConstructorParameter: false, initOnly, CreateSetter(type, member), MemberConstraints.Read(member));
+            AddMember(member.Name, memberType, nullable, isConstructorParameter: false, initOnly, member, MemberConstraints.Read(member));
         }
 
         Members = [.. members];
         _setters = [.. setters];
+        _getters = [.. getters];
+        _defaults = [.. defaults];
         _fallbacks = [.. fallbacks];
         _construct = CreateConstructor(type, constructor);
 
-        void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, Action<object, object?>? setter, MemberConstraints? constraints)
+        void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, MemberInfo? accessor, MemberConstraints? constraints)
         {
             // A format annotation ([EmailAddress]…) says more than the member name; [Required] members are never null.
             var category = FakeMember.ScalarCategory(memberType);
             var convention = constraints?.Format ?? ConventionRules.Match(name, category, type.Name);
-            members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly, constraints));
-            setters.Add(setter);
+            // Constructor parameters behind a settable property (a record's positional properties) can be set on an existing object too.
+            members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly, constraints, isSettable: accessor is not null, isNested: IsNestedType(memberType)));
+            setters.Add(accessor is null ? null : CreateSetter(type, accessor));
+            getters.Add(accessor is null ? null : CreateGetter(type, accessor));
+            defaults.Add(memberType.IsValueType ? Activator.CreateInstance(memberType) : null);
             fallbacks.Add(Producer(memberType, name, convention, nullable && constraints?.Required != true, constraints));
         }
     }
@@ -124,6 +142,30 @@ internal sealed class ReflectionTypeModel : IFakeModel
             ?? throw new InvalidOperationException($"'{Members[member].Name}' of {Type.Name} is a constructor parameter and cannot be set after creation; use a rule that does not depend on the object.");
         setter(instance, value);
         return instance;
+    }
+
+    /// <summary>Reads a settable member.</summary>
+    public object? GetObject(object instance, int member) =>
+        (_getters[member] ?? throw new InvalidOperationException($"'{Members[member].Name}' of {Type.Name} cannot be read from an existing object."))(instance);
+
+    /// <summary>Whether a settable member still holds its default value.</summary>
+    public bool IsUnsetObject(object instance, int member) => FakeScope.IsUnsetBoxed(GetObject(instance, member), _defaults[member]);
+
+    /// <summary>The producer of a member's convention or type value.</summary>
+    public Func<FakeScope, object?> FallbackOf(int member) => _fallbacks[member];
+
+    /// <summary>Populates an existing instance; the untyped twin of <see cref="FakeModel{T}.Populate"/>.</summary>
+    public object PopulateObject(object instance, FakeScope scope, PopulateMode mode) =>
+        Populator.Populate(Members, instance, scope, mode, IsUnsetObject, GetObject, SetObject, FallbackOf);
+
+    /// <summary>Whether a member of this type is created and populated recursively; mirrors the last branch of <see cref="NonNullProducer"/>.</summary>
+    private static bool IsNestedType(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (FakeMember.ScalarCategory(type) != TypeCategory.Other || type == typeof(byte[]) || ElementType(type, out _) is not null)
+            return false;
+        var ns = type.Namespace ?? "";
+        return !(type.IsAbstract || type.IsInterface || type.IsGenericType || ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) || ns.StartsWith("Microsoft.", StringComparison.Ordinal));
     }
 
     /// <summary>Builds the value producer for a member type: scalar conventions, collections, nested objects.</summary>
@@ -335,6 +377,24 @@ internal sealed class ReflectionTypeModel : IFakeModel
         var access = Expression.MakeMemberAccess(Expression.Convert(target, type), member);
         var assign = Expression.Assign(access, Expression.Convert(value, memberType));
         return Expression.Lambda<Action<object, object?>>(assign, target, value).Compile();
+    }
+
+    /// <summary>Compiled member getter; reflection for structs and without a JIT.</summary>
+    private static Func<object, object?> CreateGetter(Type type, MemberInfo member)
+    {
+        if (type.IsValueType || !RuntimeFeature.IsDynamicCodeCompiled)
+        {
+            return member switch
+            {
+                PropertyInfo p => p.GetValue,
+                FieldInfo f => f.GetValue,
+                _ => throw new InvalidOperationException(),
+            };
+        }
+
+        var target = Expression.Parameter(typeof(object), "target");
+        var access = Expression.MakeMemberAccess(Expression.Convert(target, type), member);
+        return Expression.Lambda<Func<object, object?>>(Expression.Convert(access, typeof(object)), target).Compile();
     }
 
     /// <summary>Whether the property's setter is <c>init</c>.</summary>

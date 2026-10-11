@@ -33,14 +33,14 @@ static partial class TestData
 
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Id", typeof(int), global::Phoney.Generation.ConventionKind.Id, false, false, null),
-            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName, false, false, __c1),
-            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username, false, false, __c2),
-            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price, false, false, __c3),
-            new global::Phoney.Generation.FakeMember("Email", typeof(string), global::Phoney.Generation.ConventionKind.Email, false, true, null),
-            new global::Phoney.Generation.FakeMember("Address", typeof(global::Shop.Address), global::Phoney.Generation.ConventionKind.None, false, true, null),
-            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None, false, false, __c6),
-            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None, false, false, __c7),
+            new global::Phoney.Generation.FakeMember("Id", typeof(int), global::Phoney.Generation.ConventionKind.Id, false, false, null, true, false),
+            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName, false, false, __c1, true, false),
+            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username, false, false, __c2, true, false),
+            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price, false, false, __c3, true, false),
+            new global::Phoney.Generation.FakeMember("Email", typeof(string), global::Phoney.Generation.ConventionKind.Email, false, true, null, true, false),
+            new global::Phoney.Generation.FakeMember("Address", typeof(global::Shop.Address), global::Phoney.Generation.ConventionKind.None, false, true, null, true, true),
+            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None, false, false, __c6, true, false),
+            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None, false, false, __c7, true, false),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -85,6 +85,54 @@ static partial class TestData
             }
         }
 
+        public override object Get(global::Shop.Customer instance, int member)
+        {
+            switch (member)
+            {
+                case 0: return (object)instance.Id;
+                case 1: return (object)instance.FirstName;
+                case 2: return (object)instance.Nickname;
+                case 3: return (object)instance.Balance;
+                case 4: return (object)instance.Email;
+                case 5: return (object)instance.Address;
+                case 6: return (object)instance.Orders;
+                case 7: return (object)instance.Status;
+                default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
+            }
+        }
+
+        public override bool IsUnset(global::Shop.Customer instance, int member)
+        {
+            switch (member)
+            {
+                case 0: return global::Phoney.Generation.FakeScope.IsUnset(instance.Id);
+                case 1: return global::Phoney.Generation.FakeScope.IsUnset(instance.FirstName);
+                case 2: return global::Phoney.Generation.FakeScope.IsUnset(instance.Nickname);
+                case 3: return global::Phoney.Generation.FakeScope.IsUnset(instance.Balance);
+                case 4: return global::Phoney.Generation.FakeScope.IsUnset(instance.Email);
+                case 5: return global::Phoney.Generation.FakeScope.IsUnset(instance.Address);
+                case 6: return global::Phoney.Generation.FakeScope.IsUnset(instance.Orders);
+                case 7: return global::Phoney.Generation.FakeScope.IsUnset(instance.Status);
+                default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
+            }
+        }
+
+        public override global::System.Func<global::Phoney.Generation.FakeScope, object> Fallback(int member)
+        {
+            switch (member)
+            {
+                case 0: return static s0 => (object)(global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id));
+                case 1: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c1));
+                case 2: return static s0 => (object)((s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c2)));
+                case 3: return static s0 => (object)((decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c3));
+                case 4: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email));
+                case 5: return static s0 => (object)(s0.Nested<global::Shop.Address>());
+                case 6: return static s0 => (object)(s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c6));
+                case 7: return static s0 => (object)(global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c7));
+                default: throw new global::System.ArgumentOutOfRangeException(nameof(member));
+            }
+        }
+
         [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "set_Email")]
         private static extern void __set_4(global::Shop.Customer target, string value);
 
@@ -99,8 +147,8 @@ static partial class TestData
 
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Street", typeof(string), global::Phoney.Generation.ConventionKind.StreetAddress, true, false, __c0),
-            new global::Phoney.Generation.FakeMember("City", typeof(string), global::Phoney.Generation.ConventionKind.Email, true, false, __c1),
+            new global::Phoney.Generation.FakeMember("Street", typeof(string), global::Phoney.Generation.ConventionKind.StreetAddress, true, false, __c0, true, false),
+            new global::Phoney.Generation.FakeMember("City", typeof(string), global::Phoney.Generation.ConventionKind.Email, true, false, __c1, true, false),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -117,18 +165,56 @@ static partial class TestData
         {
             switch (member)
             {
+                case 0: __set_0(instance, (string)value); return instance;
+                case 1: __set_1(instance, (string)value); return instance;
                 default: throw new global::System.InvalidOperationException(__members[member].Name + " is a constructor parameter and cannot be set after creation.");
             }
         }
+
+        public override object Get(global::Shop.Address instance, int member)
+        {
+            switch (member)
+            {
+                case 0: return (object)instance.Street;
+                case 1: return (object)instance.City;
+                default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
+            }
+        }
+
+        public override bool IsUnset(global::Shop.Address instance, int member)
+        {
+            switch (member)
+            {
+                case 0: return global::Phoney.Generation.FakeScope.IsUnset(instance.Street);
+                case 1: return global::Phoney.Generation.FakeScope.IsUnset(instance.City);
+                default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
+            }
+        }
+
+        public override global::System.Func<global::Phoney.Generation.FakeScope, object> Fallback(int member)
+        {
+            switch (member)
+            {
+                case 0: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.StreetAddress, __c0));
+                case 1: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email, __c1));
+                default: throw new global::System.ArgumentOutOfRangeException(nameof(member));
+            }
+        }
+
+        [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "set_Street")]
+        private static extern void __set_0(global::Shop.Address target, string value);
+
+        [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "set_City")]
+        private static extern void __set_1(global::Shop.Address target, string value);
     }
 
     private sealed class __PhoneyModel_Shop_Order : global::Phoney.Generation.FakeModel<global::Shop.Order>
     {
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Id", typeof(global::System.Guid), global::Phoney.Generation.ConventionKind.Id, true, false, null),
-            new global::Phoney.Generation.FakeMember("CreatedAt", typeof(global::System.DateTime), global::Phoney.Generation.ConventionKind.PastDate, true, false, null),
-            new global::Phoney.Generation.FakeMember("Customer", typeof(global::Shop.Customer), global::Phoney.Generation.ConventionKind.None, false, false, null),
+            new global::Phoney.Generation.FakeMember("Id", typeof(global::System.Guid), global::Phoney.Generation.ConventionKind.Id, true, false, null, true, false),
+            new global::Phoney.Generation.FakeMember("CreatedAt", typeof(global::System.DateTime), global::Phoney.Generation.ConventionKind.PastDate, true, false, null, true, false),
+            new global::Phoney.Generation.FakeMember("Customer", typeof(global::Shop.Customer), global::Phoney.Generation.ConventionKind.None, false, false, null, true, true),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -147,10 +233,51 @@ static partial class TestData
         {
             switch (member)
             {
+                case 0: __set_0(instance, (global::System.Guid)value); return instance;
+                case 1: __set_1(instance, (global::System.DateTime)value); return instance;
                 case 2: instance.Customer = (global::Shop.Customer)value; return instance;
                 default: throw new global::System.InvalidOperationException(__members[member].Name + " is a constructor parameter and cannot be set after creation.");
             }
         }
+
+        public override object Get(global::Shop.Order instance, int member)
+        {
+            switch (member)
+            {
+                case 0: return (object)instance.Id;
+                case 1: return (object)instance.CreatedAt;
+                case 2: return (object)instance.Customer;
+                default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
+            }
+        }
+
+        public override bool IsUnset(global::Shop.Order instance, int member)
+        {
+            switch (member)
+            {
+                case 0: return global::Phoney.Generation.FakeScope.IsUnset(instance.Id);
+                case 1: return global::Phoney.Generation.FakeScope.IsUnset(instance.CreatedAt);
+                case 2: return global::Phoney.Generation.FakeScope.IsUnset(instance.Customer);
+                default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
+            }
+        }
+
+        public override global::System.Func<global::Phoney.Generation.FakeScope, object> Fallback(int member)
+        {
+            switch (member)
+            {
+                case 0: return static s0 => (object)(global::Phoney.Generation.ConventionValues.Guid(s0, global::Phoney.Generation.ConventionKind.Id));
+                case 1: return static s0 => (object)(global::Phoney.Generation.ConventionValues.DateTime(s0, global::Phoney.Generation.ConventionKind.PastDate));
+                case 2: return static s0 => (object)((s0.MaybeNull() ? null : s0.Nested<global::Shop.Customer>()));
+                default: throw new global::System.ArgumentOutOfRangeException(nameof(member));
+            }
+        }
+
+        [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "set_Id")]
+        private static extern void __set_0(global::Shop.Order target, global::System.Guid value);
+
+        [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "set_CreatedAt")]
+        private static extern void __set_1(global::Shop.Order target, global::System.DateTime value);
     }
 
 }

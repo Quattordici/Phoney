@@ -1,0 +1,11 @@
+# The repository owner is requested for review on every pull request.
+
+- @Quattordici
+
+# Anything that can execute code during CI or release deserves explicit attention.
+
+/.github/ @Quattordici
+/tools/ @Quattordici
+_.csproj @Quattordici
+_.props @Quattordici
+\*.targets @Quattordici

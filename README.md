@@ -33,7 +33,7 @@ Fake.Internet.Email();                          // "Ryann_Beahan@yahoo.com"
 Fake.Location.StreetAddress(useFullAddress: true);
 
 // A whole, coherent person
-PersonProfile p = Fake.Person.Profile();        // names, email, username, phone, birthdate + age, address
+PersonProfile p = Fake.Person.Profile();        // names, email, username, phone, birthdate + age, address, national id
 
 // A specific locale and a seed
 var faker = new Faker("sv", seed: 42);
@@ -47,18 +47,57 @@ List<Customer> customers = Fake.Many<Customer>(1_000);
 
 ## A whole person
 
-`Person.Profile()` returns a `PersonProfile` whose parts belong together: the names match the sex, email and username are built from the names, and the age matches the birthdate.
+`Person.Profile()` returns a `PersonProfile` whose parts belong together: the names match the sex, email and username are built from the names, the age matches the birthdate, and the national id (when the locale's country has a scheme) encodes birthdate and sex.
 
 ```csharp
 var faker = new Faker("de", seed: 7);
 PersonProfile p = faker.Person.Profile(Sex.Female, minAge: 25, maxAge: 40);
-// p.FirstName, p.LastName, p.FullName, p.Email, p.Username, p.Phone, p.BirthDate, p.Age, p.JobTitle
+// p.FirstName, p.LastName, p.FullName, p.Email, p.Username, p.Phone, p.BirthDate, p.Age, p.JobTitle, p.NationalId
 // p.Address.Street, p.Address.City, p.Address.ZipCode, p.Address.State, p.Address.CountryCode
 
 AddressProfile address = faker.Location.Address(); // just an address, as parts
 ```
 
 For your own types, [`Fake.For<T>()`](#objects) gives the same coherence: a `Customer`'s `FirstName`, `Email`, `Avatar` and `Gender` describe one person.
+
+## National and tax IDs
+
+Personal identity numbers, company registration numbers and VAT numbers come with **valid check digits** and use the locale's country unless you pass one:
+
+```csharp
+var faker = new Faker("sv", seed: 1);
+faker.NationalId.Person();                                   // "19560703-6190" (personnummer)
+faker.NationalId.Person("NO", birthDate: new DateOnly(1990, 5, 17), sex: Sex.Female, formatted: false);
+faker.NationalId.Company();                                  // "214200-3165" (organisationsnummer)
+faker.NationalId.Vat("GB");                                  // "GB 154 4706 67"
+```
+
+| | Person | Company | VAT |
+|---|---|---|---|
+| SE | personnummer | organisationsnummer | ✓ |
+| NO | fødselsnummer | organisasjonsnummer | ✓ |
+| DK | CPR | CVR | ✓ |
+| FI | henkilötunnus | Y-tunnus | ✓ |
+| US | SSN (format rules, no check digit) | EIN | |
+| GB | NINO (format rules, no check digit) | | ✓ |
+| BR | CPF | CNPJ | |
+| PL | PESEL | REGON | ✓ (NIP) |
+| NL | BSN | | |
+| ES | DNI | | |
+| FR | NIR | SIREN | ✓ |
+| CA | SIN | | |
+
+Where the number encodes a birth date and sex (SE, NO, DK, FI, PL, FR) it encodes the ones you pass, so a `PersonProfile` or a generated object has an id that agrees with its `BirthDate` and `Sex`. Members named `Personnummer`, `Ssn`, `NationalId`, `Cpf`, `Pesel`… (person), `OrgNr`, `Cnpj`, `Ein`… (company) and `VatNumber` get these values by convention. A locale whose country has no scheme leaves them empty; `NationalId` throws a `PhoneyDataUnavailableException`, so pass the country there.
+
+Every scheme can also validate, and you can register your own:
+
+```csharp
+NationalIds.IsValid(NationalIdKind.Person, "SE", "19560703-6190");   // true
+NationalIds.Supported(NationalIdKind.Vat);                           // ["DK", "FI", "FR", "GB", "NO", "PL", "SE"]
+NationalIds.Register(new MyEmployeeNumbers());                       // derive from NationalIdScheme
+```
+
+The numbers are structurally valid, not issued: they can coincide with real people's or companies' numbers, so use them for test data only. Danish CPR numbers satisfy the classic mod-11 rule that new numbers no longer follow, so old and new validators accept them; the validator checks the date and century digit only.
 
 ## Values
 
@@ -72,6 +111,7 @@ A `Faker` groups values by topic:
 | `Phone` | `Number(PhoneStyle.International)`, `Imei()` |
 | `Company` / `Commerce` | `Name()`, `CatchPhrase()`, `ProductName()`, `Price()`, `Isbn()`, `Upc()` |
 | `Finance` | `Iban()`, `Bic()`, `CreditCardNumber(CardIssuer.Visa)`, `Currency()`, `Amount()`, `RoutingNumber()`, `BitcoinAddress()` |
+| `NationalId` | `Person()`, `Company()`, `Vat()`, e.g. a Swedish personnummer, a US SSN, a Brazilian CPF, valid check digits |
 | `Date` | `Past()`, `Future()`, `Recent()`, `Soon()`, `Between(...)`, `Birthdate(18, 65)`, `Month()`, `Weekday()` |
 | `Lorem` / `Word` | `Sentence()`, `Paragraphs()`, `Slug()`, `Noun(minLength: 5)` |
 | `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)` |
@@ -145,6 +185,23 @@ var customers = Fake.For<Customer>()
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data.
+
+### Filling in existing objects
+
+`Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:
+
+```csharp
+var order = Fake.Populate(new Order { CustomerId = 42 });         // CustomerId stays 42, everything else is filled
+Fake.For<Customer>().Seed(1).With(x => x.Status, "VIP").Populate(existing);
+generator.Populate(existing, PopulateMode.All);                   // regenerate every member
+List<Customer> filled = generator.Populate(customers);            // many at once, each from its own place in the seeded sequence
+```
+
+- **`PopulateMode.MissingOnly`** (the default) fills members that hold their default (`null`, `0`, `false`, `Guid.Empty`, an empty string or collection) and keeps the others. A set nested object is populated member by member. `PopulateMode.All` replaces everything that is not ignored.
+- Kept values shape the generated ones: with a set `FirstName`, `LastName`, `BirthDate` or sex/gender enum, the email, username, age and avatar are generated to match.
+- Members you `Ignore` are never touched; rules that depend on the object and `AfterCreate` run afterwards; `CreateWith` is ignored because nothing is created. Records are filled through their `init` properties, and a struct is populated as a copy (use the return value).
+- A `false` or `0` that you set on purpose counts as unset in `MissingOnly`: protect it with `.Ignore(x => x.IsActive)`.
+- With a seed, `Populate(new T(), PopulateMode.All)` gives exactly what `Generate()` gives.
 
 ### Values that agree
 
