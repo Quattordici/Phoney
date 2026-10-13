@@ -81,6 +81,20 @@ public sealed class SourceGeneratedTests
     }
 
     [Test]
+    public void Generated_and_reflection_models_apply_conventions_to_nested_objects_identically()
+    {
+        Generator<Member> Configure(Generator<Member> g) =>
+            g.Seed(11).ReferenceDate(Reference).WithConvention<string>(n => n is "City" or "CompanyName", f => "X" + f.Random.Int(1, 99));
+
+        var generated = Configure(TestFakes.Member).Generate(10);
+        var reflected = Configure(new Generator<Member>(new ReflectionModel<Member>())).Generate(10);
+
+        generated.ShouldAllBe(m => m.Address.City.StartsWith('X') && m.Memberships.All(x => x.CompanyName.StartsWith('X')));
+        reflected.Select(m => $"{m.Email}|{m.Address.City}|{m.Address.Street}|{string.Join(",", m.Memberships.Select(x => x.CompanyName))}")
+            .ShouldBe(generated.Select(m => $"{m.Email}|{m.Address.City}|{m.Address.Street}|{string.Join(",", m.Memberships.Select(x => x.CompanyName))}"));
+    }
+
+    [Test]
     public void Rules_work_with_generated_models_including_init_only_dependents()
     {
         var members = TestFakes.Member

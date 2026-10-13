@@ -1,5 +1,8 @@
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Phoney;
 using Phoney.Generation;
+using Phoney.NodaTime;
 
 // Exercises the AOT-relevant paths and exits non-zero on failure.
 var faker = new Faker("sv", seed: 42);
@@ -36,6 +39,33 @@ Check(partial.Home.City, "populated nested record");
 if (partial.Pets.Count == 0)
     throw new InvalidOperationException("populate did not fill collections");
 
+// Interfaces: [JsonDerivedType] defaults, [FakeSubtype] registrations and generator subtypes, no reflection.
+var owners = Fakes.Person.Seed(3).Subtype<IContact, Email, Phone>().Generate(50);
+if (owners.Any(p => p.Vehicle is not (Car or Bike)) || owners.Any(p => p.Insurance is not Policy) || owners.Any(p => p.Contact is not (Email or Phone)))
+    throw new InvalidOperationException("subtypes were not generated");
+if (!owners.Any(p => p.Contact is Email) || !owners.Any(p => p.Contact is Phone))
+    throw new InvalidOperationException("one of several subtypes was not picked");
+
+// Time: a TimeProvider drives relative dates.
+var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
+if (Fakes.Person.Seed(1).TimeProvider(clock).Generate().BirthDate.Year < 1950)
+    throw new InvalidOperationException("time provider was not used");
+
+// NodaTime: values and convention-driven members, no reflection.
+if (faker.Noda().Instant.Past() >= NodaTime.Instant.FromDateTimeOffset(faker.ReferenceDate) || faker.Noda().TimeZone() is null)
+    throw new InvalidOperationException("NodaTime values failed");
+if (people.Any(p => p.CreatedAt == default || p.CreatedAt > NodaTime.Instant.FromDateTimeOffset(Faker.DefaultSeededReferenceDate)))
+    throw new InvalidOperationException("NodaTime members were not generated");
+
+// Dependency injection with a source-generated generator.
+using (var services = new ServiceCollection().AddPhoney(o => o.Seed = 1).AddGenerator(Fakes.Person).Services.BuildServiceProvider())
+{
+    using var scope = services.CreateScope();
+    Check(scope.ServiceProvider.GetRequiredService<IFaker>().Person.FullName(), "injected faker");
+    if (scope.ServiceProvider.GetRequiredService<Generator<Person>>().Generate().Email != Fakes.Person.Seed(1).Generate().Email)
+        throw new InvalidOperationException("injected generator differs");
+}
+
 // National ids: valid check digits, no reflection.
 var personnummer = faker.NationalId.Person();
 if (!NationalIds.IsValid(NationalIdKind.Person, "SE", personnummer))
@@ -61,6 +91,39 @@ public sealed class Person
     public Address Home { get; init; } = null!;
     public List<Pet> Pets { get; set; } = [];
     public Status Status { get; set; }
+    public IVehicle Vehicle { get; set; } = null!;
+    public IInsurance Insurance { get; set; } = null!;
+    public IContact Contact { get; set; } = null!;
+    public NodaTime.Instant CreatedAt { get; set; }
+}
+
+[JsonDerivedType(typeof(Car))]
+[JsonDerivedType(typeof(Bike))]
+public interface IVehicle;
+
+public sealed class Car : IVehicle
+{
+    public string LicensePlate { get; set; } = "";
+}
+
+public sealed class Bike : IVehicle
+{
+    public int Gears { get; set; }
+}
+
+public interface IInsurance;
+
+public sealed record Policy(string AccountNumber) : IInsurance;
+
+public interface IContact;
+
+public sealed record Email(string Address) : IContact;
+
+public sealed record Phone(string Number) : IContact;
+
+internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now;
 }
 
 public sealed record Address(string Street, string City, string ZipCode, string Country);
@@ -73,5 +136,5 @@ public enum Status
     Suspended,
 }
 
-[FakeFor<Person>]
+[FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeSubtype<IInsurance, Policy>]
 internal static partial class Fakes;

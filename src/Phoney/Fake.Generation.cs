@@ -12,6 +12,9 @@ public static partial class Fake
     /// <summary>App-wide custom conventions, e.g. <c>Fake.Conventions.Add&lt;string&gt;("Sku", f =&gt; …)</c>.</summary>
     public static FakeConventions Conventions { get; } = new();
 
+    /// <summary>App-wide subtypes for interfaces and base classes, e.g. <c>Fake.Subtypes.Add&lt;IShape, Circle, Square&gt;()</c>.</summary>
+    public static FakeSubtypes Subtypes { get; } = new();
+
     /// <summary>Generates one populated <typeparamref name="T"/>.</summary>
     /// <example><code>var customer = Fake.One&lt;Customer&gt;();</code></example>
     [RequiresUnreferencedCode(ReflectionMessage)]
@@ -54,7 +57,7 @@ public static partial class Fake
     {
         var generator = new Generator<T>(ModelRegistry.For<T>());
         if (!IsSeeded)
-            return generator;
+            return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;
 
         // A seeded facade seeds its generators from its own sequence, so they are reproducible too.
         var faker = Faker;
@@ -81,7 +84,7 @@ public static partial class Fake
     {
         var generator = new ArgumentGenerator(arguments);
         if (!IsSeeded)
-            return generator;
+            return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;
 
         var faker = Faker;
         return generator.Seed(faker.Random.Long(long.MinValue, long.MaxValue)).ReferenceDate(faker.ReferenceDate).Locale(faker.Locale);

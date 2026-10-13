@@ -8,6 +8,7 @@ public sealed class FakeForGeneratorTests
         using System;
         using System.Collections.Generic;
         using System.ComponentModel.DataAnnotations;
+        using System.Text.Json.Serialization;
         using Phoney.Generation;
 
         namespace Shop;
@@ -29,7 +30,15 @@ public sealed class FakeForGeneratorTests
             public List<Order> Orders { get; set; } = new();
             [AllowedValues(Status.Active)]
             public Status Status;
+            public IPayment? Payment { get; set; }
         }
+
+        [JsonDerivedType(typeof(Card))]
+        public interface IPayment;
+
+        public sealed class Card : IPayment { public string CreditCardNumber { get; set; } = ""; }
+
+        public sealed class Swish : IPayment { public string Phone { get; set; } = ""; }
 
         public record Address([property: Required] string Street, [EmailAddress] string City);
 
@@ -38,7 +47,7 @@ public sealed class FakeForGeneratorTests
             public Customer? Customer { get; set; }
         }
 
-        [FakeFor<Customer>]
+        [FakeFor<Customer>, FakeSubtype<IPayment, Swish>]
         public static partial class TestData;
         """;
 
@@ -56,6 +65,22 @@ public sealed class FakeForGeneratorTests
         var (_, output, diagnostics) = GeneratorHarness.Run(Models);
         diagnostics.ShouldBeEmpty();
         output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Classes_with_only_FakeSubtype_get_models_and_registrations(CancellationToken cancellationToken)
+    {
+        var (driver, output, diagnostics) = GeneratorHarness.Run("""
+            using Phoney.Generation;
+            public interface IShape;
+            public sealed class Circle : IShape { public double Radius { get; set; } }
+            [FakeSubtype<IShape, Circle>] public static partial class Shapes;
+            """);
+        diagnostics.ShouldBeEmpty();
+        output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        source.ShouldContain("ModelRegistry.Register(__phoneyModel_Circle)");
+        source.ShouldContain("global::Phoney.Fake.Subtypes.Add<global::IShape, global::Circle>();");
     }
 
     [Test]

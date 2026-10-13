@@ -175,6 +175,24 @@ static class ConventionRules
         _ => TypeCategory.Other,
     };
 
+    /// <summary>
+    /// For date and time types of other libraries (NodaTime) that an add-on package produces from a built-in type: the
+    /// category whose conventions apply to them (an <c>Instant CreatedAt</c> is a creation date); otherwise <see cref="TypeCategory.Other"/>.
+    /// </summary>
+    public static TypeCategory AdaptedCategoryOf(string fullTypeName) => fullTypeName switch
+    {
+        "NodaTime.Instant" or "NodaTime.OffsetDateTime" or "NodaTime.ZonedDateTime" => TypeCategory.DateTimeOffset,
+        "NodaTime.LocalDateTime" => TypeCategory.DateTime,
+        "NodaTime.LocalDate" => TypeCategory.DateOnly,
+        "NodaTime.LocalTime" => TypeCategory.TimeOnly,
+        "NodaTime.Duration" => TypeCategory.TimeSpan,
+        _ => TypeCategory.Other,
+    };
+
+    /// <summary>The category name conventions are matched against: the type's own, else its <see cref="AdaptedCategoryOf"/> category.</summary>
+    public static TypeCategory ConventionCategoryOf(string fullTypeName, bool isEnum) =>
+        CategoryOf(fullTypeName, isEnum) is var category && category != TypeCategory.Other ? category : AdaptedCategoryOf(fullTypeName);
+
     /// <summary>Whether a category is numeric.</summary>
     public static bool IsNumber(TypeCategory c) => c >= TypeCategory.Byte && c <= TypeCategory.Decimal;
 

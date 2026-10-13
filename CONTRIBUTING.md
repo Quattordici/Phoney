@@ -17,8 +17,8 @@ dotnet build -c Release
 dotnet test -c Release --no-build
 ```
 
-The test project targets both `net8.0` and `net10.0`, so both SDKs are needed locally to run the full
-matrix. The CI also runs a Native AOT smoke test (`tests/Phoney.AotSmoke`) where trim and AOT warnings
+The test projects (`tests/*.Tests`, one per package) target `net10.0` locally and also `net8.0` in CI,
+where `Phoney.EntityFrameworkCore` is tested against EF Core 8. The CI also runs a Native AOT smoke test (`tests/Phoney.AotSmoke`) where trim and AOT warnings
 fail the build, so avoid reflection-based patterns in library code.
 
 ## Locale data

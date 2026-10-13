@@ -195,7 +195,9 @@ public sealed class GenerationTests
     [Test]
     public void Strict_mode_reports_members_without_rules_or_conventions()
     {
+#pragma warning disable PHONEY004 // the compile-time check reports this too; here the runtime check is tested
         var ex = Should.Throw<InvalidOperationException>(() => Fake.For<Unconventional>().Strict().Generate());
+#pragma warning restore PHONEY004
         ex.Message.ShouldContain("Foo");
         ex.Message.ShouldContain("Bar");
         ex.Message.ShouldNotContain("Email");

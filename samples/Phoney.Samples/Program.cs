@@ -64,6 +64,17 @@ var dalarna = new Faker("sv_dalarna");
 var resident = dalarna.Person.Profile(Sex.Female);
 Console.WriteLine($"{resident.FullName} \"{dalarna.Pick("person.nickname")}\" <{resident.Email}> from {resident.Address.City}");
 
+// 7. Interfaces and subtypes ------------------------------------------------------------------
+Console.WriteLine("\n== Subtypes");
+foreach (var drawing in Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle, Square>().Generate(3))
+    Console.WriteLine($"{drawing.Title}: {drawing.Shape}");
+
+// 8. Time from a TimeProvider -----------------------------------------------------------------
+Console.WriteLine("\n== TimeProvider");
+var clock = new FixedClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+var future = new Faker("en", seed: 1) { TimeProvider = clock };
+Console.WriteLine($"Relative to {clock.GetUtcNow():yyyy-MM-dd}: past {future.Date.Past():yyyy-MM-dd}, birthdate {future.Date.Birthdate()}");
+
 public enum Gender
 {
     Female,
@@ -96,3 +107,21 @@ public sealed record Order(Guid Id, decimal Total, OrderStatus Status);
 
 [FakeFor<Customer>]
 internal static partial class SampleData;
+
+public interface IShape;
+
+public sealed record Circle(double Radius) : IShape;
+
+public sealed record Square(double Side) : IShape;
+
+public sealed class Drawing
+{
+    public string Title { get; set; } = "";
+    public IShape Shape { get; set; } = null!;
+}
+
+/// <summary>A clock that stands still, like <c>FakeTimeProvider</c> in tests.</summary>
+public sealed class FixedClock(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now;
+}

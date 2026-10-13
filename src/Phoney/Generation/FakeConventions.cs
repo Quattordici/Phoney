@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 
 namespace Phoney.Generation;
 
 /// <summary>
-/// App-wide custom conventions, checked before the built-in ones for members without an explicit rule.
+/// App-wide custom conventions, checked before the built-in ones for members without an explicit rule, in the
+/// generated objects and in every object nested in them.
 /// </summary>
 /// <example>
 /// <code>
@@ -48,6 +50,37 @@ internal sealed record CustomConvention(Type Type, Func<string, bool> NameMatche
     /// <summary>Whether the convention applies to <paramref name="member"/> (same type, or its nullable form, and a matching name).</summary>
     public bool Matches(FakeMember member) =>
         (member.Type == Type || Nullable.GetUnderlyingType(member.Type) == Type) && NameMatches(member.Name);
+}
+
+/// <summary>
+/// The custom conventions of one compiled generator (its own, then the app-wide ones) for the nested objects it creates,
+/// bound to each nested type's members once and cached. Bound slots carry no state, so they are shared across threads.
+/// </summary>
+internal sealed class NestedConventions(ImmutableList<CustomConvention> conventions)
+{
+    private readonly ConcurrentDictionary<Type, RuleSlot?[]?> _slots = new();
+
+    /// <summary>A convention holder, or <see langword="null"/> when there are no conventions (nested objects then need no slots).</summary>
+    public static NestedConventions? For(ImmutableList<CustomConvention> conventions) => conventions.IsEmpty ? null : new(conventions);
+
+    /// <summary>Slots for the members of <paramref name="model"/> that a convention matches, or <see langword="null"/> when none does.</summary>
+    public RuleSlot?[]? SlotsFor(Type type, IFakeModel model) =>
+        _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(conventions, model.Members));
+
+    /// <summary>Binds the first matching convention to each member, like the root object's rules in <c>Generator&lt;T&gt;.Compile</c>.</summary>
+    private static RuleSlot?[]? Bind(ImmutableList<CustomConvention> conventions, IReadOnlyList<FakeMember> members)
+    {
+        RuleSlot?[]? slots = null;
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (conventions.FirstOrDefault(c => c.Matches(members[i])) is not { } match)
+                continue;
+            slots ??= new RuleSlot?[members.Count];
+            slots[i] = new RuleSlot(RuleKind.Convention, match.Factory, unique: false, maxAttempts: 0);
+        }
+
+        return slots;
+    }
 }
 
 /// <summary>

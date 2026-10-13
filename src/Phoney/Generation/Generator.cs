@@ -53,6 +53,13 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>Sets the point in time relative dates are computed from (default: now, or a fixed date when seeded).</summary>
     public Generator<T> ReferenceDate(DateTimeOffset referenceDate) => Derive(_config with { ReferenceDate = referenceDate });
 
+    /// <summary>
+    /// Reads "now" for relative dates from <paramref name="timeProvider"/> (e.g. a <c>FakeTimeProvider</c>), also when
+    /// seeded. An explicit <see cref="ReferenceDate"/> takes precedence.
+    /// </summary>
+    public Generator<T> TimeProvider(TimeProvider timeProvider) =>
+        Derive(_config with { TimeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) });
+
     /// <summary>Sets a member to a fixed value.</summary>
     public Generator<T> With<TValue>(Expression<Func<T, TValue>> member, TValue value) =>
         AddRule(member, new Rule(RuleKind.Constant, value));
@@ -74,9 +81,44 @@ public sealed class Generator<T> : INestedGenerator
         return AddRule(member, new Rule(RuleKind.Dependent, (Func<Faker, T, object?>)((f, x) => factory(f, x))));
     }
 
-    /// <summary>Generates a nested member with its own generator, e.g. <c>.With(x =&gt; x.Address, Fake.For&lt;Address&gt;().Locale("sv"))</c>.</summary>
-    public Generator<T> With<TValue>(Expression<Func<T, TValue>> member, Generator<TValue> generator) =>
+    /// <summary>
+    /// Generates a nested member with its own generator, e.g. <c>.With(x =&gt; x.Address, Fake.For&lt;Address&gt;().Locale("sv"))</c>;
+    /// the generator may produce a subtype of the member's type: <c>.With(x =&gt; x.Shape, Fake.For&lt;Circle&gt;())</c>.
+    /// </summary>
+    public Generator<T> With<TValue, TGenerated>(Expression<Func<T, TValue>> member, Generator<TGenerated> generator)
+        where TGenerated : TValue =>
         AddRule(member, new Rule(RuleKind.Generator, generator ?? throw new ArgumentNullException(nameof(generator))));
+
+    /// <summary>
+    /// Generates <typeparamref name="T1"/> for every member of type <typeparamref name="TBase"/> in the generated objects
+    /// (also nested ones), e.g. <c>.Subtype&lt;IShape, Circle&gt;()</c>. Replaces earlier subtypes of <typeparamref name="TBase"/>
+    /// for this generator and takes precedence over <see cref="Fake.Subtypes"/> and <c>[JsonDerivedType]</c>.
+    /// </summary>
+    public Generator<T> Subtype<TBase, T1>()
+        where T1 : TBase => Subtype<TBase>(typeof(T1));
+
+    /// <summary>Generates one of the subtypes, picked at random, for every member of type <typeparamref name="TBase"/>: <c>.Subtype&lt;IShape, Circle, Square&gt;()</c>.</summary>
+    public Generator<T> Subtype<TBase, T1, T2>()
+        where T1 : TBase
+        where T2 : TBase => Subtype<TBase>(typeof(T1), typeof(T2));
+
+    /// <summary>Generates one of the subtypes, picked at random, for every member of type <typeparamref name="TBase"/>.</summary>
+    public Generator<T> Subtype<TBase, T1, T2, T3>()
+        where T1 : TBase
+        where T2 : TBase
+        where T3 : TBase => Subtype<TBase>(typeof(T1), typeof(T2), typeof(T3));
+
+    /// <summary>Generates one of the subtypes, picked at random, for every member of type <typeparamref name="TBase"/>.</summary>
+    public Generator<T> Subtype<TBase, T1, T2, T3, T4>()
+        where T1 : TBase
+        where T2 : TBase
+        where T3 : TBase
+        where T4 : TBase => Subtype<TBase>(typeof(T1), typeof(T2), typeof(T3), typeof(T4));
+
+    /// <summary>Generates one of <paramref name="subtypes"/>, picked at random in the given order, for every member of type <typeparamref name="TBase"/>.</summary>
+    /// <exception cref="ArgumentException">A subtype is abstract, an interface, open generic or not assignable to <typeparamref name="TBase"/>.</exception>
+    public Generator<T> Subtype<TBase>(params Type[] subtypes) =>
+        Derive(_config with { Subtypes = _config.Subtypes.SetItem(typeof(TBase), Subtypes.Validate(typeof(TBase), subtypes)) });
 
     /// <summary>
     /// Sets a member to one of <paramref name="values"/>, e.g. existing ids or objects:
@@ -118,7 +160,7 @@ public sealed class Generator<T> : INestedGenerator
 
     /// <summary>
     /// Applies <paramref name="factory"/> to every member of type <typeparamref name="TValue"/> whose name matches
-    /// <paramref name="nameMatches"/> and has no explicit rule, e.g. <c>.WithConvention&lt;string&gt;(n =&gt; n.EndsWith("Code"), f =&gt; f.Random.Replace("??-###"))</c>.
+    /// <paramref name="nameMatches"/> and has no explicit rule, also in nested objects (before app-wide <see cref="Fake.Conventions"/>), e.g. <c>.WithConvention&lt;string&gt;(n =&gt; n.EndsWith("Code"), f =&gt; f.Random.Replace("??-###"))</c>.
     /// </summary>
     public Generator<T> WithConvention<TValue>(Func<string, bool> nameMatches, Func<Faker, TValue> factory)
     {
@@ -289,11 +331,11 @@ public sealed class Generator<T> : INestedGenerator
         var compiled = _state.Compiled ??= Compile();
         var data = parentFaker is not null && _config.Locale is null ? parentFaker.Data : LocaleStore.Get(_config.Locale ?? Fake.Locale);
         var faker = new Faker(data, new Randomizer(0));
-        // Explicit date, else the parent's (nested generators), else a fixed date for seeded generators so their
-        // relative dates don't drift with the clock; unseeded generators use the current time.
-        var referenceDate = _config.ReferenceDate ?? parentFaker?.ReferenceDate
-            ?? (_config.Seed is not null ? Faker.DefaultSeededReferenceDate : null);
-        if (referenceDate is { } date)
+        // Explicit date, else the configured clock, else the parent's date (nested generators), else a fixed date for
+        // seeded generators so their relative dates don't drift with the clock; unseeded generators use the current time.
+        if (_config.ReferenceDate is null && _config.TimeProvider is { } clock)
+            faker.TimeProvider = clock;
+        else if ((_config.ReferenceDate ?? parentFaker?.ReferenceDate ?? (_config.Seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
             faker.ReferenceDate = date;
         return new Run(this, compiled, faker, seed ?? BaseSeed);
     }
@@ -355,7 +397,13 @@ public sealed class Generator<T> : INestedGenerator
             }
         }
 
-        return new Compiled(slots, [.. dependent]);
+        // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
+        var settings = _config.Settings with
+        {
+            Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
+            Conventions = NestedConventions.For(conventions),
+        };
+        return new Compiled(slots, [.. dependent], settings);
     }
 
     /// <summary>One generation run: a faker reused for every item, reseeded per item for order-independent results.</summary>
@@ -367,7 +415,7 @@ public sealed class Generator<T> : INestedGenerator
             faker.Random.Reseed(Randomizer.DeriveSeed(seed, index));
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, config.Settings, compiled.Slots, index, typeof(T), parent);
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent);
 
             T item;
             if (config.Factory is { } factory)
@@ -398,7 +446,7 @@ public sealed class Generator<T> : INestedGenerator
             faker.Random.Reseed(Randomizer.DeriveSeed(seed, index));
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, config.Settings, compiled.Slots, index, typeof(T));
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T));
 
             var item = model.Populate(instance, scope, mode);
             foreach (var (member, rule) in compiled.Dependent)
@@ -414,7 +462,7 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>Rules bound to member indices, plus rules that run after creation.</summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent);
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory.</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null);
@@ -439,19 +487,22 @@ public sealed class Generator<T> : INestedGenerator
         string? Locale,
         long? Seed,
         DateTimeOffset? ReferenceDate,
+        TimeProvider? TimeProvider,
         ImmutableDictionary<string, Rule> Rules,
         ImmutableDictionary<string, int> Unique,
         ImmutableList<CustomConvention> Conventions,
+        ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
         ImmutableList<Action<Faker, T>> AfterCreate,
         Func<Faker, T>? Factory,
         bool Strict,
         GenerationSettings Settings)
     {
         public static readonly Config Default = new(
-            null, null, null,
+            null, null, null, null,
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
             ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             [],
+            ImmutableDictionary<Type, ImmutableArray<Type>>.Empty,
             [],
             null,
             false,
