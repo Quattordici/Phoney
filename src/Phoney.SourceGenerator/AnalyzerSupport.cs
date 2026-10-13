@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -67,6 +69,19 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
 /// <summary>Helpers shared by the analyzers.</summary>
 internal static class AnalyzerSupport
 {
+    /// <summary>The generator calls that produce objects, which end a fluent chain.</summary>
+    public static readonly HashSet<string> Terminals = new(StringComparer.Ordinal) { "Generate", "Stream", "GenerateParallel", "Populate" };
+
+    /// <summary>Whether the chain starts a new generator (<c>Fake.For&lt;T&gt;()</c>, <c>new Generator&lt;T&gt;(…)</c> or a <c>[FakeFor]</c> property), so no rules can have been added elsewhere.</summary>
+    public static bool IsStart(IOperation? receiver, INamedTypeSymbol? fake, INamedTypeSymbol? fakeFor) => receiver switch
+    {
+        IInvocationOperation { TargetMethod.Name: "For" } call => SymbolEqualityComparer.Default.Equals(call.TargetMethod.ContainingType, fake),
+        IObjectCreationOperation => true,
+        IPropertyReferenceOperation { Property.IsStatic: true } property =>
+            fakeFor is not null && property.Property.ContainingType.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass?.OriginalDefinition, fakeFor)),
+        _ => false,
+    };
+
     /// <summary>Whether <paramref name="type"/> is <paramref name="definition"/> or a constructed form of it.</summary>
     public static bool IsDefinition(INamedTypeSymbol? type, INamedTypeSymbol? definition) =>
         definition is not null && SymbolEqualityComparer.Default.Equals(type?.OriginalDefinition, definition);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -12,7 +13,8 @@ namespace Phoney.SourceGenerator;
 /// <summary>
 /// Reports calls that silently do nothing or throw when a generator is first used: results of immutable generators that
 /// are thrown away (PHONEY005), <c>Fake.Seeded</c> scopes that are never disposed (PHONEY006), rules for members that
-/// can't be generated (PHONEY007) and rules that replace each other in one chain (PHONEY008).
+/// can't be generated (PHONEY007), rules that replace each other in one chain (PHONEY008), new generators with a constant
+/// seed in a loop (PHONEY010) and constant arguments that make a call throw (PHONEY011).
 /// </summary>
 /// <remarks>
 /// The member checks mirror <c>Generator&lt;T&gt;.Compile</c> and use <see cref="ModelBuilder.DescribeMembers"/>, so they
@@ -28,7 +30,9 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(Diagnostics.DiscardedResult, Diagnostics.SeededNotDisposed, Diagnostics.RuleNotGenerated, Diagnostics.RuleReplaced);
+        ImmutableArray.Create(
+            Diagnostics.DiscardedResult, Diagnostics.SeededNotDisposed, Diagnostics.RuleNotGenerated, Diagnostics.RuleReplaced,
+            Diagnostics.SeedInLoop, Diagnostics.ArgumentOutOfRange);
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -41,7 +45,8 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             var fake = start.Compilation.GetTypeByMetadataName("Phoney.Fake");
             if (generator is null || fake is null)
                 return;
-            var symbols = new Symbols(start.Compilation, generator, fake);
+            var fakeFor = start.Compilation.GetTypeByMetadataName("Phoney.Generation.FakeForAttribute`1");
+            var symbols = new Symbols(start.Compilation, generator, fake, fakeFor);
             start.RegisterOperationAction(c => Analyze(c, symbols), OperationKind.Invocation);
         });
     }
@@ -61,7 +66,91 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             CheckPopulate(context, call, onFake);
         else if (onGenerator)
             CheckGenerator(context, call, symbols);
+
+        CheckArguments(context, call);
+        if (onGenerator && AnalyzerSupport.Terminals.Contains(method.Name))
+            CheckSeedInLoop(context, call, symbols);
     }
+
+    /// <summary>PHONEY010: every iteration builds a new generator from the same seed, so every iteration gets the same objects.</summary>
+    private static void CheckSeedInLoop(OperationAnalysisContext context, IInvocationOperation terminal, Symbols symbols)
+    {
+        // The last Seed in the chain wins; a seed that isn't a constant may vary per iteration.
+        IInvocationOperation? seed = null;
+        var receiver = terminal.Instance;
+        while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, symbols.Generator))
+        {
+            if (seed is null && earlier.TargetMethod.Name == "Seed")
+                seed = earlier;
+            receiver = earlier.Instance;
+        }
+
+        if (seed is null || seed.Arguments.FirstOrDefault()?.Value.ConstantValue is not { HasValue: true } || !AnalyzerSupport.IsStart(receiver, symbols.Fake, symbols.FakeFor))
+            return;
+
+        IOperation child = terminal;
+        for (var parent = terminal.Parent; parent is not null; child = parent, parent = parent.Parent)
+        {
+            if (parent is ILoopOperation loop && RunsEveryIteration(loop, child))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.SeedInLoop, AnalyzerSupport.NameLocation(seed)));
+                return;
+            }
+        }
+    }
+
+    /// <summary>Whether <paramref name="part"/> of <paramref name="loop"/> runs again on every iteration (not the collection of a <c>foreach</c> or the initializers of a <c>for</c>).</summary>
+    private static bool RunsEveryIteration(ILoopOperation loop, IOperation part) => loop switch
+    {
+        IForEachLoopOperation forEach => forEach.Collection != part,
+        IForLoopOperation forLoop => !forLoop.Before.Contains(part),
+        _ => true,
+    };
+
+    /// <summary>PHONEY011: constant arguments the runtime rejects (<c>NullProbability(1.5)</c>, <c>Generate(-1)</c>…).</summary>
+    private static void CheckArguments(OperationAnalysisContext context, IInvocationOperation call)
+    {
+        switch (call.TargetMethod.Name)
+        {
+            case "NullProbability":
+                Check(context, call, "probability", v => v is >= 0 and <= 1, "between 0 and 1");
+                break;
+            case "CollectionSize":
+                Check(context, call, "min", v => v >= 0, "at least 0");
+                if (Constant(call, "min") is { } min)
+                    Check(context, call, "max", v => v >= min, $"at least {min.ToString(CultureInfo.InvariantCulture)} (the minimum)");
+                break;
+            case "MaxDepth":
+                Check(context, call, "depth", v => v >= 0, "at least 0");
+                break;
+            case "Generate" or "GenerateParallel" or "Many":
+                Check(context, call, "count", v => v >= 0, "at least 0");
+                break;
+            case "Unique":
+                Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
+                break;
+        }
+    }
+
+    private static void Check(OperationAnalysisContext context, IInvocationOperation call, string parameter, Func<double, bool> valid, string expected)
+    {
+        if (Argument(call, parameter) is not { } argument || Constant(call, parameter) is not { } value || valid(value))
+            return;
+        context.ReportDiagnostic(Diagnostic.Create(
+            Diagnostics.ArgumentOutOfRange,
+            argument.Syntax.GetLocation(),
+            $"'{call.TargetMethod.Name}' needs {parameter} {expected}, but it is {value.ToString(CultureInfo.InvariantCulture)}; the call fails when it runs."));
+    }
+
+    /// <summary>The argument written in the source for <paramref name="parameter"/> (not a default value).</summary>
+    private static IArgumentOperation? Argument(IInvocationOperation call, string parameter) =>
+        call.Arguments.FirstOrDefault(a => a.Parameter?.Name == parameter && a.ArgumentKind != ArgumentKind.DefaultValue);
+
+    /// <summary>The numeric constant passed for <paramref name="parameter"/>, or <see langword="null"/>.</summary>
+    private static double? Constant(IInvocationOperation call, string parameter) =>
+        call.Arguments.FirstOrDefault(a => a.Parameter?.Name == parameter)?.Value.ConstantValue is { HasValue: true, Value: IConvertible value } && value is not (string or bool or char)
+            ? value.ToDouble(CultureInfo.InvariantCulture)
+            : null;
 
     /// <summary>PHONEY005: a configuration method's new generator is dropped, so the call changes nothing.</summary>
     private static void CheckDiscarded(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
@@ -193,13 +282,15 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>The symbols of one compilation, with the members of each generated type described once.</summary>
-    private sealed class Symbols(Compilation compilation, INamedTypeSymbol generator, INamedTypeSymbol fake)
+    private sealed class Symbols(Compilation compilation, INamedTypeSymbol generator, INamedTypeSymbol fake, INamedTypeSymbol? fakeFor)
     {
         private readonly ConcurrentDictionary<INamedTypeSymbol, List<MemberModel>?> _members = new(SymbolEqualityComparer.Default);
 
         public INamedTypeSymbol Generator { get; } = generator;
 
         public INamedTypeSymbol Fake { get; } = fake;
+
+        public INamedTypeSymbol? FakeFor { get; } = fakeFor;
 
         /// <summary>The members Phoney generates for <paramref name="type"/>, or <see langword="null"/> when it can't be generated.</summary>
         public List<MemberModel>? Describe(INamedTypeSymbol type) =>

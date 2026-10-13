@@ -357,6 +357,19 @@ The package also reports these diagnostics:
 | PHONEY007 | Warning | a rule would throw when the generator is first used: the member isn't a public settable member or constructor parameter, the selector isn't `x => x.Member`, or an object-dependent rule targets a constructor parameter |
 | PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain |
 | PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
+| PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
+| PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`…) |
+| PHONEY012 | Info | `Fake.For<T>()`, `One`, `Many` or `Populate` generate a type with reflection because no `[FakeFor<T>]` covers it |
+
+The IDE offers fixes for two of them: **PHONEY001** (make the class and its containing types `partial`) and **PHONEY012** (add `[FakeFor<T>]` to the partial class that already lists types, or create a `FakeModels` class). PHONEY012 is only a suggestion, since reflection is fine unless the app is trimmed or published with Native AOT; silence it with `dotnet_diagnostic.PHONEY012.severity = none` in `.editorconfig`.
+
+The advisory rules (PHONEY004–008 and 010–012) are in the category `Phoney.Usage`; PHONEY001–003 and 009, which come from the source generator, are in `Phoney`. To switch off or tone down all the advisory rules at once without touching the generator's errors:
+
+```ini
+# .editorconfig
+[*.cs]
+dotnet_analyzer_diagnostic.category-Phoney.Usage.severity = suggestion
+```
 
 ## Dependency injection and ASP.NET Core
 

@@ -220,4 +220,112 @@ public sealed class UsageAnalyzerTests
 
         diagnostics.ShouldBeEmpty();
     }
+
+    // PHONEY010: a new generator with a constant seed in a loop repeats itself
+
+    [Test]
+    public async Task Constant_seed_in_a_new_generator_inside_a_loop_is_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY010", """
+            public static void A(List<Product> products)
+            {
+                for (var i = 0; i < 3; i++)
+                    products.Add(Fake.For<Product>().Seed(1).Generate());
+            }
+            public static void B(List<int> ids, List<Product> products)
+            {
+                foreach (var id in ids)
+                    products.AddRange(Fake.For<Product>().With(p => p.Id, id).Seed(42).Generate(2));
+            }
+            public static void C(List<Product> products)
+            {
+                var i = 0;
+                while (i++ < 3)
+                {
+                    var product = Fake.For<Product>().Seed(7).Locale("sv").Populate(new Product());
+                    products.Add(product);
+                }
+            }
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(3);
+        diagnostics.ShouldAllBe(d => TextOf(d) == "Seed");
+        diagnostics[0].GetMessage().ShouldContain("same");
+    }
+
+    [Test]
+    public async Task Varying_seeds_and_generators_made_outside_the_loop_are_not_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY010", """
+            public static void A(List<Product> products)
+            {
+                for (var i = 0; i < 3; i++)
+                    products.Add(Fake.For<Product>().Seed(i).Generate());
+            }
+            public static void B(List<Product> products)
+            {
+                var generator = Fake.For<Product>().Seed(1);
+                for (var i = 0; i < 3; i++)
+                    products.Add(generator.Generate());
+            }
+            public static void C(List<Product> products)
+            {
+                for (var i = 0; i < 3; i++)
+                    products.Add(Fake.For<Product>().Generate());
+                products.Add(Fake.For<Product>().Seed(1).Generate());
+            }
+            public static void D(List<Product> products, int seed)
+            {
+                for (var i = 0; i < 3; i++)
+                    products.Add(Fake.For<Product>().Seed(1).Seed(seed + i).Generate());
+            }
+            public static void E(List<Product> products)
+            {
+                // Evaluated once, before the first iteration.
+                foreach (var product in Fake.For<Product>().Seed(1).Generate(3))
+                    products.Add(product);
+                for (var batch = Fake.For<Product>().Seed(2).Generate(2); batch.Count > 5; batch.RemoveAt(0))
+                    products.Add(batch[0]);
+            }
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    // PHONEY011: constant arguments that make the call throw
+
+    [Test]
+    public async Task Constant_arguments_out_of_range_are_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY011", """
+            public static object A() => Fake.For<Product>().NullProbability(1.5);
+            public static object B() => Fake.For<Product>().NullProbability(-0.1);
+            public static object C() => Fake.For<Product>().CollectionSize(5, 2);
+            public static object D() => Fake.For<Product>().CollectionSize(-1, 3);
+            public static object E() => Fake.For<Product>().MaxDepth(-1);
+            public static object F() => Fake.For<Product>().Generate(-1);
+            public static object G() => Fake.For<Product>().GenerateParallel(-5);
+            public static object H() => Fake.For<Product>().Unique(p => p.Name, 0);
+            public static object I() => Fake.Many<Product>(-1);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(9);
+        diagnostics.Select(TextOf).ShouldBe(["1.5", "-0.1", "2", "-1", "-1", "-1", "-5", "0", "-1"], ignoreOrder: true);
+        diagnostics.Single(d => TextOf(d) == "1.5").GetMessage().ShouldContain("NullProbability");
+        diagnostics.Single(d => TextOf(d) == "2").GetMessage().ShouldContain("at least 5");
+    }
+
+    [Test]
+    public async Task Valid_and_unknown_arguments_are_not_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY011", """
+            private const int Many = 3;
+            public static object A() => Fake.For<Product>().NullProbability(0).NullProbability(1).CollectionSize(0, 0).CollectionSize(2, Many).MaxDepth(0).Unique(p => p.Name).Unique(p => p.Id, 1);
+            public static object B() => (Fake.For<Product>().Generate(0), Fake.For<Product>().Generate(Many));
+            public static object C(int n, double p) => Fake.For<Product>().NullProbability(p).CollectionSize(n, 1).CollectionSize(2, n).MaxDepth(n).Generate(n);
+            public static object D() => Fake.Many<Product>(0);
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
 }

@@ -7,6 +7,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Phoney/Phoney.csproj" />
+    <Project Path="src/Phoney.CodeFixes/Phoney.CodeFixes.csproj" />
     <Project Path="src/Phoney.DependencyInjection/Phoney.DependencyInjection.csproj" />
     <Project Path="src/Phoney.EntityFrameworkCore/Phoney.EntityFrameworkCore.csproj" />
     <Project Path="src/Phoney.NodaTime/Phoney.NodaTime.csproj" />

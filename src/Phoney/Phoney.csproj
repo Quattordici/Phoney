@@ -22,10 +22,12 @@
     <InternalsVisibleTo Include="Phoney.NodaTime.Tests" />
   </ItemGroup>
 
-  <!-- Ship the source generator inside the Phoney package so [FakeFor<T>] works with a single package reference. -->
+  <!-- Ship the source generator and analyzers inside the Phoney package so [FakeFor<T>] works with a single package reference; the code fixes sit next to them. -->
   <ItemGroup>
     <ProjectReference Include="../Phoney.SourceGenerator/Phoney.SourceGenerator.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <ProjectReference Include="../Phoney.CodeFixes/Phoney.CodeFixes.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <None Include="../Phoney.SourceGenerator/bin/$(Configuration)/netstandard2.0/Phoney.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="../Phoney.CodeFixes/bin/$(Configuration)/netstandard2.0/Phoney.CodeFixes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

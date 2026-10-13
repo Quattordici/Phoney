@@ -22,7 +22,6 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class StrictAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly HashSet<string> Terminals = new(StringComparer.Ordinal) { "Generate", "Stream", "GenerateParallel", "Populate" };
     private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique" };
 
     /// <inheritdoc />
@@ -59,7 +58,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             current = outer;
         }
 
-        if (later.Count == 0 || !Terminals.Contains(later[later.Count - 1].TargetMethod.Name) || later.Any(i => i.TargetMethod.Name == "Strict"))
+        if (later.Count == 0 || !AnalyzerSupport.Terminals.Contains(later[later.Count - 1].TargetMethod.Name) || later.Any(i => i.TargetMethod.Name == "Strict"))
             return;
 
         // Earlier calls (receivers), down to where the generator was started.
@@ -71,7 +70,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             receiver = inner.Instance;
         }
 
-        if (!IsStart(receiver, fake, fakeFor))
+        if (!AnalyzerSupport.IsStart(receiver, fake, fakeFor))
             return;
 
         var type = ((INamedTypeSymbol)strict.TargetMethod.ContainingType).TypeArguments[0] as INamedTypeSymbol;
@@ -131,16 +130,6 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         var argument = arguments.FirstOrDefault();
         return argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue || argument.Value.ConstantValue is { HasValue: true, Value: true };
     }
-
-    /// <summary>Whether the chain starts a new generator, so no rules can have been added elsewhere.</summary>
-    private static bool IsStart(IOperation? receiver, INamedTypeSymbol? fake, INamedTypeSymbol? fakeFor) => receiver switch
-    {
-        IInvocationOperation { TargetMethod.Name: "For" } call => SymbolEqualityComparer.Default.Equals(call.TargetMethod.ContainingType, fake),
-        IObjectCreationOperation => true,
-        IPropertyReferenceOperation { Property.IsStatic: true } property =>
-            fakeFor is not null && property.Property.ContainingType.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass?.OriginalDefinition, fakeFor)),
-        _ => false,
-    };
 
     /// <summary>The member named by the first argument, <c>x =&gt; x.Name</c> (also through a cast), or <see langword="null"/>.</summary>
     private static string? SelectedMember(IInvocationOperation call) =>
