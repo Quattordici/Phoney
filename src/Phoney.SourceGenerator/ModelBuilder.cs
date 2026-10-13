@@ -225,7 +225,7 @@ internal sealed class ModelBuilder
         var constraints = ConstraintReader.Read(attributes);
         var convention = constraints.Format is { } format
             ? (ConventionKind)Enum.Parse(typeof(ConventionKind), format)
-            : ConventionRules.Match(name, Category(type), owner.Name);
+            : ConventionRules.Match(name, ConventionCategory(type), owner.Name);
         var constraintsField = constraints.Initializer is null ? null : "__c" + index;
         return new MemberModel
         {
@@ -244,7 +244,7 @@ internal sealed class ModelBuilder
             SetterInitOnly = isInitOnly,
             SetterDeclaringType = declaringType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             Type = type,
-            IsScalar = Category(type) != TypeCategory.Other,
+            IsScalar = Category(type) != TypeCategory.Other || AdapterCall(Unwrap(type)) is not null,
             DefinesValue = constraints.DefinesValue,
             IsNested = IsNestable(type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType ? nullableType.TypeArguments[0] : type) || IsPolymorphic(type),
         };
@@ -298,10 +298,14 @@ internal sealed class ModelBuilder
         if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, Rank: 1 })
             return $"{s}.Bytes()";
 
+        // Date and time types of add-on packages (NodaTime) are produced by the add-on from the member's convention.
+        if (AdapterCall(type) is { } adapter)
+            return $"{adapter}({s}, {k}{extra})";
+
         // Collections: elements use the singular member name for conventions ("Emails" → email addresses).
         var singular = memberName.EndsWith("s", StringComparison.Ordinal) ? memberName.Substring(0, memberName.Length - 1) : memberName;
         string Element(ITypeSymbol element) =>
-            Value(element, singular, ConventionRules.Match(singular, Category(element), ""), false, depth + 1);
+            Value(element, singular, ConventionRules.Match(singular, ConventionCategory(element), ""), false, depth + 1);
         var next = "s" + (depth + 1);
 
         if (type is IArrayTypeSymbol { Rank: 1 } array)
@@ -324,7 +328,8 @@ internal sealed class ModelBuilder
             }
         }
 
-        if (IsNestable(type))
+        // An adapted date type without its add-on is created like any other object, as before the add-on existed.
+        if (IsNestable(type) || (type is INamedTypeSymbol { IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct } && ConventionRules.AdaptedCategoryOf(FullName(type)) != TypeCategory.Other))
         {
             Enqueue((INamedTypeSymbol)type);
             return $"{s}.Nested<{fq}>()";
@@ -375,11 +380,40 @@ internal sealed class ModelBuilder
         (named.TypeKind == TypeKind.Interface || (named.TypeKind == TypeKind.Class && named.IsAbstract)) &&
         !IsFrameworkType(named);
 
-    /// <summary>Objects Phoney recurses into: concrete user types (framework types are left default).</summary>
+    /// <summary>Objects Phoney recurses into: concrete user types (framework types are left default, adapted date types are values).</summary>
     private static bool IsNestable(ITypeSymbol type) =>
         type is INamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct, IsAbstract: false, IsGenericType: false } named &&
         named.SpecialType == SpecialType.None &&
-        !IsFrameworkType(named);
+        !IsFrameworkType(named) &&
+        ConventionRules.AdaptedCategoryOf(FullName(named)) == TypeCategory.Other;
+
+    /// <summary>
+    /// The add-on method producing an adapted type (<c>global::Phoney.NodaTime.NodaTimeValues.Instant</c>), or
+    /// <see langword="null"/> when the type is not adapted or the add-on is not referenced (the type is then handled as before).
+    /// </summary>
+    private string? AdapterCall(ITypeSymbol type)
+    {
+        if (ConventionRules.AdaptedCategoryOf(FullName(type)) == TypeCategory.Other)
+            return null;
+        var values = _compilation.GetTypeByMetadataName("Phoney.NodaTime.NodaTimeValues");
+        return values is not null && values.GetMembers(type.Name).Any(m => m is IMethodSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public })
+            ? Fq(values) + "." + type.Name
+            : null;
+    }
+
+    /// <summary>Namespace-qualified metadata name, as <c>Type.FullName</c> gives it for non-nested types.</summary>
+    private static string FullName(ITypeSymbol type) => (type.ContainingNamespace?.ToDisplayString() ?? "") + "." + type.MetadataName;
+
+    /// <summary>The underlying type of <c>Nullable&lt;T&gt;</c>, else the type.</summary>
+    private static ITypeSymbol Unwrap(ITypeSymbol type) =>
+        type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable ? nullable.TypeArguments[0] : type;
+
+    /// <summary>The category conventions are matched against, including adapted date types (an <c>Instant</c> is a date).</summary>
+    private static TypeCategory ConventionCategory(ITypeSymbol type)
+    {
+        type = Unwrap(type);
+        return ConventionRules.ConventionCategoryOf(FullName(type), type.TypeKind == TypeKind.Enum);
+    }
 
     /// <summary>Types in System.* namespaces are not populated recursively (their constructors expect real data).</summary>
     internal static bool IsFrameworkType(INamedTypeSymbol type)

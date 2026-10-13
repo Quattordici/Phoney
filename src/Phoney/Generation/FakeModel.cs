@@ -54,13 +54,20 @@ public sealed class FakeMember
     public bool IsNested { get; }
 
     /// <summary>Whether the member holds a scalar value (string, number, date…) rather than an object or collection.</summary>
-    public bool IsScalar => ScalarCategory(Type) != TypeCategory.Other;
+    public bool IsScalar => ScalarCategory(Type) != TypeCategory.Other || ScalarAdapters.IsAdapted(Type);
 
     /// <summary>Scalar category of a type (looking through <c>Nullable&lt;T&gt;</c>); <see cref="TypeCategory.Other"/> for objects and collections.</summary>
     internal static TypeCategory ScalarCategory(Type type)
     {
         var t = Nullable.GetUnderlyingType(type) ?? type;
         return ConventionRules.CategoryOf(t.FullName ?? "", t.IsEnum);
+    }
+
+    /// <summary>The category name conventions are matched against: <see cref="ScalarCategory"/>, or the category of an adapted type (NodaTime's <c>Instant</c> → date).</summary>
+    internal static TypeCategory ConventionCategory(Type type)
+    {
+        var t = Nullable.GetUnderlyingType(type) ?? type;
+        return ConventionRules.ConventionCategoryOf(t.FullName ?? "", t.IsEnum);
     }
 
     /// <inheritdoc />

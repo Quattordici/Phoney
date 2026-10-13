@@ -152,7 +152,7 @@ public sealed class ArgumentGenerator
     {
         var constraints = argument.Attributes is { } attributes ? MemberConstraints.Read(attributes) : null;
         var name = ReflectionTypeModel.Capitalize(argument.Name);
-        var category = FakeMember.ScalarCategory(argument.Type);
+        var category = FakeMember.ConventionCategory(argument.Type);
         var convention = constraints?.Format ?? ConventionRules.Match(name, category, "");
 
         var member = new FakeMember(name, argument.Type, convention, constraints: constraints);

@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Phoney/Phoney.csproj" />
     <ProjectReference Include="../../src/Phoney.DependencyInjection/Phoney.DependencyInjection.csproj" />
+    <ProjectReference Include="../../src/Phoney.NodaTime/Phoney.NodaTime.csproj" />
     <ProjectReference Include="../../src/Phoney.SourceGenerator/Phoney.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

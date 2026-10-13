@@ -293,6 +293,22 @@ Fake.Conventions.Add<string>(name => name.EndsWith("Sku"), f => f.Random.Replace
 Fake.For<Order>().WithConvention<decimal>(n => n == "Vat", f => 0.25m);                          // one generator
 ```
 
+### NodaTime
+
+The `Phoney.NodaTime` package adds NodaTime values and NodaTime members:
+
+```bash
+dotnet add package Phoney.NodaTime
+```
+
+```csharp
+Instant created = faker.Noda().Instant.Past();
+LocalDate birthday = faker.Noda().LocalDate.Birthdate();
+var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate BirthDate… follow the conventions
+```
+
+`Instant`, `OffsetDateTime`, `ZonedDateTime`, `LocalDateTime`, `LocalDate`, `LocalTime` and `Duration` members are generated like their built-in counterparts (`DateTimeOffset`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`), so `CreatedAt`, `ExpiresAt`, `BirthDate` and `Age` agree; this works with reflection and with source-generated models. See the [package README](src/Phoney.NodaTime/README.md).
+
 ## Source generator and Native AOT
 
 `Fake.For<T>()` uses reflection (with compiled delegates) unless a generated model exists. Declare the types you generate:

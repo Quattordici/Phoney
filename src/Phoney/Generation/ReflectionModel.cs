@@ -98,7 +98,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
         void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, MemberInfo? accessor, MemberConstraints? constraints)
         {
             // A format annotation ([EmailAddress]…) says more than the member name; [Required] members are never null.
-            var category = FakeMember.ScalarCategory(memberType);
+            var category = FakeMember.ConventionCategory(memberType);
             var convention = constraints?.Format ?? ConventionRules.Match(name, category, type.Name);
             // Constructor parameters behind a settable property (a record's positional properties) can be set on an existing object too.
             members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly, constraints, isSettable: accessor is not null, isNested: IsNestedType(memberType)));
@@ -162,7 +162,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
     private static bool IsNestedType(Type type)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
-        if (FakeMember.ScalarCategory(type) != TypeCategory.Other || type == typeof(byte[]) || ElementType(type, out _) is not null)
+        if (FakeMember.ConventionCategory(type) != TypeCategory.Other || type == typeof(byte[]) || ElementType(type, out _) is not null)
             return false;
         return !IsFrameworkType(type) && (!type.IsGenericType || IsPolymorphic(type));
     }
@@ -203,12 +203,16 @@ internal sealed class ReflectionTypeModel : IFakeModel
         if (type == typeof(byte[]))
             return s => s.Bytes();
 
+        // Date and time types of add-on packages (NodaTime) are produced from the built-in type their category names.
+        if (ScalarAdapters.TryGet(type, out var adapter))
+            return s => adapter(s, convention, constraints);
+
         // Collections: elements use the singular member name for conventions ("Emails" → email addresses).
         var element = ElementType(type, out var key);
         if (element is not null)
         {
             var singular = memberName.EndsWith('s') ? memberName[..^1] : memberName;
-            var elementProducer = Producer(element, singular, ConventionRules.Match(singular, FakeMember.ScalarCategory(element), ""), false);
+            var elementProducer = Producer(element, singular, ConventionRules.Match(singular, FakeMember.ConventionCategory(element), ""), false);
             if (key is not null)
             {
                 var keyProducer = Producer(key, singular + "Key", ConventionKind.None, false);

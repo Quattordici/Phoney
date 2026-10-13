@@ -107,6 +107,7 @@ jobs:
           dotnet pack src/Phoney.TUnit -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.DependencyInjection -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.EntityFrameworkCore -c Release -o artifacts/packages -p:Version="$VERSION"
+          dotnet pack src/Phoney.NodaTime -c Release -o artifacts/packages -p:Version="$VERSION"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: packages

@@ -18,6 +18,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Phoney.Tests" />
     <InternalsVisibleTo Include="Phoney.Benchmarks" />
+    <!-- The add-on tests compare the reflection and generated models. -->
+    <InternalsVisibleTo Include="Phoney.NodaTime.Tests" />
   </ItemGroup>
 
   <!-- Ship the source generator inside the Phoney package so [FakeFor<T>] works with a single package reference. -->
