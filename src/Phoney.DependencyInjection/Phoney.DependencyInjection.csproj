@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Phoney.DependencyInjection</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>Phoney.DependencyInjection</PackageId>
+    <Description>Phoney fake data in Microsoft.Extensions.DependencyInjection and ASP.NET Core: services.AddPhoney() registers IFaker, a faker factory and configured, reproducible generators.</Description>
+    <PackageTags>$(PackageTags);dependency-injection;aspnetcore</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PrivateAssets=none: installing only this package still brings Phoney's [FakeFor<T>] source generator. -->
+    <ProjectReference Include="../Phoney/Phoney.csproj" PrivateAssets="none" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

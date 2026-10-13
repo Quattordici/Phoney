@@ -7,11 +7,13 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Phoney/Phoney.csproj" />
+    <Project Path="src/Phoney.DependencyInjection/Phoney.DependencyInjection.csproj" />
     <Project Path="src/Phoney.SourceGenerator/Phoney.SourceGenerator.csproj" />
     <Project Path="src/Phoney.TUnit/Phoney.TUnit.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Phoney.AotSmoke/Phoney.AotSmoke.csproj" />
+    <Project Path="tests/Phoney.DependencyInjection.Tests/Phoney.DependencyInjection.Tests.csproj" />
     <Project Path="tests/Phoney.SourceGenerator.Tests/Phoney.SourceGenerator.Tests.csproj" />
     <Project Path="tests/Phoney.Tests/Phoney.Tests.csproj" />
     <Project Path="tests/Phoney.TUnit.Tests/Phoney.TUnit.Tests.csproj" />

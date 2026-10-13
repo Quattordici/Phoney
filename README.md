@@ -306,6 +306,28 @@ var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer
 
 The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
 
+## Dependency injection and ASP.NET Core
+
+The `Phoney.DependencyInjection` package registers fakers and generators in `IServiceCollection`:
+
+```bash
+dotnet add package Phoney.DependencyInjection
+```
+
+```csharp
+builder.Services.AddPhoney(o => { o.Locale = "sv"; o.Seed = 42; })
+    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // singleton Generator<Customer>
+    .AddGenerator(TestData.Order);                              // source-generated: no reflection, AOT safe
+
+app.MapGet("/demo/customers", (Generator<Customer> customers) => customers.Generate(10));
+app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
+```
+
+- `IFaker`/`Faker` are scoped, `IFakerFactory` creates fakers for other locales and seeds, and generators are singletons.
+- With `Seed`, every scope starts at the seed, so each request or test scope is reproducible.
+- `ReferenceDate`, or a `TimeProvider` (from the options or registered in the container, e.g. `FakeTimeProvider`), sets "now".
+- In integration tests, call `AddPhoney(o => o.Seed = 1)` again in `WebApplicationFactory.ConfigureTestServices`; it configures the same options.
+
 ## Test data in TUnit
 
 The `Phoney.TUnit` package adds `[FakeData]`, which fills [TUnit](https://tunit.dev) test parameters the way Phoney fills the members of an object:

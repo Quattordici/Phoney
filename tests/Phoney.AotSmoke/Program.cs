@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Phoney;
 using Phoney.Generation;
 
@@ -48,6 +49,15 @@ if (!owners.Any(p => p.Contact is Email) || !owners.Any(p => p.Contact is Phone)
 var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
 if (Fakes.Person.Seed(1).TimeProvider(clock).Generate().BirthDate.Year < 1950)
     throw new InvalidOperationException("time provider was not used");
+
+// Dependency injection with a source-generated generator.
+using (var services = new ServiceCollection().AddPhoney(o => o.Seed = 1).AddGenerator(Fakes.Person).Services.BuildServiceProvider())
+{
+    using var scope = services.CreateScope();
+    Check(scope.ServiceProvider.GetRequiredService<IFaker>().Person.FullName(), "injected faker");
+    if (scope.ServiceProvider.GetRequiredService<Generator<Person>>().Generate().Email != Fakes.Person.Seed(1).Generate().Email)
+        throw new InvalidOperationException("injected generator differs");
+}
 
 // National ids: valid check digits, no reflection.
 var personnummer = faker.NationalId.Person();

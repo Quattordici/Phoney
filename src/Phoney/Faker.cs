@@ -16,7 +16,7 @@ namespace Phoney;
 /// string text = faker.Parse("{{person.firstName}} lives in {{location.city}}");
 /// </code>
 /// </example>
-public sealed partial class Faker
+public sealed partial class Faker : IFaker
 {
     private DateTimeOffset? _referenceDate;
     private bool _seeded;
@@ -88,6 +88,9 @@ public sealed partial class Faker
         _seeded = true;
         return this;
     }
+
+    /// <inheritdoc />
+    IFaker IFaker.Seed(long seed) => Seed(seed);
 
     /// <summary>
     /// Evaluates <c>{{...}}</c> expressions in <paramref name="template"/>, faker.js style. An expression is either a
