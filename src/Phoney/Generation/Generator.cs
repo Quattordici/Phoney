@@ -81,9 +81,44 @@ public sealed class Generator<T> : INestedGenerator
         return AddRule(member, new Rule(RuleKind.Dependent, (Func<Faker, T, object?>)((f, x) => factory(f, x))));
     }
 
-    /// <summary>Generates a nested member with its own generator, e.g. <c>.With(x =&gt; x.Address, Fake.For&lt;Address&gt;().Locale("sv"))</c>.</summary>
-    public Generator<T> With<TValue>(Expression<Func<T, TValue>> member, Generator<TValue> generator) =>
+    /// <summary>
+    /// Generates a nested member with its own generator, e.g. <c>.With(x =&gt; x.Address, Fake.For&lt;Address&gt;().Locale("sv"))</c>;
+    /// the generator may produce a subtype of the member's type: <c>.With(x =&gt; x.Shape, Fake.For&lt;Circle&gt;())</c>.
+    /// </summary>
+    public Generator<T> With<TValue, TGenerated>(Expression<Func<T, TValue>> member, Generator<TGenerated> generator)
+        where TGenerated : TValue =>
         AddRule(member, new Rule(RuleKind.Generator, generator ?? throw new ArgumentNullException(nameof(generator))));
+
+    /// <summary>
+    /// Generates <typeparamref name="T1"/> for every member of type <typeparamref name="TBase"/> in the generated objects
+    /// (also nested ones), e.g. <c>.Subtype&lt;IShape, Circle&gt;()</c>. Replaces earlier subtypes of <typeparamref name="TBase"/>
+    /// for this generator and takes precedence over <see cref="Fake.Subtypes"/> and <c>[JsonDerivedType]</c>.
+    /// </summary>
+    public Generator<T> Subtype<TBase, T1>()
+        where T1 : TBase => Subtype<TBase>(typeof(T1));
+
+    /// <summary>Generates one of the subtypes, picked at random, for every member of type <typeparamref name="TBase"/>: <c>.Subtype&lt;IShape, Circle, Square&gt;()</c>.</summary>
+    public Generator<T> Subtype<TBase, T1, T2>()
+        where T1 : TBase
+        where T2 : TBase => Subtype<TBase>(typeof(T1), typeof(T2));
+
+    /// <summary>Generates one of the subtypes, picked at random, for every member of type <typeparamref name="TBase"/>.</summary>
+    public Generator<T> Subtype<TBase, T1, T2, T3>()
+        where T1 : TBase
+        where T2 : TBase
+        where T3 : TBase => Subtype<TBase>(typeof(T1), typeof(T2), typeof(T3));
+
+    /// <summary>Generates one of the subtypes, picked at random, for every member of type <typeparamref name="TBase"/>.</summary>
+    public Generator<T> Subtype<TBase, T1, T2, T3, T4>()
+        where T1 : TBase
+        where T2 : TBase
+        where T3 : TBase
+        where T4 : TBase => Subtype<TBase>(typeof(T1), typeof(T2), typeof(T3), typeof(T4));
+
+    /// <summary>Generates one of <paramref name="subtypes"/>, picked at random in the given order, for every member of type <typeparamref name="TBase"/>.</summary>
+    /// <exception cref="ArgumentException">A subtype is abstract, an interface, open generic or not assignable to <typeparamref name="TBase"/>.</exception>
+    public Generator<T> Subtype<TBase>(params Type[] subtypes) =>
+        Derive(_config with { Subtypes = _config.Subtypes.SetItem(typeof(TBase), Subtypes.Validate(typeof(TBase), subtypes)) });
 
     /// <summary>
     /// Sets a member to one of <paramref name="values"/>, e.g. existing ids or objects:
@@ -362,7 +397,9 @@ public sealed class Generator<T> : INestedGenerator
             }
         }
 
-        return new Compiled(slots, [.. dependent]);
+        // Subtypes apply to the whole object graph, so they travel with the settings into nested scopes.
+        var settings = _config.Settings with { Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes) };
+        return new Compiled(slots, [.. dependent], settings);
     }
 
     /// <summary>One generation run: a faker reused for every item, reseeded per item for order-independent results.</summary>
@@ -374,7 +411,7 @@ public sealed class Generator<T> : INestedGenerator
             faker.Random.Reseed(Randomizer.DeriveSeed(seed, index));
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, config.Settings, compiled.Slots, index, typeof(T), parent);
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent);
 
             T item;
             if (config.Factory is { } factory)
@@ -405,7 +442,7 @@ public sealed class Generator<T> : INestedGenerator
             faker.Random.Reseed(Randomizer.DeriveSeed(seed, index));
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, config.Settings, compiled.Slots, index, typeof(T));
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T));
 
             var item = model.Populate(instance, scope, mode);
             foreach (var (member, rule) in compiled.Dependent)
@@ -421,7 +458,7 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>Rules bound to member indices, plus rules that run after creation.</summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent);
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory.</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null);
@@ -450,6 +487,7 @@ public sealed class Generator<T> : INestedGenerator
         ImmutableDictionary<string, Rule> Rules,
         ImmutableDictionary<string, int> Unique,
         ImmutableList<CustomConvention> Conventions,
+        ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
         ImmutableList<Action<Faker, T>> AfterCreate,
         Func<Faker, T>? Factory,
         bool Strict,
@@ -460,6 +498,7 @@ public sealed class Generator<T> : INestedGenerator
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
             ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             [],
+            ImmutableDictionary<Type, ImmutableArray<Type>>.Empty,
             [],
             null,
             false,

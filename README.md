@@ -195,11 +195,30 @@ var customers = Fake.For<Customer>()
     .Generate(100);                                                // also: Generate(), Stream(), GenerateParallel(n)
 ```
 
-- **Supported shapes**: classes with a parameterless constructor, records and classes with constructor parameters (the constructor with most parameters is used), `init` and `required` members, public fields, structs, nested objects, `T[]`, `List<T>` and its interfaces, `HashSet<T>`, `Dictionary<K,V>`, enums, nullable types, `byte[]`, and `Guid`, `DateTime(Offset)`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri` plus every numeric type.
+- **Supported shapes**: classes with a parameterless constructor, records and classes with constructor parameters (the constructor with most parameters is used), `init` and `required` members, public fields, structs, nested objects, interfaces and abstract classes (through [subtypes](#interfaces-and-subtypes)), `T[]`, `List<T>` and its interfaces, `HashSet<T>`, `Dictionary<K,V>`, enums, nullable types, `byte[]`, and `Guid`, `DateTime(Offset)`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri` plus every numeric type.
 - **Cycles** (`Customer → Order → Customer`) stop with `null`. `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data.
+
+### Interfaces and subtypes
+
+Members declared as an interface, an abstract class or a base class are generated as one of their subtypes:
+
+```csharp
+var drawings = Fake.For<Drawing>()
+    .Subtype<IShape, Circle>()               // every IShape in the object graph is a Circle
+    .Subtype<IAnimal, Cat, Dog>()            // one of Cat or Dog, picked at random (reproducible with a seed)
+    .With(d => d.Logo, Fake.For<Square>())   // one member with its own generator of a subtype
+    .Generate(10);
+
+Fake.Subtypes.Add<IShape, Circle, Square>(); // app-wide, for generators created afterwards
+```
+
+- **`[JsonDerivedType]` works out of the box**: an interface or abstract class that lists its derived types for System.Text.Json uses them as its default subtypes.
+- **Precedence**: the generator's `Subtype`, then `Fake.Subtypes`, then `[JsonDerivedType]`. An interface or abstract class with none of them stays `null`. A concrete base class is generated as itself unless you map it (`.Subtype<Vehicle, Truck>()`).
+- `Populate` fills an existing object as its runtime type: a `Circle` in an `IShape` member keeps being a circle and gets its missing members.
+- With the source generator, `[FakeSubtype<IShape, Circle>]` on the `[FakeFor]` class registers the subtype app-wide and generates its model; `[JsonDerivedType]` types get models automatically. In Native AOT apps every subtype needs a generated model (`[FakeFor<T>]`, `[FakeSubtype<,>]` or `[JsonDerivedType]`).
 
 ### Filling in existing objects
 

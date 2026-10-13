@@ -109,6 +109,12 @@ internal sealed class ModelBuilder
     /// <summary>Models built so far, requested types first.</summary>
     public List<TypeModel> Models { get; } = new();
 
+    /// <summary>
+    /// Interfaces and abstract classes met as member types with the <c>[JsonDerivedType]</c> types listed on them
+    /// (fully qualified, sorted), registered at startup as their default subtypes.
+    /// </summary>
+    public SortedDictionary<string, List<string>> DerivedTypes { get; } = new(StringComparer.Ordinal);
+
     /// <summary>Schedules a type for model generation (once).</summary>
     public void Enqueue(INamedTypeSymbol type)
     {
@@ -221,7 +227,7 @@ internal sealed class ModelBuilder
             Settable = !isConstructorParameter,
             SetterInitOnly = isInitOnly,
             SetterDeclaringType = declaringType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            IsNested = IsNestable(type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType ? nullableType.TypeArguments[0] : type),
+            IsNested = IsNestable(type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType ? nullableType.TypeArguments[0] : type) || IsPolymorphic(type),
         };
     }
 
@@ -305,8 +311,50 @@ internal sealed class ModelBuilder
             return $"{s}.Nested<{fq}>()";
         }
 
+        // Interfaces and abstract classes are created as one of their subtypes at runtime (null when there are none).
+        if (IsPolymorphic(type))
+        {
+            AddDerivedTypes((INamedTypeSymbol)type);
+            return $"{s}.Nested<{fq}>()";
+        }
+
         return $"default({fq})";
     }
+
+    /// <summary>Generates models for the <c>[JsonDerivedType]</c> types of a polymorphic type and records them as its defaults.</summary>
+    private void AddDerivedTypes(INamedTypeSymbol baseType)
+    {
+        var key = Fq(baseType);
+        if (DerivedTypes.ContainsKey(key) || !_compilation.IsSymbolAccessibleWithin(baseType, _owner))
+            return;
+        var derived = new List<string>();
+        foreach (var attribute in baseType.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != "System.Text.Json.Serialization.JsonDerivedTypeAttribute" ||
+                attribute.ConstructorArguments.Length == 0 ||
+                attribute.ConstructorArguments[0].Value is not INamedTypeSymbol type ||
+                type.IsAbstract || type.TypeKind is not (TypeKind.Class or TypeKind.Struct) || type.IsUnboundGenericType ||
+                !_compilation.IsSymbolAccessibleWithin(type, _owner))
+            {
+                continue;
+            }
+
+            Enqueue(type);
+            derived.Add(Fq(type));
+        }
+
+        if (derived.Count > 0)
+        {
+            derived.Sort(StringComparer.Ordinal);
+            DerivedTypes[key] = derived;
+        }
+    }
+
+    /// <summary>User interfaces and abstract classes (also generic ones), which are generated as one of their subtypes.</summary>
+    internal static bool IsPolymorphic(ITypeSymbol type) =>
+        type is INamedTypeSymbol { SpecialType: SpecialType.None } named &&
+        (named.TypeKind == TypeKind.Interface || (named.TypeKind == TypeKind.Class && named.IsAbstract)) &&
+        !IsFrameworkType(named);
 
     /// <summary>Objects Phoney recurses into: concrete user types (framework types are left default).</summary>
     private static bool IsNestable(ITypeSymbol type) =>

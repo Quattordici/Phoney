@@ -18,6 +18,7 @@ namespace Phoney.SourceGenerator;
 public sealed class FakeForGenerator : IIncrementalGenerator
 {
     private const string AttributeMetadataName = "Phoney.Generation.FakeForAttribute`1";
+    private const string SubtypeAttributeMetadataName = "Phoney.Generation.FakeSubtypeAttribute`2";
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -27,13 +28,34 @@ public sealed class FakeForGenerator : IIncrementalGenerator
             static (node, _) => node is ClassDeclarationSyntax,
             static (ctx, ct) => Analyze(ctx, ct));
 
-        context.RegisterSourceOutput(targets, static (spc, result) =>
-        {
-            foreach (var diagnostic in result.Diagnostics)
-                spc.ReportDiagnostic(diagnostic.ToDiagnostic());
-            if (result.Source is not null)
-                spc.AddSource(result.HintName, result.Source);
-        });
+        // Classes with only [FakeSubtype] attributes; classes that also have [FakeFor] are handled above.
+        var subtypeOnly = context.SyntaxProvider.ForAttributeWithMetadataName(
+            SubtypeAttributeMetadataName,
+            static (node, _) => node is ClassDeclarationSyntax,
+            static (ctx, ct) => HasAttribute((INamedTypeSymbol)ctx.TargetSymbol, AttributeMetadataName) ? null : Analyze(ctx, ct));
+
+        context.RegisterSourceOutput(targets, static (spc, result) => Report(spc, result));
+        context.RegisterSourceOutput(subtypeOnly, static (spc, result) => Report(spc, result));
+    }
+
+    private static void Report(SourceProductionContext context, GenerationResult? result)
+    {
+        if (result is null)
+            return;
+        foreach (var diagnostic in result.Diagnostics)
+            context.ReportDiagnostic(diagnostic.ToDiagnostic());
+        if (result.Source is not null)
+            context.AddSource(result.HintName, result.Source);
+    }
+
+    /// <summary>Whether <paramref name="symbol"/> has an attribute whose generic definition is <paramref name="metadataName"/>.</summary>
+    private static bool HasAttribute(INamedTypeSymbol symbol, string metadataName) =>
+        symbol.GetAttributes().Any(a => IsAttribute(a, metadataName));
+
+    private static bool IsAttribute(AttributeData attribute, string metadataName)
+    {
+        var definition = attribute.AttributeClass?.OriginalDefinition;
+        return definition is not null && definition.ContainingNamespace?.ToDisplayString() + "." + definition.MetadataName == metadataName;
     }
 
     /// <summary>Builds the generated source for one annotated class. Returns only strings so results cache well.</summary>
@@ -66,18 +88,33 @@ public sealed class FakeForGenerator : IIncrementalGenerator
         }
 
         var compilation = context.SemanticModel.Compilation;
-        var roots = context.Attributes
+        var attributes = symbol.GetAttributes();
+        var roots = attributes
+            .Where(a => IsAttribute(a, AttributeMetadataName))
             .Select(a => a.AttributeClass?.TypeArguments.FirstOrDefault())
             .OfType<INamedTypeSymbol>()
             .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
             .ToList();
 
+        // [FakeSubtype<TBase, TSubtype>]: register the pair at startup and generate a model for the subtype.
+        var subtypes = new List<(string Base, string Subtype)>();
         var builder = new ModelBuilder(compilation, symbol, diagnostics, location);
+        foreach (var attribute in attributes.Where(a => IsAttribute(a, SubtypeAttributeMetadataName)))
+        {
+            var arguments = attribute.AttributeClass!.TypeArguments;
+            if (arguments.Length == 2 && arguments[1] is INamedTypeSymbol subtype)
+            {
+                var baseType = arguments[0];
+                subtypes.Add((baseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), subtype.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                builder.Enqueue(subtype);
+            }
+        }
+
         foreach (var root in roots)
             builder.Enqueue(root);
         builder.BuildAll(cancellationToken);
 
-        var source = Emitter.Emit(symbol, roots, builder.Models);
+        var source = Emitter.Emit(symbol, roots, builder.Models, builder.DerivedTypes, subtypes);
         return new GenerationResult(hintName, source, diagnostics);
     }
 

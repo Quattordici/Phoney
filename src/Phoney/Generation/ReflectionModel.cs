@@ -164,9 +164,18 @@ internal sealed class ReflectionTypeModel : IFakeModel
         type = Nullable.GetUnderlyingType(type) ?? type;
         if (FakeMember.ScalarCategory(type) != TypeCategory.Other || type == typeof(byte[]) || ElementType(type, out _) is not null)
             return false;
-        var ns = type.Namespace ?? "";
-        return !(type.IsAbstract || type.IsInterface || type.IsGenericType || ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) || ns.StartsWith("Microsoft.", StringComparison.Ordinal));
+        return !IsFrameworkType(type) && (!type.IsGenericType || IsPolymorphic(type));
     }
+
+    /// <summary>Framework types (System.*, Microsoft.*) are not populated recursively; their constructors expect real data.</summary>
+    private static bool IsFrameworkType(Type type)
+    {
+        var ns = type.Namespace ?? "";
+        return ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) || ns.StartsWith("Microsoft.", StringComparison.Ordinal);
+    }
+
+    /// <summary>Interfaces and abstract classes, which are created as one of their subtypes (also when generic).</summary>
+    private static bool IsPolymorphic(Type type) => type.IsInterface || type.IsAbstract;
 
     /// <summary>Builds the value producer for a member type: scalar conventions, collections, nested objects.</summary>
     internal static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints = null)
@@ -246,9 +255,9 @@ internal sealed class ReflectionTypeModel : IFakeModel
             };
         }
 
-        // Framework types (System.*, Microsoft.*) are not populated recursively; their constructors expect real data.
-        var ns = type.Namespace ?? "";
-        if (ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) || ns.StartsWith("Microsoft.", StringComparison.Ordinal) || type.IsGenericType)
+        // Framework types are not populated recursively, nor are concrete generic types; interfaces and abstract classes
+        // go through their subtypes.
+        if (IsFrameworkType(type) || (type.IsGenericType && !IsPolymorphic(type)))
             return static _ => null;
 
         return s => s.NestedObject(type);

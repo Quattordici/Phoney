@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Immutable;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using Phoney.Modules;
@@ -11,9 +12,10 @@ internal sealed record GenerationSettings(
     double NullProbability,
     int MinCollectionSize,
     int MaxCollectionSize,
-    int MaxDepth)
+    int MaxDepth,
+    ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes)
 {
-    public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4);
+    public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
 }
 
 /// <summary>How a generator rule produces a member's value.</summary>
@@ -204,12 +206,18 @@ public sealed class FakeScope
     private static bool IsSexEnum(Type type) =>
         type.Name.Contains("Gender", StringComparison.OrdinalIgnoreCase) || type.Name.Contains("Sex", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Populates an existing nested object through its model, stopping at the depth limit and on cycles (the object is then left as it is).</summary>
+    /// <summary>
+    /// Populates an existing nested object through the model of its runtime type (so a <c>Circle</c> in an <c>IShape</c>
+    /// member is filled as a circle), stopping at the depth limit and on cycles (the object is then left as it is).
+    /// </summary>
     internal object PopulateNested(Type type, object existing, PopulateMode mode)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
         if (Depth + 1 > Settings.MaxDepth)
             return existing;
+        var runtimeType = existing.GetType();
+        if (runtimeType != type && (ModelRegistry.CanGet(runtimeType) || type.IsInterface || type.IsAbstract))
+            type = runtimeType;
         for (var scope = this; scope is not null; scope = scope._parent)
         {
             if (scope._type == type)
@@ -326,11 +334,20 @@ public sealed class FakeScope
     /// <summary>Whether a nullable member should be left <see langword="null"/>, per the generator's null probability.</summary>
     public bool MaybeNull() => Settings.NullProbability > 0 && Faker.Random.Bool(Settings.NullProbability);
 
-    /// <summary>Creates a nested object through its model, stopping at the depth limit and on cycles.</summary>
+    /// <summary>
+    /// Creates a nested object through its model, stopping at the depth limit and on cycles. A type with subtypes
+    /// (<see cref="Generator{T}.Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c>, <c>[JsonDerivedType]</c>) is created as one of
+    /// them; an interface or abstract class without subtypes stays <see langword="null"/>.
+    /// </summary>
     internal object? NestedObject(Type type)
     {
         if (Depth + 1 > Settings.MaxDepth)
             return null;
+        if (Settings.Subtypes.TryGetValue(type, out var subtypes) || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
+            type = subtypes.Length == 1 ? subtypes[0] : subtypes[Faker.Random.Index(subtypes.Length)];
+        else if (type.IsInterface || type.IsAbstract)
+            return null;
+
         for (var scope = this; scope is not null; scope = scope._parent)
         {
             if (scope._type == type)

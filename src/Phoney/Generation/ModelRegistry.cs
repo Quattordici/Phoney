@@ -34,6 +34,20 @@ public static class ModelRegistry
         return model as FakeModel<T> ?? (FakeModel<T>)(Models[typeof(T)] = new ReflectionModel<T>());
     }
 
+    /// <summary>
+    /// Records the subtypes an interface or abstract class lists with <c>[JsonDerivedType]</c>, so they are its default
+    /// subtypes without reflection (called by source-generated code).
+    /// </summary>
+    public static void RegisterDerivedTypes(Type baseType, params Type[] derivedTypes)
+    {
+        ArgumentNullException.ThrowIfNull(baseType);
+        ArgumentNullException.ThrowIfNull(derivedTypes);
+        Subtypes.RegisterDefaults(baseType, derivedTypes);
+    }
+
+    /// <summary>Whether <see cref="Get"/> can return a model for <paramref name="type"/> without failing: one is registered, or reflection is available.</summary>
+    internal static bool CanGet(Type type) => Models.ContainsKey(type) || RuntimeFeature.IsDynamicCodeSupported;
+
     /// <summary>Returns the model for a nested type, or <see langword="null"/> when the type cannot be created (interfaces, abstract types).</summary>
     internal static IFakeModel? Get(Type type)
     {

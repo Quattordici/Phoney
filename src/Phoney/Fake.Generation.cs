@@ -12,6 +12,9 @@ public static partial class Fake
     /// <summary>App-wide custom conventions, e.g. <c>Fake.Conventions.Add&lt;string&gt;("Sku", f =&gt; …)</c>.</summary>
     public static FakeConventions Conventions { get; } = new();
 
+    /// <summary>App-wide subtypes for interfaces and base classes, e.g. <c>Fake.Subtypes.Add&lt;IShape, Circle, Square&gt;()</c>.</summary>
+    public static FakeSubtypes Subtypes { get; } = new();
+
     /// <summary>Generates one populated <typeparamref name="T"/>.</summary>
     /// <example><code>var customer = Fake.One&lt;Customer&gt;();</code></example>
     [RequiresUnreferencedCode(ReflectionMessage)]
