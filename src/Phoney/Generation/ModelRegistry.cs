@@ -24,6 +24,17 @@ public static class ModelRegistry
     /// <summary>Whether a model has been registered or built for <typeparamref name="T"/>.</summary>
     public static bool IsRegistered<T>() => Models.ContainsKey(typeof(T));
 
+    /// <summary>
+    /// Returns the registered source-generated model for <typeparamref name="T"/> without any reflection, so it is safe in trimmed
+    /// and Native AOT apps; throws when the type has none.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No <c>[FakeFor&lt;T&gt;]</c> model is registered for the type.</exception>
+    public static FakeModel<T> Generated<T>() =>
+        Models.TryGetValue(typeof(T), out var model) && model is FakeModel<T> typed and not ReflectionModel<T>
+            ? typed
+            : throw new InvalidOperationException(
+                $"No source-generated model for '{typeof(T).FullName}'. Add [FakeFor<{typeof(T).Name}>] to a partial class so Phoney can generate it without reflection, or use Fake.For<{typeof(T).Name}>() where reflection is available.");
+
     /// <summary>Returns the model for <typeparamref name="T"/>, building a reflection model when none is registered.</summary>
     [RequiresUnreferencedCode("Types without a source-generated model are populated with reflection. Add [FakeFor<T>] to make generation trim and AOT safe.")]
     [RequiresDynamicCode("Types without a source-generated model are populated with reflection. Add [FakeFor<T>] to make generation trim and AOT safe.")]

@@ -53,9 +53,20 @@ public static partial class Fake
     /// </example>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static Generator<T> For<T>()
+    public static Generator<T> For<T>() => Configured(new Generator<T>(ModelRegistry.For<T>()));
+
+    /// <summary>
+    /// Like <see cref="For{T}"/> for a type with a source-generated model (<see cref="FakeForAttribute{T}"/>), but without any
+    /// reflection: trim and Native AOT safe, and seeded from the facade the same way. Throws an
+    /// <see cref="InvalidOperationException"/> that says how to fix it when the type has no generated model.
+    /// </summary>
+    /// <example><code>var order = Fake.Populate(new Order { CustomerId = 42 }); // reflection
+    /// var safe = Fake.Generated&lt;Order&gt;().Populate(new Order { CustomerId = 42 }); // AOT safe</code></example>
+    public static Generator<T> Generated<T>() => Configured(new Generator<T>(ModelRegistry.Generated<T>()));
+
+    /// <summary>Applies the facade's seed, locale, reference date and clock to a new generator.</summary>
+    private static Generator<T> Configured<T>(Generator<T> generator)
     {
-        var generator = new Generator<T>(ModelRegistry.For<T>());
         if (!IsSeeded)
             return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;
 

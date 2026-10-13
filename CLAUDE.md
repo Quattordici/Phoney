@@ -11,7 +11,7 @@ The solution should strive to follow best practices and follow well established 
 In practice here:
 
 - **TDD:** write the failing test first, make it pass, then refactor. Run the one test (see Commands) before the whole suite.
-- **Source generation and AOT:** every feature that touches object generation must work through both the reflection model and the source-generated one, with identical data for a seed, and must not add trim/AOT warnings. Reflection-only entry points carry `RequiresUnreferencedCode`/`RequiresDynamicCode`.
+- **Source generation and AOT:** every feature that touches object generation must work through both the reflection model and the source-generated one, with identical data for a seed, and must not add trim/AOT warnings. Reflection-only entry points carry `RequiresUnreferencedCode`/`RequiresDynamicCode`; `Fake.Generated<T>()` is the unannotated facade entry for types with a generated model. The reflection model builds collections through the same typed `FakeScope` helpers as generated models (`ReflectionCollections`), never per-element reflection.
 - **Performance:** lookups are array-indexed, hot paths are allocation-free, templates are parsed once. Check `benchmarks/` when touching them.
 - **Ease of use:** one obvious call for the common case (`Fake.Populate(x)`, `faker.NationalId.Person()`), sensible defaults, and a clear exception message that says how to fix the problem.
 - **Robustness:** validate arguments, never fail silently, and make results reproducible for a seed.

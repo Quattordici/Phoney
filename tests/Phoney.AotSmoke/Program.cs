@@ -39,6 +39,15 @@ Check(partial.Home.City, "populated nested record");
 if (partial.Pets.Count == 0)
     throw new InvalidOperationException("populate did not fill collections");
 
+// The facade without reflection: seeded like Fake.For, populates what is unset.
+using (Fake.Seeded(9))
+{
+    var viaFacade = Fake.Generated<Person>().Populate(new Person { FirstName = "Kim" });
+    if (viaFacade.FirstName != "Kim")
+        throw new InvalidOperationException("Fake.Generated overwrote existing values");
+    Check(viaFacade.LastName, "facade last name");
+}
+
 // Interfaces: [JsonDerivedType] defaults, [FakeSubtype] registrations and generator subtypes, no reflection.
 var owners = Fakes.Person.Seed(3).Subtype<IContact, Email, Phone>().Generate(50);
 if (owners.Any(p => p.Vehicle is not (Car or Bike)) || owners.Any(p => p.Insurance is not Policy) || owners.Any(p => p.Contact is not (Email or Phone)))

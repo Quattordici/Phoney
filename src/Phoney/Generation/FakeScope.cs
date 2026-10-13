@@ -301,7 +301,7 @@ public sealed class FakeScope
         {
             // The value is only produced for a new key, like the reflection model, so both consume randomness alike.
             var k = key(this);
-            if (!dictionary.ContainsKey(k))
+            if (k is not null && !dictionary.ContainsKey(k))
                 dictionary.Add(k, value(this));
         }
         return dictionary;

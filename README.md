@@ -340,7 +340,13 @@ internal static partial class TestData;
 var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer>, no reflection
 ```
 
-The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
+The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. `Fake.For`, `One`, `Many` and `Populate` fall back to reflection for other types, so the compiler flags them in trimmed and AOT apps even when a model exists; **`Fake.Generated<Customer>()`** is the same facade (seed, locale and clock of `Fake.Seeded`) without any reflection, so it is warning free there, and it throws with the fix when the type has no generated model:
+
+```csharp
+var customer = Fake.Generated<Customer>().Populate(new Customer { Id = 42 }); // trim and AOT safe
+```
+
+Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
 
 `[FakeFor]` and `[FakeSubtype]` go on a partial class or record. Subtypes of interfaces and abstract classes need models too: types listed with `[JsonDerivedType]` on the base type get them automatically, and `[FakeSubtype<IShape, Circle>]` on the same class generates a model for `Circle` and registers it as a subtype app-wide (see [Interfaces and subtypes](#interfaces-and-subtypes)). NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
 
