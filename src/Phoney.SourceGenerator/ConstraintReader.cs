@@ -24,6 +24,14 @@ internal static class ConstraintReader
     public static Result Read(IEnumerable<AttributeData> attributes)
     {
         var parts = new Dictionary<string, string>();
+        var order = new List<string>(); // the order the initializer is written in: first set, first written
+        void Set(string key, string value)
+        {
+            if (!parts.ContainsKey(key))
+                order.Add(key);
+            parts[key] = value;
+        }
+
         string? format = null;
         var required = false;
 
@@ -34,27 +42,27 @@ internal static class ConstraintReader
             {
                 case Ns + "StringLengthAttribute":
                     if (args.Length == 1 && args[0].Value is int max)
-                        parts["MaxLength"] = Int(max);
+                        Set("MaxLength", Int(max));
                     foreach (var named in attribute.NamedArguments)
                     {
                         if (named.Key == "MinimumLength" && named.Value.Value is int min && min > 0)
-                            parts["MinLength"] = Int(min);
+                            Set("MinLength", Int(min));
                     }
 
                     break;
                 case Ns + "MaxLengthAttribute":
                     if (args.Length == 1 && args[0].Value is int maxLength && maxLength > 0)
-                        parts["MaxLength"] = Int(maxLength);
+                        Set("MaxLength", Int(maxLength));
                     break;
                 case Ns + "MinLengthAttribute":
                     if (args.Length == 1 && args[0].Value is int minLength)
-                        parts["MinLength"] = Int(minLength);
+                        Set("MinLength", Int(minLength));
                     break;
                 case Ns + "LengthAttribute":
                     if (args.Length == 2 && args[0].Value is int lower && args[1].Value is int upper)
                     {
-                        parts["MinLength"] = Int(lower);
-                        parts["MaxLength"] = Int(upper);
+                        Set("MinLength", Int(lower));
+                        Set("MaxLength", Int(upper));
                     }
 
                     break;
@@ -63,14 +71,14 @@ internal static class ConstraintReader
                     var bounds = args.Length == 3 ? args.Skip(1).ToArray() : args.ToArray();
                     if (bounds.Length == 2)
                     {
-                        parts["RangeMin"] = Literal(Invariant(bounds[0].Value));
-                        parts["RangeMax"] = Literal(Invariant(bounds[1].Value));
+                        Set("RangeMin", Literal(Invariant(bounds[0].Value)));
+                        Set("RangeMax", Literal(Invariant(bounds[1].Value)));
                     }
 
                     break;
                 case Ns + "RegularExpressionAttribute":
                     if (args.Length == 1 && args[0].Value is string pattern)
-                        parts["Pattern"] = Literal(pattern);
+                        Set("Pattern", Literal(pattern));
                     break;
                 case Ns + "EmailAddressAttribute":
                     format = "Email";
@@ -85,24 +93,24 @@ internal static class ConstraintReader
                     format = "CreditCardNumber";
                     break;
                 case Ns + "Base64StringAttribute":
-                    parts["Base64"] = "true";
+                    Set("Base64", "true");
                     break;
                 case Ns + "RequiredAttribute":
                     required = true;
-                    parts["Required"] = "true";
+                    Set("Required", "true");
                     break;
                 case Ns + "AllowedValuesAttribute":
-                    parts["AllowedValues"] = Values(args);
+                    Set("AllowedValues", Values(args));
                     break;
                 case Ns + "DeniedValuesAttribute":
-                    parts["DeniedValues"] = Values(args);
+                    Set("DeniedValues", Values(args));
                     break;
             }
         }
 
         if (format is not null)
-            parts["Format"] = "global::Phoney.Generation.ConventionKind." + format;
-        var initializer = parts.Count == 0 ? null : string.Join(", ", parts.Select(p => $"{p.Key} = {p.Value}"));
+            Set("Format", "global::Phoney.Generation.ConventionKind." + format);
+        var initializer = parts.Count == 0 ? null : string.Join(", ", order.Select(key => $"{key} = {parts[key]}"));
         var definesValue = format is not null || parts.ContainsKey("Pattern") || parts.ContainsKey("RangeMin") || parts.ContainsKey("AllowedValues") || parts.ContainsKey("Base64");
         return new Result(initializer, format, required, definesValue);
     }

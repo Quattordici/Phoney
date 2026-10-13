@@ -75,7 +75,8 @@ public static class PhoneyEntityTypeBuilderExtensions
         return unchecked((long)hash);
     }
 
-    /// <summary>Adjusts generated entities to what <c>HasData</c> and the database accept.</summary>
+    /// <summary>Adjusts generated entities to what <c>HasData</c> and the database accept; reads the property types of the EF model with reflection.</summary>
+    [RequiresUnreferencedCode(ReflectionMessage)]
     private sealed class Seeder<T>(IMutableEntityType entityType, FakeModel<T> model, List<T> items, long seed)
     {
         private readonly Dictionary<string, int> _members = model.Members.Select((m, i) => (m.Name, i)).ToDictionary(x => x.Name, x => x.i, StringComparer.Ordinal);

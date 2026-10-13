@@ -24,6 +24,7 @@
     <Project Path="tests/Phoney.TUnit.Tests/Phoney.TUnit.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/Phoney.DevAnalyzers/Phoney.DevAnalyzers.csproj" />
     <Project Path="tools/Phoney.DataCompiler/Phoney.DataCompiler.csproj" />
   </Folder>
 </Solution>

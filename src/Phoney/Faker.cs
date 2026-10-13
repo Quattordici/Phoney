@@ -68,7 +68,9 @@ public sealed partial class Faker : IFaker
     /// </summary>
     public DateTimeOffset ReferenceDate
     {
+#pragma warning disable RS0030 // The system clock is the documented fallback of an unseeded faker without a TimeProvider.
         get => _referenceDate ?? TimeProvider?.GetUtcNow() ?? (_seeded ? DefaultSeededReferenceDate : DateTimeOffset.UtcNow);
+#pragma warning restore RS0030
         set => _referenceDate = value;
     }
 

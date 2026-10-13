@@ -3,6 +3,9 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <RootNamespace>Phoney.TUnit</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Not IsAotCompatible ([FakeData] reads test parameters with reflection by design), but the analyzers still flag reflection that is added unannounced. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
     <IsPackable>true</IsPackable>
     <PackageId>Phoney.TUnit</PackageId>
     <Description>Phoney fake data for TUnit tests: [FakeData] fills test method parameters, constructor parameters and properties with realistic, reproducible values that agree with each other.</Description>

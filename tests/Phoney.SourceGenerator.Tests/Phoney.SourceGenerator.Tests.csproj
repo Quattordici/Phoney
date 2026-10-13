@@ -34,5 +34,6 @@
     <ProjectReference Include="../../src/Phoney/Phoney.csproj" />
     <ProjectReference Include="../../src/Phoney.SourceGenerator/Phoney.SourceGenerator.csproj" />
     <ProjectReference Include="../../src/Phoney.CodeFixes/Phoney.CodeFixes.csproj" />
+    <ProjectReference Include="../../tools/Phoney.DevAnalyzers/Phoney.DevAnalyzers.csproj" />
   </ItemGroup>
 </Project>

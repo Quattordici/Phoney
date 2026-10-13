@@ -240,6 +240,24 @@ dotnet_naming_rule.parameters_and_locals_camel_case.style = camel_case
 dotnet_naming_rule.parameters_and_locals_camel_case.severity = suggestion
 
 # ---------------------------------------------------------------------------
+# Library code: performance rules, and culture rules because generated values must not depend on the machine
+# ---------------------------------------------------------------------------
+[src/**.cs]
+dotnet_analyzer_diagnostic.category-Performance.severity = warning
+# Public instance members stay instance members (Fake.Conventions.Add(...) is called on an instance), and public arrays/structs are API decisions.
+dotnet_code_quality.CA1822.api_surface = private, internal
+dotnet_diagnostic.CA1819.severity = none
+dotnet_diagnostic.CA1815.severity = none
+dotnet_diagnostic.CA2263.severity = warning
+
+# Specify the culture or comparison; ordinal and invariant behavior is deliberate (CA1307 only asks for it on char overloads, which are ordinal anyway).
+dotnet_diagnostic.CA1304.severity = warning
+dotnet_diagnostic.CA1305.severity = warning
+dotnet_diagnostic.CA1309.severity = warning
+dotnet_diagnostic.CA1310.severity = warning
+dotnet_diagnostic.CA1311.severity = warning
+
+# ---------------------------------------------------------------------------
 # Tests: relax a few rules
 # ---------------------------------------------------------------------------
 [tests/**.cs]

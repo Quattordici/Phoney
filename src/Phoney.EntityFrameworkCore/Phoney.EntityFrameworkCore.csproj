@@ -3,6 +3,9 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <RootNamespace>Phoney.EntityFrameworkCore</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Not IsAotCompatible (HasFakeData is a reflection entry point (RequiresUnreferencedCode) and EF Core model building is not trim safe), but the analyzers still flag reflection that is added unannounced. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
     <IsPackable>true</IsPackable>
     <PackageId>Phoney.EntityFrameworkCore</PackageId>
     <Description>Seed EF Core models with Phoney fake data: modelBuilder.Entity&lt;T&gt;().HasFakeData(50) generates realistic, reproducible HasData seed rows with valid keys, linked foreign keys and no navigation values.</Description>

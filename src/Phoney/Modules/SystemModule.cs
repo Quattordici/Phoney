@@ -137,15 +137,18 @@ public sealed class SystemModule : FakerModule
         {
             var extensionsField = table.FieldIndex("extensions");
             var byType = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            var order = new List<string>(); // MIME types in the order of the table: seeded picks index into the lists below, and a dictionary has no defined order
             for (var row = 0; row < table.Count; row++)
             {
-                var extensions = table.Get(row, extensionsField)?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
-                byType[table.Get(row, 0)!] = extensions;
+                var type = table.Get(row, 0)!;
+                if (!byType.ContainsKey(type))
+                    order.Add(type);
+                byType[type] = table.Get(row, extensionsField)?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
             }
 
             ExtensionsByType = byType;
-            AllExtensions = [.. byType.Values.SelectMany(e => e).Distinct()];
-            Types = [.. byType.Keys.Select(k => k.Split('/')[0]).Distinct()];
+            AllExtensions = [.. order.SelectMany(type => byType[type]).Distinct()];
+            Types = [.. order.Select(type => type.Split('/')[0]).Distinct()];
         }
 
         /// <summary>Extensions per MIME type.</summary>
