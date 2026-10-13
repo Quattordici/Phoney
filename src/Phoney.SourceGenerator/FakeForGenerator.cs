@@ -25,18 +25,21 @@ public sealed class FakeForGenerator : IIncrementalGenerator
     {
         var targets = context.SyntaxProvider.ForAttributeWithMetadataName(
             AttributeMetadataName,
-            static (node, _) => node is ClassDeclarationSyntax,
+            static (node, _) => IsClassOrRecord(node),
             static (ctx, ct) => Analyze(ctx, ct));
 
         // Classes with only [FakeSubtype] attributes; classes that also have [FakeFor] are handled above.
         var subtypeOnly = context.SyntaxProvider.ForAttributeWithMetadataName(
             SubtypeAttributeMetadataName,
-            static (node, _) => node is ClassDeclarationSyntax,
+            static (node, _) => IsClassOrRecord(node),
             static (ctx, ct) => HasAttribute((INamedTypeSymbol)ctx.TargetSymbol, AttributeMetadataName) ? null : Analyze(ctx, ct));
 
         context.RegisterSourceOutput(targets, static (spc, result) => Report(spc, result));
         context.RegisterSourceOutput(subtypeOnly, static (spc, result) => Report(spc, result));
     }
+
+    /// <summary>Classes and records can carry the attributes; structs are rejected by the attributes' usage.</summary>
+    private static bool IsClassOrRecord(SyntaxNode node) => node is ClassDeclarationSyntax or RecordDeclarationSyntax;
 
     private static void Report(SourceProductionContext context, GenerationResult? result)
     {
@@ -62,7 +65,7 @@ public sealed class FakeForGenerator : IIncrementalGenerator
     private static GenerationResult Analyze(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
     {
         var symbol = (INamedTypeSymbol)context.TargetSymbol;
-        var declaration = (ClassDeclarationSyntax)context.TargetNode;
+        var declaration = (TypeDeclarationSyntax)context.TargetNode;
         var location = LocationInfo.From(declaration.Identifier.GetLocation());
         var diagnostics = new List<DiagnosticInfo>();
         var hintName = Sanitize(symbol.ToDisplayString()) + ".Phoney.g.cs";
@@ -105,6 +108,13 @@ public sealed class FakeForGenerator : IIncrementalGenerator
             if (arguments.Length == 2 && arguments[1] is INamedTypeSymbol subtype)
             {
                 var baseType = arguments[0];
+                // Registering a subtype that can't be created would make the module initializer throw when the app starts.
+                if (NotCreatable(subtype) is { } reason)
+                {
+                    diagnostics.Add(new DiagnosticInfo(Diagnostics.SubtypeNotRegistrable, location, baseType.ToDisplayString(), subtype.ToDisplayString(), reason));
+                    continue;
+                }
+
                 subtypes.Add((baseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), subtype.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
                 builder.Enqueue(subtype);
             }
@@ -114,9 +124,20 @@ public sealed class FakeForGenerator : IIncrementalGenerator
             builder.Enqueue(root);
         builder.BuildAll(cancellationToken);
 
+        // A subtype that got no model (PHONEY002: inaccessible, no public constructor) can't be generated, so it isn't registered either.
+        var generated = new HashSet<string>(builder.Models.Select(m => m.FullName));
+        subtypes.RemoveAll(s => !generated.Contains(s.Subtype));
+
         var source = Emitter.Emit(symbol, roots, builder.Models, builder.DerivedTypes, subtypes);
         return new GenerationResult(hintName, source, diagnostics);
     }
+
+    /// <summary>Why <paramref name="type"/> can't be registered as a subtype, or <see langword="null"/> when it is a concrete class or struct.</summary>
+    private static string? NotCreatable(INamedTypeSymbol type) =>
+        type.TypeKind == TypeKind.Interface ? "it is an interface"
+        : type.IsAbstract ? "it is abstract"
+        : type.TypeKind is TypeKind.Class or TypeKind.Struct ? null
+        : "only classes and structs can be created";
 
     /// <summary>Turns a display name into an identifier fragment (<c>Shop.Customer</c> → <c>Shop_Customer</c>).</summary>
     internal static string Sanitize(string name)
@@ -143,6 +164,31 @@ internal static class Diagnostics
         "PHONEY004", "Strict generator leaves members without a value",
         "Strict generator for '{0}' has no rule, convention or annotation for: {1}. Add .With(...) or .Ignore(...) for them, or it throws when generating.",
         "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor DiscardedResult = new(
+        "PHONEY005", "Result of an immutable Phoney call is discarded",
+        "{0}",
+        "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor SeededNotDisposed = new(
+        "PHONEY006", "Seeded scope is never disposed",
+        "Fake.Seeded returns a scope that stays active until it is disposed, so everything after this call in the same async flow stays seeded. Use 'using var _ = Fake.Seeded(...);'.",
+        "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor RuleNotGenerated = new(
+        "PHONEY007", "Rule can't be applied",
+        "{0}",
+        "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor RuleReplaced = new(
+        "PHONEY008", "Rule is replaced by a later rule",
+        "This rule replaces the earlier rule for '{0}' in the same chain, which has no effect. Remove one of them.",
+        "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor SubtypeNotRegistrable = new(
+        "PHONEY009", "Subtype cannot be registered",
+        "[FakeSubtype<{0}, {1}>] can't register '{1}': {2}. Use a concrete class or struct; the registration is left out.",
+        "Phoney", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor GenericContainer = new(
         "PHONEY003", "Generic classes are not supported",

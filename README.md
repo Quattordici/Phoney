@@ -342,7 +342,7 @@ var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer
 
 The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
 
-Subtypes of interfaces and abstract classes need models too: types listed with `[JsonDerivedType]` on the base type get them automatically, and `[FakeSubtype<IShape, Circle>]` on the same class generates a model for `Circle` and registers it as a subtype app-wide (see [Interfaces and subtypes](#interfaces-and-subtypes)). NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
+`[FakeFor]` and `[FakeSubtype]` go on a partial class or record. Subtypes of interfaces and abstract classes need models too: types listed with `[JsonDerivedType]` on the base type get them automatically, and `[FakeSubtype<IShape, Circle>]` on the same class generates a model for `Circle` and registers it as a subtype app-wide (see [Interfaces and subtypes](#interfaces-and-subtypes)). NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
 
 The package also reports these diagnostics:
 
@@ -352,6 +352,11 @@ The package also reports these diagnostics:
 | PHONEY002 | Warning | a type can't be generated (abstract, no public constructor, inaccessible); its members stay default |
 | PHONEY003 | Error | `[FakeFor]` is inside a generic type |
 | PHONEY004 | Warning | a `.Strict()` generator has scalar members without a rule, convention or annotation |
+| PHONEY005 | Warning | the result of a generator method is discarded (`gen.With(...);`: generators are immutable), or of `Populate` on a struct (it returns the populated copy) |
+| PHONEY006 | Warning | `Fake.Seeded(...)` is never disposed, so everything after it stays seeded; use `using var _ = Fake.Seeded(1);` |
+| PHONEY007 | Warning | a rule would throw when the generator is first used: the member isn't a public settable member or constructor parameter, the selector isn't `x => x.Member`, or an object-dependent rule targets a constructor parameter |
+| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain |
+| PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
 
 ## Dependency injection and ASP.NET Core
 

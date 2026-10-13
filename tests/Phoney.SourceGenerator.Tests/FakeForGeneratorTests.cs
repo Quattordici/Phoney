@@ -115,4 +115,68 @@ public sealed class FakeForGeneratorTests
             """);
         diagnostics.ShouldContain(d => d.Id == "PHONEY003");
     }
+
+    [Test]
+    public void Records_can_carry_FakeFor_and_FakeSubtype(CancellationToken cancellationToken)
+    {
+        var (driver, output, diagnostics) = GeneratorHarness.Run("""
+            using Phoney.Generation;
+            public interface IShape;
+            public sealed class Circle : IShape { public double Radius { get; set; } }
+            public class Thing { public string Name { get; set; } = ""; }
+            [FakeFor<Thing>, FakeSubtype<IShape, Circle>] public partial record TestData;
+            """);
+
+        diagnostics.ShouldBeEmpty();
+        output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        source.ShouldContain("partial record TestData");
+        source.ShouldContain("Generator<global::Thing> Thing =>");
+        source.ShouldContain("Fake.Subtypes.Add<global::IShape, global::Circle>();");
+    }
+
+    [Test]
+    public void Non_partial_records_are_reported()
+    {
+        var (_, _, diagnostics) = GeneratorHarness.Run("""
+            using Phoney.Generation;
+            public class Thing { public string Name { get; set; } = ""; }
+            [FakeFor<Thing>] public record Data;
+            """);
+        diagnostics.ShouldContain(d => d.Id == "PHONEY001");
+    }
+
+    [Test]
+    [Arguments("public abstract class Square : IShape { }")]
+    [Arguments("public interface ISquare : IShape { }")]
+    public void Subtypes_that_cannot_be_created_are_reported_and_not_registered(string subtype)
+    {
+        var (driver, _, diagnostics) = GeneratorHarness.Run($$"""
+            using Phoney.Generation;
+            public interface IShape;
+            {{subtype}}
+            [FakeSubtype<IShape, {{(subtype.Contains("interface") ? "ISquare" : "Square")}}>] public static partial class Shapes;
+            """);
+
+        diagnostics.ShouldContain(d => d.Id == "PHONEY009");
+        // Registering it would make the module initializer throw when the app starts.
+        driver.GetRunResult().GeneratedTrees.ShouldAllBe(t => !t.ToString().Contains("Subtypes.Add"));
+    }
+
+    [Test]
+    public void Subtypes_without_a_model_are_not_registered()
+    {
+        var (driver, _, diagnostics) = GeneratorHarness.Run("""
+            using Phoney.Generation;
+            public interface IShape;
+            public sealed class Square : IShape { internal Square() { } }
+            public sealed class Circle : IShape { public double Radius { get; set; } }
+            [FakeSubtype<IShape, Square>, FakeSubtype<IShape, Circle>] public static partial class Shapes;
+            """);
+
+        diagnostics.ShouldContain(d => d.Id == "PHONEY002");
+        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        source.ShouldContain("Subtypes.Add<global::IShape, global::Circle>();");
+        source.ShouldNotContain("global::Square");
+    }
 }
