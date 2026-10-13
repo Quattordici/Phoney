@@ -19,6 +19,8 @@ public sealed class Member
     public Dictionary<string, int> Scores { get; set; } = [];
     public string[] Tags { get; set; } = [];
     public byte[] Avatar { get; set; } = [];
+    public HashSet<string> Roles { get; set; } = [];
+    public ISet<int> Levels { get; set; } = new HashSet<int>();
 }
 
 public sealed record MemberAddress(string Street, string City, string ZipCode);
@@ -26,6 +28,11 @@ public sealed record MemberAddress(string Street, string City, string ZipCode);
 public sealed record Membership(string CompanyName, DateTime StartDate)
 {
     public Member? Owner { get; init; }
+}
+
+public sealed class NotGenerated
+{
+    public string Name { get; set; } = "";
 }
 
 public struct Coordinates
@@ -55,6 +62,30 @@ public sealed class SourceGeneratedTests
         member.Memberships.ShouldAllBe(m => m.Owner == null); // cycle back to Member stops
         member.Scores.ShouldNotBeEmpty();
         member.Avatar.Length.ShouldBe(16);
+        member.Roles.ShouldNotBeEmpty();
+        member.Levels.ShouldNotBeEmpty();
+    }
+
+    [Test]
+    public void Fake_Generated_uses_the_source_generated_model_and_the_seeded_facade()
+    {
+        Member viaGenerated;
+        Member viaFor;
+        using (Fake.Seeded(5))
+            viaGenerated = Fake.Generated<Member>().ReferenceDate(Reference).Generate();
+        using (Fake.Seeded(5))
+            viaFor = Fake.For<Member>().ReferenceDate(Reference).Generate();
+        viaGenerated.Email.ShouldBe(viaFor.Email);
+        viaGenerated.Username.ShouldBe(viaFor.Username);
+
+        Fake.Generated<Member>().Seed(3).Generate().Email.ShouldBe(TestFakes.Member.Seed(3).Generate().Email);
+    }
+
+    [Test]
+    public void Fake_Generated_explains_how_to_fix_a_type_without_a_generated_model()
+    {
+        var exception = Should.Throw<InvalidOperationException>(() => Fake.Generated<NotGenerated>());
+        exception.Message.ShouldContain("[FakeFor<NotGenerated>]");
     }
 
     [Test]
@@ -77,7 +108,8 @@ public sealed class SourceGeneratedTests
         static string Describe(Member m) =>
             $"{m.Id}|{m.FirstName}|{m.LastName}|{m.Email}|{m.Gender}|{m.BirthDate}|{m.Balance}|{m.Nickname}|{m.Username}|" +
             $"{m.Address.Street}|{m.Address.City}|{string.Join(",", m.Memberships.Select(x => x.CompanyName + x.StartDate.ToString("O")))}|" +
-            $"{string.Join(",", m.Scores.Select(x => x.Key + "=" + x.Value))}|{string.Join(",", m.Tags)}|{Convert.ToHexString(m.Avatar)}";
+            $"{string.Join(",", m.Scores.Select(x => x.Key + "=" + x.Value))}|{string.Join(",", m.Tags)}|{Convert.ToHexString(m.Avatar)}|" +
+            $"{string.Join(",", m.Roles)}|{string.Join(",", m.Levels)}";
     }
 
     [Test]

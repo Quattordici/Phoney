@@ -21,6 +21,17 @@ public sealed class RandomizerTests
     }
 
     [Test]
+    public void Enum_picks_a_value_without_allocating()
+    {
+        var random = new Randomizer(1);
+        random.Enum<DayOfWeek>(); // warm up the per-enum cache
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 1000; i++)
+            random.Enum<DayOfWeek>();
+        (GC.GetAllocatedBytesForCurrentThread() - before).ShouldBeLessThan(1024);
+    }
+
+    [Test]
     public void Reseed_restarts_the_sequence()
     {
         var random = new Randomizer(7);

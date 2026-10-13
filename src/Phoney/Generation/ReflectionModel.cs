@@ -207,7 +207,8 @@ internal sealed class ReflectionTypeModel : IFakeModel
         if (ScalarAdapters.TryGet(type, out var adapter))
             return s => adapter(s, convention, constraints);
 
-        // Collections: elements use the singular member name for conventions ("Emails" → email addresses).
+        // Collections: elements use the singular member name for conventions ("Emails" → email addresses). They are built by
+        // the typed FakeScope helpers the generated models call, so both models share one algorithm and nothing is reflected per element.
         var element = ElementType(type, out var key);
         if (element is not null)
         {
@@ -216,47 +217,27 @@ internal sealed class ReflectionTypeModel : IFakeModel
             if (key is not null)
             {
                 var keyProducer = Producer(key, singular + "Key", ConventionKind.None, false);
-                var dictionaryType = typeof(Dictionary<,>).MakeGenericType(key, element);
-                return s => FillDictionary(s, (IDictionary)Activator.CreateInstance(dictionaryType)!, keyProducer, elementProducer, constraints);
+                return ReflectionCollections.DictionaryOf(key, element, keyProducer, elementProducer, constraints);
             }
 
             if (type.IsArray)
-            {
-                return s =>
-                {
-                    var count = s.CollectionCount(constraints);
-                    var array = System.Array.CreateInstance(element, count);
-                    for (var i = 0; i < count; i++)
-                        array.SetValue(elementProducer(s), i);
-                    return array;
-                };
-            }
-
+                return ReflectionCollections.Of(element).Array(elementProducer, constraints);
             if (IsSet(type))
+                return ReflectionCollections.Of(element).Set(elementProducer, constraints);
+            if (type.IsClass && !type.IsAbstract && typeof(IList).IsAssignableFrom(type) && type != typeof(List<>).MakeGenericType(element))
             {
-                var setType = typeof(HashSet<>).MakeGenericType(element);
-                var add = setType.GetMethod("Add")!;
-                var countProperty = setType.GetProperty("Count")!;
+                // A custom list class: created as itself.
                 return s =>
                 {
-                    // Same as FakeScope.Set: retry duplicates (up to 10x) so the set reaches the requested size.
-                    var set = Activator.CreateInstance(setType)!;
+                    var list = (IList)Activator.CreateInstance(type)!;
                     var count = s.CollectionCount(constraints);
-                    for (var i = 0; i < count * 10 && (int)countProperty.GetValue(set)! < count; i++)
-                        add.Invoke(set, [elementProducer(s)]);
-                    return set;
+                    for (var i = 0; i < count; i++)
+                        list.Add(elementProducer(s));
+                    return list;
                 };
             }
 
-            var listType = type.IsClass && !type.IsAbstract && typeof(IList).IsAssignableFrom(type) ? type : typeof(List<>).MakeGenericType(element);
-            return s =>
-            {
-                var list = (IList)Activator.CreateInstance(listType)!;
-                var count = s.CollectionCount(constraints);
-                for (var i = 0; i < count; i++)
-                    list.Add(elementProducer(s));
-                return list;
-            };
+            return ReflectionCollections.Of(element).List(elementProducer, constraints);
         }
 
         // Framework types are not populated recursively, nor are concrete generic types; interfaces and abstract classes
@@ -265,20 +246,6 @@ internal sealed class ReflectionTypeModel : IFakeModel
             return static _ => null;
 
         return s => s.NestedObject(type);
-    }
-
-    /// <summary>Adds up to the collection size of distinct keys to <paramref name="dictionary"/>.</summary>
-    private static object FillDictionary(FakeScope s, IDictionary dictionary, Func<FakeScope, object?> key, Func<FakeScope, object?> value, MemberConstraints? constraints)
-    {
-        var count = s.CollectionCount(constraints);
-        for (var i = 0; i < count * 10 && dictionary.Count < count; i++)
-        {
-            var k = key(s);
-            if (k is not null && !dictionary.Contains(k))
-                dictionary.Add(k, value(s));
-        }
-
-        return dictionary;
     }
 
     /// <summary>Element type of arrays and generic collections; <paramref name="key"/> is set for dictionaries.</summary>

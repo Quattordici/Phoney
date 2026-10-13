@@ -434,7 +434,7 @@ public static class ConventionValues
     private static class EnumCache<TEnum>
         where TEnum : struct, Enum
     {
-        public static readonly TEnum[] Values = global::System.Enum.GetValues<TEnum>();
+        public static readonly TEnum[] Values = EnumValues<TEnum>.All;
         public static readonly TEnum? Female = Find("Female");
         public static readonly TEnum? Male = Find("Male");
         public static readonly bool IsSexEnum = IsSexEnumName(typeof(TEnum).Name);

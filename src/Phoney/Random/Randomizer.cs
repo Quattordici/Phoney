@@ -136,7 +136,7 @@ public sealed class Randomizer
     }
 
     /// <summary>Returns a random value of the enum <typeparamref name="TEnum"/>.</summary>
-    public TEnum Enum<TEnum>() where TEnum : struct, Enum => Element<TEnum>(System.Enum.GetValues<TEnum>());
+    public TEnum Enum<TEnum>() where TEnum : struct, Enum => Element<TEnum>(EnumValues<TEnum>.All);
 
     /// <summary>Returns <paramref name="count"/> distinct random elements of <paramref name="items"/> in random order.</summary>
     public T[] Elements<T>(IReadOnlyList<T> items, int count)

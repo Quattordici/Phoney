@@ -68,6 +68,42 @@ public class GenerationBenchmarks
     public Customer[] GeneratedParallel() => _generated.GenerateParallel(Count);
 }
 
+/// <summary>Collections of every kind through the reflection model (sets, lists, arrays, dictionaries) against the generated model.</summary>
+[MemoryDiagnoser]
+public class CollectionBenchmarks
+{
+    private Generator<Basket> _reflection = null!;
+    private Generator<Basket> _generated = null!;
+
+    [Params(1_000)]
+    public int Count { get; set; }
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        _reflection = new Generator<Basket>(new ReflectionModel<Basket>()).Seed(1).CollectionSize(5, 10);
+        _generated = BenchmarkFakes.Basket.Seed(1).CollectionSize(5, 10);
+        _reflection.Generate(10);
+        _generated.Generate(10);
+    }
+
+    [Benchmark(Baseline = true, Description = "Collections, reflection model")]
+    public List<Basket> Reflection() => _reflection.Generate(Count);
+
+    [Benchmark(Description = "Collections, source-generated model")]
+    public List<Basket> Generated() => _generated.Generate(Count);
+}
+
+/// <summary>Picking a random enum value.</summary>
+[MemoryDiagnoser]
+public class EnumBenchmarks
+{
+    private readonly Randomizer _random = new(1);
+
+    [Benchmark(Description = "Randomizer.Enum")]
+    public DayOfWeek Enum() => _random.Enum<DayOfWeek>();
+}
+
 /// <summary>Cost of loading a locale's embedded data (done once per locale per process).</summary>
 [MemoryDiagnoser]
 public class LocaleLoadBenchmarks
@@ -95,5 +131,13 @@ public sealed record Address(string Street, string City, string ZipCode, string 
 
 public sealed record Order(Guid Id, decimal Total, DateTime CreatedAt);
 
-[FakeFor<Customer>]
+public sealed class Basket
+{
+    public List<string> Items { get; set; } = [];
+    public HashSet<string> Tags { get; set; } = [];
+    public string[] Codes { get; set; } = [];
+    public Dictionary<string, int> Quantities { get; set; } = [];
+}
+
+[FakeFor<Customer>, FakeFor<Basket>]
 public static partial class BenchmarkFakes;
