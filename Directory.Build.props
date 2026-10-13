@@ -18,7 +18,12 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageIcon>phoney-icon-128.png</PackageIcon>
   </PropertyGroup>
+  <!-- Items are evaluated after all properties, so IsPackable here already sees the value set in the project file. -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)images/phoney-icon-128.png" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>

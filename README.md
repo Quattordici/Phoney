@@ -1,4 +1,5 @@
-# Phoney
+<!-- An absolute URL so the logo also shows on nuget.org, which renders this README but not relative images. -->
+# [![Phoney](https://raw.githubusercontent.com/Quattordici/Phoney/main/images/phoney-logo.png)](https://github.com/Quattordici/Phoney)
 
 [![NuGet](https://img.shields.io/nuget/v/Phoney.svg?label=NuGet)](https://www.nuget.org/packages/Phoney)
 [![NuGet prerelease](https://img.shields.io/nuget/vpre/Phoney.svg?label=NuGet%20prerelease)](https://www.nuget.org/packages/Phoney)
