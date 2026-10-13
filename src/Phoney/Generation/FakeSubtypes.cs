@@ -35,25 +35,25 @@ public sealed class FakeSubtypes
 
     /// <summary>Generates <typeparamref name="T1"/> for members of type <typeparamref name="TBase"/>, in addition to subtypes added before.</summary>
     public void Add<TBase, T1>()
-        where T1 : TBase => Add(typeof(TBase), [typeof(T1)]);
+        where T1 : TBase => Add<TBase>(typeof(T1));
 
     /// <summary>Generates one of the subtypes for members of type <typeparamref name="TBase"/>, in addition to subtypes added before.</summary>
     public void Add<TBase, T1, T2>()
         where T1 : TBase
-        where T2 : TBase => Add(typeof(TBase), [typeof(T1), typeof(T2)]);
+        where T2 : TBase => Add<TBase>(typeof(T1), typeof(T2));
 
     /// <summary>Generates one of the subtypes for members of type <typeparamref name="TBase"/>, in addition to subtypes added before.</summary>
     public void Add<TBase, T1, T2, T3>()
         where T1 : TBase
         where T2 : TBase
-        where T3 : TBase => Add(typeof(TBase), [typeof(T1), typeof(T2), typeof(T3)]);
+        where T3 : TBase => Add<TBase>(typeof(T1), typeof(T2), typeof(T3));
 
     /// <summary>Generates one of the subtypes for members of type <typeparamref name="TBase"/>, in addition to subtypes added before.</summary>
     public void Add<TBase, T1, T2, T3, T4>()
         where T1 : TBase
         where T2 : TBase
         where T3 : TBase
-        where T4 : TBase => Add(typeof(TBase), [typeof(T1), typeof(T2), typeof(T3), typeof(T4)]);
+        where T4 : TBase => Add<TBase>(typeof(T1), typeof(T2), typeof(T3), typeof(T4));
 
     /// <summary>Generates one of <paramref name="subtypes"/> for members of type <typeparamref name="TBase"/>, in addition to subtypes added before.</summary>
     /// <exception cref="ArgumentException">A subtype is abstract, an interface, open generic or not assignable to <typeparamref name="TBase"/>.</exception>

@@ -2,6 +2,7 @@
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.3.4" />
     <!-- Add-on packages depend on the lowest version that supports every target, so apps can use any newer one. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
@@ -22,6 +23,7 @@
   <ItemGroup>
     <!-- Kept at the Roslyn version shipped with the .NET 8 SDK so the generator runs on every supported toolchain. -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <!-- TUnit.Core is the dependency of the Phoney.TUnit package; TUnit is the test framework of every test project. -->
     <PackageVersion Include="TUnit" Version="1.72.16" />

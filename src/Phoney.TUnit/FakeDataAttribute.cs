@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Phoney.Generation;
@@ -88,6 +89,8 @@ public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
     }
 
     /// <summary>Configures the generator from the attribute's properties.</summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "[FakeData] reads the parameters of test methods with reflection by design; TUnit test projects are not trimmed.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "[FakeData] reads the parameters of test methods with reflection by design; TUnit test projects are not published with Native AOT.")]
     internal ArgumentGenerator CreateGenerator(IReadOnlyList<FakeArgument> arguments, MethodMetadata? test)
     {
         var generator = new ArgumentGenerator(arguments)

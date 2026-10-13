@@ -19,7 +19,9 @@ public sealed class Randomizer
     private ulong _s0, _s1, _s2, _s3;
 
     /// <summary>Creates a randomizer with a random seed.</summary>
+#pragma warning disable RS0030 // An unseeded randomizer is random by definition; seeded ones never reach this.
     public Randomizer() : this(System.Random.Shared.NextInt64())
+#pragma warning restore RS0030
     {
     }
 

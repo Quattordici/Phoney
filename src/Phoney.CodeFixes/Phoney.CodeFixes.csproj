@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Code fixes are loaded by the IDE next to the analyzers, which requires netstandard2.0. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>Phoney.CodeFixes</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The IDE provides the workspace assemblies; only the analyzer package itself is shipped. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

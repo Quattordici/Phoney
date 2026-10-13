@@ -53,8 +53,11 @@ internal static class NordicSchemes
         var yy = Number(digits, digits.Length - 10, 2);
         return digits.Length == 12
             ? IsDate(Number(digits, 0, 4), month, day)
-            : new[] { 1900, 2000, 1800 }.Any(century => IsDate(century + yy, month, day));
+            : SwedishCenturies.Any(century => IsDate(century + yy, month, day));
     }
+
+    /// <summary>Centuries a 10-digit personnummer can belong to, most likely first.</summary>
+    private static readonly int[] SwedishCenturies = [1900, 2000, 1800];
 
     private static readonly char[] SwedishOrganisationGroups = ['5', '5', '5', '5', '6', '7', '8', '9', '2'];
 

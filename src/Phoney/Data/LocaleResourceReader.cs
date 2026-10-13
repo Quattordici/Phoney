@@ -63,7 +63,7 @@ internal static class LocaleResourceReader
 
     // Empty lists and tables are read as missing data (null) rather than as entries.
     /// <summary>Reads a list of string indices.</summary>
-    private static Entry? ReadStrings(BinaryReader r, string[] strings)
+    private static StringsEntry? ReadStrings(BinaryReader r, string[] strings)
     {
         var values = new string[r.Read7BitEncodedInt()];
         for (var i = 0; i < values.Length; i++)
@@ -72,7 +72,7 @@ internal static class LocaleResourceReader
     }
 
     /// <summary>Reads (string index, weight) pairs.</summary>
-    private static Entry? ReadWeighted(BinaryReader r, string[] strings)
+    private static WeightedEntry? ReadWeighted(BinaryReader r, string[] strings)
     {
         var count = r.Read7BitEncodedInt();
         var values = new string[count];
@@ -87,7 +87,7 @@ internal static class LocaleResourceReader
     }
 
     /// <summary>Reads a list of 32-bit integers.</summary>
-    private static Entry? ReadInts(BinaryReader r)
+    private static IntsEntry? ReadInts(BinaryReader r)
     {
         var values = new int[r.Read7BitEncodedInt()];
         for (var i = 0; i < values.Length; i++)
@@ -96,7 +96,7 @@ internal static class LocaleResourceReader
     }
 
     /// <summary>Reads field names and row-major values (index + 1, 0 for missing).</summary>
-    private static Entry? ReadRecords(BinaryReader r, string[] strings)
+    private static RecordsEntry? ReadRecords(BinaryReader r, string[] strings)
     {
         var fields = new string[r.Read7BitEncodedInt()];
         for (var i = 0; i < fields.Length; i++)

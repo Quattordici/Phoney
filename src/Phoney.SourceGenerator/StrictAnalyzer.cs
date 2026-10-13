@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 using Phoney.Generation;
@@ -23,7 +22,6 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class StrictAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly HashSet<string> Terminals = new(StringComparer.Ordinal) { "Generate", "Stream", "GenerateParallel", "Populate" };
     private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique" };
 
     /// <inheritdoc />
@@ -60,7 +58,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             current = outer;
         }
 
-        if (later.Count == 0 || !Terminals.Contains(later[later.Count - 1].TargetMethod.Name) || later.Any(i => i.TargetMethod.Name == "Strict"))
+        if (later.Count == 0 || !AnalyzerSupport.Terminals.Contains(later[later.Count - 1].TargetMethod.Name) || later.Any(i => i.TargetMethod.Name == "Strict"))
             return;
 
         // Earlier calls (receivers), down to where the generator was started.
@@ -72,7 +70,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             receiver = inner.Instance;
         }
 
-        if (!IsStart(receiver, fake, fakeFor))
+        if (!AnalyzerSupport.IsStart(receiver, fake, fakeFor))
             return;
 
         var type = ((INamedTypeSymbol)strict.TargetMethod.ContainingType).TypeArguments[0] as INamedTypeSymbol;
@@ -120,14 +118,11 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         if (uncovered.Count == 0)
             return;
 
-        var location = strict.Syntax is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access }
-            ? access.Name.GetLocation()
-            : strict.Syntax.GetLocation();
-        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.StrictUncovered, location, type.Name, string.Join(", ", uncovered)));
+        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.StrictUncovered, AnalyzerSupport.NameLocation(strict), type.Name, string.Join(", ", uncovered)));
     }
 
     private static bool IsGeneratorMethod(IMethodSymbol method, INamedTypeSymbol generator) =>
-        SymbolEqualityComparer.Default.Equals(method.ContainingType?.OriginalDefinition, generator);
+        AnalyzerSupport.IsDefinition(method.ContainingType, generator);
 
     /// <summary>Whether a <c>bool</c> parameter is left at its default (<see langword="true"/>) or passed a constant <see langword="true"/>.</summary>
     private static bool IsTrue(ImmutableArray<IArgumentOperation> arguments)
@@ -136,35 +131,9 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         return argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue || argument.Value.ConstantValue is { HasValue: true, Value: true };
     }
 
-    /// <summary>Whether the chain starts a new generator, so no rules can have been added elsewhere.</summary>
-    private static bool IsStart(IOperation? receiver, INamedTypeSymbol? fake, INamedTypeSymbol? fakeFor) => receiver switch
-    {
-        IInvocationOperation { TargetMethod.Name: "For" } call => SymbolEqualityComparer.Default.Equals(call.TargetMethod.ContainingType, fake),
-        IObjectCreationOperation => true,
-        IPropertyReferenceOperation { Property.IsStatic: true } property =>
-            fakeFor is not null && property.Property.ContainingType.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass?.OriginalDefinition, fakeFor)),
-        _ => false,
-    };
-
     /// <summary>The member named by the first argument, <c>x =&gt; x.Name</c> (also through a cast), or <see langword="null"/>.</summary>
-    private static string? SelectedMember(IInvocationOperation call)
-    {
-        var argument = call.Arguments.FirstOrDefault(a => a.Parameter?.Ordinal == 0);
-        if (argument?.Syntax is not ArgumentSyntax { Expression: LambdaExpressionSyntax lambda })
-            return null;
-        var body = lambda.Body as ExpressionSyntax;
-        while (body is CastExpressionSyntax or ParenthesizedExpressionSyntax)
-            body = body is CastExpressionSyntax cast ? cast.Expression : ((ParenthesizedExpressionSyntax)body).Expression;
-        var parameter = lambda switch
-        {
-            SimpleLambdaExpressionSyntax simple => simple.Parameter.Identifier.ValueText,
-            ParenthesizedLambdaExpressionSyntax { ParameterList.Parameters.Count: 1 } parenthesized => parenthesized.ParameterList.Parameters[0].Identifier.ValueText,
-            _ => null,
-        };
-        return body is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax target } access && target.Identifier.ValueText == parameter
-            ? access.Name.Identifier.ValueText
-            : null;
-    }
+    private static string? SelectedMember(IInvocationOperation call) =>
+        RuleSelector.Read(call) is { Kind: SelectorKind.Member, Name: { } name } ? name : null;
 
     /// <summary>Whether a <c>WithConvention&lt;TValue&gt;</c> applies to a member type (also its nullable form), like <c>CustomConvention.Matches</c>.</summary>
     private static bool Matches(ITypeSymbol conventionType, ITypeSymbol? memberType)

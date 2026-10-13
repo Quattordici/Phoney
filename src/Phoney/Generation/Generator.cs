@@ -322,8 +322,9 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>A new generator with <paramref name="config"/> and fresh state.</summary>
     private Generator<T> Derive(Config config) => new(_model, config);
 
+    /// <summary>Adds (or replaces) the rule of a member; the rule remembers when it was added, because dictionaries don't keep that order.</summary>
     private Generator<T> AddRule<TValue>(Expression<Func<T, TValue>> member, Rule rule) =>
-        Derive(_config with { Rules = _config.Rules.SetItem(MemberName(member), rule) });
+        Derive(_config with { Rules = _config.Rules.SetItem(MemberName(member), rule with { Added = _config.RuleCount }), RuleCount = _config.RuleCount + 1 });
 
     /// <summary>Prepares a run: compiled rules, a faker for the locale and the base seed. Nested generators inherit the parent's locale and reference date.</summary>
     private Run Start(long? seed = null, Faker? parentFaker = null)
@@ -350,7 +351,8 @@ public sealed class Generator<T> : INestedGenerator
         for (var i = 0; i < members.Count; i++)
             known[members[i].Name] = i;
 
-        foreach (var (name, rule) in _config.Rules)
+        // In the order the rules were added: dependent rules draw from the faker, and the first invalid rule is the one reported.
+        foreach (var (name, rule) in _config.Rules.OrderBy(r => r.Value.Added))
         {
             if (!known.TryGetValue(name, out var index))
                 throw new InvalidOperationException($"{typeof(T).Name}.{name} can't be generated: it is not a public settable member or constructor parameter.");
@@ -365,7 +367,7 @@ public sealed class Generator<T> : INestedGenerator
         }
 
         // Unique members without an explicit rule keep their convention value but still need a slot.
-        foreach (var (name, attempts) in _config.Unique)
+        foreach (var (name, attempts) in _config.Unique.OrderBy(u => u.Key, StringComparer.Ordinal))
         {
             if (!known.TryGetValue(name, out var index))
                 throw new InvalidOperationException($"{typeof(T).Name}.{name} is not a generated member.");
@@ -464,8 +466,8 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>Rules bound to member indices, plus rules that run after creation.</summary>
     private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings);
 
-    /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory.</summary>
-    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null);
+    /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added.</summary>
+    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0);
 
     /// <summary>Mutable per-instance state; derived generators start fresh.</summary>
     private sealed class State
@@ -473,7 +475,9 @@ public sealed class Generator<T> : INestedGenerator
         private long _next;
 
         /// <summary>Base seed used when no seed is configured.</summary>
+#pragma warning disable RS0030 // Base seed of an unseeded generator; a configured seed replaces it.
         public long RandomSeed { get; } = System.Random.Shared.NextInt64();
+#pragma warning restore RS0030
 
         /// <summary>Rules compiled against the model on first use.</summary>
         public Compiled? Compiled { get; set; }
@@ -489,6 +493,7 @@ public sealed class Generator<T> : INestedGenerator
         DateTimeOffset? ReferenceDate,
         TimeProvider? TimeProvider,
         ImmutableDictionary<string, Rule> Rules,
+        int RuleCount,
         ImmutableDictionary<string, int> Unique,
         ImmutableList<CustomConvention> Conventions,
         ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
@@ -500,6 +505,7 @@ public sealed class Generator<T> : INestedGenerator
         public static readonly Config Default = new(
             null, null, null, null,
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
+            0,
             ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             [],
             ImmutableDictionary<Type, ImmutableArray<Type>>.Empty,

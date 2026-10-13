@@ -55,11 +55,13 @@ internal static class KeyRegistry
     {
         if (id < DataKeys.Count)
             return DataKeys.Paths[id];
+#pragma warning disable PHONEYDEV001 // Ids are unique, so at most one path matches whatever the order.
         foreach (var (path, customId) in CustomKeys)
         {
             if (customId == id)
                 return path;
         }
+#pragma warning restore PHONEYDEV001
 
         throw new ArgumentOutOfRangeException(nameof(id));
     }

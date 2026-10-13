@@ -31,7 +31,9 @@ public sealed class ArgumentGenerator
     private readonly DateTimeOffset? _referenceDate;
     private readonly TimeProvider? _timeProvider;
     private readonly GenerationSettings _settings;
+#pragma warning disable RS0030 // Base seed of an unseeded generator; a configured seed replaces it.
     private readonly long _randomSeed = System.Random.Shared.NextInt64();
+#pragma warning restore RS0030
     private long _next;
 
     /// <summary>Creates a generator for <paramref name="arguments"/>.</summary>

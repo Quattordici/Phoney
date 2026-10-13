@@ -67,7 +67,7 @@ internal static class LocaleStore
         canonical = "";
         if (string.IsNullOrWhiteSpace(code))
             return false;
-        var locales = Sources.Values.Select(s => s.Info);
+        var locales = Sources.Values.Select(s => s.Info).OrderBy(i => i.Code, StringComparer.Ordinal);
         var normalized = code.Trim().Replace('-', '_');
 
         // 1. An existing code in any casing and separator style.
@@ -100,8 +100,11 @@ internal static class LocaleStore
             return true;
         }
 
+        // The exact code wins; codes that differ only in case (a custom "SV" next to "sv") resolve to the first in ordinal order.
         static string? FindCode(string candidate) =>
-            Sources.Keys.FirstOrDefault(k => string.Equals(k, candidate, StringComparison.OrdinalIgnoreCase));
+            Sources.ContainsKey(candidate)
+                ? candidate
+                : Sources.Keys.Where(k => string.Equals(k, candidate, StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal).FirstOrDefault();
     }
 
     /// <summary>Adds or replaces a user-defined locale and invalidates merged data.</summary>
@@ -155,7 +158,7 @@ internal static class LocaleStore
         {
             var source = Sources[code];
             chain = [source, .. source.Info.Fallback.Select(f => Sources[f])];
-            user = [.. chain.Select(c => c.User.Select(u => (u.Key, u.Value)).ToArray())];
+            user = [.. chain.Select(c => c.User.OrderBy(u => u.Key).Select(u => (u.Key, u.Value)).ToArray())];
         }
 
         var keyCount = KeyRegistry.Count;
