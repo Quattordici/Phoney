@@ -139,6 +139,11 @@ internal static class Diagnostics
         "Phoney cannot generate '{0}': {1}. Members of this type are left at their default value.",
         "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor StrictUncovered = new(
+        "PHONEY004", "Strict generator leaves members without a value",
+        "Strict generator for '{0}' has no rule, convention or annotation for: {1}. Add .With(...) or .Ignore(...) for them, or it throws when generating.",
+        "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
     public static readonly DiagnosticDescriptor GenericContainer = new(
         "PHONEY003", "Generic classes are not supported",
         "[FakeFor] cannot be used inside generic type '{0}'; declare it on a non-generic partial class",

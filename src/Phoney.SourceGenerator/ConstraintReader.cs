@@ -18,7 +18,8 @@ internal static class ConstraintReader
     /// <param name="Initializer">Object initializer body (<c>MaxLength = 10, Required = true</c>), or <see langword="null"/> when there are no supported annotations.</param>
     /// <param name="Format">Convention kind name forced by a format annotation (<c>Email</c>…), if any.</param>
     /// <param name="Required">Whether the member is <c>[Required]</c>.</param>
-    public readonly record struct Result(string? Initializer, string? Format, bool Required);
+    /// <param name="DefinesValue">Whether the annotations alone define the value (format, pattern, range, allowed values or Base64), like <c>MemberConstraints.DefinesValue</c>.</param>
+    public readonly record struct Result(string? Initializer, string? Format, bool Required, bool DefinesValue);
 
     public static Result Read(IEnumerable<AttributeData> attributes)
     {
@@ -102,7 +103,8 @@ internal static class ConstraintReader
         if (format is not null)
             parts["Format"] = "global::Phoney.Generation.ConventionKind." + format;
         var initializer = parts.Count == 0 ? null : string.Join(", ", parts.Select(p => $"{p.Key} = {p.Value}"));
-        return new Result(initializer, format, required);
+        var definesValue = format is not null || parts.ContainsKey("Pattern") || parts.ContainsKey("RangeMin") || parts.ContainsKey("AllowedValues") || parts.ContainsKey("Base64");
+        return new Result(initializer, format, required, definesValue);
     }
 
     /// <summary><c>params object?[]</c> arguments as an <c>object[]</c> expression.</summary>

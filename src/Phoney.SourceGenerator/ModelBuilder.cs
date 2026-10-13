@@ -82,6 +82,15 @@ internal sealed class MemberModel
 
     /// <summary>Name of the static field holding those constraints, or <see langword="null"/>.</summary>
     public string? ConstraintsField { get; set; }
+
+    /// <summary>Fully qualified member type without nullable annotation, for matching <c>WithConvention&lt;TValue&gt;</c>.</summary>
+    public ITypeSymbol? Type { get; set; }
+
+    /// <summary>Whether the member holds a scalar value (string, number, date…), like <c>FakeMember.IsScalar</c>.</summary>
+    public bool IsScalar { get; set; }
+
+    /// <summary>Whether data annotations alone define the value, like <c>MemberConstraints.DefinesValue</c>.</summary>
+    public bool DefinesValue { get; set; }
 }
 
 /// <summary>
@@ -114,6 +123,13 @@ internal sealed class ModelBuilder
     /// (fully qualified, sorted), registered at startup as their default subtypes.
     /// </summary>
     public SortedDictionary<string, List<string>> DerivedTypes { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The members Phoney populates on <paramref name="type"/>, as the generator and the reflection model see them, or
+    /// <see langword="null"/> when the type cannot be generated. Used by analyzers.
+    /// </summary>
+    public static List<MemberModel>? DescribeMembers(Compilation compilation, INamedTypeSymbol type) =>
+        new ModelBuilder(compilation, type, new List<DiagnosticInfo>(), LocationInfo.From(Location.None)).Build(type)?.Members;
 
     /// <summary>Schedules a type for model generation (once).</summary>
     public void Enqueue(INamedTypeSymbol type)
@@ -227,6 +243,9 @@ internal sealed class ModelBuilder
             Settable = !isConstructorParameter,
             SetterInitOnly = isInitOnly,
             SetterDeclaringType = declaringType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            Type = type,
+            IsScalar = Category(type) != TypeCategory.Other,
+            DefinesValue = constraints.DefinesValue,
             IsNested = IsNestable(type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType ? nullableType.TypeArguments[0] : type) || IsPolymorphic(type),
         };
     }
