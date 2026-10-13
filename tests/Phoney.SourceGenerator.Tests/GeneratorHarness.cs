@@ -27,6 +27,10 @@ internal static class GeneratorHarness
         return (driver, output, diagnostics);
     }
 
+    /// <summary>Analyzers run concurrently and report in no particular order; tests index into the results, so sort them by position.</summary>
+    internal static ImmutableArray<Diagnostic> InSourceOrder(IEnumerable<Diagnostic> diagnostics) =>
+        [.. diagnostics.OrderBy(d => d.Location.SourceTree?.FilePath, StringComparer.Ordinal).ThenBy(d => d.Location.SourceSpan.Start).ThenBy(d => d.Id, StringComparer.Ordinal)];
+
     /// <summary>Runs the generator, then <paramref name="analyzer"/> over the result; returns the analyzer's diagnostics.</summary>
     public static async Task<ImmutableArray<Diagnostic>> Analyze(string source, DiagnosticAnalyzer analyzer, CancellationToken cancellationToken = default)
     {
@@ -34,6 +38,6 @@ internal static class GeneratorHarness
         var errors = output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         if (errors.Count > 0)
             throw new InvalidOperationException("Test source does not compile: " + string.Join(Environment.NewLine, errors));
-        return await output.WithAnalyzers([analyzer]).GetAnalyzerDiagnosticsAsync(cancellationToken);
+        return InSourceOrder(await output.WithAnalyzers([analyzer]).GetAnalyzerDiagnosticsAsync(cancellationToken));
     }
 }

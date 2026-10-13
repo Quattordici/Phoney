@@ -43,7 +43,7 @@ internal static class CodeFixHarness
     {
         var compilation = (await project.GetCompilationAsync(cancellationToken))!;
         var all = await compilation.WithAnalyzers([analyzer]).GetAnalyzerDiagnosticsAsync(cancellationToken);
-        return [.. all.Where(d => d.Id == id)];
+        return GeneratorHarness.InSourceOrder(all.Where(d => d.Id == id));
     }
 
     /// <summary>The fixes <paramref name="provider"/> offers for <paramref name="diagnostic"/>, each applied to its own copy of the project.</summary>
