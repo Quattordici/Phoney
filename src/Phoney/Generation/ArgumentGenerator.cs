@@ -29,13 +29,14 @@ public sealed class ArgumentGenerator
     private readonly string? _locale;
     private readonly long? _seed;
     private readonly DateTimeOffset? _referenceDate;
+    private readonly TimeProvider? _timeProvider;
     private readonly GenerationSettings _settings;
     private readonly long _randomSeed = System.Random.Shared.NextInt64();
     private long _next;
 
     /// <summary>Creates a generator for <paramref name="arguments"/>.</summary>
     public ArgumentGenerator(IEnumerable<FakeArgument> arguments)
-        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], null, null, null, GenerationSettings.Default, null)
+        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], null, null, null, null, GenerationSettings.Default, null)
     {
     }
 
@@ -44,6 +45,7 @@ public sealed class ArgumentGenerator
         string? locale,
         long? seed,
         DateTimeOffset? referenceDate,
+        TimeProvider? timeProvider,
         GenerationSettings settings,
         Func<FakeScope, object?>[]? producers)
     {
@@ -51,6 +53,7 @@ public sealed class ArgumentGenerator
         _locale = locale;
         _seed = seed;
         _referenceDate = referenceDate;
+        _timeProvider = timeProvider;
         _settings = settings;
         _producers = producers ?? [.. arguments.Select(CreateProducer)];
     }
@@ -69,6 +72,10 @@ public sealed class ArgumentGenerator
 
     /// <summary>The point in time relative dates (past, recent, birthdates, ages) are computed from.</summary>
     public ArgumentGenerator ReferenceDate(DateTimeOffset referenceDate) => With(referenceDate: referenceDate);
+
+    /// <summary>Reads "now" for relative dates from <paramref name="timeProvider"/>, also when seeded; an explicit <see cref="ReferenceDate"/> takes precedence.</summary>
+    public ArgumentGenerator TimeProvider(TimeProvider timeProvider) =>
+        With(timeProvider: timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)));
 
     /// <summary>Probability (0–1) that nullable arguments (<c>int?</c>, <c>string?</c>…) are <see langword="null"/>. Default 0.</summary>
     public ArgumentGenerator NullProbability(double probability)
@@ -128,14 +135,14 @@ public sealed class ArgumentGenerator
 
     private Faker CreateFaker()
     {
-        var faker = new Faker(LocaleStore.Get(_locale ?? Fake.Locale), new Randomizer(0));
-        if ((_referenceDate ?? (_seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
+        var faker = new Faker(LocaleStore.Get(_locale ?? Fake.Locale), new Randomizer(0)) { TimeProvider = _referenceDate is null ? _timeProvider : null };
+        if (faker.TimeProvider is null && (_referenceDate ?? (_seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
             faker.ReferenceDate = date;
         return faker;
     }
 
-    private ArgumentGenerator With(string? locale = null, long? seed = null, DateTimeOffset? referenceDate = null, GenerationSettings? settings = null) =>
-        new(_arguments, locale ?? _locale, seed ?? _seed, referenceDate ?? _referenceDate, settings ?? _settings, _producers);
+    private ArgumentGenerator With(string? locale = null, long? seed = null, DateTimeOffset? referenceDate = null, TimeProvider? timeProvider = null, GenerationSettings? settings = null) =>
+        new(_arguments, locale ?? _locale, seed ?? _seed, referenceDate ?? _referenceDate, timeProvider ?? _timeProvider, settings ?? _settings, _producers);
 
     /// <summary>
     /// The value producer for one argument, chosen exactly like for an object member: a custom convention

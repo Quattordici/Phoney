@@ -153,6 +153,21 @@ Fake.Seed(42);                                // or seed the facade app-wide (ev
 
 `Generator<T>.Seed(n)` does the same for a generator. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
 
+### Controlling "now" with `TimeProvider`
+
+Relative dates can follow a .NET `TimeProvider` instead of the system clock, so they move with the clock your tests already control (for example `FakeTimeProvider` from `Microsoft.Extensions.TimeProvider.Testing`):
+
+```csharp
+var time = new FakeTimeProvider(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+var faker = new Faker("sv") { TimeProvider = time };            // faker.Date.Past() is before 2030-01-01
+var orders = Fake.For<Order>().TimeProvider(time).Generate(10);   // CreatedAt, ages, timelines follow the clock
+Fake.TimeProvider = time;                                         // the static facade and Fake.For/One/Many
+time.Advance(TimeSpan.FromDays(30));                              // read on every use, so dates move along
+```
+
+The reference date is, in order: an explicit `ReferenceDate`, the `TimeProvider`, `DefaultSeededReferenceDate` for seeded fakers and generators, and otherwise the system clock.
+
 ## Templates
 
 Templates use the same names as the API:

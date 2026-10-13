@@ -54,7 +54,7 @@ public static partial class Fake
     {
         var generator = new Generator<T>(ModelRegistry.For<T>());
         if (!IsSeeded)
-            return generator;
+            return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;
 
         // A seeded facade seeds its generators from its own sequence, so they are reproducible too.
         var faker = Faker;
@@ -81,7 +81,7 @@ public static partial class Fake
     {
         var generator = new ArgumentGenerator(arguments);
         if (!IsSeeded)
-            return generator;
+            return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;
 
         var faker = Faker;
         return generator.Seed(faker.Random.Long(long.MinValue, long.MaxValue)).ReferenceDate(faker.ReferenceDate).Locale(faker.Locale);

@@ -19,6 +19,7 @@ namespace Phoney;
 public sealed partial class Faker
 {
     private DateTimeOffset? _referenceDate;
+    private bool _seeded;
 
     /// <summary>
     /// The <see cref="ReferenceDate"/> of seeded fakers and generators that don't set one: a fixed point in time, so
@@ -30,13 +31,12 @@ public sealed partial class Faker
     /// <param name="locale">Locale code or culture name; see <see cref="Locales.All"/>.</param>
     /// <param name="seed">
     /// Seed for reproducible values; random when <see langword="null"/>. A seeded faker also fixes
-    /// <see cref="ReferenceDate"/> to <see cref="DefaultSeededReferenceDate"/> unless you set it.
+    /// <see cref="ReferenceDate"/> to <see cref="DefaultSeededReferenceDate"/> unless you set it or a <see cref="TimeProvider"/>.
     /// </param>
     public Faker(string locale = Locales.Default, long? seed = null)
         : this(LocaleStore.Get(locale), seed is { } s ? new Randomizer(s) : new Randomizer())
     {
-        if (seed is not null)
-            _referenceDate = DefaultSeededReferenceDate;
+        _seeded = seed is not null;
     }
 
     /// <summary>Creates a faker for the locale matching <paramref name="culture"/> (e.g. <c>sv-SE</c> → <c>sv</c>).</summary>
@@ -62,23 +62,30 @@ public sealed partial class Faker
     public Randomizer Random { get; }
 
     /// <summary>
-    /// The point in time that relative dates (past, future, recent, birthdates…) are computed from. Defaults to the
-    /// current time, or to <see cref="DefaultSeededReferenceDate"/> once the faker is seeded.
+    /// The point in time that relative dates (past, future, recent, birthdates…) are computed from: the value you set,
+    /// else the current time of <see cref="TimeProvider"/>, else <see cref="DefaultSeededReferenceDate"/> once the faker
+    /// is seeded, else the system clock.
     /// </summary>
     public DateTimeOffset ReferenceDate
     {
-        get => _referenceDate ?? DateTimeOffset.UtcNow;
+        get => _referenceDate ?? TimeProvider?.GetUtcNow() ?? (_seeded ? DefaultSeededReferenceDate : DateTimeOffset.UtcNow);
         set => _referenceDate = value;
     }
 
     /// <summary>
-    /// Restarts the random sequence from <paramref name="seed"/>. Unless a <see cref="ReferenceDate"/> was set, it
-    /// becomes <see cref="DefaultSeededReferenceDate"/> so dates are reproducible too.
+    /// The clock that "now" is read from when no <see cref="ReferenceDate"/> is set, e.g. a <c>FakeTimeProvider</c> in tests.
+    /// It is read on every use, so advancing it moves the dates. It takes precedence over <see cref="DefaultSeededReferenceDate"/>.
+    /// </summary>
+    public TimeProvider? TimeProvider { get; set; }
+
+    /// <summary>
+    /// Restarts the random sequence from <paramref name="seed"/>. Unless a <see cref="ReferenceDate"/> or
+    /// <see cref="TimeProvider"/> was set, dates become relative to <see cref="DefaultSeededReferenceDate"/> so they are reproducible too.
     /// </summary>
     public Faker Seed(long seed)
     {
         Random.Reseed(seed);
-        _referenceDate ??= DefaultSeededReferenceDate;
+        _seeded = true;
         return this;
     }
 

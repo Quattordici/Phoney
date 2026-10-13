@@ -20,6 +20,7 @@ public static partial class Fake
     private static readonly AsyncLocal<Faker?> s_scoped = new();
     private static string s_locale = Locales.Default;
     private static StrongBox<long>? s_seed; // a reference, so threads read it atomically
+    private static TimeProvider? s_timeProvider;
     private static int s_version;
 
     [ThreadStatic]
@@ -42,6 +43,20 @@ public static partial class Fake
     }
 
     /// <summary>
+    /// The clock relative dates of the facade and of <see cref="For{T}"/> generators are computed from, e.g. a
+    /// <c>FakeTimeProvider</c>; <see langword="null"/> (the default) uses the system clock. Changing it affects all threads.
+    /// </summary>
+    public static TimeProvider? TimeProvider
+    {
+        get => Volatile.Read(ref s_timeProvider);
+        set
+        {
+            Volatile.Write(ref s_timeProvider, value);
+            Interlocked.Increment(ref s_version);
+        }
+    }
+
+    /// <summary>
     /// The faker behind the facade: the one from an enclosing <see cref="Seeded"/> scope, otherwise the current
     /// thread's (seeded when <see cref="Seed"/> was called).
     /// </summary>
@@ -58,7 +73,7 @@ public static partial class Fake
             if (faker is null || t_version != Volatile.Read(ref s_version))
             {
                 t_version = Volatile.Read(ref s_version);
-                faker = t_faker = new Faker(s_locale, Volatile.Read(ref s_seed)?.Value);
+                faker = t_faker = new Faker(s_locale, Volatile.Read(ref s_seed)?.Value) { TimeProvider = TimeProvider };
             }
 
             return faker;
@@ -94,7 +109,7 @@ public static partial class Fake
     public static IDisposable Seeded(long seed, string? locale = null)
     {
         var previous = s_scoped.Value;
-        s_scoped.Value = new Faker(locale ?? s_locale, seed);
+        s_scoped.Value = new Faker(locale ?? s_locale, seed) { TimeProvider = TimeProvider };
         return new Scope(previous);
     }
 

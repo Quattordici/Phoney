@@ -53,6 +53,13 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>Sets the point in time relative dates are computed from (default: now, or a fixed date when seeded).</summary>
     public Generator<T> ReferenceDate(DateTimeOffset referenceDate) => Derive(_config with { ReferenceDate = referenceDate });
 
+    /// <summary>
+    /// Reads "now" for relative dates from <paramref name="timeProvider"/> (e.g. a <c>FakeTimeProvider</c>), also when
+    /// seeded. An explicit <see cref="ReferenceDate"/> takes precedence.
+    /// </summary>
+    public Generator<T> TimeProvider(TimeProvider timeProvider) =>
+        Derive(_config with { TimeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) });
+
     /// <summary>Sets a member to a fixed value.</summary>
     public Generator<T> With<TValue>(Expression<Func<T, TValue>> member, TValue value) =>
         AddRule(member, new Rule(RuleKind.Constant, value));
@@ -289,11 +296,11 @@ public sealed class Generator<T> : INestedGenerator
         var compiled = _state.Compiled ??= Compile();
         var data = parentFaker is not null && _config.Locale is null ? parentFaker.Data : LocaleStore.Get(_config.Locale ?? Fake.Locale);
         var faker = new Faker(data, new Randomizer(0));
-        // Explicit date, else the parent's (nested generators), else a fixed date for seeded generators so their
-        // relative dates don't drift with the clock; unseeded generators use the current time.
-        var referenceDate = _config.ReferenceDate ?? parentFaker?.ReferenceDate
-            ?? (_config.Seed is not null ? Faker.DefaultSeededReferenceDate : null);
-        if (referenceDate is { } date)
+        // Explicit date, else the configured clock, else the parent's date (nested generators), else a fixed date for
+        // seeded generators so their relative dates don't drift with the clock; unseeded generators use the current time.
+        if (_config.ReferenceDate is null && _config.TimeProvider is { } clock)
+            faker.TimeProvider = clock;
+        else if ((_config.ReferenceDate ?? parentFaker?.ReferenceDate ?? (_config.Seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
             faker.ReferenceDate = date;
         return new Run(this, compiled, faker, seed ?? BaseSeed);
     }
@@ -439,6 +446,7 @@ public sealed class Generator<T> : INestedGenerator
         string? Locale,
         long? Seed,
         DateTimeOffset? ReferenceDate,
+        TimeProvider? TimeProvider,
         ImmutableDictionary<string, Rule> Rules,
         ImmutableDictionary<string, int> Unique,
         ImmutableList<CustomConvention> Conventions,
@@ -448,7 +456,7 @@ public sealed class Generator<T> : INestedGenerator
         GenerationSettings Settings)
     {
         public static readonly Config Default = new(
-            null, null, null,
+            null, null, null, null,
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
             ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             [],
