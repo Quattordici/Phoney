@@ -160,7 +160,7 @@ public sealed class Generator<T> : INestedGenerator
 
     /// <summary>
     /// Applies <paramref name="factory"/> to every member of type <typeparamref name="TValue"/> whose name matches
-    /// <paramref name="nameMatches"/> and has no explicit rule, e.g. <c>.WithConvention&lt;string&gt;(n =&gt; n.EndsWith("Code"), f =&gt; f.Random.Replace("??-###"))</c>.
+    /// <paramref name="nameMatches"/> and has no explicit rule, also in nested objects (before app-wide <see cref="Fake.Conventions"/>), e.g. <c>.WithConvention&lt;string&gt;(n =&gt; n.EndsWith("Code"), f =&gt; f.Random.Replace("??-###"))</c>.
     /// </summary>
     public Generator<T> WithConvention<TValue>(Func<string, bool> nameMatches, Func<Faker, TValue> factory)
     {
@@ -397,8 +397,12 @@ public sealed class Generator<T> : INestedGenerator
             }
         }
 
-        // Subtypes apply to the whole object graph, so they travel with the settings into nested scopes.
-        var settings = _config.Settings with { Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes) };
+        // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
+        var settings = _config.Settings with
+        {
+            Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
+            Conventions = NestedConventions.For(conventions),
+        };
         return new Compiled(slots, [.. dependent], settings);
     }
 

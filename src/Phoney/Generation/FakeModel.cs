@@ -81,6 +81,9 @@ public interface IFakeModel
     /// <summary>The type the model creates.</summary>
     Type Type { get; }
 
+    /// <summary>The members, indexed as used by <see cref="FakeScope.Get{TValue}"/>.</summary>
+    IReadOnlyList<FakeMember> Members { get; }
+
     /// <summary>Creates and populates an instance.</summary>
     object? CreateObject(FakeScope scope);
 

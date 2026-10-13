@@ -310,6 +310,8 @@ Fake.Conventions.Add<string>(name => name.EndsWith("Sku"), f => f.Random.Replace
 Fake.For<Order>().WithConvention<decimal>(n => n == "Vat", f => 0.25m);                          // one generator
 ```
 
+Both apply to every object in the graph, so `Order.Lines[0].Sku` is covered as well as `Order.Sku`. A generator's own conventions come before the app-wide ones, and explicit rules (`With`, `Ignore`…) come before both.
+
 ### NodaTime
 
 The `Phoney.NodaTime` package adds NodaTime values and NodaTime members:

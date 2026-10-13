@@ -13,7 +13,8 @@ internal sealed record GenerationSettings(
     int MinCollectionSize,
     int MaxCollectionSize,
     int MaxDepth,
-    ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes)
+    ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
+    NestedConventions? Conventions = null)
 {
     public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
 }
@@ -225,7 +226,9 @@ public sealed class FakeScope
         }
 
         var model = ModelRegistry.Get(type);
-        return model?.PopulateObject(existing, new FakeScope(Faker, Settings, null, Faker.Random.Long(0, int.MaxValue), type, this), mode) ?? existing;
+        if (model is null)
+            return existing;
+        return model.PopulateObject(existing, new FakeScope(Faker, Settings, Settings.Conventions?.SlotsFor(type, model), Faker.Random.Long(0, int.MaxValue), type, this), mode);
     }
 
     /// <summary>Whether the model should set <paramref name="member"/> while creating the object.</summary>
@@ -355,7 +358,10 @@ public sealed class FakeScope
         }
 
         var model = ModelRegistry.Get(type);
-        return model?.CreateObject(new FakeScope(Faker, Settings, null, Faker.Random.Long(0, int.MaxValue), type, this));
+        if (model is null)
+            return null;
+        // Custom conventions reach nested members through slots, so both kinds of model apply them in FakeScope.Get.
+        return model.CreateObject(new FakeScope(Faker, Settings, Settings.Conventions?.SlotsFor(type, model), Faker.Random.Long(0, int.MaxValue), type, this));
     }
 
     private TValue Produce<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback) => slot.Kind switch
