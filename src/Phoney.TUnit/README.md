@@ -23,8 +23,8 @@ public class OrderTests
 - **Reproducible by default.** The seed is derived from the test's class, method and parameters, so every run and every machine gets the same values. Set `Seed = 42` for other values.
 - **Options:** `Count`, `Seed`, `Locale`, `NullProbability` (for nullable parameters) and `ReferenceDate` (ISO 8601).
 - Also works on the test class (constructor parameters) and on `required` properties.
-- Custom conventions (`Fake.Conventions.Add(...)`) and source-generated models (`[FakeFor<T>]`) apply.
-- Test data is created while TUnit discovers tests, so register custom conventions in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late:
+- Custom conventions (`Fake.Conventions.Add(...)`), subtypes (`Fake.Subtypes.Add<IShape, Circle>()`, `[JsonDerivedType]`) and source-generated models (`[FakeFor<T>]`) apply.
+- Test data is created while TUnit discovers tests, so register custom conventions and subtypes in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late:
 
   ```csharp
   public static class TestSetup

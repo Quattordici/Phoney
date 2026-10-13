@@ -6,7 +6,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     <PackageId>Phoney</PackageId>
-    <Description>Fast, easy and flexible fake data for .NET: 76 locales imported from faker.js, convention-based object population, fluent rules, deterministic seeds and a source generator for reflection-free, AOT-safe generation.</Description>
+    <Description>Fast, easy and flexible fake data for .NET: 76 locales imported from faker.js, convention-based object population with interfaces and subtypes, fluent rules, deterministic seeds, TimeProvider support, and a source generator and analyzer for reflection-free, AOT-safe generation.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

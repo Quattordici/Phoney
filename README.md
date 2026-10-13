@@ -4,17 +4,30 @@
 [![NuGet prerelease](https://img.shields.io/nuget/vpre/Phoney.svg?label=NuGet%20prerelease)](https://www.nuget.org/packages/Phoney)
 [![NuGet downloads](https://img.shields.io/nuget/dt/Phoney.svg?label=Downloads)](https://www.nuget.org/packages/Phoney)
 [![Phoney.TUnit](https://img.shields.io/nuget/vpre/Phoney.TUnit.svg?label=Phoney.TUnit)](https://www.nuget.org/packages/Phoney.TUnit)
+[![Phoney.DependencyInjection](https://img.shields.io/nuget/vpre/Phoney.DependencyInjection.svg?label=Phoney.DependencyInjection)](https://www.nuget.org/packages/Phoney.DependencyInjection)
+[![Phoney.EntityFrameworkCore](https://img.shields.io/nuget/vpre/Phoney.EntityFrameworkCore.svg?label=Phoney.EntityFrameworkCore)](https://www.nuget.org/packages/Phoney.EntityFrameworkCore)
+[![Phoney.NodaTime](https://img.shields.io/nuget/vpre/Phoney.NodaTime.svg?label=Phoney.NodaTime)](https://www.nuget.org/packages/Phoney.NodaTime)
 
 **Fast, easy and flexible fake data for .NET**, powered by the locale data of [faker.js](https://github.com/faker-js/faker).
 
 - **76 locales** imported from faker.js (`@faker-js/faker` 10.6.0), kept up to date by an automated sync pipeline.
 - **One line to a value or a fully populated object**: `Fake.Person.FullName()`, `Fake.Many<Customer>(100)`.
 - **Convention-based population** of classes, records and structs: `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… just work, and names, emails and avatars of one object belong to the same person.
-- **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode, custom conventions, custom locales, faker.js-style templates.
+- **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode (also checked at compile time), custom conventions, custom locales, faker.js-style templates.
+- **Interfaces and polymorphism**: `.Subtype<IShape, Circle, Square>()`, app-wide `Fake.Subtypes`, and `[JsonDerivedType]` honoured out of the box.
+- **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
 - **Deterministic**: same seed means same data, dates included, on every OS and .NET version and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
 - **Trim and Native AOT safe** with the source generator.
-- **Test data in TUnit**: `[FakeData]` fills test parameters (package `Phoney.TUnit`).
+- **Integrations**: `[FakeData]` for TUnit tests, `services.AddPhoney()` for dependency injection and ASP.NET Core, `HasFakeData` for EF Core seeding, and NodaTime types.
+
+| Package | What it adds |
+|---|---|
+| `Phoney` | fakers, generators, the source generator and the Strict analyzer |
+| `Phoney.TUnit` | [`[FakeData]` for TUnit](#test-data-in-tunit) |
+| `Phoney.DependencyInjection` | [`services.AddPhoney()`, `IFaker`, injectable generators](#dependency-injection-and-aspnet-core) |
+| `Phoney.EntityFrameworkCore` | [`HasFakeData` seed data](#ef-core-seeding) |
+| `Phoney.NodaTime` | [NodaTime values and members](#nodatime) |
 
 Targets .NET 8 and .NET 10.
 
@@ -162,7 +175,8 @@ var time = new FakeTimeProvider(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan
 
 var faker = new Faker("sv") { TimeProvider = time };            // faker.Date.Past() is before 2030-01-01
 var orders = Fake.For<Order>().TimeProvider(time).Generate(10);   // CreatedAt, ages, timelines follow the clock
-Fake.TimeProvider = time;                                         // the static facade and Fake.For/One/Many
+var rows = Fake.Arguments(method).TimeProvider(time).Generate(5); // argument rows too
+Fake.TimeProvider = time;                                         // the static facade, Fake.For/One/Many and Fake.Arguments
 time.Advance(TimeSpan.FromDays(30));                              // read on every use, so dates move along
 ```
 
@@ -213,7 +227,10 @@ var drawings = Fake.For<Drawing>()
     .Generate(10);
 
 Fake.Subtypes.Add<IShape, Circle, Square>(); // app-wide, for generators created afterwards
+Fake.Subtypes.Remove<IShape>();              // or Clear() for all
 ```
+
+Up to four subtypes fit the type arguments; pass more as types: `.Subtype<IShape>(typeof(Circle), typeof(Square), …)`. A subtype must be concrete and assignable to the base type, otherwise you get an `ArgumentException` saying which.
 
 - **`[JsonDerivedType]` works out of the box**: an interface or abstract class that lists its derived types for System.Text.Json uses them as its default subtypes.
 - **Precedence**: the generator's `Subtype`, then `Fake.Subtypes`, then `[JsonDerivedType]`. An interface or abstract class with none of them stays `null`. A concrete base class is generated as itself unless you map it (`.Subtype<Vehicle, Truck>()`).
@@ -322,6 +339,17 @@ var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer
 
 The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
 
+Subtypes of interfaces and abstract classes need models too: types listed with `[JsonDerivedType]` on the base type get them automatically, and `[FakeSubtype<IShape, Circle>]` on the same class generates a model for `Circle` and registers it as a subtype app-wide (see [Interfaces and subtypes](#interfaces-and-subtypes)). NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
+
+The package also reports these diagnostics:
+
+| Id | Severity | Meaning |
+|---|---|---|
+| PHONEY001 | Error | the class with `[FakeFor]` must be `partial` |
+| PHONEY002 | Warning | a type can't be generated (abstract, no public constructor, inaccessible); its members stay default |
+| PHONEY003 | Error | `[FakeFor]` is inside a generic type |
+| PHONEY004 | Warning | a `.Strict()` generator has scalar members without a rule, convention or annotation |
+
 ## Dependency injection and ASP.NET Core
 
 The `Phoney.DependencyInjection` package registers fakers and generators in `IServiceCollection`:
@@ -339,7 +367,8 @@ app.MapGet("/demo/customers", (Generator<Customer> customers) => customers.Gener
 app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 ```
 
-- `IFaker`/`Faker` are scoped, `IFakerFactory` creates fakers for other locales and seeds, and generators are singletons.
+- `IFaker`/`Faker` are scoped, `IFakerFactory` creates fakers for other locales and seeds, and generators are singletons. `IFaker` itself is in the core package (implemented by `Faker`), for your own abstractions and test doubles.
+- `PhoneyOptions`: `Locale`, `Seed`, `ReferenceDate` and `TimeProvider`.
 - With `Seed`, every scope starts at the seed, so each request or test scope is reproducible.
 - `ReferenceDate`, or a `TimeProvider` (from the options or registered in the container, e.g. `FakeTimeProvider`), sets "now".
 - In integration tests, call `AddPhoney(o => o.Seed = 1)` again in `WebApplicationFactory.ConfigureTestServices`; it configures the same options.
@@ -384,7 +413,8 @@ public async Task Formats_address(string street, string city, string zipCode) { 
 - The parameters of one test case agree like the members of one object: `firstName`, `email`, `birthDate` and `age` describe the same person, `street`, `city` and `zipCode` one address.
 - **Reproducible by default**: the seed is derived from the test's class, method and parameters, so every run and machine gets the same values (and the same test names). Set `Seed = 42` for other values.
 - Options: `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`. It also works on the test class (constructor parameters) and on `required` properties.
-- Test data is created while TUnit discovers tests, so register custom conventions (`Fake.Conventions.Add`) in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late.
+- Interface and abstract parameters get one of their subtypes from `Fake.Subtypes` or `[JsonDerivedType]`.
+- Test data is created while TUnit discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes (`Fake.Subtypes.Add`) in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late.
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 
