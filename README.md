@@ -328,6 +328,26 @@ app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 - `ReferenceDate`, or a `TimeProvider` (from the options or registered in the container, e.g. `FakeTimeProvider`), sets "now".
 - In integration tests, call `AddPhoney(o => o.Seed = 1)` again in `WebApplicationFactory.ConfigureTestServices`; it configures the same options.
 
+## EF Core seeding
+
+The `Phoney.EntityFrameworkCore` package turns generated data into `HasData` seed data:
+
+```bash
+dotnet add package Phoney.EntityFrameworkCore
+```
+
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    var customers = modelBuilder.Entity<Customer>().HasFakeData(50);
+    modelBuilder.Entity<Order>().HasFakeData(200, g => g.With(o => o.Status, OrderStatus.Paid));
+}
+```
+
+- The data is the same on every model build (the seed is derived from the entity name), so migrations stay stable.
+- Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys are pointed at seeded principals (seed principals first, or link with `WithOneOf`).
+- Call it after the entity's other configuration; it reads keys, maximum lengths and navigations from the model.
+
 ## Test data in TUnit
 
 The `Phoney.TUnit` package adds `[FakeData]`, which fills [TUnit](https://tunit.dev) test parameters the way Phoney fills the members of an object:

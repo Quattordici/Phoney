@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="t">
+  <title id="t">Phoney logo</title>
+  <defs>
+    <radialGradient id="space" cx="35%" cy="30%" r="95%">
+      <stop offset="0" stop-color="#34177a"/>
+      <stop offset="0.55" stop-color="#170a3a"/>
+      <stop offset="1" stop-color="#070316"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e2c7ff"/>
+      <stop offset="0.45" stop-color="#a566f7"/>
+      <stop offset="1" stop-color="#5b21b6"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b1a82"/>
+      <stop offset="1" stop-color="#1a0b3d"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f5d0fe"/>
+      <stop offset="0.5" stop-color="#c084fc"/>
+      <stop offset="1" stop-color="#f0e1ff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#a855f7" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#ecdcff"/>
+      <stop offset="1" stop-color="#c79bff"/>
+    </linearGradient>
+    <radialGradient id="planet" cx="35%" cy="28%" r="85%">
+      <stop offset="0" stop-color="#d9b8ff"/>
+      <stop offset="0.45" stop-color="#9d57f2"/>
+      <stop offset="1" stop-color="#4c1d95"/>
+    </radialGradient>
+    <linearGradient id="mask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1263"/>
+      <stop offset="1" stop-color="#150833"/>
+    </linearGradient>
+    <clipPath id="pclip"><circle cx="256" cy="244" r="126"/></clipPath>
+    <clipPath id="clip"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="512" height="512" fill="url(#space)"/>
+    <path d="M329.1,40.9 Q330.5,47.6 337.2,49.1 Q330.5,50.5 329.1,57.2 Q327.6,50.5 320.9,49.1 Q327.6,47.6 329.1,40.9Z" fill="#f5e9ff" opacity="0.8097066750737756"/>
+    <path d="M42.1,253.4 Q43.2,258.5 48.2,259.6 Q43.2,260.7 42.1,265.7 Q41.0,260.7 35.9,259.6 Q41.0,258.5 42.1,253.4Z" fill="#f5e9ff" opacity="0.8300937050987157"/>
+    <path d="M47.8,50.2 Q49.2,56.5 55.5,57.9 Q49.2,59.3 47.8,65.6 Q46.4,59.3 40.1,57.9 Q46.4,56.5 47.8,50.2Z" fill="#f5e9ff" opacity="0.9480556374016114"/>
+    <path d="M317.7,464.4 Q319.2,471.2 326.0,472.7 Q319.2,474.2 317.7,481.0 Q316.2,474.2 309.4,472.7 Q316.2,471.2 317.7,464.4Z" fill="#f5e9ff" opacity="0.819004142395234"/>
+    <path d="M486.5,27.1 Q488.2,34.8 495.9,36.5 Q488.2,38.2 486.5,46.0 Q484.8,38.2 477.1,36.5 Q484.8,34.8 486.5,27.1Z" fill="#f5e9ff" opacity="0.7868827858995029"/>
+    <circle cx="163.3" cy="409.0" r="1.2" fill="#ffffff" opacity="0.70"/>
+    <circle cx="279.1" cy="44.4" r="0.9" fill="#c4b5fd" opacity="0.47"/>
+    <circle cx="268.2" cy="437.6" r="2.0" fill="#e9d5ff" opacity="0.72"/>
+    <circle cx="49.4" cy="261.8" r="1.2" fill="#e9d5ff" opacity="0.44"/>
+    <circle cx="250.7" cy="33.0" r="0.9" fill="#c4b5fd" opacity="0.69"/>
+    <circle cx="420.5" cy="471.2" r="2.0" fill="#c4b5fd" opacity="0.75"/>
+    <circle cx="43.4" cy="353.5" r="2.0" fill="#e9d5ff" opacity="0.78"/>
+    <circle cx="469.3" cy="186.0" r="0.9" fill="#e9d5ff" opacity="0.39"/>
+    <circle cx="435.8" cy="53.0" r="2.0" fill="#e9d5ff" opacity="0.68"/>
+    <circle cx="441.6" cy="410.5" r="1.6" fill="#c4b5fd" opacity="0.60"/>
+    <circle cx="187.6" cy="441.9" r="1.2" fill="#ffffff" opacity="0.40"/>
+    <circle cx="19.8" cy="416.2" r="1.2" fill="#e9d5ff" opacity="0.52"/>
+    <circle cx="74.7" cy="429.9" r="0.9" fill="#e9d5ff" opacity="0.89"/>
+    <circle cx="391.5" cy="437.3" r="2.0" fill="#e9d5ff" opacity="0.59"/>
+    <circle cx="44.1" cy="46.6" r="1.2" fill="#e9d5ff" opacity="0.45"/>
+    <circle cx="178.6" cy="39.4" r="0.9" fill="#c4b5fd" opacity="0.44"/>
+    <circle cx="26.3" cy="437.2" r="2.0" fill="#ffffff" opacity="0.73"/>
+    <circle cx="476.4" cy="305.5" r="2.0" fill="#ffffff" opacity="0.42"/>
+    <circle cx="250.2" cy="487.3" r="2.0" fill="#e9d5ff" opacity="0.54"/>
+    <circle cx="113.3" cy="474.8" r="1.6" fill="#ffffff" opacity="0.76"/>
+    <circle cx="456.4" cy="380.9" r="1.6" fill="#c4b5fd" opacity="0.87"/>
+    <circle cx="122.0" cy="406.8" r="1.2" fill="#ffffff" opacity="0.84"/>
+    <circle cx="28.0" cy="27.5" r="1.6" fill="#e9d5ff" opacity="0.51"/>
+    <circle cx="349.2" cy="477.0" r="2.0" fill="#c4b5fd" opacity="0.94"/>
+    <circle cx="476.2" cy="190.5" r="1.2" fill="#ffffff" opacity="0.49"/>
+    <circle cx="316.0" cy="449.7" r="0.9" fill="#e9d5ff" opacity="0.90"/>
+    <circle cx="110.5" cy="444.3" r="2.0" fill="#c4b5fd" opacity="0.55"/>
+    <circle cx="401.6" cy="484.3" r="2.0" fill="#e9d5ff" opacity="0.59"/>
+    <circle cx="472.2" cy="364.8" r="1.2" fill="#ffffff" opacity="0.37"/>
+
+    <circle cx="256" cy="250" r="225" fill="url(#glow)"/>
+    <g transform="rotate(-16 256 256)">
+      <ellipse cx="256" cy="312" rx="204" ry="50" fill="none" stroke="url(#ring)" stroke-width="11" opacity="0.85"/>
+    </g>
+    <circle cx="256" cy="244" r="126" fill="url(#planet)"/>
+    <g clip-path="url(#pclip)" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="10" stroke-linecap="round">
+      <path d="M150 330 Q256 372 366 322"/>
+      <path d="M140 300 Q256 336 376 292"/>
+    </g>
+    <path d="M168 168 Q196 134 238 126" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="7" stroke-linecap="round"/>
+    <path d="M140 222 Q140 196 176 192 Q216 190 256 208 Q296 190 336 192 Q372 196 372 222 Q372 262 330 268 Q294 272 274 246 Q256 238 238 246 Q218 272 182 268 Q140 262 140 222 Z" fill="url(#mask)" stroke="#e9d5ff" stroke-opacity="0.55" stroke-width="3" stroke-linejoin="round"/>
+    <ellipse cx="196" cy="232" rx="24" ry="19" fill="#fbf3ff"/>
+    <circle cx="203" cy="234" r="9.5" fill="#1a0b3d"/>
+    <circle cx="206" cy="230" r="3" fill="#ffffff"/>
+    <path d="M292 236 Q316 214 340 236" fill="none" stroke="#fbf3ff" stroke-width="9" stroke-linecap="round"/>
+    <path d="M222 292 Q256 322 292 290" fill="none" stroke="#f3e8ff" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="170" cy="284" r="10" fill="#f0abfc" opacity="0.35"/>
+    <circle cx="344" cy="280" r="10" fill="#f0abfc" opacity="0.35"/>
+    <g transform="rotate(-16 256 256)">
+      <path d="M52 312 A204 50 0 0 0 460 312" fill="none" stroke="url(#ring)" stroke-width="11" stroke-linecap="round"/>
+      <g transform="translate(429.0 338.5) rotate(24)">
+        <rect x="-21" y="-21" width="42" height="42" rx="10" fill="#fbe8ff" stroke="#c084fc" stroke-width="2.5"/>
+        <circle cx="-9" cy="-9" r="4.4" fill="#4c1d95"/>
+        <circle cx="0" cy="0" r="4.4" fill="#4c1d95"/>
+        <circle cx="9" cy="9" r="4.4" fill="#4c1d95"/>
+      </g>
+    </g>
+  </g>
+</svg>
