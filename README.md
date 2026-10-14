@@ -882,7 +882,7 @@ The same scenarios run against the best-known .NET libraries, at the versions be
 
 | Library | Version | Released |
 |---|---|---|
-| Phoney | 1.0.0 | not released yet (this repository) |
+| Phoney | 1.0.0 | |
 | [Bogus](https://github.com/bchavez/Bogus) | 35.6.5 | 2025-10-26 |
 | [AutoBogus](https://github.com/nickdodd79/AutoBogus) | 2.13.1 | 2021-07-17 |
 | [AutoFixture](https://github.com/AutoFixture/AutoFixture) | 4.18.1 | 2023-11-28 |
