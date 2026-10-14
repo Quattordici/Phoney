@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_usernames:
+      - dependabot[bot]
+      - github-actions[bot]
+  # Generated or imported output; CI already fails when it drifts from a fresh import.
+  path_filters:
+    - "!data/**"
+    - "!src/Phoney/Resources/**"
+    - "!src/Phoney/Data/Generated/**"
+    - "!**/Snapshots/*.verified.cs"
+    - "!tools/extract/package-lock.json"
+    - "!**/*.bin.br"
+  path_instructions:
+    - path: "src/Phoney/**/*.cs"
+      instructions: |
+        Generation must be reproducible for a seed: no System.Random, DateTime.Now, Guid.NewGuid or
+        unordered iteration over hash-based collections. Randomness comes from the faker's Randomizer
+        and dates from ReferenceDate. The order of Randomizer draws is part of the contract, so new
+        randomness goes after existing draws. Hot paths must stay allocation-free and array-indexed.
+        Public members need XML docs. New code must not add trim/AOT warnings.
+    - path: "src/Phoney/Generation/**/*.cs"
+      instructions: |
+        Reflection and source-generated models must produce identical data for the same seed.
+        Rules, conventions and constraints are applied in FakeScope.Get for both paths.
+        Generation/Shared/ConventionRules.cs is also compiled into the netstandard2.0 generator,
+        so it must not use newer APIs. New ConventionKind values go at the end of the enum.
+    - path: "src/Phoney.SourceGenerator/**/*.cs"
+      instructions: |
+        Targets netstandard2.0. Analyzers must not call Compilation.GetSemanticModel (RS1030).
+        Keep StrictAnalyzer, UsageAnalyzer and Generator<T>.Compile in sync, register new diagnostics in
+        AnalyzerReleases.Unshipped.md and the README diagnostics table.
+    - path: "src/Phoney/NationalIds/**/*.cs"
+      instructions: |
+        Every scheme needs a validator, and checksum or format logic should be verified against an
+        independent implementation, not only against itself.
+    - path: "tests/**/*.cs"
+      instructions: |
+        Tests use TUnit and Shouldly. Expect a failing-test-first workflow: new behaviour needs a
+        test that would fail without it. Seeded tests must assert exact, reproducible values.
+    - path: "README.md"
+      instructions: |
+        User-facing documentation for every feature. The locale table between the locales:start/end
+        markers is generated and must not be edited by hand.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CLAUDE.md"
+      - "CONTRIBUTING.md"
+
+chat:
+  auto_reply: true
