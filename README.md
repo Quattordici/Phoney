@@ -337,6 +337,16 @@ foreach (var c in Fake.For<Order>().Seed(1).BoundaryCases())
 | `[RegularExpression]`, `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | text the real validator rejects | none: they define a value, not an edge |
 | `[AllowedValues]`, `[DeniedValues]` | a value that is not allowed / a denied one | none |
 
+- **As test data**: every case can be a test case of its own, named after what it is (`Validation_rejects(Quantity: above the maximum (10))`). With TUnit:
+
+  ```csharp
+  public static IEnumerable<Func<ConstraintCase<Order>>> Violations() =>
+      Fake.For<Order>().Seed(1).InvalidCases().Select(c => (Func<ConstraintCase<Order>>)(() => c));
+
+  [Test, MethodDataSource(nameof(Violations))]
+  public void Validation_rejects(ConstraintCase<Order> violation) =>
+      Validate(violation.Value).IsValid.ShouldBeFalse(violation.ToString());
+  ```
 - **One change per case.** A case is the object `Generate()` gives for the seed, with only that member replaced, so it differs from a valid object in the member it is about (a collection that gets a different size also changes the draws after it). `InvalidCases()` and `BoundaryCases()` use one base object for all cases (the `Seed`, or a random one).
 - **Which violation?** `Invalid(member)` picks one violation per object, reproducibly with a seed, so `Generate(50)` covers them all. A value can break more than one limit of its member (an empty string is also too short); other members stay valid.
 - **Never silent.** A member without annotations to break throws an `InvalidOperationException` that lists the supported ones. Rules for the same member are replaced (`Invalid` and `Boundary` take the member's rule slot), ignored members are skipped, and limits beyond 100,000 characters or elements are not built.
@@ -415,7 +425,7 @@ The package also reports these diagnostics:
 | PHONEY005 | Warning | the result of a generator method is discarded (`gen.With(...);`: generators are immutable), or of `Populate` on a struct (it returns the populated copy) |
 | PHONEY006 | Warning | `Fake.Seeded(...)` is never disposed, so everything after it stays seeded; use `using var _ = Fake.Seeded(1);` |
 | PHONEY007 | Warning | a rule would throw when the generator is first used: the member isn't a public settable member or constructor parameter, the selector isn't `x => x.Member`, or an object-dependent rule targets a constructor parameter |
-| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain |
+| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `Use` generator replaces an earlier `Use` for the same type |
 | PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
 | PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
 | PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`…) |
@@ -515,7 +525,7 @@ public async Task Totals_add_up()
 - **Replay** with `[FakeSeed(481516234)]` on the test (it pins the seed while you fix the bug), or `PHONEY_SEED=481516234 dotnet test` to rerun a whole run. A pinned seed wins over `PHONEY_SEED`; a `PHONEY_SEED` that is not a whole number is reported with a message that says so.
 - On a method it wins over the class, and on a class over the assembly (`[assembly: FakeSeed]` makes every test random and replayable). Parallel tests don't affect each other.
 - The seed covers the `Fake` facade of the test, not generators created earlier (a `static` field) or ones that set their own `.Seed(...)`. Skipped tests print nothing.
-- The attribute installs the test's executor, so it can't be combined with another one such as `[STAThreadExecutor]`.
+- It works with other test executors (`[TestExecutor<T>]`): the executor the test already has runs inside the seeded scope.
 - Other frameworks can do the same with `FakeSeed.Pick()` (`PHONEY_SEED`, else a new seed), `Fake.Seeded(seed)` and printing the seed when the test fails.
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.

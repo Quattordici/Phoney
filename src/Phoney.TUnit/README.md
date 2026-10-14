@@ -54,4 +54,17 @@ public async Task Totals_add_up()
 - **Replay** with `[FakeSeed(481516234)]` on the test, or run `PHONEY_SEED=481516234 dotnet test` to rerun a whole run. A pinned seed wins over `PHONEY_SEED`.
 - On a method it wins over the class, and on a class over the assembly (`[assembly: FakeSeed]`). Parallel tests don't affect each other.
 - It seeds the `Fake` facade of the test, not generators created earlier (a `static` field) or ones that call `.Seed(...)` themselves. Skipped tests print nothing.
-- The attribute installs the test's executor, so it can't be combined with another one such as `[STAThreadExecutor]`.
+- It works with other test executors (`[TestExecutor<T>]`): the executor the test already has runs inside the seeded scope.
+
+## Invalid and boundary data as test cases
+
+`Generator<T>.InvalidCases()` and `BoundaryCases()` (see the main README) make good TUnit data sources: every case is a test case named after what it is.
+
+```csharp
+public static IEnumerable<Func<ConstraintCase<Order>>> Violations() =>
+    Fake.For<Order>().Seed(1).InvalidCases().Select(c => (Func<ConstraintCase<Order>>)(() => c));
+
+[Test, MethodDataSource(nameof(Violations))]   // e.g. Validation_rejects(Quantity: above the maximum (10))
+public void Validation_rejects(ConstraintCase<Order> violation) =>
+    Validate(violation.Value).IsValid.ShouldBeFalse(violation.ToString());
+```
