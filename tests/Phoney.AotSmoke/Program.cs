@@ -109,6 +109,11 @@ if (!numbered.Select(p => p.FirstName).SequenceEqual(["P0", "P1", "P2", "P3", "P
 if (people.Any(p => p.Aliases.IsDefault || p.Aliases.Length == 0 || p.Visits.Count == 0))
     throw new InvalidOperationException("immutable or frozen collections were not generated");
 
+// Back-references through generated models, no reflection.
+var folders = Fakes.Folder.Seed(11).WithBackReferences().Generate(5);
+if (folders.Any(f => f.Documents.Count == 0 || f.Documents.Any(d => !ReferenceEquals(d.Folder, f))))
+    throw new InvalidOperationException("back-references were not set");
+
 // Rules for every member of a type, through generated models, no reflection.
 if (Fakes.Person.Seed(10).WithType(Status.Suspended).Generate(10).Any(p => p.Status != Status.Suspended))
     throw new InvalidOperationException("WithType was not applied");
@@ -217,5 +222,17 @@ public sealed class Ticket
     public string Contact { get; set; } = "";
 }
 
-[FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeSubtype<IInsurance, Policy>]
+public sealed class Folder
+{
+    public string Title { get; set; } = "";
+    public List<Document> Documents { get; set; } = [];
+}
+
+public sealed class Document
+{
+    public string Name { get; set; } = "";
+    public Folder? Folder { get; set; }
+}
+
+[FakeFor<Folder>, FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeSubtype<IInsurance, Policy>]
 internal static partial class Fakes;

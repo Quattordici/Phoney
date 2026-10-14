@@ -448,6 +448,26 @@ public sealed class Generator<T> : INestedGenerator
     public Generator<T> CreateWith(Func<Faker, T> factory) =>
         Derive(_config with { Factory = factory ?? throw new ArgumentNullException(nameof(factory)) });
 
+    /// <summary>
+    /// Points members that would close a cycle at the object that contains them, instead of leaving them <see langword="null"/>: with
+    /// <c>Order → Lines → Line.Order</c>, every <c>Line.Order</c> is the order that holds the line, like an ORM's navigation properties.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After an object is created (before <see cref="Where(Func{T, bool}, int)"/> and <see cref="AfterCreate"/> see it), every member that is still
+    /// <see langword="null"/> and whose type one of the objects above it satisfies gets the nearest such object. Members that have a value are kept, so
+    /// a rule for the member wins. Nothing is drawn, so the rest of the data is the data of the same seed without it.
+    /// </para>
+    /// <para>
+    /// It works through settable members (setters, <see langword="init"/>, public fields); constructor-only members of positional records can be neither read nor
+    /// set and are left alone. The objects form real cycles afterwards: <c>ToString</c>, <c>Equals</c> and serializers of records and of libraries without cycle
+    /// handling may not cope. A nested generator (<c>Use</c>, <c>With</c>) wires the graph it creates, which starts at its own objects. <see cref="Populate(T, PopulateMode)"/>
+    /// fills the missing references of an existing graph the same way.
+    /// </para>
+    /// </remarks>
+    /// <param name="enabled"><see langword="false"/> turns it off again.</param>
+    public Generator<T> WithBackReferences(bool enabled = true) => Derive(_config with { BackReferences = enabled });
+
     /// <summary>Runs <paramref name="action"/> on every generated object, after all members are set.</summary>
     public Generator<T> AfterCreate(Action<Faker, T> action) =>
         Derive(_config with { AfterCreate = _config.AfterCreate.Add(action ?? throw new ArgumentNullException(nameof(action))) });
@@ -859,6 +879,8 @@ public sealed class Generator<T> : INestedGenerator
 
             foreach (var (member, rule) in compiled.Dependent)
                 item = model.Set(item, member, rule(faker, item));
+            if (config.BackReferences && item is not null)
+                Phoney.Generation.BackReferences.Apply(item);
             foreach (var action in config.AfterCreate)
                 action(faker, item);
             return item;
@@ -878,6 +900,8 @@ public sealed class Generator<T> : INestedGenerator
                     item = model.Set(item, member, rule(faker, item));
             }
 
+            if (config.BackReferences && item is not null)
+                Phoney.Generation.BackReferences.Apply(item);
             foreach (var action in config.AfterCreate)
                 action(faker, item);
             return item;
@@ -967,6 +991,7 @@ public sealed class Generator<T> : INestedGenerator
         Func<Faker, T>? Factory,
         bool Strict,
         bool Verify,
+        bool BackReferences,
         GenerationSettings Settings)
     {
         public static readonly Config Default = new(
@@ -982,6 +1007,7 @@ public sealed class Generator<T> : INestedGenerator
             [],
             ImmutableDictionary.Create<string, MemberFilter>(StringComparer.Ordinal),
             null,
+            false,
             false,
             false,
             GenerationSettings.Default);

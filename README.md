@@ -221,7 +221,7 @@ var customers = Fake.For<Customer>()
 ```
 
 - **Supported shapes**: classes with a parameterless constructor, records and classes with constructor parameters (the constructor with most parameters is used), `init` and `required` members, public fields, structs, nested objects, interfaces and abstract classes (through [subtypes](#interfaces-and-subtypes)), `T[]`, `List<T>` and its interfaces, `HashSet<T>`, `Dictionary<K,V>` and [more collection types](#collection-types), enums, nullable types, `byte[]`, and `Guid`, `DateTime(Offset)`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri` plus every numeric type.
-- **Cycles** (`Customer → Order → Customer`) stop with `null`. `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
+- **Cycles** (`Customer → Order → Customer`) stop with `null`, or point back at the containing object with [`WithBackReferences()`](#back-references). `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data. The included analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`, so a new member breaks the build instead of the test run. It can't see app-wide `Fake.Conventions` (registered at runtime): cover such members with `.Ignore(...)`/`.With(...)` or suppress the warning.
@@ -240,6 +240,21 @@ Besides arrays, `List<T>`, `HashSet<T>`, `Dictionary<K,V>` and their interfaces,
 Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` counterpart (so a seed gives the same elements whichever type holds them) and converted. Sizes, `[MinLength]`/`[MaxLength]`, `CollectionSize`, `Invalid`/`Boundary`, `Populate` (a default `ImmutableArray<T>` counts as unset), `Each()` paths and the source generator all work the same. Collections that are only readable (`public List<T> Items { get; } = []`) are not filled.
 
 For code that works from `Type` values, `Fake.One(type)` and `Fake.Many(type, count)` create objects of a type known only at runtime (reflection, like `Fake.One<T>()`).
+
+### Back-references
+
+With navigation properties in both directions (`Order.Lines`, `OrderLine.Order`) a cycle stops with `null` by default. `WithBackReferences()` closes it, like an ORM would:
+
+```csharp
+var orders = Fake.For<Order>().WithBackReferences().Generate(10);
+orders[0].Lines[0].Order;   // the very same order (ReferenceEquals), not null
+```
+
+- After an object is created, every member that is still `null` and whose type one of the objects above it satisfies gets the **nearest** such object: `Line.Order` is the order that holds the line, and a `Line.Customer` is the customer further up. Collections and dictionary values are walked too.
+- Members that have a value are kept (a rule for the member wins), nothing is drawn, so **the rest of the data is exactly the data of the same seed without it**, and a `Where` condition or `AfterCreate` action sees the finished graph. `Populate` fills the missing references of an existing graph.
+- It works through settable members (setters, `init`, fields). Constructor-only members of positional records can be neither read nor set and are left alone.
+- The graph has real cycles afterwards: `ToString`, `Equals` and `GetHashCode` of records and serializers without cycle handling (`ReferenceHandler.Preserve` for System.Text.Json) may not cope. A nested generator (`Use`, `With`) wires the graph it creates.
+- Works the same with reflection and with the source generator.
 
 ### Rules for nested members
 

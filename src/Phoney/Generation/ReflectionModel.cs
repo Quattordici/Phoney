@@ -148,6 +148,12 @@ internal sealed class ReflectionTypeModel : IFakeModel
     public object? GetObject(object instance, int member) =>
         (_getters[member] ?? throw new InvalidOperationException($"'{Members[member].Name}' of {Type.Name} cannot be read from an existing object."))(instance);
 
+    /// <inheritdoc />
+    object? IFakeModel.GetMember(object instance, int member) => GetObject(instance, member);
+
+    /// <inheritdoc />
+    object IFakeModel.SetMember(object instance, int member, object? value) => SetObject(instance, member, value);
+
     /// <summary>Whether a settable member still holds its default value.</summary>
     public bool IsUnsetObject(object instance, int member) => FakeScope.IsUnsetBoxed(GetObject(instance, member), _defaults[member]);
 

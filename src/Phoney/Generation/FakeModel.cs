@@ -89,6 +89,12 @@ public interface IFakeModel
 
     /// <summary>Populates an existing instance; returns it (a populated copy for structs).</summary>
     object PopulateObject(object instance, FakeScope scope, PopulateMode mode);
+
+    /// <summary>Reads a <see cref="FakeMember.IsSettable"/> member (boxed) from an instance.</summary>
+    object? GetMember(object instance, int member);
+
+    /// <summary>Sets a <see cref="FakeMember.IsSettable"/> member on an instance; returns it (a copy for structs).</summary>
+    object SetMember(object instance, int member, object? value);
 }
 
 /// <summary>
@@ -142,6 +148,12 @@ public abstract class FakeModel<T> : IFakeModel
 
     /// <inheritdoc />
     object IFakeModel.PopulateObject(object instance, FakeScope scope, PopulateMode mode) => Populate((T)instance, scope, mode)!;
+
+    /// <inheritdoc />
+    object? IFakeModel.GetMember(object instance, int member) => Get((T)instance, member);
+
+    /// <inheritdoc />
+    object IFakeModel.SetMember(object instance, int member, object? value) => Set((T)instance, member, value)!;
 }
 
 /// <summary>The populate algorithm, shared by typed models and the untyped reflection model.</summary>
