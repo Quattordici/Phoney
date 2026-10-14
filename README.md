@@ -85,45 +85,6 @@ AddressProfile address = faker.Location.Address(); // just an address, as parts
 
 For your own types, [`Fake.For<T>()`](#objects) gives the same coherence: a `Customer`'s `FirstName`, `Email`, `Avatar` and `Gender` describe one person.
 
-## National and tax IDs
-
-Personal identity numbers, company registration numbers and VAT numbers come with **valid check digits** and use the locale's country unless you pass one:
-
-```csharp
-var faker = new Faker("sv", seed: 1);
-faker.NationalId.Person();                                   // "19560703-6190" (personnummer)
-faker.NationalId.Person("NO", birthDate: new DateOnly(1990, 5, 17), sex: Sex.Female, formatted: false);
-faker.NationalId.Company();                                  // "214200-3165" (organisationsnummer)
-faker.NationalId.Vat("GB");                                  // "GB 154 4706 67"
-```
-
-| | Person | Company | VAT |
-|---|---|---|---|
-| SE | personnummer | organisationsnummer | ✓ |
-| NO | fødselsnummer | organisasjonsnummer | ✓ |
-| DK | CPR | CVR | ✓ |
-| FI | henkilötunnus | Y-tunnus | ✓ |
-| US | SSN (format rules, no check digit) | EIN | |
-| GB | NINO (format rules, no check digit) | | ✓ |
-| BR | CPF | CNPJ | |
-| PL | PESEL | REGON | ✓ (NIP) |
-| NL | BSN | | |
-| ES | DNI | | |
-| FR | NIR | SIREN | ✓ |
-| CA | SIN | | |
-
-Where the number encodes a birth date and sex (SE, NO, DK, FI, PL, FR) it encodes the ones you pass, so a `PersonProfile` or a generated object has an id that agrees with its `BirthDate` and `Sex`. Members named `Personnummer`, `Ssn`, `NationalId`, `Cpf`, `Pesel`… (person), `OrgNr`, `Cnpj`, `Ein`… (company) and `VatNumber` get these values by convention. A locale whose country has no scheme leaves them empty; `NationalId` throws a `PhoneyDataUnavailableException`, so pass the country there.
-
-Every scheme can also validate, and you can register your own:
-
-```csharp
-NationalIds.IsValid(NationalIdKind.Person, "SE", "19560703-6190");   // true
-NationalIds.Supported(NationalIdKind.Vat);                           // ["DK", "FI", "FR", "GB", "NO", "PL", "SE"]
-NationalIds.Register(new MyEmployeeNumbers());                       // derive from NationalIdScheme
-```
-
-The numbers are structurally valid, not issued: they can coincide with real people's or companies' numbers, so use them for test data only. Danish CPR numbers satisfy the classic mod-11 rule that new numbers no longer follow, so old and new validators accept them; the validator checks the date and century digit only.
-
 ## Values
 
 A `Faker` groups values by topic:
@@ -193,6 +154,169 @@ time.Advance(TimeSpan.FromDays(30));                              // read on eve
 ```
 
 The reference date is, in order: an explicit `ReferenceDate`, the `TimeProvider`, `DefaultSeededReferenceDate` for seeded fakers and generators, and otherwise the system clock.
+
+## National and tax IDs
+
+Personal identity numbers, company registration numbers and VAT numbers come with **valid check digits** and use the locale's country unless you pass one:
+
+```csharp
+var faker = new Faker("sv", seed: 1);
+faker.NationalId.Person();                                   // "19560703-6190" (personnummer)
+faker.NationalId.Person("NO", birthDate: new DateOnly(1990, 5, 17), sex: Sex.Female, formatted: false);
+faker.NationalId.Company();                                  // "214200-3165" (organisationsnummer)
+faker.NationalId.Vat("GB");                                  // "GB 154 4706 67"
+```
+
+| | Person | Company | VAT |
+|---|---|---|---|
+| SE | personnummer | organisationsnummer | ✓ |
+| NO | fødselsnummer | organisasjonsnummer | ✓ |
+| DK | CPR | CVR | ✓ |
+| FI | henkilötunnus | Y-tunnus | ✓ |
+| US | SSN (format rules, no check digit) | EIN | |
+| GB | NINO (format rules, no check digit) | | ✓ |
+| BR | CPF | CNPJ | |
+| PL | PESEL | REGON | ✓ (NIP) |
+| NL | BSN | | |
+| ES | DNI | | |
+| FR | NIR | SIREN | ✓ |
+| CA | SIN | | |
+
+Where the number encodes a birth date and sex (SE, NO, DK, FI, PL, FR) it encodes the ones you pass, so a `PersonProfile` or a generated object has an id that agrees with its `BirthDate` and `Sex`. Members named `Personnummer`, `Ssn`, `NationalId`, `Cpf`, `Pesel`… (person), `OrgNr`, `Cnpj`, `Ein`… (company) and `VatNumber` get these values by convention. A locale whose country has no scheme leaves them empty; `NationalId` throws a `PhoneyDataUnavailableException`, so pass the country there.
+
+Every scheme can also validate, and you can register your own:
+
+```csharp
+NationalIds.IsValid(NationalIdKind.Person, "SE", "19560703-6190");   // true
+NationalIds.Supported(NationalIdKind.Vat);                           // ["DK", "FI", "FR", "GB", "NO", "PL", "SE"]
+NationalIds.Register(new MyEmployeeNumbers());                       // derive from NationalIdScheme
+```
+
+The numbers are structurally valid, not issued: they can coincide with real people's or companies' numbers, so use them for test data only. Danish CPR numbers satisfy the classic mod-11 rule that new numbers no longer follow, so old and new validators accept them; the validator checks the date and century digit only.
+
+## Locales
+
+```csharp
+Locales.All;                      // 77 locales with code, title, endonym, script, fallback chain
+new Faker("de-AT");               // de_AT → de → en → base
+new Faker(CultureInfo.CurrentCulture); // "sv-SE" → sv, "sr-Latn-RS" → sr_RS_latin
+Fake.Locale = "fr";               // default for Fake.* and generators
+```
+
+<details>
+<summary>Supported locales</summary>
+
+<!-- locales:start -->
+76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`); a requested script is never substituted.
+
+| Code | Language | Native name | Falls back to |
+|---|---|---|---|
+| `af_ZA` | Afrikaans (South Africa) | Afrikaans (Suid-Afrika) | en |
+| `ar` | Arabic | اَلْعَرَبِيَّةُ | en |
+| `az` | Azerbaijani | azərbaycan dili | en |
+| `bn_BD` | Bengali (Bangladesh) | বাংলা (বাংলাদেশ) | en |
+| `cs_CZ` | Czech (Czechia) | čeština (Česká republika) | en |
+| `cy` | Welsh | Cymraeg | en |
+| `da` | Danish | Dansk | en |
+| `de` | German | Deutsch | en |
+| `de_AT` | German (Austria) | Deutsch (Österreich) | de → en |
+| `de_CH` | German (Switzerland) | Deutsch (Schweiz) | de → en |
+| `dv` | Maldivian | ދިވެހި | en |
+| `el` | Greek | Ελληνικά | en |
+| `en` | English | English | — |
+| `en_AU` | English (Australia) | English (Australia) | en |
+| `en_AU_ocker` | English (Australia Ocker) | English (Australia) | en_AU → en |
+| `en_BORK` | English (Bork) | English (Bork) | en |
+| `en_CA` | English (Canada) | English (Canada) | en |
+| `en_GB` | English (Great Britain) | English (Great Britain) | en |
+| `en_GH` | English (Ghana) | English (Ghana) | en |
+| `en_HK` | English (Hong Kong) | English (Hong Kong) | en |
+| `en_IE` | English (Ireland) | English (Ireland) | en |
+| `en_IN` | English (India) | English (India) | en |
+| `en_NG` | English (Nigeria) | English (Nigeria) | en |
+| `en_NP` | English (Nepal) | English (Nepal) | en |
+| `en_US` | English (United States) | English (United States) | en |
+| `en_ZA` | English (South Africa) | English (South Africa) | en |
+| `eo` | Esperanto | Esperanto | en |
+| `es` | Spanish | Español | en |
+| `es_MX` | Spanish (Mexico) | Español (México) | es → en |
+| `fa` | Farsi/Persian | فارسی | en |
+| `fi` | Finnish | suomi | en |
+| `fr` | French | Français | en |
+| `fr_BE` | French (Belgium) | Français (Belgique) | fr → en |
+| `fr_CA` | French (Canada) | Français (Canada) | fr → en |
+| `fr_CH` | French (Switzerland) | Français (Suisse) | fr → en |
+| `fr_LU` | French (Luxembourg) | Français (Luxembourg) | fr → en |
+| `fr_SN` | French (Senegal) | Français (Sénégal) | fr → en |
+| `he` | Hebrew | עברית | en |
+| `hr` | Croatian | Hrvatski | en |
+| `hu` | Hungarian | magyar | en |
+| `hy` | Armenian | Հայերեն | en |
+| `id_ID` | Indonesian (Indonesia) | Bahasa Indonesia (Indonesia) | en |
+| `it` | Italian | Italiano | en |
+| `ja` | Japanese | 日本語 | en |
+| `ka_GE` | Georgian (Georgia) | ქართული (საქართველო) | en |
+| `ko` | Korean | 한국어 | en |
+| `ku_ckb` | Kurdish (Sorani) | کوردی (سۆرانی) | en |
+| `ku_kmr_latin` | Kurdish (Kurmanji, Latin) | Kurdî (Kurmancî) | en |
+| `lv` | Latvian | latviešu valoda | en |
+| `mk` | Macedonian | македонски јазик | en |
+| `mn_MN_cyrl` | Mongolian (Mongolia, Cyrillic) | Монгол (Монгол Улс, Кирилл) | en |
+| `nb_NO` | Norwegian (Norway) | Norsk bokmål (Norge) | en |
+| `ne` | Nepali | नेपाली | en |
+| `nl` | Dutch | Nederlands | en |
+| `nl_BE` | Dutch (Belgium) | Nederlands (België) | nl → en |
+| `pl` | Polish | Polski | en |
+| `pt_BR` | Portuguese (Brazil) | Português (Brasil) | en |
+| `pt_PT` | Portuguese (Portugal) | Português (Portugal) | en |
+| `ro` | Romanian | Română | en |
+| `ro_MD` | Romanian (Moldova) | Română (Moldova) | ro → en |
+| `ru` | Russian | Русский | en |
+| `sk` | Slovak | slovenčina | en |
+| `sl_SI` | Slovenian (Slovenia) | Slovensko (Slovenia) | en |
+| `sr_RS_latin` | Serbian (Serbia, Latin) | srpski (Srbija, latinica) | en |
+| `sv` | Swedish | Svenska | en |
+| `ta_IN` | Tamil (India) | தமிழ் (இந்தியா) | en |
+| `th` | Thai | ไทย | en |
+| `tr` | Turkish | Türkçe | en |
+| `uk` | Ukrainian | Українська | en |
+| `ur` | Urdu | اردو | en |
+| `uz_UZ_latin` | Uzbek (Uzbekistan, Latin) | O'zbekcha | en |
+| `vi` | Vietnamese | Tiếng Việt | en |
+| `yo_NG` | Yoruba (Nigeria) | Yoruba (Naijiria) | en |
+| `zh_CN` | Chinese (China) | 中文 (中国) | en |
+| `zh_TW` | Chinese (Taiwan) | 中文 (臺灣) | en |
+| `zu_ZA` | Zulu (South Africa) | isiZulu (Iningizimu Afrika) | en |
+<!-- locales:end -->
+
+</details>
+
+Fallback works like faker.js: each data group (`person.first_name`, `location.city_pattern`…) comes from the first locale in the chain that defines it; data a locale marks as not applicable (e.g. name prefixes in Azerbaijani) is never borrowed from another locale.
+
+### Custom data
+
+```csharp
+// A new locale on top of an existing one
+Locales.Register("sv_dalarna", l => l
+    .FallbackTo("sv")                                  // sv → en → base
+    .Cities("Mora", "Falun", "Rättvik")
+    .FirstNames(Sex.Female, "Kerstin", "Margit")      // male names still come from sv
+    .EmailDomains("dalarna.example")
+    .PhoneFormats("0250-## ## ##"));
+
+// Extra or replaced data in an existing locale
+Locales.Extend("en", l => l.CompanyNames("{{Person.LastName}} & Sons", "Acme {{Commerce.Department}}"));
+```
+
+Typed methods cover the common data: `FirstNames`, `LastNames`, `JobTitles`, `Cities`, `Streets`, `States`, `Countries`, `ZipCodeFormats`, `PhoneFormats`, `EmailDomains`, `CompanyNames` and `LoremWords`. Each replaces only that data; everything else is inherited. For anything else, use a faker.js data path, or import a faker.js locale file:
+
+```csharp
+Locales.Extend("en", l => l
+    .Set("commerce.department", "Toys", "Garden")
+    .Set("person.nickname", "Ace", "Buddy"));          // new paths are allowed: faker.Pick("person.nickname")
+
+Locales.Register("en_PIRATE", File.OpenRead("pirate.json"), "en");
+```
 
 ## Templates
 
@@ -547,22 +671,6 @@ var orders = Fake.For<Order>()
 
 It sets members: the elements of collections keep their generated values, the nullable form of the type (`DateOnly?`) is matched too, and data annotations are not applied to the value. It is `WithConvention<T>(_ => true, factory)`, and `.Strict()` and the analyzer count it as covering the members of that type.
 
-### NodaTime
-
-The `Phoney.NodaTime` package adds NodaTime values and NodaTime members:
-
-```bash
-dotnet add package Phoney.NodaTime
-```
-
-```csharp
-Instant created = faker.Noda().Instant.Past();
-LocalDate birthday = faker.Noda().LocalDate.Birthdate();
-var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate BirthDate… follow the conventions
-```
-
-`Instant`, `OffsetDateTime`, `ZonedDateTime`, `LocalDateTime`, `LocalDate`, `LocalTime` and `Duration` members are generated like their built-in counterparts (`DateTimeOffset`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`), so `CreatedAt`, `ExpiresAt`, `BirthDate` and `Age` agree; this works with reflection and with source-generated models. See the [package README](src/Phoney.NodaTime/README.md).
-
 ## Source generator and Native AOT
 
 `Fake.For<T>()` uses reflection (with compiled delegates) unless a generated model exists. Declare the types you generate:
@@ -610,49 +718,6 @@ The advisory rules (PHONEY004–008 and 010–012) are in the category `Phoney.U
 [*.cs]
 dotnet_analyzer_diagnostic.category-Phoney.Usage.severity = suggestion
 ```
-
-## Dependency injection and ASP.NET Core
-
-The `Phoney.DependencyInjection` package registers fakers and generators in `IServiceCollection`:
-
-```bash
-dotnet add package Phoney.DependencyInjection
-```
-
-```csharp
-builder.Services.AddPhoney(o => { o.Locale = "sv"; o.Seed = 42; })
-    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // singleton Generator<Customer>
-    .AddGenerator(TestData.Order);                              // source-generated: no reflection, AOT safe
-
-app.MapGet("/demo/customers", (Generator<Customer> customers) => customers.Generate(10));
-app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
-```
-
-- `IFaker`/`Faker` are scoped, `IFakerFactory` creates fakers for other locales and seeds, and generators are singletons. `IFaker` itself is in the core package (implemented by `Faker`), for your own abstractions and test doubles.
-- `PhoneyOptions`: `Locale`, `Seed`, `ReferenceDate` and `TimeProvider`.
-- With `Seed`, every scope starts at the seed, so each request or test scope is reproducible.
-- `ReferenceDate`, or a `TimeProvider` (from the options or registered in the container, e.g. `FakeTimeProvider`), sets "now".
-- In integration tests, call `AddPhoney(o => o.Seed = 1)` again in `WebApplicationFactory.ConfigureTestServices`; it configures the same options.
-
-## EF Core seeding
-
-The `Phoney.EntityFrameworkCore` package turns generated data into `HasData` seed data:
-
-```bash
-dotnet add package Phoney.EntityFrameworkCore
-```
-
-```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder)
-{
-    var customers = modelBuilder.Entity<Customer>().HasFakeData(50);
-    modelBuilder.Entity<Order>().HasFakeData(200, g => g.With(o => o.Status, OrderStatus.Paid));
-}
-```
-
-- The data is the same on every model build (the seed is derived from the entity name), so migrations stay stable.
-- Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys are pointed at seeded principals (seed principals first, or link with `WithOneOf`).
-- Call it after the entity's other configuration; it reads keys, maximum lengths and navigations from the model.
 
 ## Test data in TUnit
 
@@ -728,129 +793,64 @@ public void Places_order(Customer customer, string email, [Range(1, 10)] int qua
 - Test data is created while the framework discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes before that, for example in a module initializer.
 - Packages target .NET 8 and .NET 10. They work with **xUnit.net v3 3.0 and later** (`xunit.v3` 3.x and 4.x), **NUnit 4.0 and later** (4.x and 5.x) and **MSTest 4.0 and later**; MSTest 3.x is not supported because 4.0 changed the data source interface, so a build for 3.x would fail in 4.x apps. `Phoney.TUnit` needs TUnit 1.10 or later and `Phoney.NodaTime` NodaTime 3.1 or later.
 
-## Locales
+## Dependency injection and ASP.NET Core
 
-```csharp
-Locales.All;                      // 77 locales with code, title, endonym, script, fallback chain
-new Faker("de-AT");               // de_AT → de → en → base
-new Faker(CultureInfo.CurrentCulture); // "sv-SE" → sv, "sr-Latn-RS" → sr_RS_latin
-Fake.Locale = "fr";               // default for Fake.* and generators
+The `Phoney.DependencyInjection` package registers fakers and generators in `IServiceCollection`:
+
+```bash
+dotnet add package Phoney.DependencyInjection
 ```
 
-<details>
-<summary>Supported locales</summary>
-
-<!-- locales:start -->
-76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`); a requested script is never substituted.
-
-| Code | Language | Native name | Falls back to |
-|---|---|---|---|
-| `af_ZA` | Afrikaans (South Africa) | Afrikaans (Suid-Afrika) | en |
-| `ar` | Arabic | اَلْعَرَبِيَّةُ | en |
-| `az` | Azerbaijani | azərbaycan dili | en |
-| `bn_BD` | Bengali (Bangladesh) | বাংলা (বাংলাদেশ) | en |
-| `cs_CZ` | Czech (Czechia) | čeština (Česká republika) | en |
-| `cy` | Welsh | Cymraeg | en |
-| `da` | Danish | Dansk | en |
-| `de` | German | Deutsch | en |
-| `de_AT` | German (Austria) | Deutsch (Österreich) | de → en |
-| `de_CH` | German (Switzerland) | Deutsch (Schweiz) | de → en |
-| `dv` | Maldivian | ދިވެހި | en |
-| `el` | Greek | Ελληνικά | en |
-| `en` | English | English | — |
-| `en_AU` | English (Australia) | English (Australia) | en |
-| `en_AU_ocker` | English (Australia Ocker) | English (Australia) | en_AU → en |
-| `en_BORK` | English (Bork) | English (Bork) | en |
-| `en_CA` | English (Canada) | English (Canada) | en |
-| `en_GB` | English (Great Britain) | English (Great Britain) | en |
-| `en_GH` | English (Ghana) | English (Ghana) | en |
-| `en_HK` | English (Hong Kong) | English (Hong Kong) | en |
-| `en_IE` | English (Ireland) | English (Ireland) | en |
-| `en_IN` | English (India) | English (India) | en |
-| `en_NG` | English (Nigeria) | English (Nigeria) | en |
-| `en_NP` | English (Nepal) | English (Nepal) | en |
-| `en_US` | English (United States) | English (United States) | en |
-| `en_ZA` | English (South Africa) | English (South Africa) | en |
-| `eo` | Esperanto | Esperanto | en |
-| `es` | Spanish | Español | en |
-| `es_MX` | Spanish (Mexico) | Español (México) | es → en |
-| `fa` | Farsi/Persian | فارسی | en |
-| `fi` | Finnish | suomi | en |
-| `fr` | French | Français | en |
-| `fr_BE` | French (Belgium) | Français (Belgique) | fr → en |
-| `fr_CA` | French (Canada) | Français (Canada) | fr → en |
-| `fr_CH` | French (Switzerland) | Français (Suisse) | fr → en |
-| `fr_LU` | French (Luxembourg) | Français (Luxembourg) | fr → en |
-| `fr_SN` | French (Senegal) | Français (Sénégal) | fr → en |
-| `he` | Hebrew | עברית | en |
-| `hr` | Croatian | Hrvatski | en |
-| `hu` | Hungarian | magyar | en |
-| `hy` | Armenian | Հայերեն | en |
-| `id_ID` | Indonesian (Indonesia) | Bahasa Indonesia (Indonesia) | en |
-| `it` | Italian | Italiano | en |
-| `ja` | Japanese | 日本語 | en |
-| `ka_GE` | Georgian (Georgia) | ქართული (საქართველო) | en |
-| `ko` | Korean | 한국어 | en |
-| `ku_ckb` | Kurdish (Sorani) | کوردی (سۆرانی) | en |
-| `ku_kmr_latin` | Kurdish (Kurmanji, Latin) | Kurdî (Kurmancî) | en |
-| `lv` | Latvian | latviešu valoda | en |
-| `mk` | Macedonian | македонски јазик | en |
-| `mn_MN_cyrl` | Mongolian (Mongolia, Cyrillic) | Монгол (Монгол Улс, Кирилл) | en |
-| `nb_NO` | Norwegian (Norway) | Norsk bokmål (Norge) | en |
-| `ne` | Nepali | नेपाली | en |
-| `nl` | Dutch | Nederlands | en |
-| `nl_BE` | Dutch (Belgium) | Nederlands (België) | nl → en |
-| `pl` | Polish | Polski | en |
-| `pt_BR` | Portuguese (Brazil) | Português (Brasil) | en |
-| `pt_PT` | Portuguese (Portugal) | Português (Portugal) | en |
-| `ro` | Romanian | Română | en |
-| `ro_MD` | Romanian (Moldova) | Română (Moldova) | ro → en |
-| `ru` | Russian | Русский | en |
-| `sk` | Slovak | slovenčina | en |
-| `sl_SI` | Slovenian (Slovenia) | Slovensko (Slovenia) | en |
-| `sr_RS_latin` | Serbian (Serbia, Latin) | srpski (Srbija, latinica) | en |
-| `sv` | Swedish | Svenska | en |
-| `ta_IN` | Tamil (India) | தமிழ் (இந்தியா) | en |
-| `th` | Thai | ไทย | en |
-| `tr` | Turkish | Türkçe | en |
-| `uk` | Ukrainian | Українська | en |
-| `ur` | Urdu | اردو | en |
-| `uz_UZ_latin` | Uzbek (Uzbekistan, Latin) | O'zbekcha | en |
-| `vi` | Vietnamese | Tiếng Việt | en |
-| `yo_NG` | Yoruba (Nigeria) | Yoruba (Naijiria) | en |
-| `zh_CN` | Chinese (China) | 中文 (中国) | en |
-| `zh_TW` | Chinese (Taiwan) | 中文 (臺灣) | en |
-| `zu_ZA` | Zulu (South Africa) | isiZulu (Iningizimu Afrika) | en |
-<!-- locales:end -->
-
-</details>
-
-Fallback works like faker.js: each data group (`person.first_name`, `location.city_pattern`…) comes from the first locale in the chain that defines it; data a locale marks as not applicable (e.g. name prefixes in Azerbaijani) is never borrowed from another locale.
-
-### Custom data
-
 ```csharp
-// A new locale on top of an existing one
-Locales.Register("sv_dalarna", l => l
-    .FallbackTo("sv")                                  // sv → en → base
-    .Cities("Mora", "Falun", "Rättvik")
-    .FirstNames(Sex.Female, "Kerstin", "Margit")      // male names still come from sv
-    .EmailDomains("dalarna.example")
-    .PhoneFormats("0250-## ## ##"));
+builder.Services.AddPhoney(o => { o.Locale = "sv"; o.Seed = 42; })
+    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // singleton Generator<Customer>
+    .AddGenerator(TestData.Order);                              // source-generated: no reflection, AOT safe
 
-// Extra or replaced data in an existing locale
-Locales.Extend("en", l => l.CompanyNames("{{Person.LastName}} & Sons", "Acme {{Commerce.Department}}"));
+app.MapGet("/demo/customers", (Generator<Customer> customers) => customers.Generate(10));
+app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 ```
 
-Typed methods cover the common data: `FirstNames`, `LastNames`, `JobTitles`, `Cities`, `Streets`, `States`, `Countries`, `ZipCodeFormats`, `PhoneFormats`, `EmailDomains`, `CompanyNames` and `LoremWords`. Each replaces only that data; everything else is inherited. For anything else, use a faker.js data path, or import a faker.js locale file:
+- `IFaker`/`Faker` are scoped, `IFakerFactory` creates fakers for other locales and seeds, and generators are singletons. `IFaker` itself is in the core package (implemented by `Faker`), for your own abstractions and test doubles.
+- `PhoneyOptions`: `Locale`, `Seed`, `ReferenceDate` and `TimeProvider`.
+- With `Seed`, every scope starts at the seed, so each request or test scope is reproducible.
+- `ReferenceDate`, or a `TimeProvider` (from the options or registered in the container, e.g. `FakeTimeProvider`), sets "now".
+- In integration tests, call `AddPhoney(o => o.Seed = 1)` again in `WebApplicationFactory.ConfigureTestServices`; it configures the same options.
+
+## EF Core seeding
+
+The `Phoney.EntityFrameworkCore` package turns generated data into `HasData` seed data:
+
+```bash
+dotnet add package Phoney.EntityFrameworkCore
+```
 
 ```csharp
-Locales.Extend("en", l => l
-    .Set("commerce.department", "Toys", "Garden")
-    .Set("person.nickname", "Ace", "Buddy"));          // new paths are allowed: faker.Pick("person.nickname")
-
-Locales.Register("en_PIRATE", File.OpenRead("pirate.json"), "en");
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    var customers = modelBuilder.Entity<Customer>().HasFakeData(50);
+    modelBuilder.Entity<Order>().HasFakeData(200, g => g.With(o => o.Status, OrderStatus.Paid));
+}
 ```
+
+- The data is the same on every model build (the seed is derived from the entity name), so migrations stay stable.
+- Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys are pointed at seeded principals (seed principals first, or link with `WithOneOf`).
+- Call it after the entity's other configuration; it reads keys, maximum lengths and navigations from the model.
+
+## NodaTime
+
+The `Phoney.NodaTime` package adds NodaTime values and NodaTime members:
+
+```bash
+dotnet add package Phoney.NodaTime
+```
+
+```csharp
+Instant created = faker.Noda().Instant.Past();
+LocalDate birthday = faker.Noda().LocalDate.Birthdate();
+var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate BirthDate… follow the conventions
+```
+
+`Instant`, `OffsetDateTime`, `ZonedDateTime`, `LocalDateTime`, `LocalDate`, `LocalTime` and `Duration` members are generated like their built-in counterparts (`DateTimeOffset`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`), so `CreatedAt`, `ExpiresAt`, `BirthDate` and `Age` agree; this works with reflection and with source-generated models. See the [package README](src/Phoney.NodaTime/README.md).
 
 ## Performance
 
