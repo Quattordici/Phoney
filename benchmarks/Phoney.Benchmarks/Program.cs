@@ -111,8 +111,11 @@ public class LocaleLoadBenchmarks
     [Params("en", "de", "ja")]
     public string Locale { get; set; } = "en";
 
-    [Benchmark(Description = "Read embedded locale")]
-    public Entry?[]? Load() => LocaleResourceReader.ReadEmbedded(Locale);
+    [Benchmark(Description = "Open embedded locale (decodes nothing)")]
+    public int Open() => LocaleResource.Open(Locale)?.DecodedEntries ?? -1;
+
+    [Benchmark(Description = "Open and decode every entry")]
+    public Entry?[]? OpenAndDecodeAll() => LocaleResource.Open(Locale)?.DecodeAll();
 }
 
 public sealed class Customer

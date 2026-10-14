@@ -117,8 +117,26 @@ public sealed partial class HelpersModule : FakerModule
     }
 
     /// <summary>Replaces runs of <c>#</c> with digits where the first digit is not zero (used for building and apartment numbers).</summary>
-    internal string ReplaceHashRunsWithoutLeadingZero(string text) =>
-        HashRun().Replace(text, m => Faker.String.Numeric(m.Length, allowLeadingZeros: false));
+    internal string ReplaceHashRunsWithoutLeadingZero(string text)
+    {
+        // A loop, not a Regex: the first use of one costs a process milliseconds, and every address has a building number.
+        var first = text.IndexOf('#', StringComparison.Ordinal);
+        if (first < 0)
+            return text;
+        var sb = new StringBuilder(text.Length + 8);
+        var position = 0;
+        while (first >= 0)
+        {
+            var end = first;
+            while (end < text.Length && text[end] == '#')
+                end++;
+            sb.Append(text, position, first - position).Append(Faker.String.Numeric(end - first, allowLeadingZeros: false));
+            position = end;
+            first = text.IndexOf('#', position);
+        }
+
+        return sb.Append(text, position, text.Length - position).ToString();
+    }
 
     /// <summary>
     /// faker.js' legacy pre-pass for credit card patterns: <c>x{n,m}</c>, <c>x{n}</c> repeat characters and
@@ -166,9 +184,6 @@ public sealed partial class HelpersModule : FakerModule
         return sum % 10;
     }
 
-    /// <summary>Runs of <c>#</c>.</summary>
-    [GeneratedRegex("#+")]
-    private static partial Regex HashRun();
 
     /// <summary><c>x{n,m}</c>: a character repeated n to m times.</summary>
     [GeneratedRegex(@"(.)\{(\d+),(\d+)\}")]

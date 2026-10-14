@@ -7,6 +7,7 @@ using FizzWare.NBuilder;
 
 // Timed comparison:  dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- --filter '*'
 // Cold start:        dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold [library...]   (all libraries, or just the ones named)
+// Cold start AOT:    dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-aot <published benchmarks/Phoney.Benchmarks.ColdAot executable>
 // Cold phases:       dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-phases        (where Phoney's first call spends its time; set DOTNET_* variables to try runtime settings)
 // Check:             dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- check   (prints one object per library, to see that they make comparable data)
 // Summary:           dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- summarize <artifacts directory of the timed run>   (prints the README's comparison matrix)
@@ -18,6 +19,11 @@ if (args is ["cold-child", var library])
 if (args is ["cold", ..var only])
 {
     return ColdStart.Run(only);
+}
+
+if (args is ["cold-aot", var binary])
+{
+    return ColdStart.RunExecutable("Phoney (Native AOT, source generated)", binary);
 }
 
 if (args is ["cold-phases-child"])
@@ -75,20 +81,37 @@ internal static class ColdStart
         Console.WriteLine("|---|---:|---:|---:|");
         foreach (var library in new[] { "Phoney (reflection)", "Phoney (source generated)", "Bogus", "AutoBogus", "AutoFixture", "NBuilder", "Faker.Net" }.Where(l => only.Length == 0 || only.Contains(l)))
         {
-            var samples = new List<double>();
-            for (var run = 0; run < 15; run++)
-            {
-                using var process = Process.Start(new ProcessStartInfo(host, [.. prefix, "cold-child", library]) { RedirectStandardOutput = true })!;
-                samples.Add(double.Parse(process.StandardOutput.ReadToEnd().Trim(), CultureInfo.InvariantCulture));
-                process.WaitForExit();
-            }
-
-            samples.Sort();
-            Console.WriteLine($"| {library} | {samples[samples.Count / 2].ToString("F1", CultureInfo.InvariantCulture)} | {samples[0].ToString("F1", CultureInfo.InvariantCulture)} | {samples[^1].ToString("F1", CultureInfo.InvariantCulture)} |");
+            Print(library, Measure(host, [.. prefix, "cold-child", library]));
         }
 
         return 0;
     }
+
+    /// <summary>Measures an executable that prints the milliseconds to its first object (the Native AOT build).</summary>
+    public static int RunExecutable(string label, string path)
+    {
+        Console.WriteLine("| Library | Median (ms) | Fastest (ms) | Slowest (ms) |");
+        Console.WriteLine("|---|---:|---:|---:|");
+        Print(label, Measure(Path.GetFullPath(path), []));
+        return 0;
+    }
+
+    private static List<double> Measure(string executable, string[] arguments)
+    {
+        var samples = new List<double>();
+        for (var run = 0; run < 15; run++)
+        {
+            using var process = Process.Start(new ProcessStartInfo(executable, arguments) { RedirectStandardOutput = true })!;
+            samples.Add(double.Parse(process.StandardOutput.ReadToEnd().Trim(), CultureInfo.InvariantCulture));
+            process.WaitForExit();
+        }
+
+        samples.Sort();
+        return samples;
+    }
+
+    private static void Print(string library, List<double> samples) =>
+        Console.WriteLine($"| {library} | {samples[samples.Count / 2].ToString("F1", CultureInfo.InvariantCulture)} | {samples[0].ToString("F1", CultureInfo.InvariantCulture)} | {samples[^1].ToString("F1", CultureInfo.InvariantCulture)} |");
 }
 
 /// <summary>Times the steps of Phoney's first call one after the other in fresh processes, to see which of them the start-up goes to.</summary>
@@ -97,12 +120,42 @@ internal static class ColdPhases
     public static int Child()
     {
         var clock = Stopwatch.StartNew();
-        var marks = new List<(string Name, double Ms)>();
+        var marks = new List<(string Name, double Ms, double JitMs, int Methods)>();
+        var (jit, methods) = (System.Runtime.JitInfo.GetCompilationTime(), System.Runtime.JitInfo.GetCompiledMethodCount());
         void Mark(string name)
         {
-            marks.Add((name, clock.Elapsed.TotalMilliseconds));
+            var (jitNow, methodsNow) = (System.Runtime.JitInfo.GetCompilationTime(), System.Runtime.JitInfo.GetCompiledMethodCount());
+            marks.Add((name, clock.Elapsed.TotalMilliseconds, (jitNow - jit).TotalMilliseconds, (int)(methodsNow - methods)));
+            (jit, methods) = (jitNow, methodsNow);
             clock.Restart();
         }
+
+        GC.KeepAlive(Phoney.Data.DataKeys.Paths.Length);
+        Mark("(probe) DataKeys.Paths");
+        GC.KeepAlive(Phoney.Data.DataKeys.GroupOf.Length);
+        Mark("(probe) DataKeys.GroupOf");
+        GC.KeepAlive(new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal));
+        Mark("(probe) new ConcurrentDictionary<string,int>");
+        GC.KeepAlive(new Dictionary<string, int>(StringComparer.Ordinal) { ["a"] = 1 });
+        Mark("(probe) new Dictionary<string,int>");
+        var probeCatalog = new Dictionary<string, int>(Phoney.Data.DataKeys.Count, StringComparer.Ordinal);
+        for (var id = 0; id < Phoney.Data.DataKeys.Count; id++)
+            probeCatalog.Add(Phoney.Data.DataKeys.Paths[id], id);
+        Mark("(probe) fill catalog dictionary");
+        var probeGroups = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < Phoney.Data.DataKeys.Count; i++)
+        {
+            var path = Phoney.Data.DataKeys.Paths[i];
+            var first = path.IndexOf('.');
+            var second = first < 0 ? -1 : path.IndexOf('.', first + 1);
+            probeGroups.TryAdd(second < 0 ? path : path[..second], Phoney.Data.DataKeys.GroupOf[i]);
+        }
+
+        Mark("(probe) fill group dictionary");
+        GC.KeepAlive(Phoney.Data.LocaleCatalog.Embedded);
+        Mark("(probe) LocaleCatalog.Embedded");
+        GC.KeepAlive(Phoney.Data.KeyRegistry.Count);
+        Mark("(probe) KeyRegistry");
 
         using (var resource = typeof(Phoney.Faker).Assembly.GetManifestResourceStream("Phoney.Locales.en.bin.br")!)
         using (var brotli = new System.IO.Compression.BrotliStream(resource, System.IO.Compression.CompressionMode.Decompress))
@@ -123,7 +176,7 @@ internal static class ColdPhases
         Mark("(probe) first Regex");
         _ = "abc".Normalize(System.Text.NormalizationForm.FormKD);
         Mark("(probe) string.Normalize");
-        _ = Phoney.Modules.CharMappings.Map.Count;
+        GC.KeepAlive(Phoney.Modules.CharMappings.Count);
         Mark("(probe) CharMappings.Map");
         _ = faker.Internet.Email();
         Mark("Internet.Email()");
@@ -133,7 +186,7 @@ internal static class ColdPhases
         Mark("first Generate() (compile + object)");
         _ = generator.Generate();
         Mark("second Generate()");
-        Console.WriteLine(string.Join(';', marks.Select(m => m.Name + "=" + m.Ms.ToString("F2", CultureInfo.InvariantCulture))));
+        Console.WriteLine(string.Join(';', marks.Select(m => m.Name + "=" + m.Ms.ToString("F2", CultureInfo.InvariantCulture) + "," + m.JitMs.ToString("F2", CultureInfo.InvariantCulture) + "," + m.Methods)));
         return 0;
     }
 
@@ -142,32 +195,42 @@ internal static class ColdPhases
         var host = Environment.ProcessPath!;
         string[] prefix = Path.GetFileNameWithoutExtension(host) == "dotnet" ? [typeof(ColdPhases).Assembly.Location] : [];
         var samples = new Dictionary<string, List<double>>();
+        var jitSamples = new Dictionary<string, List<double>>();
+        var methodSamples = new Dictionary<string, List<double>>();
         var order = new List<string>();
         for (var run = 0; run < 15; run++)
         {
             using var process = Process.Start(new ProcessStartInfo(host, [.. prefix, "cold-phases-child"]) { RedirectStandardOutput = true })!;
             foreach (var part in process.StandardOutput.ReadToEnd().Trim().Split(';'))
             {
-                var (name, value) = (part[..part.LastIndexOf('=')], double.Parse(part[(part.LastIndexOf('=') + 1)..], CultureInfo.InvariantCulture));
-                if (!samples.TryGetValue(name, out var list))
+                var name = part[..part.LastIndexOf('=')];
+                var numbers = part[(part.LastIndexOf('=') + 1)..].Split(',').Select(n => double.Parse(n, CultureInfo.InvariantCulture)).ToArray();
+                if (!samples.ContainsKey(name))
                 {
-                    samples[name] = list = [];
+                    samples[name] = [];
+                    jitSamples[name] = [];
+                    methodSamples[name] = [];
                     order.Add(name);
                 }
 
-                list.Add(value);
+                samples[name].Add(numbers[0]);
+                jitSamples[name].Add(numbers[1]);
+                methodSamples[name].Add(numbers[2]);
             }
 
             process.WaitForExit();
         }
 
-        Console.WriteLine("| Step | Median (ms) |");
-        Console.WriteLine("|---|---:|");
-        foreach (var name in order)
+        static string Median(List<double> values, string format)
         {
-            samples[name].Sort();
-            Console.WriteLine($"| {name} | {samples[name][samples[name].Count / 2].ToString("F2", CultureInfo.InvariantCulture)} |");
+            values.Sort();
+            return values[values.Count / 2].ToString(format, CultureInfo.InvariantCulture);
         }
+
+        Console.WriteLine("| Step | Median (ms) | of which JIT (ms) | Methods JIT-compiled |");
+        Console.WriteLine("|---|---:|---:|---:|");
+        foreach (var name in order)
+            Console.WriteLine($"| {name} | {Median(samples[name], "F2")} | {Median(jitSamples[name], "F2")} | {Median(methodSamples[name], "F0")} |");
 
         return 0;
     }

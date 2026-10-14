@@ -14,9 +14,9 @@ internal static class LocaleStore
     /// from <see cref="Locales.Register(string, System.Action{LocaleBuilder})"/> or <see cref="Locales.Extend"/>
     /// (merged per key, so setting female first names keeps the inherited male ones).
     /// </summary>
-    private sealed class Source(LocaleInfo info, Func<Entry?[]> load)
+    private sealed class Source(LocaleInfo info, Func<LocaleResource> load)
     {
-        private readonly Lazy<Entry?[]> _embedded = new(load, LazyThreadSafetyMode.ExecutionAndPublication);
+        private readonly Lazy<LocaleResource> _embedded = new(load, LazyThreadSafetyMode.ExecutionAndPublication);
 
         /// <summary>Locale description, including the fallback chain.</summary>
         public LocaleInfo Info { get; set; } = info;
@@ -24,8 +24,8 @@ internal static class LocaleStore
         /// <summary>User-supplied entries by key id; they win over the embedded data of every locale in the chain after this one.</summary>
         public Dictionary<int, Entry> User { get; } = [];
 
-        /// <summary>The embedded (faker.js) entries; empty for user-registered locales.</summary>
-        public Entry?[] Embedded => _embedded.Value;
+        /// <summary>The embedded (faker.js) data, opened on first use and decoded entry by entry; empty for user-registered locales.</summary>
+        public LocaleResource Embedded => _embedded.Value;
     }
 
     private static readonly object Gate = new();
@@ -67,7 +67,7 @@ internal static class LocaleStore
         canonical = "";
         if (string.IsNullOrWhiteSpace(code))
             return false;
-        var locales = Sources.Values.Select(s => s.Info).OrderBy(i => i.Code, StringComparer.Ordinal);
+        IEnumerable<LocaleInfo> locales() => Sources.Values.Select(s => s.Info).OrderBy(i => i.Code, StringComparer.Ordinal); // only the fuzzy matches need it; reading Values locks the whole dictionary
         var normalized = code.Trim().Replace('-', '_');
 
         // 1. An existing code in any casing and separator style.
@@ -77,7 +77,7 @@ internal static class LocaleStore
         // 2. Script-tagged culture names: stripping segments would drop the region (en-Latn-US → en), so match
         //    on language/script/country instead (sr-Latn-RS → sr_RS_latin, zh-Hant-TW → zh_TW).
         if (CultureMatcher.TryParse(code, out _, out var script, out _) && script is not null &&
-            CultureMatcher.Match(code, locales) is { } scripted)
+            CultureMatcher.Match(code, locales()) is { } scripted)
             return Found(scripted, out canonical);
 
         // 3. Drop trailing segments: sv_SE → sv, de_AT_u_ca → de_AT, sv_dalarna_x → a custom sv_dalarna.
@@ -89,7 +89,7 @@ internal static class LocaleStore
         }
 
         // 4. The closest locale of the same language: mn-MN → mn_MN_cyrl, ckb-IQ → ku_ckb, pt-AO → pt_BR.
-        if (CultureMatcher.Match(code, locales) is { } closest)
+        if (CultureMatcher.Match(code, locales()) is { } closest)
             return Found(closest, out canonical);
 
         return false;
@@ -119,7 +119,7 @@ internal static class LocaleStore
             }
 
             var info = new LocaleInfo(builder.Code, builder.TitleText, null, null, null, null, "ltr", builder.FallbackCodes);
-            var source = new Source(info, static () => []);
+            var source = new Source(info, static () => LocaleResource.Empty);
             foreach (var (key, entry) in builder.Changes)
             {
                 if (entry is null)
@@ -153,16 +153,24 @@ internal static class LocaleStore
     private static LocaleData Build(string code)
     {
         Source[] chain;
-        (int Key, Entry Entry)[][] user;
+        Dictionary<int, Entry>[] userEntries; // snapshots: only looked up by key, so their order never matters
         lock (Gate)
         {
             var source = Sources[code];
-            chain = [source, .. source.Info.Fallback.Select(f => Sources[f])];
-            user = [.. chain.Select(c => c.User.OrderBy(u => u.Key).Select(u => (u.Key, u.Value)).ToArray())];
+            var fallback = source.Info.Fallback;
+            chain = new Source[fallback.Count + 1];
+            userEntries = new Dictionary<int, Entry>[chain.Length];
+            chain[0] = source;
+            for (var c = 1; c < chain.Length; c++)
+                chain[c] = Sources[fallback[c - 1]];
+            for (var c = 0; c < chain.Length; c++)
+                userEntries[c] = new Dictionary<int, Entry>(chain[c].User);
         }
 
         var keyCount = KeyRegistry.Count;
-        var embedded = chain.Select(s => s.Embedded).ToArray();
+        var embedded = new LocaleResource[chain.Length];
+        for (var c = 0; c < chain.Length; c++)
+            embedded[c] = chain[c].Embedded; // opens the files; no entry is decoded here
 
         // Embedded data follows faker.js: a group (person.first_name, location.city_pattern…) comes whole from the
         // first locale in the chain that defines any of it.
@@ -170,15 +178,15 @@ internal static class LocaleStore
         for (var c = 0; c < chain.Length; c++)
         {
             groupPresent[c] = new bool[KeyRegistry.GroupCount];
-            for (var k = 0; k < embedded[c].Length; k++)
+            for (var k = 0; k < DataKeys.Count; k++)
             {
-                if (embedded[c][k] is not null)
+                if (embedded[c].Has(k))
                     groupPresent[c][KeyRegistry.GroupOf(k)] = true;
             }
         }
 
-        var userEntries = user.Select(u => u.ToDictionary(x => x.Key, x => x.Entry)).ToArray();
         var merged = new Entry?[keyCount];
+        var origin = new LocaleResource?[keyCount]; // where an embedded entry is decoded from when it is first read
         for (var k = 0; k < keyCount; k++)
         {
             var group = KeyRegistry.GroupOf(k);
@@ -193,13 +201,14 @@ internal static class LocaleStore
 
                 if (group < groupPresent[c].Length && groupPresent[c][group])
                 {
-                    merged[k] = k < embedded[c].Length ? embedded[c][k] : null;
+                    if (embedded[c].Has(k))
+                        origin[k] = embedded[c];
                     break;
                 }
             }
         }
 
-        return new LocaleData(chain[0].Info, merged);
+        return new LocaleData(chain[0].Info, merged, origin);
     }
 
     /// <summary>One lazily loaded source per embedded locale.</summary>
@@ -209,7 +218,7 @@ internal static class LocaleStore
         foreach (var info in LocaleCatalog.Embedded)
         {
             var code = info.Code;
-            sources[code] = new Source(info, () => LocaleResourceReader.ReadEmbedded(code)
+            sources[code] = new Source(info, () => LocaleResource.Open(code)
                 ?? throw new PhoneyDataException($"The embedded data for locale '{code}' is missing from the Phoney assembly."));
         }
 

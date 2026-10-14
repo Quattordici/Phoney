@@ -33,7 +33,7 @@ public sealed partial class InternetModule : FakerModule
     public string Email(string? firstName = null, string? lastName = null, string? provider = null, bool allowSpecialCharacters = false)
     {
         provider ??= Faker.Pick(DataKeys.InternetFreeEmail);
-        var local = InvalidEmailChars().Replace(Username(firstName, lastName), "");
+        var local = RemoveInvalidEmailChars(Username(firstName, lastName));
         if (local.Length > 50)
             local = local[..50];
         if (allowSpecialCharacters)
@@ -45,7 +45,7 @@ public sealed partial class InternetModule : FakerModule
                 local = string.Concat(local.AsSpan(0, index), special[Random.Index(special.Length)].ToString(), local.AsSpan(index + 1));
         }
 
-        local = RepeatedDots().Replace(local, ".").Trim('.');
+        local = CollapseDots(local).Trim('.');
         return $"{local}@{provider}";
     }
 
@@ -282,13 +282,17 @@ public sealed partial class InternetModule : FakerModule
     /// <summary>Removes diacritics, transliterates non-Latin letters and encodes anything else non-ASCII in base 36, like faker.js.</summary>
     private static string ToAscii(string text)
     {
+        // Plain ASCII needs no normalisation or transliteration (no letter of the table is ASCII); this is nearly every name of an English locale.
+        if (Ascii.IsValid(text))
+            return text.Replace("'", "", StringComparison.Ordinal).Replace(" ", "", StringComparison.Ordinal);
+
         var decomposed = text.Normalize(NormalizationForm.FormKD);
         var sb = new StringBuilder(decomposed.Length);
         foreach (var rune in decomposed.EnumerateRunes())
         {
             if (Rune.GetUnicodeCategory(rune) == UnicodeCategory.NonSpacingMark && rune.Value is >= 0x300 and <= 0x36F)
                 continue;
-            if (rune.IsBmp && CharMappings.Map.TryGetValue((char)rune.Value, out var mapped))
+            if (rune.IsBmp && CharMappings.TryMap((char)rune.Value, out var mapped))
                 sb.Append(mapped);
             else if (rune.Value < 0x80)
                 sb.Append((char)rune.Value);
@@ -338,13 +342,48 @@ public sealed partial class InternetModule : FakerModule
         return Convert.ToBase64String(buffer.WrittenSpan).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
-    /// <summary>Characters not allowed in generated email local parts.</summary>
-    [GeneratedRegex("[^A-Za-z0-9._+-]+")]
-    private static partial Regex InvalidEmailChars();
+    /// <summary>
+    /// Removes the characters that are not allowed in generated email local parts (everything but <c>A-Z a-z 0-9 . _ + -</c>). Written as a loop
+    /// because the first use of a <see cref="Regex"/> in a process costs more than the whole first email.
+    /// </summary>
+    internal static string RemoveInvalidEmailChars(string text)
+    {
+        var kept = 0;
+        foreach (var c in text)
+        {
+            if (IsEmailLocalChar(c))
+                kept++;
+        }
 
-    /// <summary>Two or more consecutive dots.</summary>
-    [GeneratedRegex(@"\.{2,}")]
-    private static partial Regex RepeatedDots();
+        if (kept == text.Length)
+            return text;
+        return string.Create(kept, text, static (span, source) =>
+        {
+            var next = 0;
+            foreach (var c in source)
+            {
+                if (IsEmailLocalChar(c))
+                    span[next++] = c;
+            }
+        });
+    }
+
+    private static bool IsEmailLocalChar(char c) => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '.' or '_' or '+' or '-';
+
+    /// <summary>Replaces every run of two or more dots with one dot.</summary>
+    internal static string CollapseDots(string text)
+    {
+        if (!text.Contains("..", StringComparison.Ordinal))
+            return text;
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (c != '.' || sb.Length == 0 || sb[^1] != '.')
+                sb.Append(c);
+        }
+
+        return sb.ToString();
+    }
 
     /// <summary><c>a.b.c.d/prefix</c>.</summary>
     [GeneratedRegex(@"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})$")]
