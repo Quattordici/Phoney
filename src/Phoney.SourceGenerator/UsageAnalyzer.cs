@@ -212,6 +212,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     {
         CheckDiscarded(context, call, symbols);
         var name = call.TargetMethod.Name;
+        if (name == "Use")
+        {
+            CheckUseReplaced(context, call, symbols);
+            return;
+        }
+
         if (!RuleMethods.Contains(name))
             return;
 
@@ -259,17 +265,38 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>PHONEY008: an earlier call in the same chain set the same member, and this one replaces it.</summary>
     private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
+        if (HasEarlierInChain(call, symbols, earlier =>
+                SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Name == selector.Name))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, selector.Name));
+        }
+    }
+
+    /// <summary>PHONEY008 for type-wide generators: <c>Use</c> for a type that an earlier <c>Use</c> in the same chain registered replaces it.</summary>
+    private static void CheckUseReplaced(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
+    {
+        // Use<TNested>(generator) and Use<TBase, TGenerated>(generator) both register TypeArguments[0].
+        if (call.TargetMethod.TypeArguments.FirstOrDefault() is not { } type)
+            return;
+        if (HasEarlierInChain(call, symbols, earlier =>
+                earlier.TargetMethod.Name == "Use" && earlier.TargetMethod.TypeArguments.FirstOrDefault() is { } previous && SymbolEqualityComparer.Default.Equals(previous, type)))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, AnalyzerSupport.NameLocation(call), type.Name));
+        }
+    }
+
+    /// <summary>Whether a generator call earlier in the same fluent chain (not in a variable the chain started from) satisfies <paramref name="matches"/>.</summary>
+    private static bool HasEarlierInChain(IInvocationOperation call, Symbols symbols, Func<IInvocationOperation, bool> matches)
+    {
         var receiver = call.Instance;
         while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, symbols.Generator))
         {
-            if (SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Name == selector.Name)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, selector.Name));
-                return;
-            }
-
+            if (matches(earlier))
+                return true;
             receiver = earlier.Instance;
         }
+
+        return false;
     }
 
     /// <summary>Whether the chain starts with <c>new Generator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>

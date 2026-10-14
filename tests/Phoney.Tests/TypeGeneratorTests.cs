@@ -89,7 +89,9 @@ public sealed class TypeGeneratorTests
     [Test]
     public void A_later_registration_for_the_same_type_replaces_the_earlier_one()
     {
+#pragma warning disable PHONEY008 // replacing the earlier registration is what this test is about
         var trip = Fake.For<Trip>().Use(Oslo()).Use(Fake.For<Stopover>().With(s => s.Place, "Rome")).Generate();
+#pragma warning restore PHONEY008
 
         trip.Start.Place.ShouldBe("Rome");
     }

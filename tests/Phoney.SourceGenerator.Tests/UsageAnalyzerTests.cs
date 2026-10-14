@@ -30,6 +30,8 @@ public sealed class UsageAnalyzerTests
 
         public abstract class Shape { public string Label { get; set; } = ""; }
 
+        public class Circle : Shape { public double Radius { get; set; } }
+
         public static class Usage
         {
             private static readonly IDisposable Scope = Fake.Seeded(7);
@@ -229,6 +231,36 @@ public sealed class UsageAnalyzerTests
 
         diagnostics.Count.ShouldBe(2);
         diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Price'"));
+    }
+
+    [Test]
+    public async Task Use_that_replaces_an_earlier_Use_for_the_same_type_is_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Seed(1).Use(Fake.For<Address>().With(a => a.Street, "x"));
+            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Use<Shape, Circle>(Fake.For<Circle>().With(c => c.Radius, 2));
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("'Address'");
+        diagnostics[1].GetMessage().ShouldContain("'Shape'");
+        TextOf(diagnostics[0]).ShouldBe("Use");
+    }
+
+    [Test]
+    public async Task Use_for_different_types_or_on_derived_generators_is_not_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Use<Shape, Circle>(Fake.For<Circle>()).Use(Fake.For<Circle>());
+            public static object B(Generator<Product> baseline) => baseline.Use(Fake.For<Address>());
+            public static object C()
+            {
+                var baseline = Fake.For<Product>().Use(Fake.For<Address>());
+                return baseline.Use(Fake.For<Address>().With(a => a.Street, "x"));
+            }
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
     }
 
     [Test]
