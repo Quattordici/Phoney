@@ -121,6 +121,46 @@ public sealed class Generator<T> : INestedGenerator
         Derive(_config with { Subtypes = _config.Subtypes.SetItem(typeof(TBase), Subtypes.Validate(typeof(TBase), subtypes)) });
 
     /// <summary>
+    /// Creates every nested <typeparamref name="TNested"/> in the generated objects with <paramref name="generator"/>: members,
+    /// collection elements and dictionary values, at any depth, e.g. <c>.Use(Fake.For&lt;Address&gt;().Locale("de"))</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A rule for the member (<c>With(x =&gt; x.Billing, …)</c>) wins over the type's generator, which wins over
+    /// <see cref="Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c> and the type's model. The generator is self-contained: it brings its
+    /// own rules, locale and settings. A generator used by an inner <see cref="Use{TNested}"/> wins over this one, while types
+    /// it does not register are still created by the generators registered here. A later registration for the same type replaces an earlier one.
+    /// </para>
+    /// <para>
+    /// The generated object itself is never replaced, depth limits and cycles still stop nesting with <see langword="null"/>, and objects you
+    /// pass to <c>Populate</c> are filled member by member: the generator creates the nested objects that are missing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException"><typeparamref name="TNested"/> is a scalar (string, number, date, enum…) or an array.</exception>
+    public Generator<T> Use<TNested>(Generator<TNested> generator) => Use<TNested, TNested>(generator);
+
+    /// <summary>
+    /// Creates every nested <typeparamref name="TBase"/> (an interface, abstract class or base class) with the generator of a
+    /// subtype, e.g. <c>.Use&lt;IShape, Circle&gt;(Fake.For&lt;Circle&gt;().With(c =&gt; c.Radius, 2))</c>.
+    /// </summary>
+    /// <remarks>See <see cref="Use{TNested}"/> for precedence and scope.</remarks>
+    /// <exception cref="ArgumentException"><typeparamref name="TBase"/> is a scalar (string, number, date, enum…) or an array.</exception>
+    public Generator<T> Use<TBase, TGenerated>(Generator<TGenerated> generator)
+        where TGenerated : TBase
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        var type = typeof(TBase);
+        if (type.IsArray || FakeMember.ScalarCategory(type) != TypeCategory.Other || ScalarAdapters.IsAdapted(type))
+        {
+            throw new ArgumentException(
+                $"{type.Name} is not a nested object: values like it come from rules and conventions. Use .With(x => x.Member, …) for a member, or .WithConvention<{type.Name}>(…) for all members with a name.",
+                nameof(generator));
+        }
+
+        return Derive(_config with { TypeGenerators = _config.TypeGenerators.SetItem(type, generator) });
+    }
+
+    /// <summary>
     /// Sets a member to one of <paramref name="values"/>, e.g. existing ids or objects:
     /// <c>.WithOneOf(o =&gt; o.Customer, customers)</c>.
     /// </summary>
@@ -313,6 +353,9 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <inheritdoc />
+    Type INestedGenerator.GeneratedType => typeof(T);
+
+    /// <inheritdoc />
     object? INestedGenerator.CreateNested(FakeScope parent) =>
         Start(parent.Faker.Random.Long(), parent.Faker).Create(0, parent);
 
@@ -404,6 +447,7 @@ public sealed class Generator<T> : INestedGenerator
         {
             Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
             Conventions = NestedConventions.For(conventions),
+            TypeGenerators = _config.TypeGenerators.IsEmpty ? null : _config.TypeGenerators,
         };
         return new Compiled(slots, [.. dependent], settings);
     }
@@ -497,6 +541,7 @@ public sealed class Generator<T> : INestedGenerator
         ImmutableDictionary<string, int> Unique,
         ImmutableList<CustomConvention> Conventions,
         ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
+        ImmutableDictionary<Type, INestedGenerator> TypeGenerators,
         ImmutableList<Action<Faker, T>> AfterCreate,
         Func<Faker, T>? Factory,
         bool Strict,
@@ -509,6 +554,7 @@ public sealed class Generator<T> : INestedGenerator
             ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             [],
             ImmutableDictionary<Type, ImmutableArray<Type>>.Empty,
+            ImmutableDictionary<Type, INestedGenerator>.Empty,
             [],
             null,
             false,

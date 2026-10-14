@@ -69,6 +69,10 @@ Console.WriteLine("\n== Subtypes");
 foreach (var drawing in Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle, Square>().Generate(3))
     Console.WriteLine($"{drawing.Title}: {drawing.Shape}");
 
+// Every Circle in the drawing comes from one generator, whatever member or collection it sits in.
+var big = Fake.For<Drawing>().Seed(1).Use<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 10)).Generate(2);
+Console.WriteLine(string.Join(", ", big.Select(d => d.Shape)));
+
 // 8. Time from a TimeProvider -----------------------------------------------------------------
 Console.WriteLine("\n== TimeProvider");
 var clock = new FixedClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));

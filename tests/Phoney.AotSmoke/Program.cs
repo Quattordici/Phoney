@@ -55,6 +55,14 @@ if (owners.Any(p => p.Vehicle is not (Car or Bike)) || owners.Any(p => p.Insuran
 if (!owners.Any(p => p.Contact is Email) || !owners.Any(p => p.Contact is Phone))
     throw new InvalidOperationException("one of several subtypes was not picked");
 
+// Type-wide generators: every Address, Pet and IContact in the graph comes from the registered generator, no reflection.
+var oslo = Fakes.Person.Seed(5)
+    .Use(Fake.Generated<Address>().With(a => a.City, "Oslo"))
+    .Use<IContact, Email>(Fake.Generated<Email>().With(e => e.Address, "oslo@example.com"))
+    .Generate(20);
+if (oslo.Any(p => p.Home.City != "Oslo") || oslo.Any(p => p.Contact is not Email { Address: "oslo@example.com" }))
+    throw new InvalidOperationException("type generators were not used");
+
 // Time: a TimeProvider drives relative dates.
 var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
 if (Fakes.Person.Seed(1).TimeProvider(clock).Generate().BirthDate.Year < 1950)
