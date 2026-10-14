@@ -150,12 +150,7 @@ public sealed class Generator<T> : INestedGenerator
     {
         ArgumentNullException.ThrowIfNull(generator);
         var type = typeof(TBase);
-        if (type.IsArray || FakeMember.ScalarCategory(type) != TypeCategory.Other || ScalarAdapters.IsAdapted(type))
-        {
-            throw new ArgumentException(
-                $"{type.Name} is not a nested object: values like it come from rules and conventions. Use .With(x => x.Member, …) for a member, or .WithConvention<{type.Name}>(…) for all members with a name.",
-                nameof(generator));
-        }
+        NestedGenerators.ValidateType(type, nameof(generator));
 
         return Derive(_config with { TypeGenerators = _config.TypeGenerators.SetItem(type, generator) });
     }
@@ -473,6 +468,13 @@ public sealed class Generator<T> : INestedGenerator
         return new Run(this, compiled, faker, seed ?? BaseSeed);
     }
 
+    /// <summary>The app-wide type generators with this generator's own on top, or <see langword="null"/> when there are none.</summary>
+    private static ImmutableDictionary<Type, INestedGenerator>? MergedTypeGenerators(ImmutableDictionary<Type, INestedGenerator> own)
+    {
+        var all = FakeGenerators.All.SetItems(own);
+        return all.IsEmpty ? null : all;
+    }
+
     /// <summary>Binds the rules (by member name) to the model's member indices and validates them.</summary>
     private Compiled Compile()
     {
@@ -537,7 +539,7 @@ public sealed class Generator<T> : INestedGenerator
         {
             Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
             Conventions = NestedConventions.For(conventions),
-            TypeGenerators = _config.TypeGenerators.IsEmpty ? null : _config.TypeGenerators,
+            TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
         };
         return new Compiled(slots, [.. dependent], settings);
     }

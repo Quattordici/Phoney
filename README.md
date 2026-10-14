@@ -253,6 +253,7 @@ var orders = Fake.For<Order>()
 ```
 
 - **Precedence**: a rule for the member (`With(o => o.Billing, …)`, `Ignore`) wins over the type's generator, which wins over `Subtype`, `Fake.Subtypes`, `[JsonDerivedType]` and the type's model. A `Subtype` that picked `Card` for an `IPayment` member still uses the generator registered for `Card`.
+- **App-wide**: `Fake.Generators.Add(Fake.For<Address>().Locale("sv"))` registers a generator for every generator compiled afterwards (like `Fake.Subtypes` and `Fake.Conventions`: do it at startup or in a test setup hook), also for `[FakeData]` parameters. A generator's own `Use` for the same type wins; `Remove<T>()` and `Clear()` undo it. The registered generator is shared, so its `Unique` members are unique across everything it creates.
 - **Self-contained**: the generator brings its own rules, locale, conventions and `Unique` sets (uniqueness holds across every object it creates). It inherits the reference date and, unless it sets its own, the locale.
 - **Whole graph, innermost wins**: a generator registered on an inner `Use` replaces the outer one for what it creates; types it doesn't register still come from the outer generators. A later `Use` for the same type replaces an earlier one.
 - **Not the root**: the object you generate is always made by the generator you call `Generate` on. Cycles and `MaxDepth` still stop nesting with `null`.
