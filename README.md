@@ -16,6 +16,8 @@
 - **Convention-based population** of classes, records and structs: `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… just work, and names, emails and avatars of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode (also checked at compile time), custom conventions, custom locales, faker.js-style templates.
 - **Interfaces and polymorphism**: `.Subtype<IShape, Circle, Square>()`, app-wide `Fake.Subtypes`, and `[JsonDerivedType]` honoured out of the box.
+- **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
+- **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
 - **Type-wide rules**: `.Use(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
@@ -166,7 +168,7 @@ public void Creates_an_invoice()
 Fake.Seed(42);                                // or seed the facade app-wide (every thread starts the same sequence)
 ```
 
-`Generator<T>.Seed(n)` does the same for a generator. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
+`Generator<T>.Seed(n)` does the same for a generator. For tests that should run on random data but be replayable, see [`[FakeSeed]`](#test-data-in-tunit) and `FakeSeed.Pick()`. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
 
 ### Controlling "now" with `TimeProvider`
 
@@ -307,6 +309,38 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 | `[Required]` | never `null` (even with `NullProbability`) and never empty |
 
 Annotations work the same with reflection and with the source generator, on properties, fields and record parameters (`[property: Range(1, 5)]`).
+
+### Invalid and boundary data
+
+The annotations that make generated objects valid also tell Phoney how to break them, so you can check that validation rejects what it should and accepts what sits right on the edge:
+
+```csharp
+// One object with one broken member, everything else valid (0 or 11 for [Range(1, 10)]).
+var order = Fake.For<Order>().Invalid(o => o.Quantity).Generate();
+var edge = Fake.For<Order>().Boundary(o => o.Quantity).Generate();            // 1 or 10
+
+// Every violation of every annotated member, one object each.
+foreach (var c in Fake.For<Order>().Seed(1).InvalidCases())
+    validator.Validate(c.Value).IsValid.ShouldBeFalse(c.ToString());          // "Quantity: above the maximum (10)"
+
+// Every value exactly on a limit; all of them are valid.
+foreach (var c in Fake.For<Order>().Seed(1).BoundaryCases())
+    validator.Validate(c.Value).IsValid.ShouldBeTrue(c.ToString());           // "Name: the maximum length (50)"
+```
+
+| Annotation | `Invalid` gives | `Boundary` gives |
+|---|---|---|
+| `[Required]` | `null`, and `""` for strings | strings: at least one character |
+| `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` on strings | one character too short / too long | exactly the minimum / maximum length |
+| the same on collections and arrays | one element too few / too many | exactly the minimum / maximum count |
+| `[Range]` on numbers and dates | one unit (one day for dates) below the minimum / above the maximum | the minimum / the maximum |
+| `[RegularExpression]`, `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | text the real validator rejects | none: they define a value, not an edge |
+| `[AllowedValues]`, `[DeniedValues]` | a value that is not allowed / a denied one | none |
+
+- **One change per case.** A case is the object `Generate()` gives for the seed, with only that member replaced, so it differs from a valid object in the member it is about (a collection that gets a different size also changes the draws after it). `InvalidCases()` and `BoundaryCases()` use one base object for all cases (the `Seed`, or a random one).
+- **Which violation?** `Invalid(member)` picks one violation per object, reproducibly with a seed, so `Generate(50)` covers them all. A value can break more than one limit of its member (an empty string is also too short); other members stay valid.
+- **Never silent.** A member without annotations to break throws an `InvalidOperationException` that lists the supported ones. Rules for the same member are replaced (`Invalid` and `Boundary` take the member's rule slot), ignored members are skipped, and limits beyond 100,000 characters or elements are not built.
+- Works the same with reflection and with the source generator, and with `CreateWith`. `PopulateMode.MissingOnly` only replaces members that are unset.
 
 ### Conventions
 
@@ -462,6 +496,27 @@ public async Task Formats_address(string street, string city, string zipCode) { 
 - Options: `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`. It also works on the test class (constructor parameters) and on `required` properties.
 - Interface and abstract parameters get one of their subtypes from `Fake.Subtypes` or `[JsonDerivedType]`.
 - Test data is created while TUnit discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes (`Fake.Subtypes.Add`) in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late.
+- **`PHONEY_SEED=123 dotnet test`** moves the seed of every `[FakeData]` test at once, to run the whole suite on other data; the same value replays it. Tests still differ from each other, and an explicit `Seed` stays as it is.
+
+### Random data you can replay
+
+`[FakeSeed]` runs a test on a seeded `Fake` facade: `Fake.One<T>()`, `Fake.Many<T>()`, `Fake.For<T>()` and `Fake.Person…` give different data on every run, and **when the test fails, its seed is printed in the test output**:
+
+```csharp
+[Test, FakeSeed]
+public async Task Totals_add_up()
+{
+    var orders = Fake.Many<Order>(100);                 // different on every run
+    await Assert.That(Totals.Of(orders)).IsEqualTo(orders.Sum(o => o.Total));
+}
+// Phoney: this test ran with random seed 481516234. Replay it with [FakeSeed(481516234)] or PHONEY_SEED=481516234.
+```
+
+- **Replay** with `[FakeSeed(481516234)]` on the test (it pins the seed while you fix the bug), or `PHONEY_SEED=481516234 dotnet test` to rerun a whole run. A pinned seed wins over `PHONEY_SEED`; a `PHONEY_SEED` that is not a whole number is reported with a message that says so.
+- On a method it wins over the class, and on a class over the assembly (`[assembly: FakeSeed]` makes every test random and replayable). Parallel tests don't affect each other.
+- The seed covers the `Fake` facade of the test, not generators created earlier (a `static` field) or ones that set their own `.Seed(...)`. Skipped tests print nothing.
+- The attribute installs the test's executor, so it can't be combined with another one such as `[STAThreadExecutor]`.
+- Other frameworks can do the same with `FakeSeed.Pick()` (`PHONEY_SEED`, else a new seed), `Fake.Seeded(seed)` and printing the seed when the test fails.
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 

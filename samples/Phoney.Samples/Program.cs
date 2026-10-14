@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Phoney;
 using Phoney.Generation;
 using Phoney.Modules;
@@ -73,6 +74,21 @@ foreach (var drawing in Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle, Squa
 var big = Fake.For<Drawing>().Seed(1).Use<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 10)).Generate(2);
 Console.WriteLine(string.Join(", ", big.Select(d => d.Shape)));
 
+// 7b. Invalid and boundary data, from the data annotations ------------------------------------
+Console.WriteLine("\n== Invalid and boundary data");
+foreach (var c in Fake.For<Registration>().Seed(1).InvalidCases())
+    Console.WriteLine($"invalid  {c}  =>  {c.Value.Guests} guests, \"{c.Value.Name}\", {c.Value.Email}");
+foreach (var c in Fake.For<Registration>().Seed(1).BoundaryCases())
+    Console.WriteLine($"boundary {c}  =>  {c.Value.Guests} guests, \"{c.Value.Name}\"");
+
+// 7c. Random but replayable --------------------------------------------------------------------
+Console.WriteLine("\n== Replayable seeds");
+var seed = FakeSeed.Pick();                      // PHONEY_SEED if set, else a new random seed
+using (Fake.Seeded(seed))
+    Console.WriteLine($"seed {seed}: {Fake.Person.FullName()}");
+using (Fake.Seeded(seed))
+    Console.WriteLine($"seed {seed} again: {Fake.Person.FullName()}");   // the same person
+
 // 8. Time from a TimeProvider -----------------------------------------------------------------
 Console.WriteLine("\n== TimeProvider");
 var clock = new FixedClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -111,6 +127,13 @@ public sealed record Order(Guid Id, decimal Total, OrderStatus Status);
 
 [FakeFor<Customer>]
 internal static partial class SampleData;
+
+public sealed class Registration
+{
+    [Range(1, 10)] public int Guests { get; set; }
+    [StringLength(20, MinimumLength = 3)] public string Name { get; set; } = "";
+    [EmailAddress] public string Email { get; set; } = "";
+}
 
 public interface IShape;
 
