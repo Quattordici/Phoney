@@ -42,7 +42,7 @@ public sealed class WeightedSubsetTests
     [Arguments(false)]
     public void Values_are_included_in_proportion_to_their_weight_like_taking_one_at_a_time(bool generated)
     {
-        var crews = (generated ? Generated() : Reflected()).WithOneOf(c => c.Roles, Pool, Weights, 2).Generate(30_000);
+        var crews = (generated ? Generated() : Reflected()).WithSubsetOf(c => c.Roles, Pool, Weights, 2).Generate(30_000);
 
         var expected = ExpectedInclusionOfTwo(Weights);
         for (var i = 0; i < Pool.Length; i++)
@@ -54,7 +54,7 @@ public sealed class WeightedSubsetTests
     [Test]
     public void A_subset_of_one_is_a_weighted_pick()
     {
-        var crews = Reflected().WithOneOf(c => c.Roles, Pool, Weights, 1).Generate(30_000);
+        var crews = Reflected().WithSubsetOf(c => c.Roles, Pool, Weights, 1).Generate(30_000);
 
         for (var i = 0; i < Pool.Length; i++)
             (crews.Count(c => c.Roles.Contains(Pool[i])) / 30_000.0).ShouldBe(Weights[i] / 15, tolerance: 0.012);
@@ -66,12 +66,12 @@ public sealed class WeightedSubsetTests
     public void It_works_for_every_kind_of_collection_in_the_order_of_the_list(bool generated)
     {
         var crews = (generated ? Generated() : Reflected())
-            .WithOneOf(c => c.Roles, Pool, Weights, 3)
-            .WithOneOf(c => c.Tags, Pool, Weights, (1, 3))
-            .WithOneOf(c => c.Numbers, new[] { 1, 2, 3, 4 }, Weights, 2)
-            .WithOneOf(c => c.Groups, Pool, Weights, 2)
-            .WithOneOf(c => c.Permissions, Pool, Weights, 4)
-            .WithOneOf(c => c.Squad.Members, Pool, Weights, 2)
+            .WithSubsetOf(c => c.Roles, Pool, Weights, 3)
+            .WithSubsetOf(c => c.Tags, Pool, Weights, (1, 3))
+            .WithSubsetOf(c => c.Numbers, new[] { 1, 2, 3, 4 }, Weights, 2)
+            .WithSubsetOf(c => c.Groups, Pool, Weights, 2)
+            .WithSubsetOf(c => c.Permissions, Pool, Weights, 4)
+            .WithSubsetOf(c => c.Squad.Members, Pool, Weights, 2)
             .Generate(200);
 
         foreach (var crew in crews)
@@ -93,7 +93,7 @@ public sealed class WeightedSubsetTests
         string[] pool = ["a", "b", "never", "c"];
         double[] weights = [1, 1, 0, 1];
 
-        var crews = Reflected().WithOneOf(c => c.Roles, pool, weights, 3).Generate(500);
+        var crews = Reflected().WithSubsetOf(c => c.Roles, pool, weights, 3).Generate(500);
 
         crews.ShouldAllBe(c => c.Roles.SequenceEqual(new[] { "a", "b", "c" })); // all three that can be, in the order of the list
     }
@@ -104,7 +104,7 @@ public sealed class WeightedSubsetTests
         string[] pool = ["huge", "tiny1", "tiny2", "tiny3"];
         double[] weights = [1e12, 1, 1, 1];
 
-        var crews = Reflected().WithOneOf(c => c.Roles, pool, weights, 3).Generate(2_000);
+        var crews = Reflected().WithSubsetOf(c => c.Roles, pool, weights, 3).Generate(2_000);
 
         crews.ShouldAllBe(c => c.Roles.Count == 3 && c.Roles.Distinct().Count() == 3);
         (crews.Count(c => c.Roles.Contains("huge")) / 2000.0).ShouldBeGreaterThan(0.999);
@@ -136,7 +136,7 @@ public sealed class WeightedSubsetTests
     [Test]
     public void The_two_models_make_the_same_subsets_a_seed_repeats_them_and_item_n_is_stable()
     {
-        ObjectGenerator<Crew> Ruled(ObjectGenerator<Crew> g) => g.WithOneOf(c => c.Roles, Pool, Weights, (1, 3)).WithOneOf(c => c.Tags, Pool, Weights, 2);
+        ObjectGenerator<Crew> Ruled(ObjectGenerator<Crew> g) => g.WithSubsetOf(c => c.Roles, Pool, Weights, (1, 3)).WithSubsetOf(c => c.Tags, Pool, Weights, 2);
         string Text(Crew c) => $"{string.Join(',', c.Roles)}|{string.Join(',', c.Tags)}";
 
         var generated = Ruled(Generated()).Generate(100).Select(Text).ToList();
@@ -152,7 +152,7 @@ public sealed class WeightedSubsetTests
     {
         string[] pool = ["a", "b"];
         double[] weights = [1, 0];
-        var generator = Reflected().WithOneOf(c => c.Roles, pool, weights, 1);
+        var generator = Reflected().WithSubsetOf(c => c.Roles, pool, weights, 1);
 
         weights[0] = 0;
         weights[1] = 1;
@@ -164,13 +164,13 @@ public sealed class WeightedSubsetTests
     [Test]
     public void Arguments_are_checked_when_the_rule_is_added()
     {
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(c => c.Roles, Pool, new[] { 1.0, 2.0 }, 1)).Message.ShouldContain("4 values and 2 weights");
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(c => c.Roles, Pool, new[] { 1.0, -2.0, 1, 1 }, 1)).Message.ShouldContain("negative");
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(c => c.Roles, Pool, new[] { 1.0, double.NaN, 1, 1 }, 1));
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(c => c.Roles, Pool, new[] { 1.0, double.PositiveInfinity, 1, 1 }, 1));
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(c => c.Roles, Pool, new[] { 1.0, 0, 0, 1 }, 3)).Message.ShouldContain("3 of the 2 values with a weight above zero");
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(c => c.Roles, Pool, new[] { 1.0, 1, 1, 1 }, 5)).Message.ShouldContain("5 of the 4 values");
-        Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(c => c.Roles, Pool, (IReadOnlyList<double>)null!, 1));
-        Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(c => c.Roles, (IReadOnlyList<string>)null!, Weights, 1));
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, 2.0 }, 1)).Message.ShouldContain("4 values and 2 weights");
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, -2.0, 1, 1 }, 1)).Message.ShouldContain("negative");
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, double.NaN, 1, 1 }, 1));
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, double.PositiveInfinity, 1, 1 }, 1));
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, 0, 0, 1 }, 3)).Message.ShouldContain("3 of the 2 values with a weight above zero");
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, 1, 1, 1 }, 5)).Message.ShouldContain("5 of the 4 values");
+        Should.Throw<ArgumentNullException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, (IReadOnlyList<double>)null!, 1));
+        Should.Throw<ArgumentNullException>(() => Reflected().WithSubsetOf(c => c.Roles, (IReadOnlyList<string>)null!, Weights, 1));
     }
 }

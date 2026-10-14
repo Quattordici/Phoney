@@ -85,7 +85,7 @@ public sealed class FakeDataTests
 public static class TestSetup
 {
     [Before(TestDiscovery)]
-    public static void RegisterConventions() => Fake.Conventions.Add("Sku", f => f.Random.Replace("SKU-####"));
+    public static void RegisterConventions() => Fake.Conventions.Add("Sku", f => f.Random.ReplaceSymbols("SKU-####"));
 }
 
 /// <summary>Seeds, independent of a running test.</summary>

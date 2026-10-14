@@ -116,7 +116,7 @@ public sealed class NestedGenericTests
     public void A_generator_for_the_closed_type_applies_everywhere(bool generated)
     {
         var generator = (generated ? Generated() : Reflected()).NullProbability(0)
-            .Use(Fake.For<Envelope<Ticket>>().With(e => e.Message, "from Use"));
+            .WithGeneratorFor(Fake.For<Envelope<Ticket>>().With(e => e.Message, "from Use"));
 
         var reply = generator.Generate();
 

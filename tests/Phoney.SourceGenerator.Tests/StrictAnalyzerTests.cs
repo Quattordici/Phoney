@@ -53,8 +53,8 @@ public sealed class StrictAnalyzerTests
             public static object C() => new ObjectGenerator<Product>(null!).WithConvention<string>(n => true, f => "x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
             public static object F() => new ObjectGenerator<Product>(null!).Strict().WithFeed(null!).Generate(2);
             public static object E() => new ObjectGenerator<Product>(null!).Sequence(p => p.Flavor, i => "f" + i).Cycle(p => p.Shelf, new int?[] { 1 }).Strict().Generate(2);
-            public static object D() => new ObjectGenerator<Product>(null!).WithType("x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
-            public static object G() => Fake.For<Product>().WithNormal(p => p.Shelf, 5, 1).With(p => p.Flavor, "Mint").Strict().Generate(2);
+            public static object D() => new ObjectGenerator<Product>(null!).WithEveryMemberOfType("x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
+            public static object G() => Fake.For<Product>().WithNormalDistribution(p => p.Shelf, 5, 1).With(p => p.Flavor, "Mint").Strict().Generate(2);
             public static object H() => Fake.For<Product>().WithOneOf(p => p.Flavor, ("a", 3), ("b", 1)).WithOneOf(p => p.Shelf, new[] { 1, 2 }, new[] { 9.0, 1.0 }).Strict().Generate(2);
             """, cancellationToken);
 
@@ -85,7 +85,7 @@ public sealed class StrictAnalyzerTests
     [Test]
     public async Task Turning_conventions_off_reports_convention_members_too(CancellationToken cancellationToken)
     {
-        var diagnostics = await Diagnose("public static object A() => Data.Product.UseConventions(false).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);
+        var diagnostics = await Diagnose("public static object A() => Data.Product.WithNameConventions(false).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);
 
         var message = diagnostics.ShouldHaveSingleItem().GetMessage();
         message.ShouldContain("Id, Name, Price");

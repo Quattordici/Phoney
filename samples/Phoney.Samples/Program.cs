@@ -71,7 +71,7 @@ foreach (var drawing in Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle, Squa
     Console.WriteLine($"{drawing.Title}: {drawing.Shape}");
 
 // Every Circle in the drawing comes from one generator, whatever member or collection it sits in.
-var big = Fake.For<Drawing>().Seed(1).Use<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 10)).Generate(2);
+var big = Fake.For<Drawing>().Seed(1).WithGeneratorFor<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 10)).Generate(2);
 Console.WriteLine(string.Join(", ", big.Select(d => d.Shape)));
 
 // 7b. Invalid and boundary data, from the data annotations ------------------------------------
@@ -99,7 +99,7 @@ try
     // Every customer has at least one order, so the Orders rule applies; nothing in a customer is a Shape, so the Use never does.
     Fake.For<Customer>().Seed(2)
         .With(c => c.Orders.Each().Status, OrderStatus.Shipped)
-        .Use(Fake.For<Circle>())
+        .WithGeneratorFor(Fake.For<Circle>())
         .VerifyRules()
         .Generate(5);
 }

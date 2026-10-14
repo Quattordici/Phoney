@@ -105,7 +105,7 @@ public static class ConventionValues
                 ConventionKind.Pin => f.Finance.Pin(),
                 ConventionKind.Isbn => f.Commerce.Isbn(),
                 ConventionKind.Upc => f.Commerce.Upc(),
-                ConventionKind.Sku => f.Random.Replace("???-#####"),
+                ConventionKind.Sku => f.Random.ReplaceSymbols("???-#####"),
                 ConventionKind.Vin => f.Vehicle.Vin(),
                 ConventionKind.LicensePlate => f.Vehicle.Vrm(),
                 ConventionKind.Uuid or ConventionKind.Id or ConventionKind.ReferenceId => f.Random.Guid().ToString(),
@@ -450,7 +450,7 @@ public static class ConventionValues
 
     /// <summary>Applies the generator's "use conventions" switch.</summary>
     private static ConventionKind Effective(FakeScope scope, ConventionKind kind) =>
-        scope.Settings.UseConventions ? kind : ConventionKind.None;
+        scope.Settings.WithNameConventions ? kind : ConventionKind.None;
 
     /// <summary>Whether an enum's name suggests it describes sex or gender.</summary>
     private static bool IsSexEnumName(string name) =>

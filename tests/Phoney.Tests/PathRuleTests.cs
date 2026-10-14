@@ -167,7 +167,7 @@ public sealed class PathRuleTests
     [Test]
     public void A_type_generator_creates_the_whole_object_so_its_path_rules_do_not_apply()
     {
-        var invoice = Make().Use(Fake.For<Counterparty>().With(p => p.City, "Rome")).With(i => i.Billing.City, "Oslo").Generate();
+        var invoice = Make().WithGeneratorFor(Fake.For<Counterparty>().With(p => p.City, "Rome")).With(i => i.Billing.City, "Oslo").Generate();
 
         invoice.Billing.City.ShouldBe("Rome"); // Use is self-contained, like a generator given to With
     }

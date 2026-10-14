@@ -2,7 +2,7 @@ using Phoney.Generation;
 
 namespace Phoney.Tests;
 
-/// <summary>Type-wide generators (<c>Use</c>) through source-generated models, and their parity with the reflection model.</summary>
+/// <summary>Type-wide generators (<c>WithGeneratorFor</c>) through source-generated models, and their parity with the reflection model.</summary>
 public sealed class GeneratedTypeGeneratorTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
@@ -16,8 +16,8 @@ public sealed class GeneratedTypeGeneratorTests
     {
         var members = TestFakes.Member
             .Seed(1)
-            .Use(Fake.Generated<MemberAddress>().With(a => a.City, "Oslo"))
-            .Use(Fake.Generated<Membership>().With(m => m.CompanyName, "Acme"))
+            .WithGeneratorFor(Fake.ForGenerated<MemberAddress>().With(a => a.City, "Oslo"))
+            .WithGeneratorFor(Fake.ForGenerated<Membership>().With(m => m.CompanyName, "Acme"))
             .Generate(10);
 
         members.ShouldAllBe(m => m.Address.City == "Oslo");
@@ -30,10 +30,10 @@ public sealed class GeneratedTypeGeneratorTests
     {
         ObjectGenerator<Member> Configure(ObjectGenerator<Member> g, ObjectGenerator<MemberAddress> address, ObjectGenerator<Membership> membership) =>
             g.Seed(7).ReferenceDate(Reference)
-                .Use(address.With(a => a.City, f => "City " + f.Random.Int(1, 99)))
-                .Use(membership.With(m => m.CompanyName, f => f.Company.Name()));
+                .WithGeneratorFor(address.With(a => a.City, f => "City " + f.Random.Int(1, 99)))
+                .WithGeneratorFor(membership.With(m => m.CompanyName, f => f.Company.Name()));
 
-        var generated = Configure(TestFakes.Member, Fake.Generated<MemberAddress>(), Fake.Generated<Membership>()).Generate(25);
+        var generated = Configure(TestFakes.Member, Fake.ForGenerated<MemberAddress>(), Fake.ForGenerated<Membership>()).Generate(25);
         var reflected = Configure(
                 Reflected(),
                 new ObjectGenerator<MemberAddress>(new ReflectionModel<MemberAddress>()),
@@ -50,9 +50,9 @@ public sealed class GeneratedTypeGeneratorTests
         ObjectGenerator<Gallery> Configure(ObjectGenerator<Gallery> g, ObjectGenerator<Painting> painting) =>
             g.Seed(9).ReferenceDate(Reference)
                 .Subtype<IExhibit, Sculpture>() // loses against the type generator below
-                .Use<IExhibit, Painting>(painting.With(p => p.Price, 12.5m));
+                .WithGeneratorFor<IExhibit, Painting>(painting.With(p => p.Price, 12.5m));
 
-        var generated = Configure(GalleryFakes.Gallery, Fake.Generated<Painting>()).Generate(20);
+        var generated = Configure(GalleryFakes.Gallery, Fake.ForGenerated<Painting>()).Generate(20);
         var reflected = Configure(ReflectedGallery(), new ObjectGenerator<Painting>(new ReflectionModel<Painting>())).Generate(20);
 
         generated.ShouldAllBe(g => g.Highlight is Painting);
@@ -66,8 +66,8 @@ public sealed class GeneratedTypeGeneratorTests
     {
         Member Existing() => new() { Username = "kept", FirstName = "Grace" };
 
-        var generated = TestFakes.Member.Seed(3).ReferenceDate(Reference).Use(Fake.Generated<MemberAddress>().With(a => a.City, "Oslo")).Populate(Existing());
-        var reflected = Reflected().Seed(3).ReferenceDate(Reference).Use(new ObjectGenerator<MemberAddress>(new ReflectionModel<MemberAddress>()).With(a => a.City, "Oslo")).Populate(Existing());
+        var generated = TestFakes.Member.Seed(3).ReferenceDate(Reference).WithGeneratorFor(Fake.ForGenerated<MemberAddress>().With(a => a.City, "Oslo")).Populate(Existing());
+        var reflected = Reflected().Seed(3).ReferenceDate(Reference).WithGeneratorFor(new ObjectGenerator<MemberAddress>(new ReflectionModel<MemberAddress>()).With(a => a.City, "Oslo")).Populate(Existing());
 
         generated.Address.City.ShouldBe("Oslo");
         generated.Username.ShouldBe("kept");

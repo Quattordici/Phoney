@@ -81,7 +81,7 @@ public sealed class NumberModule : FakerModule
         return TNumber.CreateSaturating(value);
     }
 
-    /// <summary>Checks the arguments of a normal distribution; <c>ObjectGenerator&lt;T&gt;.WithNormal</c> calls it when the rule is added, so a mistake shows there and not at the first <c>Generate</c>.</summary>
+    /// <summary>Checks the arguments of a normal distribution; <c>ObjectGenerator&lt;T&gt;.WithNormalDistribution</c> calls it when the rule is added, so a mistake shows there and not at the first <c>Generate</c>.</summary>
     internal static void ValidateNormal(double mean, double standardDeviation, double? min, double? max, int? decimals)
     {
         if (!double.IsFinite(mean))

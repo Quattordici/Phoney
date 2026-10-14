@@ -261,7 +261,7 @@ public sealed class SeededRandom
     /// Replaces symbols in <paramref name="pattern"/>: <c>#</c> → digit, <c>?</c> → upper-case letter,
     /// <c>*</c> → digit or upper-case letter. All other characters are kept.
     /// </summary>
-    public string Replace(string pattern)
+    public string ReplaceSymbols(string pattern)
     {
         ArgumentNullException.ThrowIfNull(pattern);
         return string.Create(pattern.Length, (pattern, this), static (span, state) =>

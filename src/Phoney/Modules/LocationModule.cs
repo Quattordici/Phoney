@@ -54,7 +54,7 @@ public sealed class LocationModule : FakerModule
     /// <summary>Returns a postal code in one of the locale's formats, e.g. <c>91745</c>.</summary>
     /// <param name="format">Custom format (<c>#</c> digit, <c>?</c> letter, <c>*</c> either); defaults to the locale's formats.</param>
     public string ZipCode(string? format = null) =>
-        Random.Replace(format ?? Faker.Pick(DataKeys.LocationPostcode));
+        Random.ReplaceSymbols(format ?? Faker.Pick(DataKeys.LocationPostcode));
 
     /// <summary>Returns a postal code valid for <paramref name="state"/> (supported by locales such as <c>en_US</c> and <c>en_CA</c>).</summary>
     /// <exception cref="PhoneyDataException">The locale has no postal codes for the state.</exception>

@@ -26,7 +26,7 @@ public sealed class Squad
 [FakeFor<Roster>]
 public static partial class SubsetFakes;
 
-/// <summary><c>WithOneOf</c> for a collection member gives each object its own random subset of the values.</summary>
+/// <summary><c>WithSubsetOf</c> for a collection member gives each object its own random subset of the values.</summary>
 public sealed class SubsetOfTests
 {
     private static readonly string[] Pool = ["admin", "editor", "viewer", "billing", "support", "auditor", "owner", "guest", "bot", "ops"];
@@ -50,12 +50,12 @@ public sealed class SubsetOfTests
     public void Every_object_gets_distinct_values_of_the_list_in_its_order_for_every_kind_of_collection(bool generated)
     {
         var accounts = (generated ? Generated() : Reflected())
-            .WithOneOf(a => a.Roles, Pool, 3)
-            .WithOneOf(a => a.Tags, Pool, 2)
-            .WithOneOf(a => a.Numbers, new[] { 10, 20, 30, 40, 50 }, 4)
-            .WithOneOf(a => a.Groups, Pool, 3)
-            .WithOneOf(a => a.Permissions, Pool, 5)
-            .WithOneOf(a => a.Favorites, Pool, 1)
+            .WithSubsetOf(a => a.Roles, Pool, 3)
+            .WithSubsetOf(a => a.Tags, Pool, 2)
+            .WithSubsetOf(a => a.Numbers, new[] { 10, 20, 30, 40, 50 }, 4)
+            .WithSubsetOf(a => a.Groups, Pool, 3)
+            .WithSubsetOf(a => a.Permissions, Pool, 5)
+            .WithSubsetOf(a => a.Favorites, Pool, 1)
             .Generate(300);
 
         foreach (var account in accounts)
@@ -73,7 +73,7 @@ public sealed class SubsetOfTests
     [Test]
     public void Every_value_is_equally_likely_to_be_in_a_subset()
     {
-        var accounts = Reflected().WithOneOf(a => a.Roles, Pool, 3).Generate(20_000);
+        var accounts = Reflected().WithSubsetOf(a => a.Roles, Pool, 3).Generate(20_000);
 
         foreach (var role in Pool)
             (accounts.Count(a => a.Roles.Contains(role)) / (double)accounts.Count).ShouldBe(0.3, tolerance: 0.015); // 3 of 10
@@ -87,7 +87,7 @@ public sealed class SubsetOfTests
     [Arguments(false)]
     public void A_range_gives_every_size_in_it(bool generated)
     {
-        var accounts = (generated ? Generated() : Reflected()).WithOneOf(a => a.Roles, Pool, (0, 3)).Generate(2_000);
+        var accounts = (generated ? Generated() : Reflected()).WithSubsetOf(a => a.Roles, Pool, (0, 3)).Generate(2_000);
 
         accounts.Select(a => a.Roles.Count).Distinct().Order().ShouldBe([0, 1, 2, 3]);
         foreach (var size in new[] { 0, 1, 2, 3 })
@@ -103,7 +103,7 @@ public sealed class SubsetOfTests
     {
         var big = Enumerable.Range(0, 300).Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
 
-        var rosters = Reflected().WithOneOf(a => a.Roles, big, size).Generate(20);
+        var rosters = Reflected().WithSubsetOf(a => a.Roles, big, size).Generate(20);
 
         foreach (var roster in rosters)
         {
@@ -118,18 +118,18 @@ public sealed class SubsetOfTests
     [Test]
     public void The_whole_list_and_nothing_are_possible_subsets()
     {
-        var all = Reflected().WithOneOf(a => a.Roles, Pool, Pool.Length).Generate(5);
-        var none = Reflected().WithOneOf(a => a.Roles, Pool, 0).Generate(5);
+        var all = Reflected().WithSubsetOf(a => a.Roles, Pool, Pool.Length).Generate(5);
+        var none = Reflected().WithSubsetOf(a => a.Roles, Pool, 0).Generate(5);
 
         all.ShouldAllBe(a => a.Roles.SequenceEqual(Pool));
         none.ShouldAllBe(a => a.Roles.Count == 0);
-        Should.NotThrow(() => Reflected().WithOneOf(a => a.Roles, Array.Empty<string>(), 0).Generate());
+        Should.NotThrow(() => Reflected().WithSubsetOf(a => a.Roles, Array.Empty<string>(), 0).Generate());
     }
 
     [Test]
     public void The_two_models_make_the_same_subsets_and_a_seed_gives_the_same_ones()
     {
-        ObjectGenerator<Roster> Ruled(ObjectGenerator<Roster> g) => g.WithOneOf(a => a.Roles, Pool, (1, 4)).WithOneOf(a => a.Tags, Pool, 2);
+        ObjectGenerator<Roster> Ruled(ObjectGenerator<Roster> g) => g.WithSubsetOf(a => a.Roles, Pool, (1, 4)).WithSubsetOf(a => a.Tags, Pool, 2);
         string Text(Roster a) => $"{a.Name}|{string.Join(',', a.Roles)}|{string.Join(',', a.Tags)}";
 
         var generated = Ruled(Generated()).Generate(100).Select(Text).ToList();
@@ -142,7 +142,7 @@ public sealed class SubsetOfTests
     [Test]
     public void Item_n_is_the_same_however_it_is_generated()
     {
-        ObjectGenerator<Roster> Ruled() => Generated().WithOneOf(a => a.Roles, Pool, (1, 4));
+        ObjectGenerator<Roster> Ruled() => Generated().WithSubsetOf(a => a.Roles, Pool, (1, 4));
 
         Ruled().GenerateParallel(100).Select(a => string.Join(',', a.Roles)).ShouldBe(Ruled().Generate(100).Select(a => string.Join(',', a.Roles)));
         var split = Ruled();
@@ -153,9 +153,9 @@ public sealed class SubsetOfTests
     public void It_works_for_nested_members_collection_elements_and_collections_filled_in_place()
     {
         var accounts = Reflected()
-            .WithOneOf(a => a.Squad.Members, Pool, 2)
-            .WithOneOf(a => a.Squads.Each().Members, Pool, (1, 2))
-            .WithOneOf(a => a.Tracked, Pool, 3)
+            .WithSubsetOf(a => a.Squad.Members, Pool, 2)
+            .WithSubsetOf(a => a.Squads.Each().Members, Pool, (1, 2))
+            .WithSubsetOf(a => a.Tracked, Pool, 3)
             .Generate(50);
 
         accounts.ShouldAllBe(a => a.Squad.Members.Count == 2 && a.Squads.Count > 0 && a.Tracked.Count == 3);
@@ -168,7 +168,7 @@ public sealed class SubsetOfTests
     {
         var kept = new Roster { Roles = ["mine"] };
 
-        var filled = Reflected().WithOneOf(a => a.Roles, Pool, 3).WithOneOf(a => a.Tags, Pool, 2).Populate(kept);
+        var filled = Reflected().WithSubsetOf(a => a.Roles, Pool, 3).WithSubsetOf(a => a.Tags, Pool, 2).Populate(kept);
 
         filled.Roles.ShouldBe(["mine"]);
         filled.Tags.Length.ShouldBe(2);
@@ -178,7 +178,7 @@ public sealed class SubsetOfTests
     public void A_later_rule_for_the_member_replaces_it()
     {
 #pragma warning disable PHONEY008 // replacing the earlier rule is what this test is about
-        Reflected().WithOneOf(a => a.Roles, Pool, 3).With(a => a.Roles, ["fixed"]).Generate().Roles.ShouldBe(["fixed"]);
+        Reflected().WithSubsetOf(a => a.Roles, Pool, 3).With(a => a.Roles, ["fixed"]).Generate().Roles.ShouldBe(["fixed"]);
 #pragma warning restore PHONEY008
     }
 
@@ -195,11 +195,11 @@ public sealed class SubsetOfTests
     [Test]
     public void Arguments_are_checked_when_the_rule_is_added()
     {
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(a => a.Roles, Pool, 11)).Message.ShouldContain("11 of the 10 values");
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(a => a.Roles, Pool, (1, 11))).Message.ShouldContain("11 of the 10 values");
-        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithOneOf(a => a.Roles, Pool, -1));
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(a => a.Roles, Pool, (3, 1))).Message.ShouldContain("at most");
-        Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(a => a.Roles, (IReadOnlyList<string>)null!, 1));
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(a => a.Frozen, Pool, 2)).Message.ShouldContain("ImmutableArray");
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(a => a.Roles, Pool, 11)).Message.ShouldContain("11 of the 10 values");
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(a => a.Roles, Pool, (1, 11))).Message.ShouldContain("11 of the 10 values");
+        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithSubsetOf(a => a.Roles, Pool, -1));
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(a => a.Roles, Pool, (3, 1))).Message.ShouldContain("at most");
+        Should.Throw<ArgumentNullException>(() => Reflected().WithSubsetOf(a => a.Roles, (IReadOnlyList<string>)null!, 1));
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(a => a.Frozen, Pool, 2)).Message.ShouldContain("ImmutableArray");
     }
 }

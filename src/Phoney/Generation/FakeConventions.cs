@@ -10,7 +10,7 @@ namespace Phoney.Generation;
 /// <example>
 /// <code>
 /// // Every string member ending in "Sku" in every generator:
-/// Fake.Conventions.Add&lt;string&gt;(name =&gt; name.EndsWith("Sku"), f =&gt; f.Random.Replace("SKU-#####"));
+/// Fake.Conventions.Add&lt;string&gt;(name =&gt; name.EndsWith("Sku"), f =&gt; f.Random.ReplaceSymbols("SKU-#####"));
 /// </code>
 /// </example>
 public sealed class FakeConventions

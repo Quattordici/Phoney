@@ -72,19 +72,19 @@ public sealed class SourceGeneratedTests
         Member viaGenerated;
         Member viaFor;
         using (Fake.Seeded(5))
-            viaGenerated = Fake.Generated<Member>().ReferenceDate(Reference).Generate();
+            viaGenerated = Fake.ForGenerated<Member>().ReferenceDate(Reference).Generate();
         using (Fake.Seeded(5))
             viaFor = Fake.For<Member>().ReferenceDate(Reference).Generate();
         viaGenerated.Email.ShouldBe(viaFor.Email);
         viaGenerated.Username.ShouldBe(viaFor.Username);
 
-        Fake.Generated<Member>().Seed(3).Generate().Email.ShouldBe(TestFakes.Member.Seed(3).Generate().Email);
+        Fake.ForGenerated<Member>().Seed(3).Generate().Email.ShouldBe(TestFakes.Member.Seed(3).Generate().Email);
     }
 
     [Test]
     public void Fake_Generated_explains_how_to_fix_a_type_without_a_generated_model()
     {
-        var exception = Should.Throw<InvalidOperationException>(() => Fake.Generated<NotGenerated>());
+        var exception = Should.Throw<InvalidOperationException>(() => Fake.ForGenerated<NotGenerated>());
         exception.Message.ShouldContain("[FakeFor<NotGenerated>]");
     }
 

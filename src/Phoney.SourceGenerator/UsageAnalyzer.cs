@@ -24,12 +24,12 @@ namespace Phoney.SourceGenerator;
 public sealed class UsageAnalyzer : DiagnosticAnalyzer
 {
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
-    private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "Use", "Subtype" };
+    private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "WithGeneratorFor", "Subtype" };
 
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormal", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
+    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
-    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithNormal", "WithOneOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
+    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
@@ -311,12 +311,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// PHONEY008 for type registrations: <c>Use</c> or <c>Subtype</c> for a type that an earlier call of the same method in the same chain
-    /// registered replaces it. (<c>Use</c> and <c>Subtype</c> for one type are not the same thing: the generator wins over the subtype.)
+    /// PHONEY008 for type registrations: <c>WithGeneratorFor</c> or <c>Subtype</c> for a type that an earlier call of the same method in the same chain
+    /// registered replaces it. (<c>WithGeneratorFor</c> and <c>Subtype</c> for one type are not the same thing: the generator wins over the subtype.)
     /// </summary>
     private static void CheckTypeRuleReplaced(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
     {
-        // Use<TNested>, Use<TBase, TGenerated>, Subtype<TBase, T1…> and Subtype<TBase>(types) all register TypeArguments[0].
+        // WithGeneratorFor<TNested>, WithGeneratorFor<TBase, TGenerated>, Subtype<TBase, T1…> and Subtype<TBase>(types) all register TypeArguments[0].
         if (call.TargetMethod.TypeArguments.FirstOrDefault() is not { } type)
             return;
         var method = call.TargetMethod.Name;

@@ -8,7 +8,7 @@ namespace Phoney.Generation;
 
 /// <summary>Options shared by every object created in one generation run.</summary>
 internal sealed record GenerationSettings(
-    bool UseConventions,
+    bool WithNameConventions,
     double NullProbability,
     int MinCollectionSize,
     int MaxCollectionSize,
@@ -435,7 +435,7 @@ public sealed class FakeScope
 
     /// <summary>
     /// Creates a nested object, stopping at the depth limit and on cycles. A generator registered for the type
-    /// (<see cref="ObjectGenerator{T}.Use{TNested}"/>) creates it; otherwise a type with subtypes
+    /// (<see cref="ObjectGenerator{T}.WithGeneratorFor{TNested}"/>) creates it; otherwise a type with subtypes
     /// (<see cref="ObjectGenerator{T}.Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c>, <c>[JsonDerivedType]</c>) is created as one of
     /// them through its model, and an interface or abstract class without subtypes stays <see langword="null"/>.
     /// </summary>
@@ -534,7 +534,7 @@ internal interface INestedGenerator
 
     /// <summary>
     /// Why the generator can't create nested objects (it verifies its rules, which only happens at its own <c>Generate</c>; it numbers its objects, and every nested
-    /// object is position 0), or <see langword="null"/>. Registering it anyway would silently do the wrong thing, so <c>With</c>, <c>Use</c> and <c>Fake.Generators</c> refuse it.
+    /// object is position 0), or <see langword="null"/>. Registering it anyway would silently do the wrong thing, so <c>With</c>, <c>WithGeneratorFor</c> and <c>Fake.Generators</c> refuse it.
     /// </summary>
     string? CannotBeNested { get; }
 

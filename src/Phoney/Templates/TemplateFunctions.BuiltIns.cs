@@ -80,7 +80,7 @@ public static partial class TemplateFunctions
     {
         f["helpers.arrayElement"] = (faker, a) => faker.Random.Element(a.Strings(0));
         f["helpers.fromRegExp"] = (faker, a) => faker.Helpers.FromRegExp(a.String(0) ?? "");
-        f["helpers.replaceSymbols"] = (faker, a) => faker.Random.Replace(a.String(0) ?? "");
+        f["helpers.replaceSymbols"] = (faker, a) => faker.Random.ReplaceSymbols(a.String(0) ?? "");
         f["helpers.replaceSymbolWithNumber"] = (faker, a) => faker.Helpers.ReplaceSymbolWithNumber(a.String(0) ?? "");
         f["helpers.replaceCreditCardSymbols"] = (faker, a) => a.Count == 0 ? faker.Helpers.ReplaceCreditCardSymbols() : faker.Helpers.ReplaceCreditCardSymbols(a.String(0)!);
         f["helpers.slugify"] = (_, a) => HelpersModule.Slugify(a.String(0) ?? "");

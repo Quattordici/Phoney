@@ -28,7 +28,7 @@ public static partial class TemplateFunctions
         }
     }
 
-    /// <summary>Registers (or replaces) a template function, e.g. <c>Register("Shop.Sku", (f, _) => f.Random.Replace("SKU-#####"))</c>; names are case-insensitive.</summary>
+    /// <summary>Registers (or replaces) a template function, e.g. <c>Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-#####"))</c>; names are case-insensitive.</summary>
     /// <remarks>Register functions before templates that use them are first evaluated; parsed templates are cached.</remarks>
     public static void Register(string name, TemplateFunction function)
     {

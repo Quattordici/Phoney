@@ -22,7 +22,7 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class StrictAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithNormal", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
+    private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Diagnostics.StrictUncovered);
@@ -95,11 +95,11 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             {
                 return; // the columns of the feed are read at runtime: which members they cover can't be known here
             }
-            else if (name is "WithConvention" or "WithType")
+            else if (name is "WithConvention" or "WithEveryMemberOfType")
             {
                 conventionTypes.Add(call.TargetMethod.TypeArguments[0]);
             }
-            else if (name == "UseConventions")
+            else if (name == "WithNameConventions")
             {
                 var argument = call.Arguments.FirstOrDefault();
                 if (argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue)

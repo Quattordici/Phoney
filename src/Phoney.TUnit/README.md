@@ -32,7 +32,7 @@ public class OrderTests
   {
       [Before(TestDiscovery)]
       public static void RegisterConventions() =>
-          Fake.Conventions.Add("Sku", f => f.Random.Replace("SKU-####"));
+          Fake.Conventions.Add("Sku", f => f.Random.ReplaceSymbols("SKU-####"));
   }
   ```
 

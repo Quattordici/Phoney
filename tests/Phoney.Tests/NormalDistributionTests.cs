@@ -26,7 +26,7 @@ public sealed class Measures
 [FakeFor<Person180>]
 public static partial class NormalFakes;
 
-/// <summary>Numbers drawn from a normal (Gaussian) distribution: the primitive, the number module and the <c>WithNormal</c> rule.</summary>
+/// <summary>Numbers drawn from a normal (Gaussian) distribution: the primitive, the number module and the <c>WithNormalDistribution</c> rule.</summary>
 public sealed class NormalDistributionTests
 {
     private static SeededRandom Seeded(long seed = 7) => new(seed);
@@ -215,15 +215,15 @@ public sealed class NormalDistributionTests
     private static ObjectGenerator<Person180> Reflected() => new ObjectGenerator<Person180>(new ReflectionModel<Person180>()).Seed(21);
 
     private static ObjectGenerator<Person180> WithRules(ObjectGenerator<Person180> generator) => generator
-        .WithNormal(p => p.Height, 175, 8)
-        .WithNormal(p => p.Weight, 75, 10)
-        .WithNormal(p => p.Iq, 100, 15)
-        .WithNormal(p => p.Shoe, 42, 2)
-        .WithNormal(p => p.Steps, 8000, 2500, min: 0)
-        .WithNormal(p => p.Temperature, 36.6, 0.3)
-        .WithNormal(p => p.Optional, 10, 1)
-        .WithNormal(p => p.Body.Waist, 85, 9)
-        .WithNormal(p => p.History.Each().Pulse, 70, 8, min: 40, max: 120);
+        .WithNormalDistribution(p => p.Height, 175, 8)
+        .WithNormalDistribution(p => p.Weight, 75, 10)
+        .WithNormalDistribution(p => p.Iq, 100, 15)
+        .WithNormalDistribution(p => p.Shoe, 42, 2)
+        .WithNormalDistribution(p => p.Steps, 8000, 2500, min: 0)
+        .WithNormalDistribution(p => p.Temperature, 36.6, 0.3)
+        .WithNormalDistribution(p => p.Optional, 10, 1)
+        .WithNormalDistribution(p => p.Body.Waist, 85, 9)
+        .WithNormalDistribution(p => p.History.Each().Pulse, 70, 8, min: 40, max: 120);
 
     [Test]
     [Arguments(true)]
@@ -268,23 +268,23 @@ public sealed class NormalDistributionTests
     [Test]
     public void Strict_mode_counts_it_as_a_rule_and_a_later_rule_replaces_it()
     {
-        var strict = Reflected().Strict().WithNormal(p => p.Height, 175, 8).WithNormal(p => p.Weight, 75, 10).WithNormal(p => p.Iq, 100, 15)
-            .WithNormal(p => p.Steps, 8000, 2500).WithNormal(p => p.Shoe, 42, 2).WithNormal(p => p.Temperature, 36.6, 0.3);
+        var strict = Reflected().Strict().WithNormalDistribution(p => p.Height, 175, 8).WithNormalDistribution(p => p.Weight, 75, 10).WithNormalDistribution(p => p.Iq, 100, 15)
+            .WithNormalDistribution(p => p.Steps, 8000, 2500).WithNormalDistribution(p => p.Shoe, 42, 2).WithNormalDistribution(p => p.Temperature, 36.6, 0.3);
         Should.NotThrow(() => strict.Ignore(p => p.Body).Ignore(p => p.History).Ignore(p => p.Optional).Ignore(p => p.Name).Generate());
 
 #pragma warning disable PHONEY008 // replacing the earlier rule is what this test is about
-        Reflected().WithNormal(p => p.Height, 175, 8).With(p => p.Height, 1.0).Generate().Height.ShouldBe(1.0);
-        Reflected().With(p => p.Height, 1.0).WithNormal(p => p.Height, 175, 8).Generate().Height.ShouldNotBe(1.0);
+        Reflected().WithNormalDistribution(p => p.Height, 175, 8).With(p => p.Height, 1.0).Generate().Height.ShouldBe(1.0);
+        Reflected().With(p => p.Height, 1.0).WithNormalDistribution(p => p.Height, 175, 8).Generate().Height.ShouldNotBe(1.0);
 #pragma warning restore PHONEY008
     }
 
     [Test]
     public void Arguments_are_checked_when_the_rule_is_added()
     {
-        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormal(p => p.Height, 175, -1));
-        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormal(p => p.Height, double.NaN, 1));
-        Should.Throw<ArgumentException>(() => Reflected().WithNormal(p => p.Height, 175, 8, min: 10, max: 1));
-        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormal(p => p.Height, 175, 8, decimals: -2));
-        Should.Throw<ArgumentNullException>(() => Reflected().WithNormal<double>(null!, 175, 8));
+        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, -1));
+        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, double.NaN, 1));
+        Should.Throw<ArgumentException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, 8, min: 10, max: 1));
+        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, 8, decimals: -2));
+        Should.Throw<ArgumentNullException>(() => Reflected().WithNormalDistribution<double>(null!, 175, 8));
     }
 }

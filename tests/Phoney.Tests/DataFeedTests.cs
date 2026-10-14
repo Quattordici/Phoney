@@ -191,7 +191,7 @@ public sealed class DataFeedTests
     {
         var fed = Make(DataFeed.FromCsv(People));
 
-        Should.Throw<ArgumentException>(() => Fake.For<Employee>().Use(fed)).Message.ShouldContain("feed");
+        Should.Throw<ArgumentException>(() => Fake.For<Employee>().WithGeneratorFor(fed)).Message.ShouldContain("feed");
     }
 
     [Test]

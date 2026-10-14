@@ -106,7 +106,7 @@ public sealed class SeededRandomTests
     [Test]
     public void Replace_substitutes_symbols()
     {
-        var value = new SeededRandom(2).Replace("##-??-**");
+        var value = new SeededRandom(2).ReplaceSymbols("##-??-**");
         value.ShouldMatch("^[0-9]{2}-[A-Z]{2}-[0-9A-Z]{2}$");
     }
 

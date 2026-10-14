@@ -310,7 +310,7 @@ public sealed class NationalIdTests
         {
         }
 
-        public override string Generate(SeededRandom random, NationalIdRequest request) => "E-" + random.Replace("#####");
+        public override string Generate(SeededRandom random, NationalIdRequest request) => "E-" + random.ReplaceSymbols("#####");
 
         public override bool IsValid(string value) => value.Length == 7 && value.StartsWith("E-", StringComparison.Ordinal);
     }

@@ -42,9 +42,9 @@ if (partial.Pets.Count == 0)
 // The facade without reflection: seeded like Fake.For, populates what is unset.
 using (Fake.Seeded(9))
 {
-    var viaFacade = Fake.Generated<Person>().Populate(new Person { FirstName = "Kim" });
+    var viaFacade = Fake.ForGenerated<Person>().Populate(new Person { FirstName = "Kim" });
     if (viaFacade.FirstName != "Kim")
-        throw new InvalidOperationException("Fake.Generated overwrote existing values");
+        throw new InvalidOperationException("Fake.ForGenerated overwrote existing values");
     Check(viaFacade.LastName, "facade last name");
 }
 
@@ -57,8 +57,8 @@ if (!owners.Any(p => p.Contact is Email) || !owners.Any(p => p.Contact is Phone)
 
 // Type-wide generators: every Address, Pet and IContact in the graph comes from the registered generator, no reflection.
 var oslo = Fakes.Person.Seed(5)
-    .Use(Fake.Generated<Address>().With(a => a.City, "Oslo"))
-    .Use<IContact, Email>(Fake.Generated<Email>().With(e => e.Address, "oslo@example.com"))
+    .WithGeneratorFor(Fake.ForGenerated<Address>().With(a => a.City, "Oslo"))
+    .WithGeneratorFor<IContact, Email>(Fake.ForGenerated<Email>().With(e => e.Address, "oslo@example.com"))
     .Generate(20);
 if (oslo.Any(p => p.Home.City != "Oslo") || oslo.Any(p => p.Contact is not Email { Address: "oslo@example.com" }))
     throw new InvalidOperationException("type generators were not used");
@@ -89,13 +89,13 @@ if (oslo2.Any(p => p.Home.City != "Oslo") || oslo2.SelectMany(p => p.Pets).Any(x
 var threePets = Fakes.Person.Seed(8).Where(p => p.Pets.Count == 3).Generate(20);
 if (threePets.Any(p => p.Pets.Count != 3))
     throw new InvalidOperationException("Where did not filter");
-Fakes.Person.Seed(9).With(p => p.Home.City, "Oslo").Subtype<IContact, Email>().Use(Fake.Generated<Pet>()).VerifyRules().Generate(10);
+Fakes.Person.Seed(9).With(p => p.Home.City, "Oslo").Subtype<IContact, Email>().WithGeneratorFor(Fake.ForGenerated<Pet>()).VerifyRules().Generate(10);
 try
 {
-    Fakes.Person.Seed(9).Use(Fake.Generated<Ticket>()).VerifyRules().Generate(10); // nothing in a Person needs a Ticket
+    Fakes.Person.Seed(9).WithGeneratorFor(Fake.ForGenerated<Ticket>()).VerifyRules().Generate(10); // nothing in a Person needs a Ticket
     throw new InvalidOperationException("VerifyRules did not report an unused rule");
 }
-catch (InvalidOperationException e) when (e.Message.Contains("Use<Ticket>", StringComparison.Ordinal))
+catch (InvalidOperationException e) when (e.Message.Contains("WithGeneratorFor<Ticket>", StringComparison.Ordinal))
 {
 }
 
@@ -124,8 +124,8 @@ if (folders.Any(f => f.Documents.Count == 0 || f.Documents.Any(d => !ReferenceEq
     throw new InvalidOperationException("back-references were not set");
 
 // Rules for every member of a type, through generated models, no reflection.
-if (Fakes.Person.Seed(10).WithType(Status.Suspended).Generate(10).Any(p => p.Status != Status.Suspended))
-    throw new InvalidOperationException("WithType was not applied");
+if (Fakes.Person.Seed(10).WithEveryMemberOfType(Status.Suspended).Generate(10).Any(p => p.Status != Status.Suspended))
+    throw new InvalidOperationException("WithEveryMemberOfType was not applied");
 
 // Time: a TimeProvider drives relative dates.
 var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -167,12 +167,12 @@ if (shipment.Buffer.Length == 0 || shipment.Grid.Length == 0 || shipment.Pair.It
 
 // A random subset per object, for a list member: no reflection, positions in stack memory.
 var roles = new[] { "admin", "editor", "viewer", "billing", "support" };
-var crew = ShipmentFakes.Shipment.Seed(12).WithOneOf(s => s.Crew, roles, (2, 3)).Generate(100);
+var crew = ShipmentFakes.Shipment.Seed(12).WithSubsetOf(s => s.Crew, roles, (2, 3)).Generate(100);
 if (crew.Any(s => s.Crew.Count is < 2 or > 3 || s.Crew.Distinct().Count() != s.Crew.Count))
     throw new InvalidOperationException("subset off");
 
 // A weighted subset: the heavy value is almost always in it, taken one at a time by weight, without reflection.
-var weightedCrew = ShipmentFakes.Shipment.Seed(13).WithOneOf(s => s.Crew, new[] { "common", "rare", "unique" }, new[] { 1000.0, 5.0, 1.0 }, 2).Generate(200);
+var weightedCrew = ShipmentFakes.Shipment.Seed(13).WithSubsetOf(s => s.Crew, new[] { "common", "rare", "unique" }, new[] { 1000.0, 5.0, 1.0 }, 2).Generate(200);
 if (weightedCrew.Any(s => s.Crew.Count != 2 || s.Crew.Distinct().Count() != 2) || weightedCrew.Count(s => s.Crew.Contains("common")) < 190)
     throw new InvalidOperationException("weighted subset off");
 
@@ -182,7 +182,7 @@ if (picked.Any(s => s.Weight != 5 && s.Weight != 7) || picked.Count(s => s.Weigh
     throw new InvalidOperationException("weighted choice off");
 
 // Normally distributed numbers: generic math over a BigInteger and a nullable, in a generated model, without reflection.
-var heavy = ShipmentFakes.Shipment.Seed(9).WithNormal(s => s.Weight, 1000, 50).Generate(200);
+var heavy = ShipmentFakes.Shipment.Seed(9).WithNormalDistribution(s => s.Weight, 1000, 50).Generate(200);
 var average = heavy.Average(s => (double)s.Weight);
 if (average is < 980 or > 1020)
     throw new InvalidOperationException($"normal distribution off: {average}");

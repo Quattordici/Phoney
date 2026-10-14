@@ -1,7 +1,7 @@
 namespace Phoney.Tests;
 
 /// <summary>
-/// <c>VerifyRules</c> fails when a rule whose reach depends on the object graph (a path rule, <c>Subtype</c>, <c>Use</c>,
+/// <c>VerifyRules</c> fails when a rule whose reach depends on the object graph (a path rule, <c>Subtype</c>, <c>WithGeneratorFor</c>,
 /// <c>WithConvention</c>) did not apply to anything that was generated.
 /// </summary>
 public sealed class VerifyRulesTests
@@ -16,7 +16,7 @@ public sealed class VerifyRulesTests
             .Ignore(s => s.Billing.Contact)
             .With(s => s.Lines.Each().Sku, "SKU")
             .Subtype<IShape, Circle>()
-            .Use(Fake.For<Contact>().With(c => c.Phone, "1"))
+            .WithGeneratorFor(Fake.For<Contact>().With(c => c.Phone, "1"))
             .WithConvention<string>(n => n == "Number", _ => "N-1")
             .VerifyRules()
             .Generate(5);
@@ -81,9 +81,9 @@ public sealed class VerifyRulesTests
     [Test]
     public void A_type_generator_that_nothing_in_the_graph_needs_is_reported()
     {
-        var generator = Fake.For<Counterparty>().Seed(1).Use(Fake.For<Line>()).VerifyRules();
+        var generator = Fake.For<Counterparty>().Seed(1).WithGeneratorFor(Fake.For<Line>()).VerifyRules();
 
-        Should.Throw<InvalidOperationException>(() => generator.Generate(5)).Message.ShouldContain("Use<Line>");
+        Should.Throw<InvalidOperationException>(() => generator.Generate(5)).Message.ShouldContain("WithGeneratorFor<Line>");
     }
 
     [Test]
@@ -115,7 +115,7 @@ public sealed class VerifyRulesTests
             .With(s => s.Lines.Each().Sku, "SKU")
             .With(s => s.Billing.City, "Oslo")
             .Subtype<Pet, Cat>()
-            .Use(Fake.For<Line>())
+            .WithGeneratorFor(Fake.For<Line>())
             .WithConvention<int>(n => n == "Nope", _ => 1)
             .VerifyRules();
 
@@ -123,11 +123,11 @@ public sealed class VerifyRulesTests
 
         message.ShouldContain("Statement.Lines.Sku");
         message.ShouldContain("Subtype<Pet>");
-        message.ShouldContain("Use<Line>");
+        message.ShouldContain("WithGeneratorFor<Line>");
         message.ShouldContain("WithConvention<Int32>");
         message.ShouldNotContain("Statement.Billing.City"); // this one did apply
         message.IndexOf("Statement.Lines.Sku", StringComparison.Ordinal).ShouldBeLessThan(message.IndexOf("Subtype<Pet>", StringComparison.Ordinal));
-        message.IndexOf("Subtype<Pet>", StringComparison.Ordinal).ShouldBeLessThan(message.IndexOf("Use<Line>", StringComparison.Ordinal));
+        message.IndexOf("Subtype<Pet>", StringComparison.Ordinal).ShouldBeLessThan(message.IndexOf("WithGeneratorFor<Line>", StringComparison.Ordinal));
     }
 
     [Test]
@@ -209,9 +209,9 @@ public sealed class VerifyRulesTests
         var verified = Fake.For<Contact>().VerifyRules();
 
         Should.Throw<ArgumentException>(() => Make().With(s => s.Billing.Contact, verified)).Message.ShouldContain("VerifyRules(false)");
-        Should.Throw<ArgumentException>(() => Make().Use(verified)).Message.ShouldContain("VerifyRules(false)");
+        Should.Throw<ArgumentException>(() => Make().WithGeneratorFor(verified)).Message.ShouldContain("VerifyRules(false)");
         Should.Throw<ArgumentException>(() => Fake.Generators.Add(verified)).Message.ShouldContain("VerifyRules(false)");
-        Make().Use(verified.VerifyRules(false)).Generate(2).Count.ShouldBe(2);
+        Make().WithGeneratorFor(verified.VerifyRules(false)).Generate(2).Count.ShouldBe(2);
     }
 
     [Test]

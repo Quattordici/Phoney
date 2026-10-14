@@ -141,7 +141,7 @@ public sealed class WhereTests
     public void A_type_generator_with_a_condition_filters_every_nested_object_of_the_type()
     {
         var parcels = Fake.For<Parcel>().Seed(3)
-            .Use(Make().Where(t => t.Priority >= 5))
+            .WithGeneratorFor(Make().Where(t => t.Priority >= 5))
             .Generate(30);
 
         parcels.ShouldAllBe(p => p.Ticket.Priority >= 5);

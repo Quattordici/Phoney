@@ -242,8 +242,8 @@ public sealed class UsageAnalyzerTests
     public async Task WithNormal_targets_number_members_of_the_generated_type_or_of_nested_objects(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """
-            public static object A() => Fake.For<Product>().WithNormal(p => p.Price, 10, 2).WithNormal(p => p.Id, 5, 1);
-            public static object B() => Fake.For<Product>().WithNormal(p => p.Name.Length, 10, 2);
+            public static object A() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2).WithNormalDistribution(p => p.Id, 5, 1);
+            public static object B() => Fake.For<Product>().WithNormalDistribution(p => p.Name.Length, 10, 2);
             """, cancellationToken);
 
         diagnostics.Count.ShouldBe(1); // a member of a string is no member to give a rule to
@@ -264,11 +264,11 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
-    public async Task A_WithOneOf_subset_takes_the_rule_slot_of_its_collection_member(CancellationToken cancellationToken)
+    public async Task A_WithSubsetOf_takes_the_rule_slot_of_its_collection_member(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().WithOneOf(p => p.Addresses, new[] { new Address() }, 1).With(p => p.Addresses, new List<Address>());
-            public static object B() => Fake.For<Product>().WithOneOf(p => p.Addresses, new[] { new Address() }, (0, 1)).WithOneOf(p => p.Name, new[] { "a" });
+            public static object A() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address() }, 1).With(p => p.Addresses, new List<Address>());
+            public static object B() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address() }, (0, 1)).WithOneOf(p => p.Name, new[] { "a" });
             """, cancellationToken);
 
         diagnostics.Count.ShouldBe(1);
@@ -276,11 +276,11 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
-    public async Task A_weighted_WithOneOf_subset_takes_the_rule_slot_of_its_collection_member(CancellationToken cancellationToken)
+    public async Task A_weighted_WithSubsetOf_takes_the_rule_slot_of_its_collection_member(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().WithOneOf(p => p.Addresses, new[] { new Address(), new Address() }, new[] { 3.0, 1.0 }, 1).With(p => p.Addresses, new List<Address>());
-            public static object B() => Fake.For<Product>().WithOneOf(p => p.Addresses, new[] { new Address() }, new[] { 1.0 }, (0, 1)).WithOneOf(p => p.Name, new[] { "a" });
+            public static object A() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address(), new Address() }, new[] { 3.0, 1.0 }, 1).With(p => p.Addresses, new List<Address>());
+            public static object B() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address() }, new[] { 1.0 }, (0, 1)).WithOneOf(p => p.Name, new[] { "a" });
             """, cancellationToken);
 
         diagnostics.Count.ShouldBe(1);
@@ -291,9 +291,9 @@ public sealed class UsageAnalyzerTests
     public async Task WithNormal_takes_the_rule_slot_of_its_member(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().WithNormal(p => p.Price, 10, 2).With(p => p.Price, 1m);
-            public static object B() => Fake.For<Product>().With(p => p.Price, 1m).WithNormal(p => p.Price, 10, 2);
-            public static object C() => Fake.For<Product>().WithNormal(p => p.Price, 10, 2).WithNormal(p => p.Id, 5, 1);
+            public static object A() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2).With(p => p.Price, 1m);
+            public static object B() => Fake.For<Product>().With(p => p.Price, 1m).WithNormalDistribution(p => p.Price, 10, 2);
+            public static object C() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2).WithNormalDistribution(p => p.Id, 5, 1);
             """, cancellationToken);
 
         diagnostics.Count.ShouldBe(2);
@@ -388,14 +388,14 @@ public sealed class UsageAnalyzerTests
     public async Task Use_that_replaces_an_earlier_Use_for_the_same_type_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Seed(1).Use(Fake.For<Address>().With(a => a.Street, "x"));
-            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Use<Shape, Circle>(Fake.For<Circle>().With(c => c.Radius, 2));
+            public static object A() => Fake.For<Product>().WithGeneratorFor(Fake.For<Address>()).Seed(1).WithGeneratorFor(Fake.For<Address>().With(a => a.Street, "x"));
+            public static object B() => Fake.For<Product>().WithGeneratorFor<Shape, Circle>(Fake.For<Circle>()).WithGeneratorFor<Shape, Circle>(Fake.For<Circle>().With(c => c.Radius, 2));
             """, cancellationToken);
 
         diagnostics.Count.ShouldBe(2);
         diagnostics[0].GetMessage().ShouldContain("'Address'");
         diagnostics[1].GetMessage().ShouldContain("'Shape'");
-        TextOf(diagnostics[0]).ShouldBe("Use");
+        TextOf(diagnostics[0]).ShouldBe("WithGeneratorFor");
     }
 
     [Test]
@@ -415,8 +415,8 @@ public sealed class UsageAnalyzerTests
     public async Task Subtype_and_Use_do_not_replace_each_other(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().Use<Shape, Circle>(Fake.For<Circle>());
-            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Subtype<Shape, Circle>();
+            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().WithGeneratorFor<Shape, Circle>(Fake.For<Circle>());
+            public static object B() => Fake.For<Product>().WithGeneratorFor<Shape, Circle>(Fake.For<Circle>()).Subtype<Shape, Circle>();
             public static object C(ObjectGenerator<Product> baseline) => baseline.Subtype<Shape, Circle>();
             """, cancellationToken);
 
@@ -427,12 +427,12 @@ public sealed class UsageAnalyzerTests
     public async Task Use_for_different_types_or_on_derived_generators_is_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Use<Shape, Circle>(Fake.For<Circle>()).Use(Fake.For<Circle>());
-            public static object B(ObjectGenerator<Product> baseline) => baseline.Use(Fake.For<Address>());
+            public static object A() => Fake.For<Product>().WithGeneratorFor(Fake.For<Address>()).WithGeneratorFor<Shape, Circle>(Fake.For<Circle>()).WithGeneratorFor(Fake.For<Circle>());
+            public static object B(ObjectGenerator<Product> baseline) => baseline.WithGeneratorFor(Fake.For<Address>());
             public static object C()
             {
-                var baseline = Fake.For<Product>().Use(Fake.For<Address>());
-                return baseline.Use(Fake.For<Address>().With(a => a.Street, "x"));
+                var baseline = Fake.For<Product>().WithGeneratorFor(Fake.For<Address>());
+                return baseline.WithGeneratorFor(Fake.For<Address>().With(a => a.Street, "x"));
             }
             """, cancellationToken);
 

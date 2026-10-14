@@ -111,10 +111,10 @@ public sealed class SequenceTests
         var numbered = Make().Sequence(t => t.Code, i => "N" + i);
 
         Should.Throw<ArgumentException>(() => Fake.For<Parcel>().With(p => p.Ticket, numbered)).Message.ShouldContain("Sequence");
-        Should.Throw<ArgumentException>(() => Fake.For<Parcel>().Use(numbered)).Message.ShouldContain("Sequence");
+        Should.Throw<ArgumentException>(() => Fake.For<Parcel>().WithGeneratorFor(numbered)).Message.ShouldContain("Sequence");
         Should.Throw<ArgumentException>(() => Fake.Generators.Add(numbered)).Message.ShouldContain("Sequence");
 #pragma warning disable PHONEY008 // the replaced Cycle is the point: a generator without positional rules can be nested
-        Fake.For<Parcel>().Seed(1).Use(Make().Cycle(t => t.Priority, [1]).With(t => t.Priority, 2)).Generate(2).ShouldAllBe(p => p.Ticket.Priority == 2); // the rule was replaced
+        Fake.For<Parcel>().Seed(1).WithGeneratorFor(Make().Cycle(t => t.Priority, [1]).With(t => t.Priority, 2)).Generate(2).ShouldAllBe(p => p.Ticket.Priority == 2); // the rule was replaced
 #pragma warning restore PHONEY008
     }
 

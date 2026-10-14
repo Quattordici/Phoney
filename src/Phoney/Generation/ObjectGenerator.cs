@@ -128,13 +128,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
     /// <summary>
     /// Creates every nested <typeparamref name="TNested"/> in the generated objects with <paramref name="generator"/>: members,
-    /// collection elements and dictionary values, at any depth, e.g. <c>.Use(Fake.For&lt;Address&gt;().Locale("de"))</c>.
+    /// collection elements and dictionary values, at any depth, e.g. <c>.WithGeneratorFor(Fake.For&lt;Address&gt;().Locale("de"))</c>.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A rule for the member (<c>With(x =&gt; x.Billing, …)</c>) wins over the type's generator, which wins over
     /// <see cref="Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c> and the type's model. The generator is self-contained: it brings its
-    /// own rules, locale and settings. A generator used by an inner <see cref="Use{TNested}"/> wins over this one, while types
+    /// own rules, locale and settings. A generator used by an inner <see cref="WithGeneratorFor{TNested}"/> wins over this one, while types
     /// it does not register are still created by the generators registered here. A later registration for the same type replaces an earlier one.
     /// </para>
     /// <para>
@@ -143,15 +143,15 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException"><typeparamref name="TNested"/> is a scalar (string, number, date, enum…) or an array.</exception>
-    public ObjectGenerator<T> Use<TNested>(ObjectGenerator<TNested> generator) => Use<TNested, TNested>(generator);
+    public ObjectGenerator<T> WithGeneratorFor<TNested>(ObjectGenerator<TNested> generator) => WithGeneratorFor<TNested, TNested>(generator);
 
     /// <summary>
     /// Creates every nested <typeparamref name="TBase"/> (an interface, abstract class or base class) with the generator of a
     /// subtype, e.g. <c>.Use&lt;IShape, Circle&gt;(Fake.For&lt;Circle&gt;().With(c =&gt; c.Radius, 2))</c>.
     /// </summary>
-    /// <remarks>See <see cref="Use{TNested}"/> for precedence and scope.</remarks>
+    /// <remarks>See <see cref="WithGeneratorFor{TNested}"/> for precedence and scope.</remarks>
     /// <exception cref="ArgumentException"><typeparamref name="TBase"/> is a scalar (string, number, date, enum…) or an array.</exception>
-    public ObjectGenerator<T> Use<TBase, TGenerated>(ObjectGenerator<TGenerated> generator)
+    public ObjectGenerator<T> WithGeneratorFor<TBase, TGenerated>(ObjectGenerator<TGenerated> generator)
         where TGenerated : TBase
     {
         ArgumentNullException.ThrowIfNull(generator);
@@ -281,7 +281,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
     /// <summary>
     /// Gives a collection member a random subset of <paramref name="values"/>, a different one for every object:
-    /// <c>.WithOneOf(u =&gt; u.Roles, roles, 2)</c> gives each user two of the roles, <c>.WithOneOf(u =&gt; u.Roles, roles, (1, 3))</c> one to three.
+    /// <c>.WithSubsetOf(u =&gt; u.Roles, roles, 2)</c> gives each user two of the roles, <c>.WithSubsetOf(u =&gt; u.Roles, roles, (1, 3))</c> one to three.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -298,29 +298,29 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <param name="values">The values to take a subset of.</param>
     /// <param name="size">How many values: a number (<c>3</c>) or an inclusive range (<c>(1, 3)</c>).</param>
     /// <exception cref="ArgumentException">The size is larger than the list, or the member's type cannot hold a list.</exception>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, IEnumerable<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, IEnumerable<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
         RequireMemberAccepts(member, typeof(List<TValue>));
         return With(member, f => (IEnumerable<TValue>)picker.List(f.Random));
     }
 
-    /// <summary>Gives an array member a random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, TValue[]>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    /// <summary>Gives an array member a random subset of <paramref name="values"/>; see <see cref="WithSubsetOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, TValue[]>> member, IReadOnlyList<TValue> values, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
         return With(member, f => picker.Array(f.Random));
     }
 
-    /// <summary>Gives a <see cref="HashSet{T}"/> member a random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, HashSet<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    /// <summary>Gives a <see cref="HashSet{T}"/> member a random subset of <paramref name="values"/>; see <see cref="WithSubsetOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, HashSet<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
         return With(member, f => picker.Set(f.Random));
     }
 
-    /// <summary>Gives an <see cref="ISet{T}"/> member a random subset of <paramref name="values"/> (a <see cref="HashSet{T}"/>); see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, ISet<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    /// <summary>Gives an <see cref="ISet{T}"/> member a random subset of <paramref name="values"/> (a <see cref="HashSet{T}"/>); see <see cref="WithSubsetOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, ISet<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
         return With(member, f => (ISet<TValue>)picker.Set(f.Random));
@@ -328,7 +328,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
     /// <summary>
     /// Gives a collection member a random subset of <paramref name="values"/> in which heavier values are more likely to be included:
-    /// <c>.WithOneOf(u =&gt; u.Roles, roles, weights, 2)</c> gives each user two roles, the common ones more often than the rare ones.
+    /// <c>.WithSubsetOf(u =&gt; u.Roles, roles, weights, 2)</c> gives each user two roles, the common ones more often than the rare ones.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -344,29 +344,29 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <param name="weights">One weight per value (relative; zero is never included).</param>
     /// <param name="size">How many values: a number (<c>3</c>) or an inclusive range (<c>(1, 3)</c>).</param>
     /// <exception cref="ArgumentException">The lists differ in length, a weight is negative, not a number or infinite, the size is larger than the number of values with a weight above zero, or the member's type cannot hold a list.</exception>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, IEnumerable<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, IEnumerable<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
         RequireMemberAccepts(member, typeof(List<TValue>));
         return With(member, f => (IEnumerable<TValue>)picker.List(f.Random));
     }
 
-    /// <summary>Gives an array member a weighted random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, TValue[]>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    /// <summary>Gives an array member a weighted random subset of <paramref name="values"/>; see <see cref="WithSubsetOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, TValue[]>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
         return With(member, f => picker.Array(f.Random));
     }
 
-    /// <summary>Gives a <see cref="HashSet{T}"/> member a weighted random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, HashSet<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    /// <summary>Gives a <see cref="HashSet{T}"/> member a weighted random subset of <paramref name="values"/>; see <see cref="WithSubsetOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, HashSet<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
         return With(member, f => picker.Set(f.Random));
     }
 
-    /// <summary>Gives an <see cref="ISet{T}"/> member a weighted random subset of <paramref name="values"/> (a <see cref="HashSet{T}"/>); see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
-    public ObjectGenerator<T> WithOneOf<TValue>(Expression<Func<T, ISet<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    /// <summary>Gives an <see cref="ISet{T}"/> member a weighted random subset of <paramref name="values"/> (a <see cref="HashSet{T}"/>); see <see cref="WithSubsetOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
+    public ObjectGenerator<T> WithSubsetOf<TValue>(Expression<Func<T, ISet<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
     {
         var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
         return With(member, f => (ISet<TValue>)picker.Set(f.Random));
@@ -400,7 +400,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
     /// <summary>
     /// Applies <paramref name="factory"/> to every member of type <typeparamref name="TValue"/> whose name matches
-    /// <paramref name="nameMatches"/> and has no explicit rule, also in nested objects (before app-wide <see cref="Fake.Conventions"/>), e.g. <c>.WithConvention&lt;string&gt;(n =&gt; n.EndsWith("Code"), f =&gt; f.Random.Replace("??-###"))</c>.
+    /// <paramref name="nameMatches"/> and has no explicit rule, also in nested objects (before app-wide <see cref="Fake.Conventions"/>), e.g. <c>.WithConvention&lt;string&gt;(n =&gt; n.EndsWith("Code"), f =&gt; f.Random.ReplaceSymbols("??-###"))</c>.
     /// </summary>
     public ObjectGenerator<T> WithConvention<TValue>(Func<string, bool> nameMatches, Func<Faker, TValue> factory)
     {
@@ -410,43 +410,43 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         return Derive(_config with { Conventions = _config.Conventions.Add(convention) });
     }
 
-    /// <summary>Gives every member of type <typeparamref name="TValue"/> (also its nullable form) the same <paramref name="value"/>. See <see cref="WithType{TValue}(Func{Faker, TValue})"/>.</summary>
-    public ObjectGenerator<T> WithType<TValue>(TValue value) => WithType(_ => value);
+    /// <summary>Gives every member of type <typeparamref name="TValue"/> (also its nullable form) the same <paramref name="value"/>. See <see cref="WithEveryMemberOfType{TValue}(Func{Faker, TValue})"/>.</summary>
+    public ObjectGenerator<T> WithEveryMemberOfType<TValue>(TValue value) => WithEveryMemberOfType(_ => value);
 
     /// <summary>
     /// Generates every member of type <typeparamref name="TValue"/> (also its nullable form) with <paramref name="factory"/>, whatever its name and
-    /// also in nested objects, e.g. <c>.WithType&lt;DateOnly&gt;(f =&gt; f.Date.Past().Date)</c> or <c>.WithType("N/A")</c> for every string.
+    /// also in nested objects, e.g. <c>.WithEveryMemberOfType&lt;DateOnly&gt;(f =&gt; f.Date.Past().Date)</c> or <c>.WithEveryMemberOfType("N/A")</c> for every string.
     /// </summary>
     /// <remarks>
     /// A rule for the member itself (<c>With</c>, <c>Ignore</c>…) wins; this comes before name conventions and before app-wide conventions
     /// (<c>Fake.Conventions</c>). It sets members: the elements of collections and dictionaries keep their generated values, and data
     /// annotations are not applied to the value. Same as <c>WithConvention&lt;TValue&gt;(_ =&gt; true, factory)</c>.
     /// </remarks>
-    public ObjectGenerator<T> WithType<TValue>(Func<Faker, TValue> factory)
+    public ObjectGenerator<T> WithEveryMemberOfType<TValue>(Func<Faker, TValue> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
-        var convention = new CustomConvention(typeof(TValue), static _ => true, s => factory(s.Faker), nameof(WithType));
+        var convention = new CustomConvention(typeof(TValue), static _ => true, s => factory(s.Faker), nameof(WithEveryMemberOfType));
         return Derive(_config with { Conventions = _config.Conventions.Add(convention) });
     }
 
     /// <summary>
     /// Makes <c>Generate</c>, <c>GenerateParallel</c> and <c>Populate</c> throw when a rule whose reach depends on the object graph did not apply
     /// to anything that was generated: a path rule (<c>x =&gt; x.Billing.City</c>, <c>x =&gt; x.Lines.Each().Sku</c>), <see cref="Subtype{TBase, T1}"/>,
-    /// <see cref="Use{TNested}"/> and <see cref="WithConvention{TValue}"/>. Rules that are silently skipped become test failures.
+    /// <see cref="WithGeneratorFor{TNested}"/> and <see cref="WithConvention{TValue}"/>. Rules that are silently skipped become test failures.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A rule is used as soon as it applied once, to any object generated by this generator so far, so a rule that only reaches some objects
     /// (a nullable member, a collection that is sometimes empty) is fine as long as one object in the call had it. A rule stays unused when
     /// the object it is for never exists (a member that is always null or an empty collection, <see cref="MaxDepth"/>, a cycle, another
-    /// subtype), when a rule for an enclosing member or a <see cref="Use{TNested}"/> generator creates or skips that object itself, when
+    /// subtype), when a rule for an enclosing member or a <see cref="WithGeneratorFor{TNested}"/> generator creates or skips that object itself, when
     /// <see cref="Populate(T, PopulateMode)"/> keeps an existing object (path rules only shape objects that are created), or when nothing in the
     /// graph has that member or type. The exception lists every unused rule.
     /// </para>
     /// <para>
     /// Rules for the generated object's own members (<c>With(x =&gt; x.Name, …)</c>) always apply and are not checked, and neither is a generator
     /// that creates nested objects for another one: it cannot verify because it has no <c>Generate</c> call of its own, so passing such a generator to
-    /// <c>With</c> or <c>Use</c> throws. <see cref="Stream"/> has no end to check at and is not supported; generate a fixed number of objects instead.
+    /// <c>With</c> or <c>WithGeneratorFor</c> throws. <see cref="Stream"/> has no end to check at and is not supported; generate a fixed number of objects instead.
     /// <see cref="InvalidCases"/> and <see cref="BoundaryCases"/> are not verified. Nothing is checked when no object is generated.
     /// </para>
     /// </remarks>
@@ -463,7 +463,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public ObjectGenerator<T> Strict(bool strict = true) => Derive(_config with { Strict = strict });
 
     /// <summary>Turns name conventions off: members get values based on their type only.</summary>
-    public ObjectGenerator<T> UseConventions(bool useConventions = true) => Derive(_config with { Settings = _config.Settings with { UseConventions = useConventions } });
+    public ObjectGenerator<T> WithNameConventions(bool useConventions = true) => Derive(_config with { Settings = _config.Settings with { WithNameConventions = useConventions } });
 
     /// <summary>Probability (0–1) that nullable members (<c>int?</c>, <c>string?</c>…) are left <see langword="null"/>. Default 0.</summary>
     public ObjectGenerator<T> NullProbability(double probability)
@@ -495,7 +495,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// </summary>
     /// <remarks>
     /// For members of the generated object only. The rule is replaced by a later rule for the member (and replaces an earlier one). A generator with
-    /// <c>Sequence</c> or <c>Cycle</c> rules can't be given to <c>With</c>, <c>Use</c> or <c>Fake.Generators.Add</c>: it counts the objects it generates itself, and every
+    /// <c>Sequence</c> or <c>Cycle</c> rules can't be given to <c>With</c>, <c>WithGeneratorFor</c> or <c>Fake.Generators.Add</c>: it counts the objects it generates itself, and every
     /// nested object would be number 0. <see cref="Populate(T, PopulateMode)"/> numbers the objects it fills in the same way and keeps members that are set.
     /// </remarks>
     /// <param name="member">The member to number: <c>x =&gt; x.Code</c>.</param>
@@ -508,7 +508,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     }
 
     /// <summary>
-    /// Gives a number member values from a normal (Gaussian) distribution, e.g. <c>.WithNormal(x =&gt; x.Height, 175, 8)</c>: most heights are near 175, about two thirds within 8 of it.
+    /// Gives a number member values from a normal (Gaussian) distribution, e.g. <c>.WithNormalDistribution(x =&gt; x.Height, 175, 8)</c>: most heights are near 175, about two thirds within 8 of it.
     /// Realistic measurements, ages, scores and durations look like this, where a plain range gives every value the same chance.
     /// </summary>
     /// <remarks>
@@ -525,15 +525,15 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <param name="decimals">The number of decimals to round to (0 to 15), or <see langword="null"/> for the type's default.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mean"/> or a limit is not a number, <paramref name="standardDeviation"/> is negative or not finite, or <paramref name="decimals"/> is not 0 to 15.</exception>
     /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
-    public ObjectGenerator<T> WithNormal<TNumber>(Expression<Func<T, TNumber>> member, double mean, double standardDeviation, double? min = null, double? max = null, int? decimals = null)
+    public ObjectGenerator<T> WithNormalDistribution<TNumber>(Expression<Func<T, TNumber>> member, double mean, double standardDeviation, double? min = null, double? max = null, int? decimals = null)
         where TNumber : INumber<TNumber>
     {
         NumberModule.ValidateNormal(mean, standardDeviation, min, max, decimals);
         return With(member, faker => faker.Number.Normal<TNumber>(mean, standardDeviation, min, max, decimals));
     }
 
-    /// <inheritdoc cref="WithNormal{TNumber}(Expression{Func{T, TNumber}}, double, double, double?, double?, int?)"/>
-    public ObjectGenerator<T> WithNormal<TNumber>(Expression<Func<T, TNumber?>> member, double mean, double standardDeviation, double? min = null, double? max = null, int? decimals = null)
+    /// <inheritdoc cref="WithNormalDistribution{TNumber}(Expression{Func{T, TNumber}}, double, double, double?, double?, int?)"/>
+    public ObjectGenerator<T> WithNormalDistribution<TNumber>(Expression<Func<T, TNumber?>> member, double mean, double standardDeviation, double? min = null, double? max = null, int? decimals = null)
         where TNumber : struct, INumber<TNumber>
     {
         NumberModule.ValidateNormal(mean, standardDeviation, min, max, decimals);
@@ -573,7 +573,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// used up its <see cref="Unique{TValue}"/> values.
     /// </para>
     /// <para>
-    /// Also applies to what the generator creates as a nested generator (<c>With(x =&gt; x.Address, generator)</c>, <see cref="Use{TNested}"/>).
+    /// Also applies to what the generator creates as a nested generator (<c>With(x =&gt; x.Address, generator)</c>, <see cref="WithGeneratorFor{TNested}"/>).
     /// <see cref="Populate(T, PopulateMode)"/> supports it with <see cref="PopulateMode.All"/> only, because values that are kept cannot be
     /// generated again. <see cref="InvalidCases"/> and <see cref="BoundaryCases"/> ignore it: their objects are made to sit outside or on the edge of the valid ones.
     /// </para>
@@ -643,7 +643,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <para>
     /// It works through settable members (setters, <see langword="init"/>, public fields); constructor-only members of positional records can be neither read nor
     /// set and are left alone. The objects form real cycles afterwards: <c>ToString</c>, <c>Equals</c> and serializers of records and of libraries without cycle
-    /// handling may not cope. A nested generator (<c>Use</c>, <c>With</c>) wires the graph it creates, which starts at its own objects. <see cref="Populate(T, PopulateMode)"/>
+    /// handling may not cope. A nested generator (<c>WithGeneratorFor</c>, <c>With</c>) wires the graph it creates, which starts at its own objects. <see cref="Populate(T, PopulateMode)"/>
     /// fills the missing references of an existing graph the same way.
     /// </para>
     /// </remarks>
@@ -659,11 +659,11 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// Column and member names are compared ignoring case, spaces and underscores (<c>first_name</c> fills <c>FirstName</c>); values are converted to the member's
     /// type with the invariant culture (strings, numbers, booleans, enums by name, dates and times, <see cref="Guid"/>, <see cref="Uri"/>; an empty value of a
     /// nullable member is <see langword="null"/>). A rule for the member (<c>With</c>, <c>Ignore</c>…) wins over the feed, and the feed wins over name conventions
-    /// and <c>WithType</c>. Members without a column are generated as usual, independently of the row: add the columns the values must agree with.
+    /// and <c>WithEveryMemberOfType</c>. Members without a column are generated as usual, independently of the row: add the columns the values must agree with.
     /// </para>
     /// <para>
     /// The row depends on the object's position only, so results are the same whichever way the objects are generated. A generator with a feed can't be given to
-    /// <c>With</c>, <c>Use</c> or <c>Fake.Generators.Add</c>: every nested object would take the first row.
+    /// <c>With</c>, <c>WithGeneratorFor</c> or <c>Fake.Generators.Add</c>: every nested object would take the first row.
     /// </para>
     /// </remarks>
     /// <param name="feed">The rows.</param>
@@ -828,7 +828,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             $"The {typeof(T).Name} generator has {(unused.Count == 1 ? "a rule" : $"{unused.Count} rules")} that did not apply to anything it generated:{Environment.NewLine}"
             + string.Join(Environment.NewLine, unused.Select(u => "  - " + u)) + Environment.NewLine
             + "A rule stays unused when the object it is for never exists (a member that is always null or an empty collection, MaxDepth, a cycle, another subtype), "
-            + "when a rule for an enclosing member or a Use generator creates or skips that object itself, when Populate keeps an existing object, or when nothing in the graph has that member or type. "
+            + "when a rule for an enclosing member or a WithGeneratorFor generator creates or skips that object itself, when Populate keeps an existing object, or when nothing in the graph has that member or type. "
             + "Remove the rule or change what is generated; VerifyRules(false) turns this check off.");
     }
 
@@ -958,7 +958,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         {
             var uncovered = members
                 .Where((m, i) => slots[i] is null && m.IsScalar && m.Constraints?.DefinesValue != true
-                    && (m.Convention == ConventionKind.None || !_config.Settings.UseConventions))
+                    && (m.Convention == ConventionKind.None || !_config.Settings.WithNameConventions))
                 .Select(m => m.Name)
                 .ToList();
             if (uncovered.Count > 0)
@@ -980,7 +980,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             if (_config.Factory is not null)
                 throw new InvalidOperationException($"{typeof(T).Name}.{name} has a Where condition, but CreateWith decides the values of the objects it creates. Check the object with .Where(x => …) instead.");
 
-            if (_config.Settings.UseConventions && slots[index] is null or { Kind: RuleKind.Default } && IdentityBound.Contains(members[index].Convention))
+            if (_config.Settings.WithNameConventions && slots[index] is null or { Kind: RuleKind.Default } && IdentityBound.Contains(members[index].Convention))
             {
                 throw new InvalidOperationException(
                     $"{typeof(T).Name}.{name} comes from the object's identity (one name, email, address and birthdate per object, so that they agree), and drawing it again gives the same value. "

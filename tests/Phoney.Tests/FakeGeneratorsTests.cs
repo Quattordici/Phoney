@@ -75,7 +75,7 @@ public sealed class FakeGeneratorsTests
     public void A_generators_own_registration_wins_over_the_app_wide_one() =>
         With(g => g.Add(Sku("APP")), () =>
         {
-            var manifest = Fake.For<Manifest>().Use(Sku("OWN")).Generate();
+            var manifest = Fake.For<Manifest>().WithGeneratorFor(Sku("OWN")).Generate();
 
             manifest.Main.Sku.ShouldBe("OWN");
             manifest.Items.ShouldAllBe(i => i.Sku == "OWN");
@@ -120,7 +120,7 @@ public sealed class FakeGeneratorsTests
 
     [Test]
     public void Generated_and_reflection_models_produce_identical_data() =>
-        With(g => g.Add(Fake.Generated<Item>().With(i => i.Sku, f => "APP-" + f.Random.Int(100, 999))), () =>
+        With(g => g.Add(Fake.ForGenerated<Item>().With(i => i.Sku, f => "APP-" + f.Random.Int(100, 999))), () =>
         {
             var generated = ManifestFakes.Manifest.Seed(5).ReferenceDate(Reference).Generate(15);
             var reflected = new ObjectGenerator<Manifest>(new ReflectionModel<Manifest>()).Seed(5).ReferenceDate(Reference).Generate(15);

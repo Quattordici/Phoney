@@ -1,13 +1,13 @@
 namespace Phoney.Generation;
 
 /// <summary>
-/// Records which of a generator's graph-dependent rules (path rules, <c>Subtype</c>, <c>Use</c>, <c>WithConvention</c>) took effect, for
+/// Records which of a generator's graph-dependent rules (path rules, <c>Subtype</c>, <c>WithGeneratorFor</c>, <c>WithConvention</c>) took effect, for
 /// <see cref="ObjectGenerator{T}.VerifyRules"/>. Everything is registered when the generator is compiled and only read afterwards, so
 /// concurrent runs just flip flags; a generator that does not verify has no instance and pays nothing.
 /// </summary>
 internal sealed class RuleUsage
 {
-    // Looked up while generating; the lists keep the order the rules are reported in (path rules, Subtype, Use, WithConvention), whenever they were registered.
+    // Looked up while generating; the lists keep the order the rules are reported in (path rules, Subtype, WithGeneratorFor, WithConvention), whenever they were registered.
     private readonly Dictionary<string, Entry> _paths = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, Entry> _subtypes = [];
     private readonly Dictionary<Type, Entry> _generators = [];
@@ -24,8 +24,8 @@ internal sealed class RuleUsage
     /// <summary>Registers a <c>Subtype</c> for <paramref name="type"/>.</summary>
     public void AddSubtype(Type type) => Register(_subtypes, _subtypeEntries, type, $"Subtype<{type.Name}>");
 
-    /// <summary>Registers a <c>Use</c> generator for <paramref name="type"/>.</summary>
-    public void AddGenerator(Type type) => Register(_generators, _generatorEntries, type, $"Use<{type.Name}>");
+    /// <summary>Registers a <c>WithGeneratorFor</c> generator for <paramref name="type"/>.</summary>
+    public void AddGenerator(Type type) => Register(_generators, _generatorEntries, type, $"WithGeneratorFor<{type.Name}>");
 
     /// <summary>Registers a <c>WithConvention</c>; <paramref name="description"/> tells it apart from others of the same type.</summary>
     public void AddConvention(CustomConvention convention, string description) => Register(_conventions, _conventionEntries, convention, description);
@@ -33,7 +33,7 @@ internal sealed class RuleUsage
     /// <summary>Marks the generator's own subtype registration for <paramref name="type"/> as used (other registrations are not tracked).</summary>
     public void Subtype(Type type) => Mark(_subtypes, type);
 
-    /// <summary>Marks the generator's own <c>Use</c> registration for <paramref name="type"/> as used.</summary>
+    /// <summary>Marks the generator's own <c>WithGeneratorFor</c> registration for <paramref name="type"/> as used.</summary>
     public void Generator(Type type) => Mark(_generators, type);
 
     /// <summary>Marks a convention as used when it matched a member (app-wide conventions are not tracked).</summary>

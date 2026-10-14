@@ -25,7 +25,7 @@ public sealed class Subscriber
     public Ticket Ticket { get; set; } = null!;
 }
 
-/// <summary><c>WithType</c> gives every member of a type a value, in the generated object and in nested objects.</summary>
+/// <summary><c>WithEveryMemberOfType</c> gives every member of a type a value, in the generated object and in nested objects.</summary>
 public sealed class WithTypeTests
 {
     static WithTypeTests() => Fake.Conventions.Add<SupportPlan>(_ => SupportPlan.Premium); // a type no other test uses
@@ -35,7 +35,7 @@ public sealed class WithTypeTests
     [Test]
     public void Every_member_of_the_type_gets_the_value_also_in_nested_objects_and_whatever_its_name()
     {
-        var accounts = Make().WithType("X").Generate(5);
+        var accounts = Make().WithEveryMemberOfType("X").Generate(5);
 
         accounts.ShouldAllBe(a => a.Owner == "X" && a.Ticket.Code == "X");
         accounts.ShouldAllBe(a => a.Ticket.Priority >= 1); // other types are generated as usual
@@ -44,8 +44,8 @@ public sealed class WithTypeTests
     [Test]
     public void A_factory_draws_from_the_faker_and_is_reproducible()
     {
-        var first = Make().WithType<string>(f => "S" + f.Random.Int(100, 999)).Generate(10);
-        var second = Make().WithType<string>(f => "S" + f.Random.Int(100, 999)).Generate(10);
+        var first = Make().WithEveryMemberOfType<string>(f => "S" + f.Random.Int(100, 999)).Generate(10);
+        var second = Make().WithEveryMemberOfType<string>(f => "S" + f.Random.Int(100, 999)).Generate(10);
 
         first.Select(a => a.Owner).ShouldBe(second.Select(a => a.Owner));
         first.Select(a => a.Owner).Distinct().Count().ShouldBeGreaterThan(3);
@@ -55,7 +55,7 @@ public sealed class WithTypeTests
     [Test]
     public void The_nullable_form_of_the_type_is_matched_too()
     {
-        var accounts = Make().WithType(LoyaltyTier.Gold).WithType(7).Generate(5);
+        var accounts = Make().WithEveryMemberOfType(LoyaltyTier.Gold).WithEveryMemberOfType(7).Generate(5);
 
         accounts.ShouldAllBe(a => a.Tier == LoyaltyTier.Gold && a.Next == LoyaltyTier.Gold && a.Seats == 7);
     }
@@ -63,7 +63,7 @@ public sealed class WithTypeTests
     [Test]
     public void A_rule_for_the_member_wins_over_the_type_rule()
     {
-        var accounts = Make().WithType("X").With(a => a.Owner, "Owner").Generate(3);
+        var accounts = Make().WithEveryMemberOfType("X").With(a => a.Owner, "Owner").Generate(3);
 
         accounts.ShouldAllBe(a => a.Owner == "Owner" && a.Ticket.Code == "X");
     }
@@ -71,7 +71,7 @@ public sealed class WithTypeTests
     [Test]
     public void Elements_of_collections_are_not_members_so_they_keep_their_values()
     {
-        var accounts = Make().WithType("X").Generate(5);
+        var accounts = Make().WithEveryMemberOfType("X").Generate(5);
 
         accounts.SelectMany(a => a.Tags).ShouldNotBeEmpty();
         accounts.SelectMany(a => a.Tags).ShouldAllBe(t => t != "X");
@@ -80,21 +80,21 @@ public sealed class WithTypeTests
     [Test]
     public void Strict_mode_counts_a_type_rule_as_covering_the_members()
     {
-        Fake.For<Ticket>().Strict().WithType("code").WithType(1).WithType(1m).Generate(2).ShouldAllBe(t => t.Code == "code");
+        Fake.For<Ticket>().Strict().WithEveryMemberOfType("code").WithEveryMemberOfType(1).WithEveryMemberOfType(1m).Generate(2).ShouldAllBe(t => t.Code == "code");
     }
 
     [Test]
     public void VerifyRules_reports_a_type_nothing_in_the_graph_has_by_the_name_of_the_call()
     {
-        var generator = Make().WithType(Guid.Empty).VerifyRules();
+        var generator = Make().WithEveryMemberOfType(Guid.Empty).VerifyRules();
 
-        Should.Throw<InvalidOperationException>(() => generator.Generate(3)).Message.ShouldContain("WithType<Guid>");
+        Should.Throw<InvalidOperationException>(() => generator.Generate(3)).Message.ShouldContain("WithEveryMemberOfType<Guid>");
     }
 
     [Test]
     public void Generated_models_get_the_same_values()
     {
-        var members = TestFakes.Member.Seed(3).WithType(5m).WithType("S").Generate(3);
+        var members = TestFakes.Member.Seed(3).WithEveryMemberOfType(5m).WithEveryMemberOfType("S").Generate(3);
 
         members.ShouldAllBe(m => m.Balance == 5m && m.Nickname == "S" && m.Address.City == "S");
     }
@@ -102,13 +102,13 @@ public sealed class WithTypeTests
     [Test]
     public void The_factory_is_validated()
     {
-        Should.Throw<ArgumentNullException>(() => Make().WithType<string>((Func<Faker, string>)null!));
+        Should.Throw<ArgumentNullException>(() => Make().WithEveryMemberOfType<string>((Func<Faker, string>)null!));
     }
 
     [Test]
     public void An_app_wide_type_convention_applies_to_every_generator_and_the_generators_own_comes_first()
     {
         Make().Generate(3).ShouldAllBe(a => a.Plan == SupportPlan.Premium);
-        Make().WithType(SupportPlan.Basic).Generate(3).ShouldAllBe(a => a.Plan == SupportPlan.Basic);
+        Make().WithEveryMemberOfType(SupportPlan.Basic).Generate(3).ShouldAllBe(a => a.Plan == SupportPlan.Basic);
     }
 }

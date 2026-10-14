@@ -104,8 +104,8 @@ public static partial class Fake
     /// <see cref="InvalidOperationException"/> that says how to fix it when the type has no generated model.
     /// </summary>
     /// <example><code>var order = Fake.Populate(new Order { CustomerId = 42 }); // reflection
-    /// var safe = Fake.Generated&lt;Order&gt;().Populate(new Order { CustomerId = 42 }); // AOT safe</code></example>
-    public static ObjectGenerator<T> Generated<T>() => Configured(new ObjectGenerator<T>(ModelRegistry.Generated<T>()));
+    /// var safe = Fake.ForGenerated&lt;Order&gt;().Populate(new Order { CustomerId = 42 }); // AOT safe</code></example>
+    public static ObjectGenerator<T> ForGenerated<T>() => Configured(new ObjectGenerator<T>(ModelRegistry.Generated<T>()));
 
     /// <summary>Applies the facade's seed, locale, reference date and clock to a new generator.</summary>
     private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator)

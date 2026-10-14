@@ -24,8 +24,8 @@
 - **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
 - **Data from files**: `.WithFeed(DataFeed.FromCsvFile("people.csv"))` fills members from the rows of a CSV or JSON file, one row per object.
 - **Numbering**: `.Sequence(x => x.Code, i => $"T{i + 1:D4}")` and `.Cycle(x => x.Queue, ["a", "b"])` give members values by the object's position, the same however you generate.
-- **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `Use` or `WithConvention` never applied to anything.
-- **Type-wide rules**: `.Use(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
+- **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `WithGeneratorFor` or `WithConvention` never applied to anything.
+- **Type-wide rules**: `.WithGeneratorFor(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
 - **Deterministic**: same seed means same data, dates included, on every OS and .NET version and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
@@ -328,7 +328,7 @@ faker.Parse("Ticket {{Helpers.FromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{String.Nume
 faker.Parse("{{Person.FirstName}} lives at {{Location.Address}}");
 ```
 
-Names are case-insensitive, so faker.js templates (`{{person.firstName}}`, `{{number.int({"min":1,"max":9})}}`) work unchanged, and so do locale data paths and record fields (`{{airline.airport.iataCode}}`). Register your own functions with `TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.Replace("SKU-#####"))`.
+Names are case-insensitive, so faker.js templates (`{{person.firstName}}`, `{{number.int({"min":1,"max":9})}}`) work unchanged, and so do locale data paths and record fields (`{{airline.airport.iataCode}}`). Register your own functions with `TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-#####"))`.
 
 ## Objects
 
@@ -392,9 +392,9 @@ var sample = Fake.For<Customer>().Seed(7).WithFeed(feed, FeedOrder.Random).Gener
 - **One row per object**, so values that belong together stay together. The row depends on the object's position (or, for `FeedOrder.Random`, the seed and the position), so item *n* is the same however you generate: batches, `GenerateParallel`, `Stream()`.
 - **Columns fill members by name**, ignoring case, spaces and underscores (`first_name` fills `FirstName`), also constructor parameters of records. Values are converted with the invariant culture: strings, numbers, booleans (`true`/`1`/`yes`), enums by name, dates and times, `Guid`, `Uri`; an empty value of a nullable member is `null`.
 - **Strict about mistakes.** A column that no member matches, a value that doesn't fit its member's type (the message names the row, the column, the value and the type), ragged CSV rows, duplicate columns and unterminated quotes throw when the feed is read or the generator is first used, not in the middle of a run. `ignoreUnknownColumns: true` skips unmatched columns on purpose.
-- **Precedence**: a rule for the member (`With`, `Ignore`…) wins over the feed; the feed wins over name conventions and `WithType`. Members without a column are generated independently of the row (a `Email` convention doesn't know the `FirstName` from the file), so add the columns that must agree.
+- **Precedence**: a rule for the member (`With`, `Ignore`…) wins over the feed; the feed wins over name conventions and `WithEveryMemberOfType`. Members without a column are generated independently of the row (a `Email` convention doesn't know the `FirstName` from the file), so add the columns that must agree.
 - CSV follows RFC 4180 (quoted values with delimiters, `""` quotes and line breaks, CRLF, a byte order mark); pass `delimiter: ';'` for other separators. JSON must be an array of flat objects with the same properties.
-- A generator with a feed can't be given to `With`, `Use` or `Fake.Generators.Add`: every nested object would take the first row. `Populate` fills the members that are unset. Works the same with reflection and with the source generator.
+- A generator with a feed can't be given to `With`, `WithGeneratorFor` or `Fake.Generators.Add`: every nested object would take the first row. `Populate` fills the members that are unset. Works the same with reflection and with the source generator.
 
 ### Back-references
 
@@ -408,7 +408,7 @@ orders[0].Lines[0].Order;   // the very same order (ReferenceEquals), not null
 - After an object is created, every member that is still `null` and whose type one of the objects above it satisfies gets the **nearest** such object: `Line.Order` is the order that holds the line, and a `Line.Customer` is the customer further up. Collections and dictionary values are walked too.
 - Members that have a value are kept (a rule for the member wins), nothing is drawn, so **the rest of the data is exactly the data of the same seed without it**, and a `Where` condition or `AfterCreate` action sees the finished graph. `Populate` fills the missing references of an existing graph.
 - It works through settable members (setters, `init`, fields). Constructor-only members of positional records can be neither read nor set and are left alone.
-- The graph has real cycles afterwards: `ToString`, `Equals` and `GetHashCode` of records and serializers without cycle handling (`ReferenceHandler.Preserve` for System.Text.Json) may not cope. A nested generator (`Use`, `With`) wires the graph it creates.
+- The graph has real cycles afterwards: `ToString`, `Equals` and `GetHashCode` of records and serializers without cycle handling (`ReferenceHandler.Preserve` for System.Text.Json) may not cope. A nested generator (`WithGeneratorFor`, `With`) wires the graph it creates.
 - Works the same with reflection and with the source generator.
 
 ### Rules for nested members
@@ -418,7 +418,7 @@ A rule can name a member of a nested object with a path, so you don't need a gen
 ```csharp
 var invoices = Fake.For<Invoice>()
     .With(i => i.Billing.City, "Oslo")                          // this address only: Shipping is another position
-    .With(i => i.Billing.Contact.Phone, f => f.Random.Replace("+47 ## ## ## ##"))
+    .With(i => i.Billing.Contact.Phone, f => f.Random.ReplaceSymbols("+47 ## ## ## ##"))
     .With(i => i.Lines.Each().Sku, f => f.Commerce.Ean13())     // every element of a list, array or set
     .With(i => i.ByCode.Values.Each().Quantity, 1)              // every value of a dictionary
     .Ignore(i => i.Lines.Each().Supplier!.Email)
@@ -426,11 +426,11 @@ var invoices = Fake.For<Invoice>()
     .Generate(10);
 ```
 
-- **Which rules**: `With`, `WithOneOf`, `Ignore`, `Invalid` and `Boundary` accept paths. `Unique` and rules that depend on the object (`With(x => …, (f, x) => …)`) don't, since they belong to the generated object: you get an `ArgumentException`, and the analyzer reports it (**PHONEY007**).
-- **A position, not a type**: `Billing.City` and `Shipping.City` are both addresses, and only the first is changed. For every object of a type use [`Use`](#type-wide-generators).
+- **Which rules**: `With`, `WithOneOf`, `WithSubsetOf`, `Ignore`, `Invalid` and `Boundary` accept paths. `Unique` and rules that depend on the object (`With(x => …, (f, x) => …)`) don't, since they belong to the generated object: you get an `ArgumentException`, and the analyzer reports it (**PHONEY007**).
+- **A position, not a type**: `Billing.City` and `Shipping.City` are both addresses, and only the first is changed. For every object of a type use [`WithGeneratorFor`](#type-wide-generators).
 - **`Each()`** is only a marker the compiler needs (`FakePath.Each`): it says "every element" inside the expression and can't be called. `x.Lines[0]` is rejected for the same reason.
 - **Checked when the generator is first used**: a member that doesn't exist or can't be set, a string or number in the middle of a path, or `Invalid` on a member without annotations throws an `InvalidOperationException` that names the path. Below an interface or abstract class the picked subtype decides, so that part is checked when the object is created.
-- **Precedence**: a rule for the member itself (`With(i => i.Billing, generator)`), `Use` and `Fake.Generators` create the whole object with their own rules, so path rules inside it don't apply. `Populate` creates missing nested objects with the path rules and fills existing ones as before.
+- **Precedence**: a rule for the member itself (`With(i => i.Billing, generator)`), `WithGeneratorFor` and `Fake.Generators` create the whole object with their own rules, so path rules inside it don't apply. `Populate` creates missing nested objects with the path rules and fills existing ones as before.
 - Works the same with reflection and with the source generator.
 
 ### Interfaces and subtypes
@@ -457,23 +457,23 @@ Up to four subtypes fit the type arguments; pass more as types: `.Subtype<IShape
 
 ### Type-wide generators
 
-`With(x => x.Address, generator)` configures one member. `Use` configures a **type**: every nested object of that type in the graph, whether it sits in a member, a list, an array or a dictionary, and at any depth, comes from the generator you give it:
+`With(x => x.Address, generator)` configures one member. `WithGeneratorFor` configures a **type**: every nested object of that type in the graph, whether it sits in a member, a list, an array or a dictionary, and at any depth, comes from the generator you give it:
 
 ```csharp
 var orders = Fake.For<Order>()
-    .Use(Fake.For<Address>().Locale("de").With(a => a.Country, "Germany"))   // Order.Billing, Order.Shipping, Customer.Home…
-    .Use<IPayment, Card>(Fake.For<Card>().With(c => c.Network, "Visa"))       // an interface generated by the generator of a subtype
+    .WithGeneratorFor(Fake.For<Address>().Locale("de").With(a => a.Country, "Germany"))   // Order.Billing, Order.Shipping, Customer.Home…
+    .WithGeneratorFor<IPayment, Card>(Fake.For<Card>().With(c => c.Network, "Visa"))       // an interface generated by the generator of a subtype
     .Generate(100);
 ```
 
 - **Precedence**: a rule for the member (`With(o => o.Billing, …)`, `Ignore`) wins over the type's generator, which wins over `Subtype`, `Fake.Subtypes`, `[JsonDerivedType]` and the type's model. A `Subtype` that picked `Card` for an `IPayment` member still uses the generator registered for `Card`.
-- **App-wide**: `Fake.Generators.Add(Fake.For<Address>().Locale("sv"))` registers a generator for every generator compiled afterwards (like `Fake.Subtypes` and `Fake.Conventions`: do it at startup or in a test setup hook), also for `[FakeData]` parameters. A generator's own `Use` for the same type wins; `Remove<T>()` and `Clear()` undo it. The registered generator is shared, so its `Unique` members are unique across everything it creates.
+- **App-wide**: `Fake.Generators.Add(Fake.For<Address>().Locale("sv"))` registers a generator for every generator compiled afterwards (like `Fake.Subtypes` and `Fake.Conventions`: do it at startup or in a test setup hook), also for `[FakeData]` parameters. A generator's own `WithGeneratorFor` for the same type wins; `Remove<T>()` and `Clear()` undo it. The registered generator is shared, so its `Unique` members are unique across everything it creates.
 - **Self-contained**: the generator brings its own rules, locale, conventions and `Unique` sets (uniqueness holds across every object it creates). It inherits the reference date and, unless it sets its own, the locale.
-- **Whole graph, innermost wins**: a generator registered on an inner `Use` replaces the outer one for what it creates; types it doesn't register still come from the outer generators. A later `Use` for the same type replaces an earlier one.
+- **Whole graph, innermost wins**: a generator registered on an inner `WithGeneratorFor` replaces the outer one for what it creates; types it doesn't register still come from the outer generators. A later `WithGeneratorFor` for the same type replaces an earlier one.
 - **Not the root**: the object you generate is always made by the generator you call `Generate` on. Cycles and `MaxDepth` still stop nesting with `null`.
 - **`Populate`** creates the nested objects that are missing with the type's generator; nested objects you already have are filled member by member, as before.
-- Only objects can be registered. Scalars (strings, numbers, dates, enums) come from rules and conventions, so `Use` throws an `ArgumentException` that points to `WithConvention`.
-- Works the same with reflection and with the source generator: `Fake.Generated<Address>()` gives the AOT-safe generator to register.
+- Only objects can be registered. Scalars (strings, numbers, dates, enums) come from rules and conventions, so `WithGeneratorFor` throws an `ArgumentException` that points to `WithConvention`.
+- Works the same with reflection and with the source generator: `Fake.ForGenerated<Address>()` gives the AOT-safe generator to register.
 
 ### Conditions with `Where`
 
@@ -489,7 +489,7 @@ var bigOrders = Fake.For<Order>().Seed(1)
 - **Same seed, same data.** An object that already satisfies the condition is exactly the one the generator gives without it, so adding a condition only changes the objects it rejects. Retries draw from a seed derived from the seed, the position and the attempt, so item *n* is still the same whether you generate 1 or 1,000,000 items, sequentially, in parallel or as a `Stream()`.
 - **It sees the finished object**: dependent rules and `AfterCreate` actions have run, so the condition can look at anything.
 - **For conditions most objects meet.** A condition that is not met within `maxAttempts` (default 1000, `Where(…, maxAttempts: 50)`; with several conditions the smallest limit applies) throws an `InvalidOperationException` that says what to do: set the members it looks at with `With(...)` instead of waiting for luck. Creation runs for every attempt, so `AfterCreate` actions may run more than once per result, and a rejected object has used up its `Unique` values.
-- **Nested too**: a generator with a condition filters what it creates as a nested generator (`With(x => x.Ticket, generator)`, `Use(generator)`, `Fake.Generators`).
+- **Nested too**: a generator with a condition filters what it creates as a nested generator (`With(x => x.Ticket, generator)`, `WithGeneratorFor(generator)`, `Fake.Generators`).
 - **`Populate`** supports a condition with `PopulateMode.All` (the object is filled in again until it passes). `MissingOnly` keeps the values it finds, which cannot be generated again, so it throws before touching the object. `InvalidCases()` and `BoundaryCases()` ignore conditions: their objects are made to sit outside or on the edge of the valid ones.
 - Works the same with reflection and with the source generator. A constant `maxAttempts` below 1 is reported by the analyzer (**PHONEY011**).
 
@@ -516,28 +516,28 @@ var invoices = Fake.For<Invoice>().Seed(1)
     .With(i => i.Billing.City, "Oslo")
     .With(i => i.Lines.Each().Sku, f => f.Commerce.Ean13())
     .Subtype<IPayment, Card>()
-    .WithConvention<string>(n => n.EndsWith("Code"), f => f.Random.Replace("??-###"))
+    .WithConvention<string>(n => n.EndsWith("Code"), f => f.Random.ReplaceSymbols("??-###"))
     .VerifyRules()
     .Generate(20);      // InvalidOperationException listing every rule that did not apply to any of the 20 invoices
 ```
 
-- **What is checked**: path rules (`With`, `WithOneOf`, `Ignore`, `Invalid`, `Boundary` on a nested member), `Subtype`, `Use` and `WithConvention`: the rules whose reach depends on what the graph contains. Rules for the generated object's own members always apply and are not checked.
+- **What is checked**: path rules (`With`, `WithOneOf`, `WithSubsetOf`, `Ignore`, `Invalid`, `Boundary` on a nested member), `Subtype`, `WithGeneratorFor` and `WithConvention`: the rules whose reach depends on what the graph contains. Rules for the generated object's own members always apply and are not checked.
 - **Used once is used**: a rule counts as soon as it applied to any object this generator produced, so a rule for a nullable member or a sometimes empty list passes when one object in the call had it. Usage adds up over the calls of one generator instance.
 - **Checked when generation ends**: after `Generate()`, `Generate(n)`, `GenerateParallel(n)` and `Populate(...)` (not when nothing was generated). `Stream()` never ends and throws a `NotSupportedException` instead of silently skipping the check. `InvalidCases()` and `BoundaryCases()` are not verified.
-- **Typical causes**: the object never exists (always null, an empty collection, `MaxDepth`, a cycle, another subtype), a rule for the enclosing member or a `Use` generator creates or skips it, `Populate` keeps an existing object (path rules only shape objects that are created), or the graph has no such member or type.
-- **A nested generator can't verify**: it has no `Generate` call of its own, so passing a verifying generator to `With`, `Use` or `Fake.Generators.Add` throws an `ArgumentException`; call `VerifyRules(false)` on it and verify the generator you call `Generate` on.
+- **Typical causes**: the object never exists (always null, an empty collection, `MaxDepth`, a cycle, another subtype), a rule for the enclosing member or a `WithGeneratorFor` generator creates or skips it, `Populate` keeps an existing object (path rules only shape objects that are created), or the graph has no such member or type.
+- **A nested generator can't verify**: it has no `Generate` call of its own, so passing a verifying generator to `With`, `WithGeneratorFor` or `Fake.Generators.Add` throws an `ArgumentException`; call `VerifyRules(false)` on it and verify the generator you call `Generate` on.
 - Works the same with reflection and with the source generator. Turn it off again with `VerifyRules(false)`. The analyzers' rules about discarded results and replaced rules (**PHONEY005**, **PHONEY008**) catch the mistakes that are visible in the code; this catches the ones that depend on the data.
 
 ### Normally distributed numbers
 
-A plain range gives every value the same chance. Measurements, scores, ages and durations cluster around an average instead, which is what a normal (Gaussian) distribution describes. `WithNormal` gives a number member that shape:
+A plain range gives every value the same chance. Measurements, scores, ages and durations cluster around an average instead, which is what a normal (Gaussian) distribution describes. `WithNormalDistribution` gives a number member that shape:
 
 ```csharp
 var people = Fake.For<Person>().Seed(1)
-    .WithNormal(p => p.Height, mean: 175, standardDeviation: 8)             // 175.34, 168.9, 181.72… two thirds within 8 of 175
-    .WithNormal(p => p.Iq, 100, 15)                                         // whole numbers for int members
-    .WithNormal(p => p.Steps, 8000, 2500, min: 0)                           // a value below 0 is drawn again
-    .WithNormal(p => p.Lines.Each().Pulse, 70, 8, min: 40, max: 120)        // also for collection elements and nested objects
+    .WithNormalDistribution(p => p.Height, mean: 175, standardDeviation: 8)             // 175.34, 168.9, 181.72… two thirds within 8 of 175
+    .WithNormalDistribution(p => p.Iq, 100, 15)                                         // whole numbers for int members
+    .WithNormalDistribution(p => p.Steps, 8000, 2500, min: 0)                           // a value below 0 is drawn again
+    .WithNormalDistribution(p => p.Lines.Each().Pulse, 70, 8, min: 40, max: 120)        // also for collection elements and nested objects
     .Generate(1000);
 
 var iq = faker.Number.Normal<int>(100, 15);                                 // the same on a Faker: Normal(), Normal<T>(), and faker.Random.Normal()
@@ -546,7 +546,7 @@ var fake = faker.Parse("{{number.normal(50, 5)}}");                         // a
 
 - **Any numeric type**: `int`, `long`, `byte`, `decimal`, `double`, `Half`, `BigInteger`… and their nullable forms. Whole-number types are rounded to integers, other types to two decimals (`decimals: 4` changes that, 0 to 15). A value the type cannot hold becomes the type's largest or smallest, so give `min` and `max` when that matters, for instance `byte` with a mean near 255.
 - **Limits cut the bell off, they don't flatten it**: a value outside `min` and `max` is drawn again, so the shape inside the limits stays that of the normal distribution. If the limits lie so far in a tail that 100 draws miss them, the nearest limit is returned.
-- **`[Range]` is not read.** `WithNormal` is a rule, and rules win over annotations, so pass the same limits to keep the values valid.
+- **`[Range]` is not read.** `WithNormalDistribution` is a rule, and rules win over annotations, so pass the same limits to keep the values valid.
 - **Reproducible everywhere**: a sample draws exactly two numbers from the seeded generator and keeps no state, so item *n* is the same whichever way you generate. The logarithm and cosine of the Box–Muller transform are computed with `+ - * /` only, not with `Math.Log` and `Math.Cos`, which round the last bit differently on some platforms, so a seed gives the same numbers on Linux, Windows and ARM (a test pins exact values).
 - **Checked early**: a negative deviation, a limit that is not a number or `min` above `max` throws when the rule is added.
 
@@ -562,7 +562,7 @@ var tickets = Fake.For<Ticket>().Seed(1)
 ```
 
 - **Position, not luck.** The first object a generator creates is 0 and the numbers continue over calls (`Generate(10)` then `Generate(10)` gives 0–9, then 10–19). Item *n* gets the value for *n* whatever the seed, the batch size, `GenerateParallel` or `Stream()`. An object that `Where` generates again keeps its position, so the numbers stay contiguous.
-- **Members of the generated object only.** A rule for a member of a nested object (`x.Billing.Code`) is rejected, and so is giving a generator with `Sequence`/`Cycle` rules to `With`, `Use` or `Fake.Generators.Add`: it counts the objects it generates itself, and every nested object would be number 0. The analyzer reports the first (**PHONEY007**).
+- **Members of the generated object only.** A rule for a member of a nested object (`x.Billing.Code`) is rejected, and so is giving a generator with `Sequence`/`Cycle` rules to `With`, `WithGeneratorFor` or `Fake.Generators.Add`: it counts the objects it generates itself, and every nested object would be number 0. The analyzer reports the first (**PHONEY007**).
 - A later rule for the member replaces it, and the other way round (**PHONEY008** reports that in one chain). `Populate` numbers the objects it fills in the same way and keeps members that are set. For the object's own `Id` the [convention](#conventions) already counts 1, 2, 3…
 
 ### Filling in existing objects
@@ -610,12 +610,12 @@ var orders = Fake.For<Order>()
     .Generate(1000);
 ```
 
-For a collection member, `WithOneOf` gives every object its own random subset of the values:
+For a collection member, `WithSubsetOf` gives every object its own random subset of the values:
 
 ```csharp
 var users = Fake.For<User>().Seed(1)
-    .WithOneOf(u => u.Roles, roles, 2)                  // two of the roles, never the same one twice
-    .WithOneOf(u => u.Tags, tags, (1, 3))               // one to three; Tags can be an array, a HashSet, an ISet or any list interface
+    .WithSubsetOf(u => u.Roles, roles, 2)                  // two of the roles, never the same one twice
+    .WithSubsetOf(u => u.Tags, tags, (1, 3))               // one to three; Tags can be an array, a HashSet, an ISet or any list interface
     .Generate(100);
 ```
 
@@ -623,7 +623,7 @@ Give the values weights and the heavier ones are more likely to be in the subset
 
 ```csharp
 var users = Fake.For<User>().Seed(1)
-    .WithOneOf(u => u.Roles, roles, new[] { 80.0, 15, 4, 1 }, 2)   // "viewer" nearly always, "owner" almost never
+    .WithSubsetOf(u => u.Roles, roles, new[] { 80.0, 15, 4, 1 }, 2)   // "viewer" nearly always, "owner" almost never
     .Generate(100);
 ```
 
@@ -709,19 +709,19 @@ Member names (case and `_` ignored, trailing words matched, so `BillingCity` is 
 `Name` and `Title` look at the declaring type (`Company.Name` is a company name, `Product.Name` a product, `Book.Title` a title). Anything else gets a value based on its type. Add your own:
 
 ```csharp
-Fake.Conventions.Add<string>(name => name.EndsWith("Sku"), f => f.Random.Replace("SKU-#####")); // app-wide
+Fake.Conventions.Add<string>(name => name.EndsWith("Sku"), f => f.Random.ReplaceSymbols("SKU-#####")); // app-wide
 Fake.For<Order>().WithConvention<decimal>(n => n == "Vat", f => 0.25m);                          // one generator
 ```
 
 Both apply to every object in the graph, so `Order.Lines[0].Sku` is covered as well as `Order.Sku`. A generator's own conventions come before the app-wide ones, and explicit rules (`With`, `Ignore`…) come before both.
 
-To give **every member of a type** a value, whatever it is called, use `WithType` (or `Fake.Conventions.Add<T>(factory)` app-wide):
+To give **every member of a type** a value, whatever it is called, use `WithEveryMemberOfType` (or `Fake.Conventions.Add<T>(factory)` app-wide):
 
 ```csharp
 var orders = Fake.For<Order>()
-    .WithType<DateOnly>(f => f.Date.Past().Date)    // every DateOnly member, nested objects included
-    .WithType("n/a")                                 // every string member, FirstName and Email too
-    .With(o => o.Reference, f => f.Random.Replace("ORD-####"))   // a rule for the member still wins
+    .WithEveryMemberOfType<DateOnly>(f => f.Date.Past().Date)    // every DateOnly member, nested objects included
+    .WithEveryMemberOfType("n/a")                                 // every string member, FirstName and Email too
+    .With(o => o.Reference, f => f.Random.ReplaceSymbols("ORD-####"))   // a rule for the member still wins
     .Generate(10);
 ```
 
@@ -738,10 +738,10 @@ internal static partial class TestData;
 var customers = TestData.Customer.Seed(1).Generate(100); // a ObjectGenerator<Customer>, no reflection
 ```
 
-The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. `Fake.For`, `One`, `Many` and `Populate` fall back to reflection for other types, so the compiler flags them in trimmed and AOT apps even when a model exists; **`Fake.Generated<Customer>()`** is the same facade (seed, locale and clock of `Fake.Seeded`) without any reflection, so it is warning free there, and it throws with the fix when the type has no generated model:
+The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. `Fake.For`, `One`, `Many` and `Populate` fall back to reflection for other types, so the compiler flags them in trimmed and AOT apps even when a model exists; **`Fake.ForGenerated<Customer>()`** is the same facade (seed, locale and clock of `Fake.Seeded`) without any reflection, so it is warning free there, and it throws with the fix when the type has no generated model:
 
 ```csharp
-var customer = Fake.Generated<Customer>().Populate(new Customer { Id = 42 }); // trim and AOT safe
+var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 }); // trim and AOT safe
 ```
 
 Generated and reflection models produce **identical data for the same seed**. With generated models Phoney is trim and Native AOT safe; reflection entry points are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`) so the compiler tells you where they're used.
@@ -759,7 +759,7 @@ The package also reports these diagnostics:
 | PHONEY005 | Warning | the result of a generator method is discarded (`gen.With(...);`: generators are immutable), or of `Populate` on a struct (it returns the populated copy) |
 | PHONEY006 | Warning | `Fake.Seeded(...)` is never disposed, so everything after it stays seeded; use `using var _ = Fake.Seeded(1);` |
 | PHONEY007 | Warning | a rule would throw when the generator is first used: the member isn't a public settable member or constructor parameter, the selector isn't `x => x.Member`, or an object-dependent rule targets a constructor parameter |
-| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `Use` generator / `Subtype` mapping replaces an earlier one for the same type in the same chain |
+| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `WithGeneratorFor` generator / `Subtype` mapping replaces an earlier one for the same type in the same chain |
 | PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
 | PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
 | PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`, `Where(x => …, 0)`…) |
