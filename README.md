@@ -882,22 +882,22 @@ The same scenarios run against the best-known .NET libraries: [Bogus](https://gi
 
 | Scenario | Phoney | Phoney (reflection) | Bogus | AutoBogus | AutoFixture | NBuilder | Faker.Net |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| First name | **9.5 ns / 0 B** | – | 140 ns / 37 B | – | – | – | 108 µs / 139 KB |
-| Full name | 451 ns / 348 B | – | **300 ns / 127 B** | – | – | – | 170 µs / 194 KB |
-| Email | **523 ns / 277 B** | – | 2.57 µs / 1.5 KB | – | – | – | 153 µs / 196 KB |
-| Street address | **967 ns / 768 B** | – | 5.24 µs / 4.4 KB | – | – | – | 92.7 µs / 91 KB |
-| Sentence | **427 ns / 481 B** | – | 1.25 µs / 847 B | – | – | – | 73.7 µs / 78 KB |
-| Flat objects (×1,000) | **3.86 ms / 2.4 MB** | 4.59 ms / 2.9 MB | 13.8 ms / 8.9 MB | 614 ms / 649 MB | 131 ms / 49 MB | 6.54 ms / 3.9 MB | – |
-| Object graphs (×1,000) | 12.7 ms / 7.7 MB | **12.4 ms / 7.9 MB** | 29.1 ms / 14 MB | 3.46 s / 3.32 GB | 466 ms / 205 MB | 44.2 ms / 19 MB | – |
+| First name | **9.1 ns / 0 B** | – | 130 ns / 37 B | – | – | – | 96.1 µs / 139 KB |
+| Full name | 479 ns / 412 B | – | **285 ns / 127 B** | – | – | – | 154 µs / 193 KB |
+| Email | **309 ns / 129 B** | – | 2.36 µs / 1.5 KB | – | – | – | 153 µs / 196 KB |
+| Street address | **537 ns / 595 B** | – | 4.63 µs / 4.4 KB | – | – | – | 82.1 µs / 92 KB |
+| Sentence | **420 ns / 481 B** | – | 1.23 µs / 847 B | – | – | – | 72.0 µs / 77 KB |
+| Flat objects (×1,000) | **2.81 ms / 2.1 MB** | 3.46 ms / 2.6 MB | 14.3 ms / 8.9 MB | 594 ms / 649 MB | 106 ms / 49 MB | 6.53 ms / 3.9 MB | – |
+| Object graphs (×1,000) | 12.0 ms / 7.4 MB | **11.8 ms / 7.6 MB** | 31.2 ms / 14 MB | 3.57 s / 3.32 GB | 491 ms / 205 MB | 46.1 ms / 19 MB | – |
 
-"Phoney" is the source-generated model (`[FakeFor<T>]`) and "Phoney (reflection)" the reflection model; the value rows have only one column because they don't involve a model. A flat object has 11 members; a graph is a customer with an address and two purchases of two lines each, plus an enum. The run was repeated once: the numbers moved by up to about 15 %, no ranking changed except Phoney's two models on object graphs, which are within noise of each other.
+"Phoney" is the source-generated model (`[FakeFor<T>]`) and "Phoney (reflection)" the reflection model; the value rows have only one column because they don't involve a model. A flat object has 11 members; a graph is a customer with an address and two purchases of two lines each, plus an enum. The matrix was measured three times (the last run is shown, after the start-up work described below, which also removed the `Regex` from email and address generation): the numbers of unchanged code moved by up to about 15 %, and no ranking changed except Phoney's two models on object graphs, which are within noise of each other.
 
 How to read the numbers:
 
 - **The libraries don't produce the same data.** Phoney and Bogus produce realistic values (names, emails and addresses that agree with each other). AutoBogus, AutoFixture and NBuilder fill members with random placeholder strings and numbers that don't resemble the member (run the `check` command below to see what each library produces).
 - **Bogus needs every rule written by hand.** The Bogus rows use `Faker<T>` classes with a rule per member, and the nested ones are composed by hand. Phoney gets the same shape from name conventions and the type's members. NBuilder has no object-graph support, so its graph is composed by hand with `.All().Do(...)`.
-- **Faker.Net only offers single values**, one static call each, which is why it has no object rows. Its cost is about 70–170 µs and 78–196 KB per value in this run.
-- **Bogus is faster at `Full name`** (300 ns against 451 ns).
+- **Faker.Net only offers single values**, one static call each, which is why it has no object rows. Its cost is about 72–154 µs and 77–196 KB per value in this run.
+- **Bogus is faster at `Full name`** (285 ns against 479 ns).
 - **Start-up is the other thing to know.** The first object of a fresh process takes this long, from `Main` to the first generated object (median of 15 processes). The left column is a plain `dotnet` run, the right one the same app published with ReadyToRun (`-p:PublishReadyToRun=true`), which precompiles the libraries and removes most of the JIT time:
 
 | Library | JIT | ReadyToRun |
