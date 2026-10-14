@@ -1,6 +1,0 @@
-{
-  "strictness": 2,
-  "commentTypes": ["logic", "syntax", "style"],
-  "ignorePatterns": "data/**\nsrc/Phoney/Resources/**\nsrc/Phoney/Data/Generated/**\n**/Snapshots/*.verified.cs\n**/*.bin.br\ntools/extract/package-lock.json\n*.slnx",
-  "instructions": "Phoney is a .NET fake-data library (net8.0 and net10.0) that must work with Native AOT and source generation. Read CLAUDE.md for the architecture and conventions. Prioritise reproducibility for a seed, parity between the reflection and source-generated models, AOT/trim safety, and allocation-free hot paths."
-}
