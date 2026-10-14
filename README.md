@@ -726,7 +726,7 @@ public void Places_order(Customer customer, string email, [Range(1, 10)] int qua
 - **Reproducible by default** (the seed is derived from the test), with `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`; `PHONEY_SEED=123 dotnet test` moves every test at once. The shared rules live in `FakeDataOptions` in the main package.
 - These attributes fill **method parameters**. Constructor and property injection (TUnit) and `[FakeSeed]` have no counterpart in the other frameworks.
 - Test data is created while the framework discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes before that, for example in a module initializer.
-- Packages target .NET 8 and .NET 10 and depend on xUnit.net v3 `xunit.v3.extensibility.core` 4.0.2, NUnit 5.0.0 and MSTest 4.5.1.
+- Packages target .NET 8 and .NET 10. They work with **xUnit.net v3 3.0 and later** (`xunit.v3` 3.x and 4.x), **NUnit 4.0 and later** (4.x and 5.x) and **MSTest 4.0 and later**; MSTest 3.x is not supported because 4.0 changed the data source interface, so a build for 3.x would fail in 4.x apps. `Phoney.TUnit` needs TUnit 1.10 or later and `Phoney.NodaTime` NodaTime 3.1 or later.
 
 ## Locales
 
