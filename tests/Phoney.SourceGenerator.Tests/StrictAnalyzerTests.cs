@@ -57,6 +57,18 @@ public sealed class StrictAnalyzerTests
     }
 
     [Test]
+    public async Task Invalid_and_Boundary_rules_cover_members(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("""
+            // Flavor and Shelf have no annotation or convention, so only the rule covers them (what it does at runtime is not the analyzer's concern).
+            public static object A() => Data.Product.Strict().Invalid(p => p.Shelf).Ignore(p => p.Flavor).Generate();
+            public static object B() => Data.Product.Boundary(p => p.Flavor).Strict().Ignore(p => (object)p.Shelf).Generate(2);
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    [Test]
     public async Task Turning_conventions_off_reports_convention_members_too(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("public static object A() => Data.Product.UseConventions(false).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);

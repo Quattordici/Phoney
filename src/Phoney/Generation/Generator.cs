@@ -161,6 +161,57 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>
+    /// Breaks one limit of a member's data annotations, e.g. <c>.Invalid(x =&gt; x.Quantity)</c> gives a quantity just outside its
+    /// <c>[Range]</c>, a name one character too long, or an empty <c>[Required]</c> value. Which violation an object gets is
+    /// picked per object (reproducible with a <see cref="Seed"/>); every other member stays valid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Violations are derived from <c>[Required]</c>, <c>[StringLength]</c>, <c>[MinLength]</c>/<c>[MaxLength]</c> (strings and collections),
+    /// <c>[Range]</c> (numbers and dates), <c>[RegularExpression]</c>, <c>[EmailAddress]</c>/<c>[Phone]</c>/<c>[Url]</c>/<c>[CreditCard]</c>/<c>[Base64String]</c>,
+    /// <c>[AllowedValues]</c> and <c>[DeniedValues]</c>, and checked with the real validators. A value that breaks one limit can break
+    /// others of the same member (an empty string is also too short); the other members are untouched. The object is the one
+    /// <see cref="Generate()"/> would give, with only this member replaced.
+    /// </para>
+    /// <para>Use <see cref="InvalidCases"/> to get every violation of every member at once.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">At <c>Generate</c>: the member has no data annotations that can be broken.</exception>
+    public Generator<T> Invalid<TValue>(Expression<Func<T, TValue>> member) =>
+        AddRule(member, new Rule(RuleKind.Constraint, new ConstraintRequest(Boundary: false, null)));
+
+    /// <summary>
+    /// Sets a member exactly on a limit of its data annotations, e.g. <c>.Boundary(x =&gt; x.Quantity)</c> gives the smallest or the
+    /// largest value its <c>[Range]</c> allows, a name of the minimum or maximum length, or the minimum or maximum element count.
+    /// The value is valid; which edge an object gets is picked per object. See <see cref="Invalid{TValue}"/> for the annotations that are read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">At <c>Generate</c>: the member has no limits to sit on (patterns, formats and lists of allowed values define a value but have no edge).</exception>
+    public Generator<T> Boundary<TValue>(Expression<Func<T, TValue>> member) =>
+        AddRule(member, new Rule(RuleKind.Constraint, new ConstraintRequest(Boundary: true, null)));
+
+    /// <summary>
+    /// Every way to break the data annotations of the generated type, one object per violation: a quantity below and above its
+    /// <c>[Range]</c>, a name too short and too long, an empty and a missing <c>[Required]</c> value… Useful to test that validation rejects each of them.
+    /// </summary>
+    /// <remarks>
+    /// All objects are the one <see cref="Generate()"/> gives for the <see cref="Seed"/> (a random one if none is set), each with a single member
+    /// replaced, so a case differs from a valid object only in the member it is about. Rules for that member are replaced; ignored members are skipped.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// foreach (var c in Fake.For&lt;Order&gt;().Seed(1).InvalidCases())
+    ///     validator.Validate(c.Value).IsValid.ShouldBeFalse(c.ToString());   // "Quantity: above the maximum (10)"
+    /// </code>
+    /// </example>
+    public IReadOnlyList<ConstraintCase<T>> InvalidCases() => Cases(boundary: false);
+
+    /// <summary>
+    /// Every value exactly on a limit of the generated type's data annotations, one valid object per edge: the smallest and largest value of a
+    /// <c>[Range]</c>, strings of the minimum and maximum length, the minimum and maximum element count. Useful for off-by-one tests.
+    /// See <see cref="InvalidCases"/> for how the objects are made.
+    /// </summary>
+    public IReadOnlyList<ConstraintCase<T>> BoundaryCases() => Cases(boundary: true);
+
+    /// <summary>
     /// Sets a member to one of <paramref name="values"/>, e.g. existing ids or objects:
     /// <c>.WithOneOf(o =&gt; o.Customer, customers)</c>.
     /// </summary>
@@ -365,6 +416,44 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>A new generator with <paramref name="config"/> and fresh state.</summary>
     private Generator<T> Derive(Config config) => new(_model, config);
 
+    /// <summary>One object per case: the seeded base object with a single member replaced by the case.</summary>
+    private List<ConstraintCase<T>> Cases(bool boundary)
+    {
+        var seed = BaseSeed; // one base object for all cases, so they differ in the member they are about only
+        var cases = new List<ConstraintCase<T>>();
+        foreach (var member in _model.Members)
+        {
+            if (_config.Rules.TryGetValue(member.Name, out var existing) && existing.Kind == RuleKind.Ignore)
+                continue;
+
+            var descriptions = boundary ? ConstraintCases.Boundary(member) : ConstraintCases.Invalid(member);
+            for (var i = 0; i < descriptions.Count; i++)
+            {
+                var rule = new Rule(RuleKind.Constraint, new ConstraintRequest(boundary, i), Added: _config.RuleCount);
+                var generator = Derive(_config with { Seed = seed, Rules = _config.Rules.SetItem(member.Name, rule), RuleCount = _config.RuleCount + 1 });
+                cases.Add(new ConstraintCase<T>(member.Name, descriptions[i].Description, generator.Generate()));
+            }
+        }
+
+        return cases;
+    }
+
+    /// <summary>Picks the producer of a <see cref="ConstraintRequest"/>: the requested case, or one per object when none was requested.</summary>
+    private static Func<FakeScope, Func<FakeScope, object?>, object?> ResolveConstraint(FakeMember member, ConstraintRequest request)
+    {
+        var cases = request.Boundary ? ConstraintCases.Boundary(member) : ConstraintCases.Invalid(member);
+        if (cases.Count == 0)
+        {
+            throw new InvalidOperationException(request.Boundary
+                ? $"{typeof(T).Name}.{member.Name} has no limits to sit on: add [Range], [StringLength], [MinLength] or [MaxLength] to it."
+                : $"{typeof(T).Name}.{member.Name} has no data annotations that can be broken: add [Range], [StringLength], [MinLength], [MaxLength], [Required], [RegularExpression], [EmailAddress], [AllowedValues] or [DeniedValues] to it.");
+        }
+
+        if (request.Index is { } index)
+            return cases[index].Produce;
+        return cases.Count == 1 ? cases[0].Produce : (scope, valid) => cases[scope.Faker.Random.Index(cases.Count)].Produce(scope, valid);
+    }
+
     /// <summary>Adds (or replaces) the rule of a member; the rule remembers when it was added, because dictionaries don't keep that order.</summary>
     private Generator<T> AddRule<TValue>(Expression<Func<T, TValue>> member, Rule rule) =>
         Derive(_config with { Rules = _config.Rules.SetItem(MemberName(member), rule with { Added = _config.RuleCount }), RuleCount = _config.RuleCount + 1 });
@@ -406,7 +495,8 @@ public sealed class Generator<T> : INestedGenerator
                 dependent.Add((index, (Func<Faker, T, object?>)rule.Value!));
             }
 
-            slots[index] = new RuleSlot(rule.Kind, rule.Value, _config.Unique.TryGetValue(name, out var attempts), attempts, rule.Boxed);
+            var value = rule.Kind == RuleKind.Constraint ? ResolveConstraint(members[index], (ConstraintRequest)rule.Value!) : rule.Value;
+            slots[index] = new RuleSlot(rule.Kind, value, _config.Unique.TryGetValue(name, out var attempts), attempts, rule.Boxed);
         }
 
         // Unique members without an explicit rule keep their convention value but still need a slot.
@@ -470,8 +560,8 @@ public sealed class Generator<T> : INestedGenerator
                 for (var i = 0; i < compiled.Slots.Length; i++)
                 {
                     // Only explicit rules apply to factory-created objects; the factory decides everything else.
-                    if (compiled.Slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Generator or RuleKind.Convention } && !model.Members[i].IsConstructorParameter)
-                        item = model.Set(item, i, scope.GetObject(i, static _ => null));
+                    if (compiled.Slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Generator or RuleKind.Convention or RuleKind.Constraint } && !model.Members[i].IsConstructorParameter)
+                        item = model.Set(item, i, scope.GetObject(i, model.Fallback(i))); // only a constraint reads the member's own value
                 }
             }
             else
@@ -509,6 +599,9 @@ public sealed class Generator<T> : INestedGenerator
 
     /// <summary>Rules bound to member indices, plus rules that run after creation.</summary>
     private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings);
+
+    /// <summary>What <see cref="Invalid{TValue}"/> and <see cref="Boundary{TValue}"/> ask for: <paramref name="Index"/> picks one case of the member, <see langword="null"/> lets each object pick.</summary>
+    private sealed record ConstraintRequest(bool Boundary, int? Index);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added.</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0);

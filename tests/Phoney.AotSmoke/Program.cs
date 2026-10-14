@@ -63,6 +63,20 @@ var oslo = Fakes.Person.Seed(5)
 if (oslo.Any(p => p.Home.City != "Oslo") || oslo.Any(p => p.Contact is not Email { Address: "oslo@example.com" }))
     throw new InvalidOperationException("type generators were not used");
 
+// Invalid and boundary data from data annotations, through a generated model, no reflection.
+var invalid = Fakes.Ticket.Seed(6).InvalidCases();
+if (invalid.Count != 5 || !invalid.All(c => c.Member switch
+    {
+        "Seats" => c.Value.Seats is 0 or 9,
+        "Code" => c.Value.Code.Length is 1 or 7,
+        "Contact" => !c.Value.Contact.Contains('@'),
+        _ => false,
+    }))
+    throw new InvalidOperationException("invalid cases were not invalid: " + string.Join("; ", invalid));
+var edges = Fakes.Ticket.Seed(6).BoundaryCases();
+if (!edges.Where(c => c.Member == "Seats").Select(c => c.Value.Seats).Order().SequenceEqual([1, 8]) || !edges.Where(c => c.Member == "Code").Select(c => c.Value.Code.Length).Order().SequenceEqual([2, 6]))
+    throw new InvalidOperationException("boundary cases were wrong: " + string.Join("; ", edges));
+
 // Time: a TimeProvider drives relative dates.
 var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
 if (Fakes.Person.Seed(1).TimeProvider(clock).Generate().BirthDate.Year < 1950)
@@ -153,5 +167,17 @@ public enum Status
     Suspended,
 }
 
-[FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeSubtype<IInsurance, Policy>]
+public sealed class Ticket
+{
+    [System.ComponentModel.DataAnnotations.Range(1, 8)]
+    public int Seats { get; set; }
+
+    [System.ComponentModel.DataAnnotations.StringLength(6, MinimumLength = 2)]
+    public string Code { get; set; } = "";
+
+    [System.ComponentModel.DataAnnotations.EmailAddress]
+    public string Contact { get; set; } = "";
+}
+
+[FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeSubtype<IInsurance, Policy>]
 internal static partial class Fakes;

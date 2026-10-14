@@ -43,6 +43,9 @@ internal enum RuleKind
 
     /// <summary>The model's own convention or type default (used to attach uniqueness without a rule).</summary>
     Default,
+
+    /// <summary>A value that breaks or sits on the limit of the member's data annotations, built from the member's normal value.</summary>
+    Constraint,
 }
 
 /// <summary>A rule bound to a member index for one compiled generator.</summary>
@@ -125,6 +128,10 @@ public sealed class FakeScope
     internal bool CreatedClaimed { get; set; }
 
     private DateTimeOffset? _created;
+    private int? _forcedCount;
+
+    /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
+    internal void ForceNextCollectionCount(int? count) => _forcedCount = count;
 
     /// <summary>
     /// Whether <paramref name="value"/> still holds its default: <see langword="null"/>, <c>default(T)</c> (0, <see langword="false"/>,
@@ -322,6 +329,12 @@ public sealed class FakeScope
     /// </summary>
     public int CollectionCount(MemberConstraints? constraints = null)
     {
+        if (_forcedCount is { } forced)
+        {
+            _forcedCount = null; // for the member's own collection only, not for collections nested in its elements
+            return forced;
+        }
+
         var min = Settings.MinCollectionSize;
         var max = Settings.MaxCollectionSize;
         if (constraints is { MinLength: { } atLeast })
@@ -408,6 +421,7 @@ public sealed class FakeScope
         RuleKind.Factory => slot.Value is Func<Faker, TValue> typed ? typed(Faker) : (TValue)slot.BoxedFactory!(Faker)!,
         RuleKind.Generator => (TValue)((INestedGenerator)slot.Value!).CreateNested(this)!,
         RuleKind.Convention => Convert<TValue>(((Func<FakeScope, object?>)slot.Value!)(this)),
+        RuleKind.Constraint => Convert<TValue>(((Func<FakeScope, Func<FakeScope, object?>, object?>)slot.Value!)(this, s => fallback(s))),
         RuleKind.Ignore => default!,
         _ => fallback(this),
     };

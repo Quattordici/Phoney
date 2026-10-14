@@ -1,0 +1,285 @@
+using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Text;
+using Produce = System.Func<Phoney.Generation.FakeScope, System.Func<Phoney.Generation.FakeScope, object?>, object?>;
+
+namespace Phoney.Generation;
+
+/// <summary>
+/// One way to break, or to sit exactly on, a limit of a member's data annotations. <paramref name="Produce"/> receives the
+/// member's normal (valid) producer: it always runs it first, so everything drawn after the member matches a valid object.
+/// </summary>
+internal sealed record ConstraintCase(string Description, Produce Produce);
+
+/// <summary>
+/// Derives invalid values and boundary values from a member's <see cref="MemberConstraints"/>. Reflection and generated
+/// models describe members with the same constraints, so both produce the same cases.
+/// </summary>
+internal static class ConstraintCases
+{
+    /// <summary>Strings and collections longer than this are not built: a limit like <c>[MaxLength(int.MaxValue)]</c> has no useful violation.</summary>
+    private const int LongestFabricated = 100_000;
+
+    /// <summary>Texts that break most formats; the first one an annotation rejects is used.</summary>
+    private static readonly string[] BadTexts = ["not valid", "!", "@", "000", "x", "###", " "];
+
+    private enum Shape { Other, String, Collection, Number, Date }
+
+    private enum Side { Min, Max }
+
+    /// <summary>The ways to violate the member's annotations, in a fixed order (required, length, range, format, values).</summary>
+    public static IReadOnlyList<ConstraintCase> Invalid(FakeMember member)
+    {
+        var cases = new List<ConstraintCase>();
+        if (member.Constraints is not { } c)
+            return cases;
+
+        var type = Underlying(member.Type);
+        var shape = ShapeOf(type);
+        if (c.Required)
+            Required(cases, member.Type, shape);
+
+        switch (shape)
+        {
+            case Shape.String:
+                InvalidLength(cases, c, "shorter than the minimum length", "longer than the maximum length", Text);
+                InvalidText(cases, c);
+                break;
+            case Shape.Collection:
+                InvalidLength(cases, c, "fewer elements than the minimum", "more elements than the maximum", Count);
+                break;
+            case Shape.Number or Shape.Date:
+                InvalidRange(cases, type, shape, c);
+                break;
+        }
+
+        if (shape == Shape.Number && c.AllowedValues is { Length: > 0 } allowed && NotAllowedNumber(type, allowed) is { } number)
+            cases.Add(new("not one of the allowed values", Replace(number)));
+        if (c.DeniedValues?.FirstOrDefault(d => d is not null && type.IsInstanceOfType(d)) is { } denied)
+            cases.Add(new($"a denied value ({denied})", Replace(denied)));
+        return cases;
+    }
+
+    /// <summary>The values exactly on the limits of the member's annotations: smallest and largest number, date, length or element count.</summary>
+    public static IReadOnlyList<ConstraintCase> Boundary(FakeMember member)
+    {
+        var cases = new List<ConstraintCase>();
+        if (member.Constraints is not { } c)
+            return cases;
+
+        var type = Underlying(member.Type);
+        switch (ShapeOf(type))
+        {
+            // A pattern, format or list of values defines the text, so only its length can't be picked freely.
+            case Shape.String when c.Pattern is null && c.Format is null && !c.Base64 && c.AllowedValues is null:
+                BoundaryLength(cases, c, min: Math.Max(c.MinLength ?? 0, c.Required ? 1 : 0), "the minimum length", "the maximum length", Text);
+                break;
+            case Shape.Collection:
+                BoundaryLength(cases, c, min: c.MinLength ?? 0, "the minimum element count", "the maximum element count", Count);
+                break;
+            case var shape and (Shape.Number or Shape.Date):
+                foreach (var side in new[] { Side.Min, Side.Max })
+                {
+                    var text = side == Side.Min ? c.RangeMin : c.RangeMax;
+                    if (TryBound(type, shape, text, side, outside: false) is { } value)
+                        cases.Add(new($"the {(side == Side.Min ? "minimum" : "maximum")} ({text})", Replace(value)));
+                }
+
+                break;
+        }
+
+        return cases;
+    }
+
+    private static void Required(List<ConstraintCase> cases, Type memberType, Shape shape)
+    {
+        if (shape == Shape.String)
+            cases.Add(new("required but empty", Replace("")));
+        if (!memberType.IsValueType || Nullable.GetUnderlyingType(memberType) is not null)
+            cases.Add(new("required but null", Replace(null)));
+    }
+
+    /// <summary>One below the minimum and one above the maximum length (or element count).</summary>
+    private static void InvalidLength(List<ConstraintCase> cases, MemberConstraints c, string below, string above, Func<int, Produce> to)
+    {
+        if (c.MinLength is > 0 and var min)
+            cases.Add(new($"{below} ({min})", to(min - 1)));
+        if (c.MaxLength is { } max and < LongestFabricated)
+            cases.Add(new($"{above} ({max})", to(max + 1)));
+    }
+
+    private static void BoundaryLength(List<ConstraintCase> cases, MemberConstraints c, int min, string smallest, string largest, Func<int, Produce> to)
+    {
+        if (c.MinLength is null && c.MaxLength is null && !c.Required)
+            return;
+        cases.Add(new($"{smallest} ({min})", to(min)));
+        if (c.MaxLength is { } max and < LongestFabricated && max > min)
+            cases.Add(new($"{largest} ({max})", to(max)));
+    }
+
+    /// <summary>Texts that the pattern, format or list of allowed values rejects, checked with the real validators.</summary>
+    private static void InvalidText(List<ConstraintCase> cases, MemberConstraints c)
+    {
+        if (c.Pattern is { } pattern && Rejected(new RegularExpressionAttribute(pattern), c) is { } unmatched)
+            cases.Add(new($"does not match the pattern {pattern}", Replace(unmatched)));
+
+        if (c.Format is { } format && FormatOf(format) is var (attribute, name) && Rejected(attribute, c) is { } malformed)
+            cases.Add(new($"not {name}", Replace(malformed)));
+
+        if (c.Base64 && Rejected(new Base64StringAttribute(), c) is { } notBase64)
+            cases.Add(new("not valid base64", Replace(notBase64)));
+
+        if (c.AllowedValues is { Length: > 0 } allowed)
+        {
+            var taken = allowed.Select(a => a?.ToString()).ToHashSet(StringComparer.Ordinal);
+            var other = "not allowed";
+            while (taken.Contains(other))
+                other += "_";
+            cases.Add(new("not one of the allowed values", Replace(other)));
+        }
+    }
+
+    /// <summary>One unit below the minimum and above the maximum of a <c>[Range]</c>.</summary>
+    private static void InvalidRange(List<ConstraintCase> cases, Type type, Shape shape, MemberConstraints c)
+    {
+        if (TryBound(type, shape, c.RangeMin, Side.Min, outside: true) is { } below)
+            cases.Add(new($"below the minimum ({c.RangeMin})", Replace(below)));
+        if (TryBound(type, shape, c.RangeMax, Side.Max, outside: true) is { } above)
+            cases.Add(new($"above the maximum ({c.RangeMax})", Replace(above)));
+    }
+
+    /// <summary>The bound of a range, or the value one unit (a whole number, a day) outside it; <see langword="null"/> when the member's type can't hold it.</summary>
+    private static object? TryBound(Type type, Shape shape, string? text, Side side, bool outside)
+    {
+        if (text is null)
+            return null;
+        var step = outside ? (side == Side.Min ? -1 : 1) : 0;
+        try
+        {
+            if (shape == Shape.Date)
+            {
+                var date = DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).AddDays(step);
+                return type == typeof(DateTime) ? date.UtcDateTime : type == typeof(DateTimeOffset) ? date : DateOnly.FromDateTime(date.UtcDateTime);
+            }
+
+            if (type == typeof(double) || type == typeof(float))
+                return Convert.ChangeType(double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture) + step, type, CultureInfo.InvariantCulture);
+
+            var number = decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
+            if (type != typeof(decimal)) // whole-number types: the nearest whole number inside the range
+                number = side == Side.Min ? Math.Ceiling(number) : Math.Floor(number);
+            return Convert.ChangeType(number + step, type, CultureInfo.InvariantCulture);
+        }
+        catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException or ArgumentOutOfRangeException)
+        {
+            return null; // e.g. one below zero for a byte
+        }
+    }
+
+    /// <summary>A number that is not in the list of allowed values: one more than the largest.</summary>
+    private static object? NotAllowedNumber(Type type, object?[] allowed)
+    {
+        try
+        {
+            return Convert.ChangeType(allowed.Max(a => Convert.ToDecimal(a, CultureInfo.InvariantCulture)) + 1, type, CultureInfo.InvariantCulture);
+        }
+        catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The first of the bad texts, fitted to the length limits, that <paramref name="attribute"/> rejects; <see langword="null"/> if it accepts them all.</summary>
+    private static string? Rejected(ValidationAttribute attribute, MemberConstraints c)
+    {
+        foreach (var candidate in BadTexts)
+        {
+            var text = Fit(candidate, c);
+            try
+            {
+                if (!attribute.IsValid(text))
+                    return text;
+            }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or TimeoutException)
+            {
+                return null; // e.g. an invalid pattern: nothing to compare with
+            }
+        }
+
+        return null;
+    }
+
+    private static string Fit(string text, MemberConstraints c)
+    {
+        var min = Math.Max(c.MinLength ?? 0, c.Required ? 1 : 0);
+        return Resize(text.Length < min ? text.PadRight(min, 'x') : text, c.MaxLength ?? int.MaxValue, exact: false);
+    }
+
+    private static (ValidationAttribute Attribute, string Name)? FormatOf(ConventionKind format) => format switch
+    {
+        ConventionKind.Email => (new EmailAddressAttribute(), "an email address"),
+        ConventionKind.Phone => (new PhoneAttribute(), "a phone number"),
+        ConventionKind.Url => (new UrlAttribute(), "a URL"),
+        ConventionKind.CreditCardNumber => (new CreditCardAttribute(), "a credit card number"),
+        _ => null,
+    };
+
+    /// <summary>The member's valid text cut or repeated to an exact number of characters.</summary>
+    private static Func<int, Produce> Text { get; } = length => (scope, valid) => Resize(valid(scope) as string ?? "", length, exact: true);
+
+    /// <summary>The member's collection built with an exact number of elements.</summary>
+    private static Func<int, Produce> Count { get; } = count => (scope, valid) =>
+    {
+        scope.ForceNextCollectionCount(count);
+        try
+        {
+            return valid(scope);
+        }
+        finally
+        {
+            scope.ForceNextCollectionCount(null); // a member that stayed null never asked for the count
+        }
+    };
+
+    /// <summary>Replaces the member's value, after producing the valid one so later members draw the same randomness as in a valid object.</summary>
+    private static Produce Replace(object? value) => (scope, valid) =>
+    {
+        valid(scope);
+        return value;
+    };
+
+    private static string Resize(string text, int length, bool exact)
+    {
+        if (length <= 0)
+            return "";
+        if (text.Length >= length)
+            return text[..length];
+        if (!exact)
+            return text;
+
+        // Repeat the text with spaces between, so a name that is too long still reads like words; never end on a space.
+        var repeated = new StringBuilder(length + text.Length + 1);
+        var unit = text.Length == 0 ? "x" : text;
+        while (repeated.Length < length)
+            repeated.Append(unit).Append(' ');
+        repeated.Length = length;
+        if (repeated[^1] == ' ')
+            repeated[^1] = 'x';
+        return repeated.ToString();
+    }
+
+    private static Type Underlying(Type type) => Nullable.GetUnderlyingType(type) ?? type;
+
+    private static Shape ShapeOf(Type type)
+    {
+        if (type == typeof(string))
+            return Shape.String;
+        if (type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(DateOnly))
+            return Shape.Date;
+        if (type.IsEnum)
+            return Shape.Other;
+        if (Type.GetTypeCode(type) is >= TypeCode.SByte and <= TypeCode.Decimal)
+            return Shape.Number;
+        return CollectionTypes.IsGeneratedCollection(type) ? Shape.Collection : Shape.Other;
+    }
+}

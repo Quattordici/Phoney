@@ -148,6 +148,19 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task Invalid_and_Boundary_rules_for_a_member_that_cannot_be_generated_are_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Invalid(p => p.Code);
+            public static object B() => Fake.For<Product>().Boundary(p => p.Code);
+            public static object C() => Fake.For<Product>().Invalid(p => p.Name).Boundary(p => p.Price);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Product.Code'"));
+    }
+
+    [Test]
     public async Task Selector_that_is_not_a_direct_member_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """
@@ -203,6 +216,19 @@ public sealed class UsageAnalyzerTests
         diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
         diagnostics[0].GetMessage().ShouldContain("'Name'");
         TextOf(diagnostics[0]).ShouldBe("p => p.Name");
+    }
+
+    [Test]
+    public async Task Invalid_and_Boundary_replace_other_rules_of_the_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().With(p => p.Price, 1m).Invalid(p => p.Price);
+            public static object B() => Fake.For<Product>().Invalid(p => p.Price).Boundary(p => p.Price);
+            public static object C() => Fake.For<Product>().Invalid(p => p.Price).Boundary(p => p.Id);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Price'"));
     }
 
     [Test]
