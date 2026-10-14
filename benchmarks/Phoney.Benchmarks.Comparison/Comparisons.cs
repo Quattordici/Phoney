@@ -5,10 +5,11 @@ using BenchmarkDotNet.Engines;
 using Phoney;
 using Phoney.Generation;
 
-// The categories are the rows of the comparison, the descriptions its columns; tools/summarize.py (see the README) turns the CSV reports into the table.
+// The categories are the rows of the comparison, the descriptions its columns; the "summarize" command (see Program.cs) turns the CSV reports into the README table.
 
 /// <summary>Single values. Only libraries with a value API take part: AutoFixture, AutoBogus and NBuilder make whole objects.</summary>
 [MemoryDiagnoser]
+[CategoriesColumn]
 [SimpleJob(RunStrategy.Throughput, launchCount: 1, warmupCount: 5, iterationCount: 15)]
 public class ValueComparison
 {
@@ -63,6 +64,7 @@ public class ValueComparison
 
 /// <summary>1,000 objects with 11 scalar members.</summary>
 [MemoryDiagnoser]
+[CategoriesColumn]
 [SimpleJob(RunStrategy.Throughput, launchCount: 1, warmupCount: 5, iterationCount: 15)]
 public class FlatComparison
 {
@@ -114,6 +116,7 @@ public class FlatComparison
 
 /// <summary>1,000 objects with a nested object, two orders each and two lines per order.</summary>
 [MemoryDiagnoser]
+[CategoriesColumn]
 [SimpleJob(RunStrategy.Throughput, launchCount: 1, warmupCount: 5, iterationCount: 15)]
 public class GraphComparison
 {
