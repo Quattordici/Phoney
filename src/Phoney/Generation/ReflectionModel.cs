@@ -162,7 +162,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
     private static bool IsNestedType(Type type)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
-        if (FakeMember.ConventionCategory(type) != TypeCategory.Other || type == typeof(byte[]) || ElementType(type, out _) is not null)
+        if (FakeMember.ConventionCategory(type) != TypeCategory.Other || type == typeof(byte[]) || CollectionTypes.ElementType(type, out _) is not null)
             return false;
         return !IsFrameworkType(type) && (!type.IsGenericType || IsPolymorphic(type));
     }
@@ -209,7 +209,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
 
         // Collections: elements use the singular member name for conventions ("Emails" → email addresses). They are built by
         // the typed FakeScope helpers the generated models call, so both models share one algorithm and nothing is reflected per element.
-        var element = ElementType(type, out var key);
+        var element = CollectionTypes.ElementType(type, out var key);
         if (element is not null)
         {
             var singular = memberName.EndsWith('s') ? memberName[..^1] : memberName;
@@ -246,32 +246,6 @@ internal sealed class ReflectionTypeModel : IFakeModel
             return static _ => null;
 
         return s => s.NestedObject(type);
-    }
-
-    /// <summary>Element type of arrays and generic collections; <paramref name="key"/> is set for dictionaries.</summary>
-    private static Type? ElementType(Type type, out Type? key)
-    {
-        key = null;
-        if (type == typeof(string))
-            return null;
-        if (type.IsArray)
-            return type.GetElementType();
-        if (!type.IsGenericType)
-            return null;
-
-        var definition = type.GetGenericTypeDefinition();
-        var args = type.GetGenericArguments();
-        if (definition == typeof(Dictionary<,>) || definition == typeof(IDictionary<,>) || definition == typeof(IReadOnlyDictionary<,>))
-        {
-            key = args[0];
-            return args[1];
-        }
-
-        return definition == typeof(List<>) || definition == typeof(IList<>) || definition == typeof(ICollection<>) ||
-               definition == typeof(IEnumerable<>) || definition == typeof(IReadOnlyList<>) || definition == typeof(IReadOnlyCollection<>) ||
-               definition == typeof(HashSet<>) || definition == typeof(ISet<>) || definition == typeof(IReadOnlySet<>)
-            ? args[0]
-            : null;
     }
 
     /// <summary>Whether the type is <c>HashSet&lt;T&gt;</c>, <c>ISet&lt;T&gt;</c> or <c>IReadOnlySet&lt;T&gt;</c>.</summary>

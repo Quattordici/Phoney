@@ -14,7 +14,8 @@ internal sealed record GenerationSettings(
     int MaxCollectionSize,
     int MaxDepth,
     ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
-    NestedConventions? Conventions = null)
+    NestedConventions? Conventions = null,
+    ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null)
 {
     public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
 }
@@ -42,6 +43,9 @@ internal enum RuleKind
 
     /// <summary>The model's own convention or type default (used to attach uniqueness without a rule).</summary>
     Default,
+
+    /// <summary>A value that breaks or sits on the limit of the member's data annotations, built from the member's normal value.</summary>
+    Constraint,
 }
 
 /// <summary>A rule bound to a member index for one compiled generator.</summary>
@@ -80,13 +84,16 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
 public sealed class FakeScope
 {
     private readonly RuleSlot?[]? _slots;
+    private readonly PathNode?[]? _children;
+    private int _member = -1;
     private readonly FakeScope? _parent;
     private readonly Type _type;
     private Identity? _identity;
     private IdentityHints? _hints;
 
-    internal FakeScope(Faker faker, GenerationSettings settings, RuleSlot?[]? slots, long index, Type type, FakeScope? parent = null)
+    internal FakeScope(Faker faker, GenerationSettings settings, RuleSlot?[]? slots, long index, Type type, FakeScope? parent = null, PathNode?[]? children = null)
     {
+        _children = children;
         Faker = faker;
         Settings = settings;
         _slots = slots;
@@ -124,6 +131,10 @@ public sealed class FakeScope
     internal bool CreatedClaimed { get; set; }
 
     private DateTimeOffset? _created;
+    private int? _forcedCount;
+
+    /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
+    internal void ForceNextCollectionCount(int? count) => _forcedCount = count;
 
     /// <summary>
     /// Whether <paramref name="value"/> still holds its default: <see langword="null"/>, <c>default(T)</c> (0, <see langword="false"/>,
@@ -239,6 +250,7 @@ public sealed class FakeScope
     /// <summary>Returns the value for <paramref name="member"/>: from a generator rule if there is one, otherwise from <paramref name="fallback"/>.</summary>
     public TValue Get<TValue>(int member, Func<FakeScope, TValue> fallback)
     {
+        _member = member; // the nested objects created for this member (also elements of its collection) learn their position from it
         var slot = _slots?[member];
         if (slot is null)
             return fallback(this);
@@ -321,6 +333,12 @@ public sealed class FakeScope
     /// </summary>
     public int CollectionCount(MemberConstraints? constraints = null)
     {
+        if (_forcedCount is { } forced)
+        {
+            _forcedCount = null; // for the member's own collection only, not for collections nested in its elements
+            return forced;
+        }
+
         var min = Settings.MinCollectionSize;
         var max = Settings.MaxCollectionSize;
         if (constraints is { MinLength: { } atLeast })
@@ -338,30 +356,74 @@ public sealed class FakeScope
     public bool MaybeNull() => Settings.NullProbability > 0 && Faker.Random.Bool(Settings.NullProbability);
 
     /// <summary>
-    /// Creates a nested object through its model, stopping at the depth limit and on cycles. A type with subtypes
+    /// Creates a nested object, stopping at the depth limit and on cycles. A generator registered for the type
+    /// (<see cref="Generator{T}.Use{TNested}"/>) creates it; otherwise a type with subtypes
     /// (<see cref="Generator{T}.Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c>, <c>[JsonDerivedType]</c>) is created as one of
-    /// them; an interface or abstract class without subtypes stays <see langword="null"/>.
+    /// them through its model, and an interface or abstract class without subtypes stays <see langword="null"/>.
     /// </summary>
     internal object? NestedObject(Type type)
     {
         if (Depth + 1 > Settings.MaxDepth)
             return null;
+
+        // A generator registered for the declared type decides everything, subtype included.
+        if (FindGenerator(type) is { } declared)
+            return CreateWith(declared, type);
+
+        var declaredType = type;
         if (Settings.Subtypes.TryGetValue(type, out var subtypes) || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
             type = subtypes.Length == 1 ? subtypes[0] : subtypes[Faker.Random.Index(subtypes.Length)];
         else if (type.IsInterface || type.IsAbstract)
             return null;
 
-        for (var scope = this; scope is not null; scope = scope._parent)
-        {
-            if (scope._type == type)
-                return null; // cycle: Customer → Order → Customer
-        }
+        // The subtype that was picked may have a generator of its own.
+        if (type != declaredType && FindGenerator(type) is { } picked)
+            return CreateWith(picked, type);
+
+        if (IsBeingCreated(type))
+            return null; // cycle: Customer → Order → Customer
 
         var model = ModelRegistry.Get(type);
         if (model is null)
             return null;
-        // Custom conventions reach nested members through slots, so both kinds of model apply them in FakeScope.Get.
-        return model.CreateObject(new FakeScope(Faker, Settings, Settings.Conventions?.SlotsFor(type, model), Faker.Random.Long(0, int.MaxValue), type, this));
+        // Custom conventions and path rules reach nested members through slots, so both kinds of model apply them in FakeScope.Get.
+        var slots = Settings.Conventions?.SlotsFor(type, model);
+        PathNode?[]? children = null;
+        if (_children is not null && (uint)_member < (uint)_children.Length && _children[_member] is { } position)
+        {
+            var bound = position.Bind(type, model, Settings.Conventions);
+            (slots, children) = (bound.Slots, bound.Children);
+        }
+
+        return model.CreateObject(new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children));
+    }
+
+    /// <summary>The generator registered for <paramref name="type"/> by this scope's generator or, failing that, by the nearest enclosing one.</summary>
+    private INestedGenerator? FindGenerator(Type type)
+    {
+        for (var scope = this; scope is not null; scope = scope._parent)
+        {
+            if (scope.Settings.TypeGenerators is { } generators && generators.TryGetValue(type, out var generator))
+                return generator;
+        }
+
+        return null;
+    }
+
+    /// <summary>Creates <paramref name="requested"/> with <paramref name="generator"/>, unless that would repeat a type already being created.</summary>
+    private object? CreateWith(INestedGenerator generator, Type requested) =>
+        IsBeingCreated(requested) || IsBeingCreated(generator.GeneratedType) ? null : generator.CreateNested(this);
+
+    /// <summary>Whether an object of <paramref name="type"/> is being created further up the graph.</summary>
+    private bool IsBeingCreated(Type type)
+    {
+        for (var scope = this; scope is not null; scope = scope._parent)
+        {
+            if (scope._type == type)
+                return true;
+        }
+
+        return false;
     }
 
     private TValue Produce<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback) => slot.Kind switch
@@ -371,6 +433,7 @@ public sealed class FakeScope
         RuleKind.Factory => slot.Value is Func<Faker, TValue> typed ? typed(Faker) : (TValue)slot.BoxedFactory!(Faker)!,
         RuleKind.Generator => (TValue)((INestedGenerator)slot.Value!).CreateNested(this)!,
         RuleKind.Convention => Convert<TValue>(((Func<FakeScope, object?>)slot.Value!)(this)),
+        RuleKind.Constraint => Convert<TValue>(((Func<FakeScope, Func<FakeScope, object?>, object?>)slot.Value!)(this, s => fallback(s))),
         RuleKind.Ignore => default!,
         _ => fallback(this),
     };
@@ -382,6 +445,9 @@ public sealed class FakeScope
 /// <summary>A generator that can create objects nested inside another generator's objects.</summary>
 internal interface INestedGenerator
 {
+    /// <summary>The type of the objects the generator creates.</summary>
+    Type GeneratedType { get; }
+
     object? CreateNested(FakeScope parent);
 }
 

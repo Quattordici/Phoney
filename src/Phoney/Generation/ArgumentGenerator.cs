@@ -38,7 +38,7 @@ public sealed class ArgumentGenerator
 
     /// <summary>Creates a generator for <paramref name="arguments"/>.</summary>
     public ArgumentGenerator(IEnumerable<FakeArgument> arguments)
-        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], null, null, null, null, GenerationSettings.Default with { Subtypes = FakeSubtypes.All, Conventions = NestedConventions.For(FakeConventions.All) }, null)
+        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], null, null, null, null, GenerationSettings.Default with { Subtypes = FakeSubtypes.All, Conventions = NestedConventions.For(FakeConventions.All), TypeGenerators = FakeGenerators.All.IsEmpty ? null : FakeGenerators.All }, null)
     {
     }
 

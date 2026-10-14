@@ -23,10 +23,13 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class UsageAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique" };
+    /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
+    private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "Use", "Subtype" };
+
+    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
-    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore" };
+    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Invalid", "Boundary" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
@@ -212,6 +215,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     {
         CheckDiscarded(context, call, symbols);
         var name = call.TargetMethod.Name;
+        if (TypeRules.Contains(name))
+        {
+            CheckTypeRuleReplaced(context, call, symbols);
+            return;
+        }
+
         if (!RuleMethods.Contains(name))
             return;
 
@@ -229,8 +238,23 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         var method = call.TargetMethod;
         if (selector.Kind == SelectorKind.NotDirect)
         {
-            Report(context, selector, "The rule must select a member of the generated type directly, like x => x.Name. For nested members use .With(x => x.Address, Fake.For<Address>().With(...)).");
+            Report(context, selector, "The rule must select a member of the generated type (x => x.Name), of a nested object (x => x.Address.City) or of each element of a collection (x => x.Lines.Each().Sku). A member of a string, number or date has no members to give a rule to.");
             return;
+        }
+
+        if (selector.IsNested)
+        {
+            if (method.Name == "Unique")
+            {
+                Report(context, selector, $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.");
+                return;
+            }
+
+            if (IsDependentRule(method))
+            {
+                Report(context, selector, $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.");
+                return;
+            }
         }
 
         if (method.ContainingType.TypeArguments.FirstOrDefault() is not INamedTypeSymbol type || StartsFromCustomModel(call, symbols))
@@ -259,17 +283,42 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>PHONEY008: an earlier call in the same chain set the same member, and this one replaces it.</summary>
     private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
+        if (HasEarlierInChain(call, symbols, earlier =>
+                SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, selector.Path));
+        }
+    }
+
+    /// <summary>
+    /// PHONEY008 for type registrations: <c>Use</c> or <c>Subtype</c> for a type that an earlier call of the same method in the same chain
+    /// registered replaces it. (<c>Use</c> and <c>Subtype</c> for one type are not the same thing: the generator wins over the subtype.)
+    /// </summary>
+    private static void CheckTypeRuleReplaced(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
+    {
+        // Use<TNested>, Use<TBase, TGenerated>, Subtype<TBase, T1…> and Subtype<TBase>(types) all register TypeArguments[0].
+        if (call.TargetMethod.TypeArguments.FirstOrDefault() is not { } type)
+            return;
+        var method = call.TargetMethod.Name;
+        if (HasEarlierInChain(call, symbols, earlier =>
+                earlier.TargetMethod.Name == method && earlier.TargetMethod.TypeArguments.FirstOrDefault() is { } previous && SymbolEqualityComparer.Default.Equals(previous, type)))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, AnalyzerSupport.NameLocation(call), type.Name));
+        }
+    }
+
+    /// <summary>Whether a generator call earlier in the same fluent chain (not in a variable the chain started from) satisfies <paramref name="matches"/>.</summary>
+    private static bool HasEarlierInChain(IInvocationOperation call, Symbols symbols, Func<IInvocationOperation, bool> matches)
+    {
         var receiver = call.Instance;
         while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, symbols.Generator))
         {
-            if (SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Name == selector.Name)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, selector.Name));
-                return;
-            }
-
+            if (matches(earlier))
+                return true;
             receiver = earlier.Instance;
         }
+
+        return false;
     }
 
     /// <summary>Whether the chain starts with <c>new Generator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>

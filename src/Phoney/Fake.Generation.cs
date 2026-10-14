@@ -15,6 +15,9 @@ public static partial class Fake
     /// <summary>App-wide subtypes for interfaces and base classes, e.g. <c>Fake.Subtypes.Add&lt;IShape, Circle, Square&gt;()</c>.</summary>
     public static FakeSubtypes Subtypes { get; } = new();
 
+    /// <summary>App-wide generators for types, e.g. <c>Fake.Generators.Add(Fake.For&lt;Address&gt;().Locale("sv"))</c>: every nested <c>Address</c> is created by it.</summary>
+    public static FakeGenerators Generators { get; } = new();
+
     /// <summary>Generates one populated <typeparamref name="T"/>.</summary>
     /// <example><code>var customer = Fake.One&lt;Customer&gt;();</code></example>
     [RequiresUnreferencedCode(ReflectionMessage)]

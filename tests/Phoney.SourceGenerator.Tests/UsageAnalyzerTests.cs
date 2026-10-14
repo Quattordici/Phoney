@@ -19,6 +19,7 @@ public sealed class UsageAnalyzerTests
             public string Code { get; } = "x";
             public decimal Price { get; set; }
             public Address? Address { get; set; }
+            public List<Address> Addresses { get; set; } = new();
         }
 
         public record Person(string FirstName, string LastName)
@@ -29,6 +30,8 @@ public sealed class UsageAnalyzerTests
         public struct Point { public int X; public int Y; }
 
         public abstract class Shape { public string Label { get; set; } = ""; }
+
+        public class Circle : Shape { public double Radius { get; set; } }
 
         public static class Usage
         {
@@ -148,17 +151,57 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
-    public async Task Selector_that_is_not_a_direct_member_is_reported(CancellationToken cancellationToken)
+    public async Task Invalid_and_Boundary_rules_for_a_member_that_cannot_be_generated_are_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """
-            public static object A() => Fake.For<Product>().With(p => p.Address!.Street, "x");
-            public static object B() => Fake.For<Product>().With(p => p.Name.Length, 3);
-            public static object C() => Fake.For<Product>().Ignore(p => p.Name.ToUpper());
+            public static object A() => Fake.For<Product>().Invalid(p => p.Code);
+            public static object B() => Fake.For<Product>().Boundary(p => p.Code);
+            public static object C() => Fake.For<Product>().Invalid(p => p.Name).Boundary(p => p.Price);
             """, cancellationToken);
 
-        diagnostics.Count.ShouldBe(3);
-        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("directly"));
-        diagnostics[0].GetMessage().ShouldContain("Fake.For<");
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Product.Code'"));
+    }
+
+    [Test]
+    public async Task Selector_that_is_not_a_member_path_is_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().With(p => p.Name.Length, 3);
+            public static object B() => Fake.For<Product>().Ignore(p => p.Name.ToUpper());
+            public static object C() => Fake.For<Product>().With(p => p.Addresses[0].Street, "x");
+            public static object D() => Fake.For<Product>().With(p => p.Id.ToString(), "x");
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(4);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("nested object"));
+        diagnostics[0].GetMessage().ShouldContain("Each()");
+    }
+
+    [Test]
+    public async Task Paths_through_nested_objects_and_collections_are_accepted(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().With(p => p.Address!.Street, "x").Ignore(p => p.Address!.Street);
+            public static object B() => Fake.For<Product>().With(p => p.Addresses.Each().Street, "x").WithOneOf(p => p.Addresses.Each().Street, new[] { "a" });
+            public static object C() => Fake.For<Product>().Invalid(p => p.Address!.Street).Boundary(p => p.Addresses.Each().Street);
+            public static object D() => Fake.For<Product>().With(p => p.Address!, Fake.For<Address>());
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Unique_and_object_dependent_rules_cannot_target_nested_members(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Unique(p => p.Address!.Street);
+            public static object B() => Fake.For<Product>().With(p => p.Address!.Street, (f, p) => p.Name);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("directly");
+        diagnostics[1].GetMessage().ShouldContain("depend on the object");
     }
 
     [Test]
@@ -203,6 +246,87 @@ public sealed class UsageAnalyzerTests
         diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
         diagnostics[0].GetMessage().ShouldContain("'Name'");
         TextOf(diagnostics[0]).ShouldBe("p => p.Name");
+    }
+
+    [Test]
+    public async Task Invalid_and_Boundary_replace_other_rules_of_the_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().With(p => p.Price, 1m).Invalid(p => p.Price);
+            public static object B() => Fake.For<Product>().Invalid(p => p.Price).Boundary(p => p.Price);
+            public static object C() => Fake.For<Product>().Invalid(p => p.Price).Boundary(p => p.Id);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Price'"));
+    }
+
+    [Test]
+    public async Task Use_that_replaces_an_earlier_Use_for_the_same_type_is_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Seed(1).Use(Fake.For<Address>().With(a => a.Street, "x"));
+            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Use<Shape, Circle>(Fake.For<Circle>().With(c => c.Radius, 2));
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("'Address'");
+        diagnostics[1].GetMessage().ShouldContain("'Shape'");
+        TextOf(diagnostics[0]).ShouldBe("Use");
+    }
+
+    [Test]
+    public async Task Subtype_that_replaces_an_earlier_Subtype_for_the_same_base_type_is_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().Seed(1).Subtype<Shape, Circle>();
+            public static object B() => Fake.For<Product>().Subtype<Shape>(typeof(Circle)).Subtype<Shape>(typeof(Circle), typeof(Circle));
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Shape'"));
+        TextOf(diagnostics[0]).ShouldStartWith("Subtype");
+    }
+
+    [Test]
+    public async Task Subtype_and_Use_do_not_replace_each_other(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().Use<Shape, Circle>(Fake.For<Circle>());
+            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Subtype<Shape, Circle>();
+            public static object C(Generator<Product> baseline) => baseline.Subtype<Shape, Circle>();
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Use_for_different_types_or_on_derived_generators_is_not_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Use<Shape, Circle>(Fake.For<Circle>()).Use(Fake.For<Circle>());
+            public static object B(Generator<Product> baseline) => baseline.Use(Fake.For<Address>());
+            public static object C()
+            {
+                var baseline = Fake.For<Product>().Use(Fake.For<Address>());
+                return baseline.Use(Fake.For<Address>().With(a => a.Street, "x"));
+            }
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Rules_for_the_same_nested_path_replace_each_other_but_other_paths_do_not(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().With(p => p.Address!.Street, "a").With(p => p.Address!.Street, "b");
+            public static object B() => Fake.For<Product>().With(p => p.Addresses.Each().Street, "a").Ignore(p => p.Addresses.Each().Street);
+            public static object C() => Fake.For<Product>().With(p => p.Address!.Street, "a").With(p => p.Address!, Fake.For<Address>()).With(p => p.Addresses.Each().Street, "b");
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Address.Street'") || d.GetMessage().Contains("'Addresses.Street'"));
     }
 
     [Test]

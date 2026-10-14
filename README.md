@@ -16,6 +16,10 @@
 - **Convention-based population** of classes, records and structs: `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… just work, and names, emails and avatars of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode (also checked at compile time), custom conventions, custom locales, faker.js-style templates.
 - **Interfaces and polymorphism**: `.Subtype<IShape, Circle, Square>()`, app-wide `Fake.Subtypes`, and `[JsonDerivedType]` honoured out of the box.
+- **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
+- **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
+- **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
+- **Type-wide rules**: `.Use(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
 - **Deterministic**: same seed means same data, dates included, on every OS and .NET version and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
@@ -165,7 +169,7 @@ public void Creates_an_invoice()
 Fake.Seed(42);                                // or seed the facade app-wide (every thread starts the same sequence)
 ```
 
-`Generator<T>.Seed(n)` does the same for a generator. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
+`Generator<T>.Seed(n)` does the same for a generator. For tests that should run on random data but be replayable, see [`[FakeSeed]`](#test-data-in-tunit) and `FakeSeed.Pick()`. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
 
 ### Controlling "now" with `TimeProvider`
 
@@ -216,6 +220,28 @@ var customers = Fake.For<Customer>()
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data. The included analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`, so a new member breaks the build instead of the test run. It can't see app-wide `Fake.Conventions` (registered at runtime): cover such members with `.Ignore(...)`/`.With(...)` or suppress the warning.
 
+### Rules for nested members
+
+A rule can name a member of a nested object with a path, so you don't need a generator for the whole object just to change one value:
+
+```csharp
+var invoices = Fake.For<Invoice>()
+    .With(i => i.Billing.City, "Oslo")                          // this address only: Shipping is another position
+    .With(i => i.Billing.Contact.Phone, f => f.Random.Replace("+47 ## ## ## ##"))
+    .With(i => i.Lines.Each().Sku, f => f.Commerce.Ean13())     // every element of a list, array or set
+    .With(i => i.ByCode.Values.Each().Quantity, 1)              // every value of a dictionary
+    .Ignore(i => i.Lines.Each().Supplier!.Email)
+    .Invalid(i => i.Lines.Each().Quantity)                      // see "Invalid and boundary data"
+    .Generate(10);
+```
+
+- **Which rules**: `With`, `WithOneOf`, `Ignore`, `Invalid` and `Boundary` accept paths. `Unique` and rules that depend on the object (`With(x => …, (f, x) => …)`) don't, since they belong to the generated object: you get an `ArgumentException`, and the analyzer reports it (**PHONEY007**).
+- **A position, not a type**: `Billing.City` and `Shipping.City` are both addresses, and only the first is changed. For every object of a type use [`Use`](#type-wide-generators).
+- **`Each()`** is only a marker the compiler needs (`FakePath.Each`): it says "every element" inside the expression and can't be called. `x.Lines[0]` is rejected for the same reason.
+- **Checked when the generator is first used**: a member that doesn't exist or can't be set, a string or number in the middle of a path, or `Invalid` on a member without annotations throws an `InvalidOperationException` that names the path. Below an interface or abstract class the picked subtype decides, so that part is checked when the object is created.
+- **Precedence**: a rule for the member itself (`With(i => i.Billing, generator)`), `Use` and `Fake.Generators` create the whole object with their own rules, so path rules inside it don't apply. `Populate` creates missing nested objects with the path rules and fills existing ones as before.
+- Works the same with reflection and with the source generator.
+
 ### Interfaces and subtypes
 
 Members declared as an interface, an abstract class or a base class are generated as one of their subtypes:
@@ -237,6 +263,26 @@ Up to four subtypes fit the type arguments; pass more as types: `.Subtype<IShape
 - **Precedence**: the generator's `Subtype`, then `Fake.Subtypes`, then `[JsonDerivedType]`. An interface or abstract class with none of them stays `null`. A concrete base class is generated as itself unless you map it (`.Subtype<Vehicle, Truck>()`).
 - `Populate` fills an existing object as its runtime type: a `Circle` in an `IShape` member keeps being a circle and gets its missing members.
 - With the source generator, `[FakeSubtype<IShape, Circle>]` on the `[FakeFor]` class registers the subtype app-wide and generates its model; `[JsonDerivedType]` types get models automatically. In Native AOT apps every subtype needs a generated model (`[FakeFor<T>]`, `[FakeSubtype<,>]` or `[JsonDerivedType]`).
+
+### Type-wide generators
+
+`With(x => x.Address, generator)` configures one member. `Use` configures a **type**: every nested object of that type in the graph, whether it sits in a member, a list, an array or a dictionary, and at any depth, comes from the generator you give it:
+
+```csharp
+var orders = Fake.For<Order>()
+    .Use(Fake.For<Address>().Locale("de").With(a => a.Country, "Germany"))   // Order.Billing, Order.Shipping, Customer.Home…
+    .Use<IPayment, Card>(Fake.For<Card>().With(c => c.Network, "Visa"))       // an interface generated by the generator of a subtype
+    .Generate(100);
+```
+
+- **Precedence**: a rule for the member (`With(o => o.Billing, …)`, `Ignore`) wins over the type's generator, which wins over `Subtype`, `Fake.Subtypes`, `[JsonDerivedType]` and the type's model. A `Subtype` that picked `Card` for an `IPayment` member still uses the generator registered for `Card`.
+- **App-wide**: `Fake.Generators.Add(Fake.For<Address>().Locale("sv"))` registers a generator for every generator compiled afterwards (like `Fake.Subtypes` and `Fake.Conventions`: do it at startup or in a test setup hook), also for `[FakeData]` parameters. A generator's own `Use` for the same type wins; `Remove<T>()` and `Clear()` undo it. The registered generator is shared, so its `Unique` members are unique across everything it creates.
+- **Self-contained**: the generator brings its own rules, locale, conventions and `Unique` sets (uniqueness holds across every object it creates). It inherits the reference date and, unless it sets its own, the locale.
+- **Whole graph, innermost wins**: a generator registered on an inner `Use` replaces the outer one for what it creates; types it doesn't register still come from the outer generators. A later `Use` for the same type replaces an earlier one.
+- **Not the root**: the object you generate is always made by the generator you call `Generate` on. Cycles and `MaxDepth` still stop nesting with `null`.
+- **`Populate`** creates the nested objects that are missing with the type's generator; nested objects you already have are filled member by member, as before.
+- Only objects can be registered. Scalars (strings, numbers, dates, enums) come from rules and conventions, so `Use` throws an `ArgumentException` that points to `WithConvention`.
+- Works the same with reflection and with the source generator: `Fake.Generated<Address>()` gives the AOT-safe generator to register.
 
 ### Filling in existing objects
 
@@ -287,6 +333,48 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 | `[Required]` | never `null` (even with `NullProbability`) and never empty |
 
 Annotations work the same with reflection and with the source generator, on properties, fields and record parameters (`[property: Range(1, 5)]`).
+
+### Invalid and boundary data
+
+The annotations that make generated objects valid also tell Phoney how to break them, so you can check that validation rejects what it should and accepts what sits right on the edge:
+
+```csharp
+// One object with one broken member, everything else valid (0 or 11 for [Range(1, 10)]).
+var order = Fake.For<Order>().Invalid(o => o.Quantity).Generate();
+var edge = Fake.For<Order>().Boundary(o => o.Quantity).Generate();            // 1 or 10
+
+// Every violation of every annotated member, one object each.
+foreach (var c in Fake.For<Order>().Seed(1).InvalidCases())
+    validator.Validate(c.Value).IsValid.ShouldBeFalse(c.ToString());          // "Quantity: above the maximum (10)"
+
+// Every value exactly on a limit; all of them are valid.
+foreach (var c in Fake.For<Order>().Seed(1).BoundaryCases())
+    validator.Validate(c.Value).IsValid.ShouldBeTrue(c.ToString());           // "Name: the maximum length (50)"
+```
+
+| Annotation | `Invalid` gives | `Boundary` gives |
+|---|---|---|
+| `[Required]` | `null`, and `""` for strings | strings: at least one character |
+| `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` on strings | one character too short / too long | exactly the minimum / maximum length |
+| the same on collections and arrays | one element too few / too many | exactly the minimum / maximum count |
+| `[Range]` on numbers and dates | one unit (one day for dates) below the minimum / above the maximum | the minimum / the maximum |
+| `[RegularExpression]`, `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | text the real validator rejects | none: they define a value, not an edge |
+| `[AllowedValues]`, `[DeniedValues]` | a value that is not allowed / a denied one | none |
+
+- **As test data**: every case can be a test case of its own, named after what it is (`Validation_rejects(Quantity: above the maximum (10))`). With TUnit:
+
+  ```csharp
+  public static IEnumerable<Func<ConstraintCase<Order>>> Violations() =>
+      Fake.For<Order>().Seed(1).InvalidCases().Select(c => (Func<ConstraintCase<Order>>)(() => c));
+
+  [Test, MethodDataSource(nameof(Violations))]
+  public void Validation_rejects(ConstraintCase<Order> violation) =>
+      Validate(violation.Value).IsValid.ShouldBeFalse(violation.ToString());
+  ```
+- **One change per case.** A case is the object `Generate()` gives for the seed, with only that member replaced, so it differs from a valid object in the member it is about (a collection that gets a different size also changes the draws after it). `InvalidCases()` and `BoundaryCases()` use one base object for all cases (the `Seed`, or a random one).
+- **Which violation?** `Invalid(member)` picks one violation per object, reproducibly with a seed, so `Generate(50)` covers them all. A value can break more than one limit of its member (an empty string is also too short); other members stay valid.
+- **Never silent.** A member without annotations to break throws an `InvalidOperationException` that lists the supported ones. Rules for the same member are replaced (`Invalid` and `Boundary` take the member's rule slot), ignored members are skipped, and limits beyond 100,000 characters or elements are not built.
+- Works the same with reflection and with the source generator, and with `CreateWith`. `PopulateMode.MissingOnly` only replaces members that are unset.
 
 ### Conventions
 
@@ -361,7 +449,7 @@ The package also reports these diagnostics:
 | PHONEY005 | Warning | the result of a generator method is discarded (`gen.With(...);`: generators are immutable), or of `Populate` on a struct (it returns the populated copy) |
 | PHONEY006 | Warning | `Fake.Seeded(...)` is never disposed, so everything after it stays seeded; use `using var _ = Fake.Seeded(1);` |
 | PHONEY007 | Warning | a rule would throw when the generator is first used: the member isn't a public settable member or constructor parameter, the selector isn't `x => x.Member`, or an object-dependent rule targets a constructor parameter |
-| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain |
+| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `Use` generator / `Subtype` mapping replaces an earlier one for the same type in the same chain |
 | PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
 | PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
 | PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`…) |
@@ -442,6 +530,27 @@ public async Task Formats_address(string street, string city, string zipCode) { 
 - Options: `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`. It also works on the test class (constructor parameters) and on `required` properties.
 - Interface and abstract parameters get one of their subtypes from `Fake.Subtypes` or `[JsonDerivedType]`.
 - Test data is created while TUnit discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes (`Fake.Subtypes.Add`) in a `[Before(TestDiscovery)]` hook; `[Before(Assembly)]` and later hooks run too late.
+- **`PHONEY_SEED=123 dotnet test`** moves the seed of every `[FakeData]` test at once, to run the whole suite on other data; the same value replays it. Tests still differ from each other, and an explicit `Seed` stays as it is.
+
+### Random data you can replay
+
+`[FakeSeed]` runs a test on a seeded `Fake` facade: `Fake.One<T>()`, `Fake.Many<T>()`, `Fake.For<T>()` and `Fake.Person…` give different data on every run, and **when the test fails, its seed is printed in the test output**:
+
+```csharp
+[Test, FakeSeed]
+public async Task Totals_add_up()
+{
+    var orders = Fake.Many<Order>(100);                 // different on every run
+    await Assert.That(Totals.Of(orders)).IsEqualTo(orders.Sum(o => o.Total));
+}
+// Phoney: this test ran with random seed 481516234. Replay it with [FakeSeed(481516234)] or PHONEY_SEED=481516234.
+```
+
+- **Replay** with `[FakeSeed(481516234)]` on the test (it pins the seed while you fix the bug), or `PHONEY_SEED=481516234 dotnet test` to rerun a whole run. A pinned seed wins over `PHONEY_SEED`; a `PHONEY_SEED` that is not a whole number is reported with a message that says so.
+- On a method it wins over the class, and on a class over the assembly (`[assembly: FakeSeed]` makes every test random and replayable). Parallel tests don't affect each other.
+- The seed covers the `Fake` facade of the test, not generators created earlier (a `static` field) or ones that set their own `.Seed(...)`. Skipped tests print nothing.
+- It works with other test executors (`[TestExecutor<T>]`): the executor the test already has runs inside the seeded scope.
+- Other frameworks can do the same with `FakeSeed.Pick()` (`PHONEY_SEED`, else a new seed), `Fake.Seeded(seed)` and printing the seed when the test fails.
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 

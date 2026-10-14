@@ -121,6 +121,92 @@ public sealed class Generator<T> : INestedGenerator
         Derive(_config with { Subtypes = _config.Subtypes.SetItem(typeof(TBase), Subtypes.Validate(typeof(TBase), subtypes)) });
 
     /// <summary>
+    /// Creates every nested <typeparamref name="TNested"/> in the generated objects with <paramref name="generator"/>: members,
+    /// collection elements and dictionary values, at any depth, e.g. <c>.Use(Fake.For&lt;Address&gt;().Locale("de"))</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A rule for the member (<c>With(x =&gt; x.Billing, …)</c>) wins over the type's generator, which wins over
+    /// <see cref="Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c> and the type's model. The generator is self-contained: it brings its
+    /// own rules, locale and settings. A generator used by an inner <see cref="Use{TNested}"/> wins over this one, while types
+    /// it does not register are still created by the generators registered here. A later registration for the same type replaces an earlier one.
+    /// </para>
+    /// <para>
+    /// The generated object itself is never replaced, depth limits and cycles still stop nesting with <see langword="null"/>, and objects you
+    /// pass to <c>Populate</c> are filled member by member: the generator creates the nested objects that are missing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException"><typeparamref name="TNested"/> is a scalar (string, number, date, enum…) or an array.</exception>
+    public Generator<T> Use<TNested>(Generator<TNested> generator) => Use<TNested, TNested>(generator);
+
+    /// <summary>
+    /// Creates every nested <typeparamref name="TBase"/> (an interface, abstract class or base class) with the generator of a
+    /// subtype, e.g. <c>.Use&lt;IShape, Circle&gt;(Fake.For&lt;Circle&gt;().With(c =&gt; c.Radius, 2))</c>.
+    /// </summary>
+    /// <remarks>See <see cref="Use{TNested}"/> for precedence and scope.</remarks>
+    /// <exception cref="ArgumentException"><typeparamref name="TBase"/> is a scalar (string, number, date, enum…) or an array.</exception>
+    public Generator<T> Use<TBase, TGenerated>(Generator<TGenerated> generator)
+        where TGenerated : TBase
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        var type = typeof(TBase);
+        NestedGenerators.ValidateType(type, nameof(generator));
+
+        return Derive(_config with { TypeGenerators = _config.TypeGenerators.SetItem(type, generator) });
+    }
+
+    /// <summary>
+    /// Breaks one limit of a member's data annotations, e.g. <c>.Invalid(x =&gt; x.Quantity)</c> gives a quantity just outside its
+    /// <c>[Range]</c>, a name one character too long, or an empty <c>[Required]</c> value. Which violation an object gets is
+    /// picked per object (reproducible with a <see cref="Seed"/>); every other member stays valid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Violations are derived from <c>[Required]</c>, <c>[StringLength]</c>, <c>[MinLength]</c>/<c>[MaxLength]</c> (strings and collections),
+    /// <c>[Range]</c> (numbers and dates), <c>[RegularExpression]</c>, <c>[EmailAddress]</c>/<c>[Phone]</c>/<c>[Url]</c>/<c>[CreditCard]</c>/<c>[Base64String]</c>,
+    /// <c>[AllowedValues]</c> and <c>[DeniedValues]</c>, and checked with the real validators. A value that breaks one limit can break
+    /// others of the same member (an empty string is also too short); the other members are untouched. The object is the one
+    /// <see cref="Generate()"/> would give, with only this member replaced.
+    /// </para>
+    /// <para>Use <see cref="InvalidCases"/> to get every violation of every member at once.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">At <c>Generate</c>: the member has no data annotations that can be broken.</exception>
+    public Generator<T> Invalid<TValue>(Expression<Func<T, TValue>> member) =>
+        AddRule(member, new Rule(RuleKind.Constraint, new ConstraintRequest(Boundary: false, null)));
+
+    /// <summary>
+    /// Sets a member exactly on a limit of its data annotations, e.g. <c>.Boundary(x =&gt; x.Quantity)</c> gives the smallest or the
+    /// largest value its <c>[Range]</c> allows, a name of the minimum or maximum length, or the minimum or maximum element count.
+    /// The value is valid; which edge an object gets is picked per object. See <see cref="Invalid{TValue}"/> for the annotations that are read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">At <c>Generate</c>: the member has no limits to sit on (patterns, formats and lists of allowed values define a value but have no edge).</exception>
+    public Generator<T> Boundary<TValue>(Expression<Func<T, TValue>> member) =>
+        AddRule(member, new Rule(RuleKind.Constraint, new ConstraintRequest(Boundary: true, null)));
+
+    /// <summary>
+    /// Every way to break the data annotations of the generated type, one object per violation: a quantity below and above its
+    /// <c>[Range]</c>, a name too short and too long, an empty and a missing <c>[Required]</c> value… Useful to test that validation rejects each of them.
+    /// </summary>
+    /// <remarks>
+    /// All objects are the one <see cref="Generate()"/> gives for the <see cref="Seed"/> (a random one if none is set), each with a single member
+    /// replaced, so a case differs from a valid object only in the member it is about. Rules for that member are replaced; ignored members are skipped.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// foreach (var c in Fake.For&lt;Order&gt;().Seed(1).InvalidCases())
+    ///     validator.Validate(c.Value).IsValid.ShouldBeFalse(c.ToString());   // "Quantity: above the maximum (10)"
+    /// </code>
+    /// </example>
+    public IReadOnlyList<ConstraintCase<T>> InvalidCases() => Cases(boundary: false);
+
+    /// <summary>
+    /// Every value exactly on a limit of the generated type's data annotations, one valid object per edge: the smallest and largest value of a
+    /// <c>[Range]</c>, strings of the minimum and maximum length, the minimum and maximum element count. Useful for off-by-one tests.
+    /// See <see cref="InvalidCases"/> for how the objects are made.
+    /// </summary>
+    public IReadOnlyList<ConstraintCase<T>> BoundaryCases() => Cases(boundary: true);
+
+    /// <summary>
     /// Sets a member to one of <paramref name="values"/>, e.g. existing ids or objects:
     /// <c>.WithOneOf(o =&gt; o.Customer, customers)</c>.
     /// </summary>
@@ -313,6 +399,9 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <inheritdoc />
+    Type INestedGenerator.GeneratedType => typeof(T);
+
+    /// <inheritdoc />
     object? INestedGenerator.CreateNested(FakeScope parent) =>
         Start(parent.Faker.Random.Long(), parent.Faker).Create(0, parent);
 
@@ -322,9 +411,48 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>A new generator with <paramref name="config"/> and fresh state.</summary>
     private Generator<T> Derive(Config config) => new(_model, config);
 
-    /// <summary>Adds (or replaces) the rule of a member; the rule remembers when it was added, because dictionaries don't keep that order.</summary>
-    private Generator<T> AddRule<TValue>(Expression<Func<T, TValue>> member, Rule rule) =>
-        Derive(_config with { Rules = _config.Rules.SetItem(MemberName(member), rule with { Added = _config.RuleCount }), RuleCount = _config.RuleCount + 1 });
+    /// <summary>One object per case: the seeded base object with a single member replaced by the case.</summary>
+    private List<ConstraintCase<T>> Cases(bool boundary)
+    {
+        var seed = BaseSeed; // one base object for all cases, so they differ in the member they are about only
+        var cases = new List<ConstraintCase<T>>();
+        foreach (var member in _model.Members)
+        {
+            if (_config.Rules.TryGetValue(member.Name, out var existing) && existing.Kind == RuleKind.Ignore)
+                continue;
+
+            var descriptions = boundary ? ConstraintCases.Boundary(member) : ConstraintCases.Invalid(member);
+            for (var i = 0; i < descriptions.Count; i++)
+            {
+                var rule = new Rule(RuleKind.Constraint, new ConstraintRequest(boundary, i), Added: _config.RuleCount);
+                var generator = Derive(_config with { Seed = seed, Rules = _config.Rules.SetItem(member.Name, rule), RuleCount = _config.RuleCount + 1 });
+                cases.Add(new ConstraintCase<T>(member.Name, descriptions[i].Description, generator.Generate()));
+            }
+        }
+
+        return cases;
+    }
+
+    /// <summary>
+    /// Adds (or replaces) the rule of a member of the generated type, or of a member of a nested object when the selector is a path
+    /// (<c>x =&gt; x.Billing.City</c>). The rule remembers when it was added, because dictionaries don't keep that order.
+    /// </summary>
+    private Generator<T> AddRule<TValue>(Expression<Func<T, TValue>> member, Rule rule)
+    {
+        var path = MemberPath(member);
+        if (path.Length == 1)
+            return Derive(_config with { Rules = _config.Rules.SetItem(path[0], rule with { Added = _config.RuleCount }), RuleCount = _config.RuleCount + 1 });
+
+        if (rule.Kind == RuleKind.Dependent)
+        {
+            throw new ArgumentException(
+                $"'{member}' is a member of a nested object, so its rule can't depend on the object ({typeof(T).Name}). Use a rule without the object parameter.",
+                nameof(member));
+        }
+
+        var spec = new PathSpec(path, new PathRule(rule.Kind, rule.Value, rule.Boxed));
+        return Derive(_config with { PathRules = _config.PathRules.SetItem(string.Join('.', path), spec), RuleCount = _config.RuleCount + 1 });
+    }
 
     /// <summary>Prepares a run: compiled rules, a faker for the locale and the base seed. Nested generators inherit the parent's locale and reference date.</summary>
     private Run Start(long? seed = null, Faker? parentFaker = null)
@@ -339,6 +467,13 @@ public sealed class Generator<T> : INestedGenerator
         else if ((_config.ReferenceDate ?? parentFaker?.ReferenceDate ?? (_config.Seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
             faker.ReferenceDate = date;
         return new Run(this, compiled, faker, seed ?? BaseSeed);
+    }
+
+    /// <summary>The app-wide type generators with this generator's own on top, or <see langword="null"/> when there are none.</summary>
+    private static ImmutableDictionary<Type, INestedGenerator>? MergedTypeGenerators(ImmutableDictionary<Type, INestedGenerator> own)
+    {
+        var all = FakeGenerators.All.SetItems(own);
+        return all.IsEmpty ? null : all;
     }
 
     /// <summary>Binds the rules (by member name) to the model's member indices and validates them.</summary>
@@ -363,7 +498,8 @@ public sealed class Generator<T> : INestedGenerator
                 dependent.Add((index, (Func<Faker, T, object?>)rule.Value!));
             }
 
-            slots[index] = new RuleSlot(rule.Kind, rule.Value, _config.Unique.TryGetValue(name, out var attempts), attempts, rule.Boxed);
+            var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(typeof(T).Name, members[index], (ConstraintRequest)rule.Value!) : rule.Value;
+            slots[index] = new RuleSlot(rule.Kind, value, _config.Unique.TryGetValue(name, out var attempts), attempts, rule.Boxed);
         }
 
         // Unique members without an explicit rule keep their convention value but still need a slot.
@@ -404,8 +540,9 @@ public sealed class Generator<T> : INestedGenerator
         {
             Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
             Conventions = NestedConventions.For(conventions),
+            TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
         };
-        return new Compiled(slots, [.. dependent], settings);
+        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules));
     }
 
     /// <summary>One generation run: a faker reused for every item, reseeded per item for order-independent results.</summary>
@@ -417,7 +554,7 @@ public sealed class Generator<T> : INestedGenerator
             faker.Random.Reseed(Randomizer.DeriveSeed(seed, index));
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent);
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent, compiled.RootChildren);
 
             T item;
             if (config.Factory is { } factory)
@@ -426,8 +563,8 @@ public sealed class Generator<T> : INestedGenerator
                 for (var i = 0; i < compiled.Slots.Length; i++)
                 {
                     // Only explicit rules apply to factory-created objects; the factory decides everything else.
-                    if (compiled.Slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Generator or RuleKind.Convention } && !model.Members[i].IsConstructorParameter)
-                        item = model.Set(item, i, scope.GetObject(i, static _ => null));
+                    if (compiled.Slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Generator or RuleKind.Convention or RuleKind.Constraint } && !model.Members[i].IsConstructorParameter)
+                        item = model.Set(item, i, scope.GetObject(i, model.Fallback(i))); // only a constraint reads the member's own value
                 }
             }
             else
@@ -448,7 +585,7 @@ public sealed class Generator<T> : INestedGenerator
             faker.Random.Reseed(Randomizer.DeriveSeed(seed, index));
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T));
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), null, compiled.RootChildren);
 
             var item = model.Populate(instance, scope, mode);
             foreach (var (member, rule) in compiled.Dependent)
@@ -464,7 +601,7 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>Rules bound to member indices, plus rules that run after creation.</summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings);
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added.</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0);
@@ -494,9 +631,11 @@ public sealed class Generator<T> : INestedGenerator
         TimeProvider? TimeProvider,
         ImmutableDictionary<string, Rule> Rules,
         int RuleCount,
+        ImmutableDictionary<string, PathSpec> PathRules,
         ImmutableDictionary<string, int> Unique,
         ImmutableList<CustomConvention> Conventions,
         ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
+        ImmutableDictionary<Type, INestedGenerator> TypeGenerators,
         ImmutableList<Action<Faker, T>> AfterCreate,
         Func<Faker, T>? Factory,
         bool Strict,
@@ -506,24 +645,71 @@ public sealed class Generator<T> : INestedGenerator
             null, null, null, null,
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
             0,
+            ImmutableDictionary.Create<string, PathSpec>(StringComparer.Ordinal),
             ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             [],
             ImmutableDictionary<Type, ImmutableArray<Type>>.Empty,
+            ImmutableDictionary<Type, INestedGenerator>.Empty,
             [],
             null,
             false,
             GenerationSettings.Default);
     }
 
-    /// <summary>Extracts <c>Name</c> from <c>x =&gt; x.Name</c> (also through conversions like <c>(object)x.Name</c>).</summary>
+    /// <summary>Extracts <c>Name</c> from <c>x =&gt; x.Name</c> (also through conversions like <c>(object)x.Name</c>); for rules that exist per member of the generated type only.</summary>
     private static string MemberName<TValue>(Expression<Func<T, TValue>> expression)
     {
+        var path = MemberPath(expression);
+        if (path.Length != 1)
+        {
+            throw new ArgumentException(
+                $"'{expression}' must select a member of {typeof(T).Name} directly, like x => x.Name: this setting exists per member of the generated type, not for members of nested objects.",
+                nameof(expression));
+        }
+
+        return path[0];
+    }
+
+    /// <summary>
+    /// The member names of a selector: <c>x =&gt; x.Name</c> is <c>[Name]</c>, <c>x =&gt; x.Billing.City</c> is <c>[Billing, City]</c>, and
+    /// <c>x =&gt; x.Lines.Each().Sku</c> is <c>[Lines, Sku]</c> (<c>Each()</c> only marks the collection; <c>Dictionary.Values</c> and
+    /// <c>Nullable.Value</c> are skipped the same way).
+    /// </summary>
+    private static string[] MemberPath<TValue>(Expression<Func<T, TValue>> expression)
+    {
         ArgumentNullException.ThrowIfNull(expression);
-        var body = expression.Body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert ? convert.Operand : expression.Body;
-        if (body is MemberExpression { Member: PropertyInfo or FieldInfo } access && access.Expression == expression.Parameters[0])
-            return access.Member.Name;
-        throw new ArgumentException(
-            $"'{expression}' must select a member of {typeof(T).Name} directly, like x => x.Name. For nested members use .With(x => x.Address, Fake.For<Address>().With(...)).",
-            nameof(expression));
+        var names = new List<string>();
+        var node = expression.Body;
+        while (node != expression.Parameters[0])
+        {
+            switch (node)
+            {
+                case UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert:
+                    node = convert.Operand;
+                    break;
+                case MemberExpression { Member: PropertyInfo or FieldInfo, Expression: { } owner } access:
+                    if (!IsTransparent(access.Member.Name, owner.Type))
+                        names.Add(access.Member.Name);
+                    node = owner;
+                    break;
+                case MethodCallExpression { Method: { Name: nameof(FakePath.Each), DeclaringType: { } declaring }, Arguments: [var source] } when declaring == typeof(FakePath):
+                    node = source;
+                    break;
+                default:
+                    throw new ArgumentException(
+                        $"'{expression}' must select a member of {typeof(T).Name} (x => x.Name), a member of a nested object (x => x.Address.City) or of every element of a collection (x => x.Lines.Each().Sku).",
+                        nameof(expression));
+            }
+        }
+
+        if (names.Count == 0)
+            throw new ArgumentException($"'{expression}' must select a member of {typeof(T).Name}, like x => x.Name.", nameof(expression));
+        names.Reverse();
+        return [.. names];
+
+        // The values of a dictionary are what Each() walks, and a nullable's value is the object itself.
+        static bool IsTransparent(string member, Type owner) =>
+            (member == "Values" && owner.IsGenericType && owner.GetGenericTypeDefinition() is var d && (d == typeof(Dictionary<,>) || d == typeof(IDictionary<,>) || d == typeof(IReadOnlyDictionary<,>)))
+            || (member == "Value" && Nullable.GetUnderlyingType(owner) is not null);
     }
 }
