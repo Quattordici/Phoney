@@ -738,6 +738,8 @@ public sealed class Generator<T> : INestedGenerator
             {
                 if (members[index].IsConstructorParameter)
                     throw new InvalidOperationException($"{typeof(T).Name}.{name} is a constructor parameter, so it can't depend on the object. Use a rule without the object parameter.");
+                if (members[index].FillsExisting)
+                    throw new InvalidOperationException($"{typeof(T).Name}.{name} is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
                 dependent.Add((index, (Func<Faker, T, object?>)rule.Value!));
             }
 
@@ -963,8 +965,13 @@ public sealed class Generator<T> : INestedGenerator
                 for (var i = 0; i < compiled.Slots.Length; i++)
                 {
                     // Only explicit rules apply to factory-created objects; the factory decides everything else.
-                    if (compiled.Slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Generator or RuleKind.Convention or RuleKind.Constraint } && !model.Members[i].IsConstructorParameter)
-                        item = model.Set(item, i, scope.GetObject(i, model.Fallback(i))); // only a constraint reads the member's own value
+                    if (compiled.Slots[i] is not { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Generator or RuleKind.Convention or RuleKind.Constraint } || model.Members[i].IsConstructorParameter)
+                        continue;
+                    var value = scope.GetObject(i, model.Fallback(i)); // only a constraint reads the member's own value
+                    if (model.Members[i].FillsExisting)
+                        model.Fill(item, i, value, replace: false);
+                    else
+                        item = model.Set(item, i, value);
                 }
             }
             else

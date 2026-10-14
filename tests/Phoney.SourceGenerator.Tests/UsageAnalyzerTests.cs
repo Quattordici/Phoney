@@ -22,6 +22,12 @@ public sealed class UsageAnalyzerTests
             public List<Address> Addresses { get; set; } = new();
         }
 
+        public class Cart
+        {
+            public List<string> Items { get; } = new();
+            public Queue<string> Waiting { get; } = new();
+        }
+
         public record Person(string FirstName, string LastName)
         {
             public string Email { get; set; } = "";
@@ -230,6 +236,20 @@ public sealed class UsageAnalyzerTests
         diagnostics.Count.ShouldBe(2);
         diagnostics[0].GetMessage().ShouldContain("'Product.Code'");
         diagnostics[1].GetMessage().ShouldContain("directly");
+    }
+
+    [Test]
+    public async Task Read_only_collections_that_are_filled_in_place_accept_rules_but_not_object_dependent_ones(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Cart>().With(c => c.Items, new List<string>()).Ignore(c => c.Items).Invalid(c => c.Items);
+            public static object B() => Fake.For<Cart>().With(c => c.Items, (f, c) => new List<string>());
+            public static object C() => Fake.For<Cart>().With(c => c.Waiting, new Queue<string>());
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2); // A is accepted; B depends on the object, and C is a queue, which is not filled
+        diagnostics.Where(d => d.GetMessage().Contains("filled in place")).Count().ShouldBe(1);
+        diagnostics.Where(d => d.GetMessage().Contains("'Cart.Waiting'")).Count().ShouldBe(1);
     }
 
     [Test]

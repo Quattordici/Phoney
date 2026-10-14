@@ -124,7 +124,7 @@ internal static class Emitter
         foreach (var m in model.Members)
         {
             sb.Append(i2).AppendLine(
-                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}, {Bool(m.Settable)}, {Bool(m.IsNested)}),");
+                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}, {Bool(m.Settable)}, {Bool(m.IsNested)}{(m.FillsExisting ? ", fillsExisting: true" : "")}),");
         }
 
         sb.Append(i1).AppendLine("};");
@@ -171,6 +171,13 @@ internal static class Emitter
             var m = model.Members[index];
             if (m.IsConstructorParameter || m.InInitializer)
                 continue;
+            if (m.FillsExisting)
+            {
+                // A read-only collection: the generated elements are added to the one the object holds.
+                sb.Append(i2).AppendLine($"if (scope.Include({index})) global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(o.{m.Name}, v{index});");
+                continue;
+            }
+
             sb.Append(i2).AppendLine($"if (scope.Include({index})) o.{m.Name} = v{index};");
         }
 
@@ -206,7 +213,7 @@ internal static class Emitter
         sb.Append(i2).AppendLine("{");
         for (var index = 0; index < model.Members.Count; index++)
         {
-            if (model.Members[index].Settable)
+            if (model.Members[index].Settable || model.Members[index].FillsExisting)
                 sb.Append(i3).AppendLine($"case {index}: return (object)instance.{model.Members[index].Name};");
         }
 
@@ -220,7 +227,7 @@ internal static class Emitter
         sb.Append(i2).AppendLine("{");
         for (var index = 0; index < model.Members.Count; index++)
         {
-            if (model.Members[index].Settable)
+            if (model.Members[index].Settable || model.Members[index].FillsExisting)
                 sb.Append(i3).AppendLine($"case {index}: return global::Phoney.Generation.FakeScope.IsUnset(instance.{model.Members[index].Name});");
         }
 
@@ -228,6 +235,26 @@ internal static class Emitter
         sb.Append(i2).AppendLine("}");
         sb.Append(i1).AppendLine("}");
         sb.AppendLine();
+
+        // Fill: adds generated elements to the collection a read-only member holds (populating and objects made by CreateWith).
+        if (model.Members.Any(m => m.FillsExisting))
+        {
+            sb.Append(i1).AppendLine($"public override void Fill({t} instance, int member, object value, bool replace)");
+            sb.Append(i1).AppendLine("{");
+            sb.Append(i2).AppendLine("switch (member)");
+            sb.Append(i2).AppendLine("{");
+            for (var index = 0; index < model.Members.Count; index++)
+            {
+                var m = model.Members[index];
+                if (m.FillsExisting)
+                    sb.Append(i3).AppendLine($"case {index}: global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(instance.{m.Name}, ({m.TypeName})value, replace); return;");
+            }
+
+            sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" is not a collection that is filled in place.\");");
+            sb.Append(i2).AppendLine("}");
+            sb.Append(i1).AppendLine("}");
+            sb.AppendLine();
+        }
 
         // Fallback: the value producers of Create, as delegates for populating.
         sb.Append(i1).AppendLine($"public override global::System.Func<{Scope}, object> Fallback(int member)");

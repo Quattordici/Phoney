@@ -106,6 +106,8 @@ var numbered = Fakes.Person.Seed(10).Sequence(p => p.FirstName, i => "P" + i).Cy
 if (!numbered.Select(p => p.FirstName).SequenceEqual(["P0", "P1", "P2", "P3", "P4", "P5"]) || numbered[3].Status != Status.Suspended)
     throw new InvalidOperationException("Sequence or Cycle was not applied");
 
+if (people.Any(p => p.Badges.Count == 0))
+    throw new InvalidOperationException("read-only collections were not filled");
 if (people.Any(p => p.Aliases.IsDefault || p.Aliases.Length == 0 || p.Visits.Count == 0))
     throw new InvalidOperationException("immutable or frozen collections were not generated");
 
@@ -176,6 +178,7 @@ public sealed class Person
     public NodaTime.Instant CreatedAt { get; set; }
     public System.Collections.Immutable.ImmutableArray<string> Aliases { get; set; }
     public System.Collections.Frozen.FrozenDictionary<string, int> Visits { get; set; } = null!;
+    public List<string> Badges { get; } = [];
 }
 
 [JsonDerivedType(typeof(Car))]

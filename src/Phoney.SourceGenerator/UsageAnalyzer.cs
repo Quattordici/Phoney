@@ -283,6 +283,10 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         {
             Report(context, selector, $"'{type.Name}.{selector.Name}' is a constructor parameter, so it can't depend on the object. Use a rule without the object parameter.");
         }
+        else if (member.FillsExisting && IsDependentRule(method))
+        {
+            Report(context, selector, $"'{type.Name}.{selector.Name}' is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
+        }
     }
 
     /// <summary><c>Where(x =&gt; x.Member, condition)</c>: a condition on one member, unlike <c>Where(x =&gt; …)</c> on the whole object.</summary>

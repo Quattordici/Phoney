@@ -30,6 +30,9 @@ internal sealed class ReflectionModel<T> : FakeModel<T>
     public override bool IsUnset(T instance, int member) => _inner.IsUnsetObject(instance!, member);
 
     /// <inheritdoc />
+    public override void Fill(T instance, int member, object? values, bool replace) => _inner.FillObject(instance!, member, values, replace);
+
+    /// <inheritdoc />
     public override Func<FakeScope, object?> Fallback(int member) => _inner.FallbackOf(member);
 }
 
@@ -47,6 +50,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
     private readonly Func<object?[], object> _construct;
     private readonly int _constructorParameterCount;
     private readonly Action<object, object?>?[] _setters;
+    private readonly Action<object?, object?, bool>?[] _fillers;
     private readonly Func<object, object?>?[] _getters;
     private readonly object?[] _defaults;
     private readonly Func<FakeScope, object?>[] _fallbacks;
@@ -57,6 +61,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
         var nullability = new NullabilityInfoContext();
         var members = new List<FakeMember>();
         var setters = new List<Action<object, object?>?>();
+        var fillers = new List<Action<object?, object?, bool>?>();
         var getters = new List<Func<object, object?>?>();
         var defaults = new List<object?>();
         var fallbacks = new List<Func<FakeScope, object?>>();
@@ -88,21 +93,38 @@ internal sealed class ReflectionTypeModel : IFakeModel
             AddMember(member.Name, memberType, nullable, isConstructorParameter: false, initOnly, member, MemberConstraints.Read(member));
         }
 
+        // Read-only collections come last, so their elements are drawn after everything else (existing seeded data does not move).
+        var taken = parameters.Select(p => p.Name ?? "").Concat(members.Select(m => m.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var member in FilledMembers(type))
+        {
+            if (!taken.Add(member.Name))
+                continue;
+            var (memberType, nullable) = member switch
+            {
+                PropertyInfo p => (p.PropertyType, nullability.Create(p).ReadState == NullabilityState.Nullable),
+                FieldInfo f => (f.FieldType, nullability.Create(f).ReadState == NullabilityState.Nullable),
+                _ => throw new InvalidOperationException(),
+            };
+            AddMember(member.Name, memberType, nullable, isConstructorParameter: false, isInitOnly: false, member, MemberConstraints.Read(member), fillsExisting: true);
+        }
+
         Members = [.. members];
+        _fillers = [.. fillers];
         _setters = [.. setters];
         _getters = [.. getters];
         _defaults = [.. defaults];
         _fallbacks = [.. fallbacks];
         _construct = CreateConstructor(type, constructor);
 
-        void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, MemberInfo? accessor, MemberConstraints? constraints)
+        void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, MemberInfo? accessor, MemberConstraints? constraints, bool fillsExisting = false)
         {
             // A format annotation ([EmailAddress]…) says more than the member name; [Required] members are never null.
             var category = FakeMember.ConventionCategory(memberType);
             var convention = constraints?.Format ?? ConventionRules.Match(name, category, type.Name);
             // Constructor parameters behind a settable property (a record's positional properties) can be set on an existing object too.
-            members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly, constraints, isSettable: accessor is not null, isNested: IsNestedType(memberType)));
-            setters.Add(accessor is null ? null : CreateSetter(type, accessor));
+            members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly, constraints, isSettable: accessor is not null && !fillsExisting, isNested: IsNestedType(memberType), fillsExisting));
+            setters.Add(accessor is null || fillsExisting ? null : CreateSetter(type, accessor));
+            fillers.Add(fillsExisting ? CollectionFillers.Create(memberType) : null);
             getters.Add(accessor is null ? null : CreateGetter(type, accessor));
             defaults.Add(memberType.IsValueType ? Activator.CreateInstance(memberType) : null);
             fallbacks.Add(Producer(memberType, name, convention, nullable && constraints?.Required != true, constraints));
@@ -128,8 +150,13 @@ internal sealed class ReflectionTypeModel : IFakeModel
         var instance = _construct(arguments);
         for (var i = _constructorParameterCount; i < _setters.Length; i++)
         {
-            if (scope.Include(i))
-                _setters[i]!(instance, scope.GetObject(i, _fallbacks[i]));
+            if (!scope.Include(i))
+                continue;
+            var value = scope.GetObject(i, _fallbacks[i]);
+            if (_fillers[i] is { } fill)
+                fill(_getters[i]!(instance), value, false);
+            else
+                _setters[i]!(instance, value);
         }
 
         return instance;
@@ -144,7 +171,11 @@ internal sealed class ReflectionTypeModel : IFakeModel
         return instance;
     }
 
-    /// <summary>Reads a settable member.</summary>
+    /// <summary>Adds the elements of a generated collection to the collection a read-only member holds.</summary>
+    public void FillObject(object instance, int member, object? values, bool replace) =>
+        (_fillers[member] ?? throw new InvalidOperationException($"'{Members[member].Name}' of {Type.Name} is not a collection that is filled in place."))(GetObject(instance, member), values, replace);
+
+    /// <summary>Reads a settable member, or the collection of a read-only collection member.</summary>
     public object? GetObject(object instance, int member) =>
         (_getters[member] ?? throw new InvalidOperationException($"'{Members[member].Name}' of {Type.Name} cannot be read from an existing object."))(instance);
 
@@ -162,7 +193,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
 
     /// <summary>Populates an existing instance; the untyped twin of <see cref="FakeModel{T}.Populate"/>.</summary>
     public object PopulateObject(object instance, FakeScope scope, PopulateMode mode) =>
-        Populator.Populate(Members, instance, scope, mode, IsUnsetObject, GetObject, SetObject, FallbackOf);
+        Populator.Populate(Members, instance, scope, mode, IsUnsetObject, GetObject, SetObject, FallbackOf, FillObject);
 
     /// <summary>Whether a member of this type is created and populated recursively; mirrors the last branch of <see cref="NonNullProducer"/>.</summary>
     private static bool IsNestedType(Type type)
@@ -272,15 +303,34 @@ internal sealed class ReflectionTypeModel : IFakeModel
                 members.Add(f);
         }
 
-        return [.. members.OrderBy(m => Depth(m.DeclaringType!)).ThenBy(m => m.MetadataToken)];
+        return [.. members.OrderBy(m => InheritanceDepth(m.DeclaringType!)).ThenBy(m => m.MetadataToken)];
+    }
 
-        static int Depth(Type t)
+    /// <summary>Public properties without a public setter and readonly fields that hold a collection that can be added to, base class members first, in declaration order.</summary>
+    private static List<MemberInfo> FilledMembers(Type type)
+    {
+        var members = new List<MemberInfo>();
+        foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            var depth = 0;
-            for (var b = t.BaseType; b is not null; b = b.BaseType)
-                depth++;
-            return depth;
+            if (p.GetIndexParameters().Length == 0 && p.GetMethod is { IsPublic: true } && p.SetMethod is not { IsPublic: true } && CollectionTypes.IsFillable(p.PropertyType))
+                members.Add(p);
         }
+
+        foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (f.IsInitOnly && !f.IsLiteral && CollectionTypes.IsFillable(f.FieldType))
+                members.Add(f);
+        }
+
+        return [.. members.OrderBy(m => InheritanceDepth(m.DeclaringType!)).ThenBy(m => m.MetadataToken)];
+    }
+
+    private static int InheritanceDepth(Type t)
+    {
+        var depth = 0;
+        for (var b = t.BaseType; b is not null; b = b.BaseType)
+            depth++;
+        return depth;
     }
 
     /// <summary>

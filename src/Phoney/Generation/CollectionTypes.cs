@@ -87,6 +87,19 @@ internal static class CollectionTypes
     public static CollectionKind? KindOf(Type type) =>
         type.IsGenericType && Definitions.TryGetValue(type.GetGenericTypeDefinition(), out var kind) ? kind : null;
 
+    /// <summary>The collections whose elements can be added to an instance the object already holds (they implement <c>ICollection&lt;T&gt;</c> or <c>IDictionary&lt;K,V&gt;</c> and are mutable).</summary>
+    private static readonly HashSet<Type> Fillable =
+    [
+        typeof(List<>), typeof(IList<>), typeof(ICollection<>), typeof(HashSet<>), typeof(ISet<>), typeof(Collection<>), typeof(ObservableCollection<>),
+        typeof(SortedSet<>), typeof(LinkedList<>), typeof(Dictionary<,>), typeof(IDictionary<,>), typeof(SortedDictionary<,>), typeof(SortedList<,>), typeof(ConcurrentDictionary<,>),
+    ];
+
+    /// <summary>
+    /// Whether a read-only member of <paramref name="type"/> is filled by adding to the collection it holds. Queues, stacks, bags and immutable, frozen and read-only
+    /// collections are not: they have no <c>Add</c>, or cannot change.
+    /// </summary>
+    public static bool IsFillable(Type type) => type.IsGenericType && Fillable.Contains(type.GetGenericTypeDefinition());
+
     /// <summary>Whether members of <paramref name="type"/> get a generated number of elements (<c>byte[]</c> is filled with bytes instead).</summary>
     public static bool IsGeneratedCollection(Type type) => type != typeof(byte[]) && ElementType(type, out _) is not null;
 }

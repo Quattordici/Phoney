@@ -77,6 +77,12 @@ internal sealed class MemberModel
     /// <summary>Whether the member is an object the generator creates and populates recursively.</summary>
     public bool IsNested { get; set; }
 
+    /// <summary>Whether the member is a read-only collection (getter only, private setter, readonly field) whose generated elements are added to the collection the object holds.</summary>
+    public bool FillsExisting { get; set; }
+
+    /// <summary>The type arguments of a <see cref="FillsExisting"/> collection (<c>string</c> or <c>string, int</c>), for the typed <c>AddAll</c> helper.</summary>
+    public string FillTypeArguments { get; set; } = "";
+
     /// <summary>Object initializer body for the member's <c>MemberConstraints</c> (from data annotations), or <see langword="null"/>.</summary>
     public string? Constraints { get; set; }
 
@@ -202,6 +208,20 @@ internal sealed class ModelBuilder
             {
                 members.Add(Member(type, f.Name, f.Type, IsNullableReference(f.Type, f.NullableAnnotation), false, false, f.IsRequired, f.ContainingType, isField: true, f.GetAttributes(), members.Count));
             }
+        }
+
+        // Read-only collections come last (their elements are drawn after everything else), as in the reflection model.
+        var taken = new HashSet<string>(members.Select(m => m.Name), StringComparer.OrdinalIgnoreCase);
+        foreach (var member in FilledMembers(type))
+        {
+            if (!taken.Add(member.Name))
+                continue;
+            var (memberType, annotation) = member is IPropertySymbol property ? (property.Type, property.NullableAnnotation) : (((IFieldSymbol)member).Type, ((IFieldSymbol)member).NullableAnnotation);
+            var filled = Member(type, member.Name, memberType, IsNullableReference(memberType, annotation), false, false, false, member.ContainingType, isField: member is IFieldSymbol, member.GetAttributes(), members.Count);
+            filled.Settable = false;
+            filled.FillsExisting = true;
+            filled.FillTypeArguments = string.Join(", ", ((INamedTypeSymbol)memberType).TypeArguments.Select(Fq));
+            members.Add(filled);
         }
 
         var key = FakeForGenerator.Sanitize(type.ToDisplayString());
@@ -491,6 +511,49 @@ internal sealed class ModelBuilder
         type.IsReferenceType && annotation == NullableAnnotation.Annotated;
 
     /// <summary>Public settable/init properties and non-readonly fields, base class first, in declaration order.</summary>
+    /// <summary>The collections whose elements can be added to the instance a read-only member holds; mirrors <c>CollectionTypes.IsFillable</c> in the runtime.</summary>
+    private static readonly HashSet<string> FillableCollections = new(StringComparer.Ordinal)
+    {
+        "System.Collections.Generic.List<T>", "System.Collections.Generic.IList<T>", "System.Collections.Generic.ICollection<T>", "System.Collections.Generic.HashSet<T>",
+        "System.Collections.Generic.ISet<T>", "System.Collections.ObjectModel.Collection<T>", "System.Collections.ObjectModel.ObservableCollection<T>",
+        "System.Collections.Generic.SortedSet<T>", "System.Collections.Generic.LinkedList<T>", "System.Collections.Generic.Dictionary<TKey, TValue>",
+        "System.Collections.Generic.IDictionary<TKey, TValue>", "System.Collections.Generic.SortedDictionary<TKey, TValue>", "System.Collections.Generic.SortedList<TKey, TValue>",
+        "System.Collections.Concurrent.ConcurrentDictionary<TKey, TValue>",
+    };
+
+    /// <summary>Public properties without a public setter and readonly fields that hold a collection that can be added to, base class members first, in declaration order.</summary>
+    private static List<ISymbol> FilledMembers(INamedTypeSymbol type)
+    {
+        var chain = new List<INamedTypeSymbol>();
+        for (var t = type; t is not null && t.SpecialType != SpecialType.System_Object && t.SpecialType != SpecialType.System_ValueType; t = t.BaseType)
+            chain.Insert(0, t);
+
+        var members = new List<ISymbol>();
+        foreach (var t in chain)
+        {
+            // Fields before properties within a type: the order the reflection model gets from metadata tokens, which is what the two models must agree on.
+            foreach (var member in t.GetMembers().OrderBy(m => m is IFieldSymbol ? 0 : 1))
+            {
+                var include = member switch
+                {
+                    IPropertySymbol { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public, GetMethod.DeclaredAccessibility: Accessibility.Public } p =>
+                        p.SetMethod is not { DeclaredAccessibility: Accessibility.Public } && IsFillable(p.Type),
+                    IFieldSymbol { IsStatic: false, IsReadOnly: true, IsConst: false, IsImplicitlyDeclared: false, DeclaredAccessibility: Accessibility.Public } f => IsFillable(f.Type),
+                    _ => false,
+                };
+                if (!include)
+                    continue;
+
+                members.RemoveAll(m => m.Name == member.Name);
+                members.Add(member);
+            }
+        }
+
+        return members;
+    }
+
+    private static bool IsFillable(ITypeSymbol type) => type is INamedTypeSymbol { IsGenericType: true } named && FillableCollections.Contains(named.OriginalDefinition.ToDisplayString());
+
     private static List<ISymbol> WritableMembers(INamedTypeSymbol type)
     {
         var chain = new List<INamedTypeSymbol>();

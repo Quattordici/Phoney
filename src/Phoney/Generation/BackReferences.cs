@@ -31,13 +31,13 @@ internal static class BackReferences
         for (var i = 0; i < members.Count; i++)
         {
             var member = members[i];
-            if (!member.IsSettable)
+            if (!member.IsSettable && !member.FillsExisting)
                 continue;
 
             var value = model.GetMember(node, i);
             if (value is null)
             {
-                if (member.IsNested && member.Type != typeof(object) && Nearest(ancestors, member.Type) is { } parent)
+                if (member.IsSettable && member.IsNested && member.Type != typeof(object) && Nearest(ancestors, member.Type) is { } parent)
                     model.SetMember(node, i, parent);
             }
             else if (member.IsNested)

@@ -238,7 +238,19 @@ Besides arrays, `List<T>`, `HashSet<T>`, `Dictionary<K,V>` and their interfaces,
 | `Queue<T>`, `Stack<T>`, `LinkedList<T>` | `FrozenSet<T>` | `FrozenDictionary<K,V>` |
 | `ConcurrentBag<T>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>` | | `ConcurrentDictionary<K,V>` |
 
-Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` counterpart (so a seed gives the same elements whichever type holds them) and converted. Sizes, `[MinLength]`/`[MaxLength]`, `CollectionSize`, `Invalid`/`Boundary`, `Populate` (a default `ImmutableArray<T>` counts as unset), `Each()` paths and the source generator all work the same. Collections that are only readable (`public List<T> Items { get; } = []`) are not filled.
+Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` counterpart (so a seed gives the same elements whichever type holds them) and converted. Sizes, `[MinLength]`/`[MaxLength]`, `CollectionSize`, `Invalid`/`Boundary`, `Populate` (a default `ImmutableArray<T>` counts as unset), `Each()` paths and the source generator all work the same.
+
+**Read-only collections are filled in place.** A collection with a getter only (`public List<Line> Lines { get; } = [];`), a private setter or a `readonly` field gets its generated elements added to the collection the object already holds:
+
+```csharp
+public class Order { public List<Line> Lines { get; } = []; public ISet<string> Tags { get; } = new HashSet<string>(); }
+Fake.One<Order>().Lines.Count;   // 1–3 generated lines
+```
+
+- Works for `List<T>`, `IList<T>`, `ICollection<T>`, `HashSet<T>`, `ISet<T>`, `Collection<T>`, `ObservableCollection<T>`, `SortedSet<T>`, `LinkedList<T>`, `Dictionary<K,V>`, `IDictionary<K,V>`, `SortedDictionary<K,V>`, `SortedList<K,V>` and `ConcurrentDictionary<K,V>`. Collections that can't be added to (`IEnumerable<T>`, `IReadOnlyList<T>`, immutable, frozen, queues, stacks, bags), a property that holds `null`, and a collection that is read-only at runtime are left alone.
+- Rules work as for any member: `Ignore`, `CollectionSize`, `[MinLength]`, `x.Lines.Each().Sku` paths, `Invalid`/`Boundary`, `With(x => x.Lines, list)` (the elements are **added to** the existing collection; a rule that depends on the object, `(f, x) => …`, is rejected because there is nothing to set). Back-references reach into them.
+- They are drawn **after all other members**, so the data of every existing type for a seed is unchanged. `Populate` fills the ones that are empty and keeps the others; `PopulateMode.All` replaces their elements.
+- The EF Core package leaves navigations (and other collections of objects) of this shape empty, because seed data can't hold them. Works the same with reflection and with the source generator.
 
 For code that works from `Type` values, `Fake.One(type)` and `Fake.Many(type, count)` create objects of a type known only at runtime (reflection, like `Fake.One<T>()`).
 

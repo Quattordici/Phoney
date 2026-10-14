@@ -17,8 +17,13 @@ public sealed class FakeMember
     /// <c>init</c> accessor, also behind a constructor parameter. Default: every member that is not a constructor parameter.
     /// </param>
     /// <param name="isNested">Whether the member holds an object the generator creates and populates recursively.</param>
-    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter = false, bool isInitOnly = false, MemberConstraints? constraints = null, bool? isSettable = null, bool isNested = false)
+    /// <param name="fillsExisting">
+    /// Whether the member is a collection that can only be read (<c>{ get; }</c>, a private setter, a readonly field): it is generated like any collection and its
+    /// elements are added to the collection the object already holds (<see cref="FakeModel{T}.Fill"/>). Such a member is not <paramref name="isSettable"/>.
+    /// </param>
+    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter = false, bool isInitOnly = false, MemberConstraints? constraints = null, bool? isSettable = null, bool isNested = false, bool fillsExisting = false)
     {
+        FillsExisting = fillsExisting;
         Constraints = constraints;
         Name = name;
         Type = type;
@@ -52,6 +57,9 @@ public sealed class FakeMember
 
     /// <summary>Whether the member holds an object that is created and populated recursively.</summary>
     public bool IsNested { get; }
+
+    /// <summary>Whether the member is a read-only collection whose elements are added to the collection the object holds.</summary>
+    public bool FillsExisting { get; }
 
     /// <summary>Whether the member holds a scalar value (string, number, date…) rather than an object or collection.</summary>
     public bool IsScalar => ScalarCategory(Type) != TypeCategory.Other || ScalarAdapters.IsAdapted(Type);
@@ -124,8 +132,15 @@ public abstract class FakeModel<T> : IFakeModel
     /// <exception cref="InvalidOperationException">The member is not <see cref="FakeMember.IsSettable"/>.</exception>
     public abstract T Set(T instance, int member, object? value);
 
-    /// <summary>Reads member <paramref name="member"/> (boxed) from an instance; only for <see cref="FakeMember.IsSettable"/> members.</summary>
+    /// <summary>Reads member <paramref name="member"/> (boxed) from an instance; only for <see cref="FakeMember.IsSettable"/> and <see cref="FakeMember.FillsExisting"/> members.</summary>
     public abstract object? Get(T instance, int member);
+
+    /// <summary>
+    /// Adds the elements of <paramref name="values"/> (a collection that was generated for the member) to the collection that a <see cref="FakeMember.FillsExisting"/>
+    /// member holds on <paramref name="instance"/>; with <paramref name="replace"/> it is emptied first. Does nothing when the object holds no collection or a read-only one.
+    /// </summary>
+    public virtual void Fill(T instance, int member, object? values, bool replace) =>
+        throw new InvalidOperationException($"{Members[member].Name} is not a collection that is filled in place.");
 
     /// <summary>Whether member <paramref name="member"/> of an instance still holds its default value, see <see cref="FakeScope.IsUnset{TValue}"/>.</summary>
     public abstract bool IsUnset(T instance, int member);
@@ -141,7 +156,7 @@ public abstract class FakeModel<T> : IFakeModel
     /// </summary>
     /// <returns>The instance; a populated copy for value types.</returns>
     public virtual T Populate(T instance, FakeScope scope, PopulateMode mode) =>
-        Populator.Populate(Members, instance, scope, mode, IsUnset, Get, Set, Fallback);
+        Populator.Populate(Members, instance, scope, mode, IsUnset, Get, Set, Fallback, Fill);
 
     /// <inheritdoc />
     object? IFakeModel.CreateObject(FakeScope scope) => Create(scope);
@@ -167,7 +182,8 @@ internal static class Populator
         Func<T, int, bool> isUnset,
         Func<T, int, object?> get,
         Func<T, int, object?, T> set,
-        Func<int, Func<FakeScope, object?>> fallback)
+        Func<int, Func<FakeScope, object?>> fallback,
+        Action<T, int, object?, bool> fill)
     {
         var generate = new bool[members.Count];
         var current = new object?[members.Count];
@@ -193,6 +209,13 @@ internal static class Populator
                 instance = set(instance, i, scope.GetObject(i, fallback(i)));
             else if (members[i].IsNested && current[i] is { } existing && scope.Include(i))
                 instance = set(instance, i, scope.PopulateNested(members[i].Type, existing, mode));
+        }
+
+        // Read-only collections are filled last, in place: an empty one gets elements, and PopulateMode.All replaces what it holds.
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (members[i].FillsExisting && scope.Include(i) && (mode == PopulateMode.All || isUnset(instance, i)))
+                fill(instance, i, scope.GetObject(i, fallback(i)), mode == PopulateMode.All);
         }
 
         return instance;

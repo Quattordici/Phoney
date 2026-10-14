@@ -311,6 +311,29 @@ public sealed class FakeScope
         return list;
     }
 
+    /// <summary>Adds <paramref name="values"/> to <paramref name="target"/> (a read-only member's collection); with <paramref name="replace"/> it is emptied first. Does nothing without a target or for a read-only one.</summary>
+    public static void AddAll<TElement>(ICollection<TElement>? target, IEnumerable<TElement>? values, bool replace = false)
+    {
+        if (target is null || values is null || target.IsReadOnly)
+            return;
+        if (replace)
+            target.Clear();
+        foreach (var value in values)
+            target.Add(value);
+    }
+
+    /// <summary>Adds the entries of <paramref name="values"/> to <paramref name="target"/> (a read-only member's dictionary); with <paramref name="replace"/> it is emptied first.</summary>
+    public static void AddAll<TKey, TValue>(IDictionary<TKey, TValue>? target, IEnumerable<KeyValuePair<TKey, TValue>>? values, bool replace = false)
+        where TKey : notnull
+    {
+        if (target is null || values is null || target.IsReadOnly)
+            return;
+        if (replace)
+            target.Clear();
+        foreach (var (key, value) in values)
+            target[key] = value;
+    }
+
     /// <summary>Creates a collection of <typeparamref name="TCollection"/> from the <see cref="List{TElement}"/> that <see cref="List{TElement}"/> would build (immutable lists, queues, stacks…).</summary>
     public TCollection ListAs<TCollection, TElement>(Func<List<TElement>, TCollection> convert, Func<FakeScope, TElement> element, MemberConstraints? constraints = null) =>
         convert(List(element, constraints));
