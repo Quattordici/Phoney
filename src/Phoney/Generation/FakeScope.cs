@@ -66,6 +66,18 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     /// <summary>Whether produced values must be unique.</summary>
     public bool Unique => _seen is not null;
 
+    /// <summary>A condition from <c>Where(x =&gt; x.Member, …)</c> that produced values must satisfy, or <see langword="null"/>. Set while the generator compiles, before the slot is shared.</summary>
+    public Func<object?, bool>? Filter { get; set; }
+
+    /// <summary>Attempts per value before <see cref="Filter"/> gives up.</summary>
+    public int FilterAttempts { get; set; }
+
+    /// <summary>The name of the member the slot belongs to, for messages about <see cref="Filter"/>.</summary>
+    public string? MemberName { get; set; }
+
+    /// <summary>How many values may be produced for one result: the smallest limit of the checks that apply (uniqueness, condition).</summary>
+    public int Attempts => Unique ? (Filter is null ? MaxAttempts : Math.Min(MaxAttempts, FilterAttempts)) : FilterAttempts;
+
     /// <summary>Attempts per value before uniqueness gives up.</summary>
     public int MaxAttempts { get; } = maxAttempts;
 
@@ -255,18 +267,25 @@ public sealed class FakeScope
         var slot = _slots?[member];
         if (slot is null)
             return fallback(this);
-        if (!slot.Unique)
+        if (!slot.Unique && slot.Filter is null)
             return Produce(slot, fallback);
 
-        for (var attempt = 0; attempt < slot.MaxAttempts; attempt++)
+        // A condition is checked first, so only accepted values use up the unique ones.
+        var attempts = slot.Attempts;
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             var value = Produce(slot, fallback);
-            if (slot.TryClaim(value))
+            if (slot.Filter is { } accepts && !accepts(value))
+                continue;
+            if (!slot.Unique || slot.TryClaim(value))
                 return value;
         }
 
-        throw new InvalidOperationException(
-            $"Could not generate a unique value for member {member} of {_type.Name} after {slot.MaxAttempts} attempts. Use a source with more distinct values.");
+        throw slot.Filter is null
+            ? new InvalidOperationException($"Could not generate a unique value for member {member} of {_type.Name} after {attempts} attempts. Use a source with more distinct values.")
+            : new InvalidOperationException(
+                $"Could not generate {_type.Name}.{slot.MemberName} {(slot.Unique ? "unique and " : "")}satisfying its Where condition after {attempts} attempts. "
+                + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");
     }
 
     /// <summary>Untyped <see cref="Get{TValue}"/> used by the reflection model.</summary>

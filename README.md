@@ -303,6 +303,20 @@ var bigOrders = Fake.For<Order>().Seed(1)
 - **`Populate`** supports a condition with `PopulateMode.All` (the object is filled in again until it passes). `MissingOnly` keeps the values it finds, which cannot be generated again, so it throws before touching the object. `InvalidCases()` and `BoundaryCases()` ignore conditions: their objects are made to sit outside or on the edge of the valid ones.
 - Works the same with reflection and with the source generator. A constant `maxAttempts` below 1 is reported by the analyzer (**PHONEY011**).
 
+**One member instead of the whole object.** `Where(x => x.Member, condition)` draws just that member again, which is cheaper and leaves the rest of the object alone:
+
+```csharp
+var orders = Fake.For<Order>().Seed(1)
+    .Where(o => o.Total, total => total > 100)          // only Total is drawn again
+    .Unique(o => o.Reference).Where(o => o.Reference, r => !r.StartsWith("TEST"))
+    .Generate(50);
+```
+
+- It filters what the member's rule or convention produces, whether `With` or `Where` comes first; several conditions on a member must all hold, and with `Unique` a value must be accepted and new. A member that passes on the first try keeps the value it would have without the condition.
+- **Members of the generated object only** (`x => x.Billing.City` is rejected, and reported by the analyzer, **PHONEY007**). A member that is ignored, set from the object (`With(x => x.Email, (f, x) => …)`) or created by `CreateWith` has nothing to draw again and throws when the generator is first used.
+- **Identity members have one value.** `FirstName`, `LastName`, `Email`, `Username`, address parts, `BirthDate`, `Age`, `NationalId` and sex/gender enums come from the object's identity (so that they agree) and cannot be drawn again: you get an exception that says so. Give the member a value with `With(...)` and filter that, or use `Where` on the object, which generates the whole person again.
+- `Populate` filters the values it generates and keeps the ones it finds; `InvalidCases()` and `BoundaryCases()` ignore conditions.
+
 ### Checking that rules apply
 
 A rule that names a position in the object graph can silently do nothing: `.With(x => x.Lines.Each().Sku, "A")` when the lists happen to be empty, `.With(x => x.Billing.City, "Oslo")` after `.With(x => x.Billing, generator)` replaced the whole address, or a `Subtype` for an interface nothing uses. `VerifyRules()` turns that into a failure:

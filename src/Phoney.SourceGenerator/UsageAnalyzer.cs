@@ -221,7 +221,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (!RuleMethods.Contains(name))
+        if (!RuleMethods.Contains(name) && !IsMemberCondition(call.TargetMethod))
             return;
 
         var selector = RuleSelector.Read(call);
@@ -250,6 +250,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
+            if (method.Name == "Where")
+            {
+                Report(context, selector, $"Where must select a member of the generated type directly, like x => x.Name: a condition on a member applies to the generated object's own members, not to '{selector.Path}' in a nested object.");
+                return;
+            }
+
             if (IsDependentRule(method))
             {
                 Report(context, selector, $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.");
@@ -272,6 +278,10 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             Report(context, selector, $"'{type.Name}.{selector.Name}' is a constructor parameter, so it can't depend on the object. Use a rule without the object parameter.");
         }
     }
+
+    /// <summary><c>Where(x =&gt; x.Member, condition)</c>: a condition on one member, unlike <c>Where(x =&gt; …)</c> on the whole object.</summary>
+    private static bool IsMemberCondition(IMethodSymbol method) =>
+        method.Name == "Where" && method.Parameters.Length >= 2 && method.Parameters[0].Type is INamedTypeSymbol { Name: "Expression" };
 
     private static void Report(OperationAnalysisContext context, RuleSelector selector, string message) =>
         context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleNotGenerated, selector.Location, message));

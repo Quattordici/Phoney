@@ -205,6 +205,20 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task A_member_condition_is_checked_like_a_rule_but_a_condition_on_the_object_is_not(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Where(p => p.Code, c => true);
+            public static object B() => Fake.For<Product>().Where(p => p.Address!.Street, s => true);
+            public static object C() => Fake.For<Product>().Where(p => p.Name != null).Where(p => p.Name != null, 5).Where(p => p.Name, n => n != null);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("'Product.Code'");
+        diagnostics[1].GetMessage().ShouldContain("directly");
+    }
+
+    [Test]
     public async Task Dependent_rule_on_a_constructor_parameter_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """

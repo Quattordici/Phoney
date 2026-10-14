@@ -371,6 +371,44 @@ public sealed class Generator<T> : INestedGenerator
         return Derive(_config with { Filters = _config.Filters.Add(new Filter(predicate, maxAttempts)) });
     }
 
+    /// <summary>
+    /// Generates one member again until it satisfies <paramref name="predicate"/>, e.g. <c>.Where(o =&gt; o.Total, t =&gt; t &gt; 100)</c>: cheaper than
+    /// <see cref="Where(Func{T, bool}, int)"/> because only that member is drawn again, and it filters what a rule or convention for the member produces
+    /// (whichever of <c>With</c> and <c>Where</c> comes first). Several conditions on a member must all hold.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A member that passes on the first try is the value it would have without the condition. Values that are drawn again use the faker's next
+    /// randomness, so members after it differ from an unfiltered object, but results still depend on the seed and the position only.
+    /// With <see cref="Unique{TValue}"/> a value has to be accepted and new; with several conditions or <c>Unique</c> the smallest <paramref name="maxAttempts"/> applies.
+    /// </para>
+    /// <para>
+    /// For members of the generated object only (not <c>x =&gt; x.Billing.City</c>). A member that is ignored, set from the object
+    /// (<c>With(x =&gt; x.Email, (f, x) =&gt; …)</c>) or created by <see cref="CreateWith"/> has nothing to draw again and throws when the generator is first
+    /// used. <see cref="Populate(T, PopulateMode)"/> filters the values it generates and keeps the ones it finds. <see cref="InvalidCases"/> and
+    /// <see cref="BoundaryCases"/> ignore it.
+    /// </para>
+    /// </remarks>
+    /// <param name="member">The member to filter: <c>x =&gt; x.Name</c>.</param>
+    /// <param name="predicate">The condition its value must satisfy.</param>
+    /// <param name="maxAttempts">How many values may be drawn for one result before giving up (default 1000).</param>
+    /// <exception cref="InvalidOperationException">At <c>Generate</c>: no value satisfied the condition within <paramref name="maxAttempts"/> attempts, or the member cannot be filtered.</exception>
+    public Generator<T> Where<TValue>(Expression<Func<T, TValue>> member, Func<TValue, bool> predicate, int maxAttempts = 1000)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
+        var name = MemberName(member);
+        Func<object?, bool> accepts = value => predicate((TValue)value!);
+        var filter = new MemberFilter(accepts, maxAttempts);
+        if (_config.MemberFilters.TryGetValue(name, out var existing))
+        {
+            var earlier = existing.Accepts;
+            filter = new MemberFilter(value => earlier(value) && accepts(value), Math.Min(existing.MaxAttempts, maxAttempts));
+        }
+
+        return Derive(_config with { MemberFilters = _config.MemberFilters.SetItem(name, filter) });
+    }
+
     /// <summary>Creates instances with <paramref name="factory"/> instead of a constructor; rules are applied afterwards, conventions are not.</summary>
     public Generator<T> CreateWith(Func<Faker, T> factory) =>
         Derive(_config with { Factory = factory ?? throw new ArgumentNullException(nameof(factory)) });
@@ -541,7 +579,7 @@ public sealed class Generator<T> : INestedGenerator
             for (var i = 0; i < descriptions.Count; i++)
             {
                 var rule = new Rule(RuleKind.Constraint, new ConstraintRequest(boundary, i), Added: _config.RuleCount);
-                var generator = Derive(_config with { Seed = seed, Rules = _config.Rules.SetItem(member.Name, rule), RuleCount = _config.RuleCount + 1, Filters = [], Verify = false });
+                var generator = Derive(_config with { Seed = seed, Rules = _config.Rules.SetItem(member.Name, rule), RuleCount = _config.RuleCount + 1, Filters = [], MemberFilters = _config.MemberFilters.Clear(), Verify = false });
                 cases.Add(new ConstraintCase<T>(member.Name, descriptions[i].Description, generator.Generate()));
             }
         }
@@ -653,6 +691,31 @@ public sealed class Generator<T> : INestedGenerator
                 throw new InvalidOperationException(
                     $"Strict generator for {typeof(T).Name}: no rule or convention for {string.Join(", ", uncovered)}. Add .With(...) or .Ignore(...) for them.");
             }
+        }
+
+        // Last, so a member that only has a condition does not count as covered by the strict check above.
+        foreach (var (name, filter) in _config.MemberFilters.OrderBy(f => f.Key, StringComparer.Ordinal))
+        {
+            if (!known.TryGetValue(name, out var index))
+                throw new InvalidOperationException($"{typeof(T).Name}.{name} can't be generated: it is not a public settable member or constructor parameter, so a Where condition on it has nothing to check.");
+            if (slots[index] is { Kind: RuleKind.Ignore })
+                throw new InvalidOperationException($"{typeof(T).Name}.{name} is ignored, so its Where condition has nothing to check. Remove the Ignore or the condition.");
+            if (slots[index] is { Kind: RuleKind.Dependent })
+                throw new InvalidOperationException($"{typeof(T).Name}.{name} depends on the object, so it is set after the object is created and a Where condition on it can't draw it again. Check it with .Where(x => …) on the object instead.");
+            if (_config.Factory is not null)
+                throw new InvalidOperationException($"{typeof(T).Name}.{name} has a Where condition, but CreateWith decides the values of the objects it creates. Check the object with .Where(x => …) instead.");
+
+            if (_config.Settings.UseConventions && slots[index] is null or { Kind: RuleKind.Default } && IdentityBound.Contains(members[index].Convention))
+            {
+                throw new InvalidOperationException(
+                    $"{typeof(T).Name}.{name} comes from the object's identity (one name, email, address and birthdate per object, so that they agree), and drawing it again gives the same value. "
+                    + $"Give it a value with .With(x => x.{name}, f => …) and filter that, or check the whole object with .Where(x => …).");
+            }
+
+            var slot = slots[index] ??= new RuleSlot(RuleKind.Default, null, unique: false, maxAttempts: 0);
+            slot.Filter = filter.Accepts;
+            slot.FilterAttempts = filter.MaxAttempts;
+            slot.MemberName = name;
         }
 
         // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
@@ -781,7 +844,18 @@ public sealed class Generator<T> : INestedGenerator
         }
     }
 
-    /// <summary>A condition from <see cref="Where"/> and how often an object may be generated again for it.</summary>
+    /// <summary>The conventions whose value is read from the object's <see cref="Identity"/>, which is generated once per object.</summary>
+    private static readonly HashSet<ConventionKind> IdentityBound =
+    [
+        ConventionKind.FirstName, ConventionKind.LastName, ConventionKind.Username, ConventionKind.Email, ConventionKind.StreetAddress, ConventionKind.City,
+        ConventionKind.ZipCode, ConventionKind.State, ConventionKind.Country, ConventionKind.CountryCode, ConventionKind.NationalId, ConventionKind.Age,
+        ConventionKind.BirthDate, ConventionKind.Gender, ConventionKind.Sex,
+    ];
+
+    /// <summary>A condition on one member from <c>Where(x =&gt; x.Member, …)</c> and how often the member may be drawn again for it.</summary>
+    private sealed record MemberFilter(Func<object?, bool> Accepts, int MaxAttempts);
+
+    /// <summary>A condition from <see cref="Where(Func{T, bool}, int)"/> and how often an object may be generated again for it.</summary>
     private sealed record Filter(Func<T, bool> Predicate, int MaxAttempts)
     {
         /// <summary>The smallest limit of the conditions: the object has to satisfy all of them, so the strictest one gives up first.</summary>
@@ -849,6 +923,7 @@ public sealed class Generator<T> : INestedGenerator
         ImmutableDictionary<Type, INestedGenerator> TypeGenerators,
         ImmutableList<Action<Faker, T>> AfterCreate,
         ImmutableList<Filter> Filters,
+        ImmutableDictionary<string, MemberFilter> MemberFilters,
         Func<Faker, T>? Factory,
         bool Strict,
         bool Verify,
@@ -865,6 +940,7 @@ public sealed class Generator<T> : INestedGenerator
             ImmutableDictionary<Type, INestedGenerator>.Empty,
             [],
             [],
+            ImmutableDictionary.Create<string, MemberFilter>(StringComparer.Ordinal),
             null,
             false,
             false,

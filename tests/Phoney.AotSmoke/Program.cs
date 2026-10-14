@@ -99,6 +99,9 @@ catch (InvalidOperationException e) when (e.Message.Contains("Use<Ticket>", Stri
 {
 }
 
+if (Fakes.Person.Seed(10).Where(p => p.Pets, pets => pets.Count == 2).Generate(10).Any(p => p.Pets.Count != 2))
+    throw new InvalidOperationException("Where on a member was not applied");
+
 // Rules for every member of a type, through generated models, no reflection.
 if (Fakes.Person.Seed(10).WithType(Status.Suspended).Generate(10).Any(p => p.Status != Status.Suspended))
     throw new InvalidOperationException("WithType was not applied");
