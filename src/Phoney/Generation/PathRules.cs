@@ -18,15 +18,15 @@ internal sealed record PathBinding(RuleSlot?[] Slots, PathNode?[]? Children);
 /// </summary>
 internal sealed class PathNode
 {
-    private readonly Dictionary<string, PathRule> _rules = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (PathRule Rule, RuleUsage.Entry? Usage)> _rules = new(StringComparer.Ordinal);
     private readonly Dictionary<string, PathNode> _children = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<Type, PathBinding> _bound = new();
 
     /// <summary>The position below this one reached through <paramref name="member"/>, created on first use.</summary>
     public PathNode Child(string member) => _children.TryGetValue(member, out var child) ? child : _children[member] = new PathNode();
 
-    /// <summary>Sets (or replaces) the rule for <paramref name="member"/> of the object at this position.</summary>
-    public void Set(string member, PathRule rule) => _rules[member] = rule;
+    /// <summary>Sets (or replaces) the rule for <paramref name="member"/> of the object at this position; <paramref name="usage"/> is marked when an object there gets it.</summary>
+    public void Set(string member, PathRule rule, RuleUsage.Entry? usage) => _rules[member] = (rule, usage);
 
     /// <summary>The onward nodes indexed by <paramref name="members"/>, or <see langword="null"/> when none is below this one.</summary>
     public PathNode?[]? ChildrenFor(IReadOnlyList<FakeMember> members)
@@ -58,8 +58,10 @@ internal sealed class PathNode
         var slots = fromConventions is null ? new RuleSlot?[members.Count] : (RuleSlot?[])fromConventions.Clone();
         for (var i = 0; i < members.Count; i++)
         {
-            if (!_rules.TryGetValue(members[i].Name, out var rule))
+            if (!_rules.TryGetValue(members[i].Name, out var found))
                 continue;
+            var (rule, usage) = found;
+            usage?.MarkUsed(); // the model gets or skips every member of an object created here, so binding is applying
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(type.Name, members[i], (ConstraintRequest)rule.Value!) : rule.Value;
             slots[i] = new RuleSlot(rule.Kind, value, unique: false, maxAttempts: 0, rule.Boxed);
         }
@@ -77,18 +79,18 @@ internal static class PathRules
     /// Below an interface or abstract class the subtype decides, so the rest of the path is checked when the nested object is created.
     /// </summary>
     /// <exception cref="InvalidOperationException">A path or rule can't be generated.</exception>
-    public static PathNode?[]? Build(Type rootType, IReadOnlyList<FakeMember> rootMembers, ImmutableDictionary<string, PathSpec> rules)
+    public static PathNode?[]? Build(Type rootType, IReadOnlyList<FakeMember> rootMembers, ImmutableDictionary<string, PathSpec> rules, RuleUsage? usage = null)
     {
         if (rules.IsEmpty)
             return null;
 
         var root = new PathNode();
         foreach (var key in rules.Keys.Order(StringComparer.Ordinal))
-            Insert(root, rootType, rootMembers, rules[key]);
+            Insert(root, rootType, rootMembers, rules[key], usage?.AddPath(rootType, key, rules[key].Rule));
         return root.ChildrenFor(rootMembers);
     }
 
-    private static void Insert(PathNode root, Type rootType, IReadOnlyList<FakeMember> rootMembers, PathSpec spec)
+    private static void Insert(PathNode root, Type rootType, IReadOnlyList<FakeMember> rootMembers, PathSpec spec, RuleUsage.Entry? usage)
     {
         var node = root;
         var owner = rootType;
@@ -106,7 +108,7 @@ internal static class PathRules
             {
                 if (member is not null && spec.Rule.Kind == RuleKind.Constraint)
                     ConstraintCases.Resolve(owner.Name, member, (ConstraintRequest)spec.Rule.Value!); // fail now, not when the first nested object is created
-                node.Set(name, spec.Rule);
+                node.Set(name, spec.Rule, usage);
                 return;
             }
 

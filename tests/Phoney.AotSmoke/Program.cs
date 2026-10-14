@@ -85,6 +85,20 @@ var oslo2 = Fakes.Person.Seed(7)
 if (oslo2.Any(p => p.Home.City != "Oslo") || oslo2.SelectMany(p => p.Pets).Any(x => x.PetName != "Rex") || !oslo2.SelectMany(p => p.Pets).Any())
     throw new InvalidOperationException("path rules were not applied");
 
+// Conditions and rule verification, through generated models, no reflection.
+var threePets = Fakes.Person.Seed(8).Where(p => p.Pets.Count == 3).Generate(20);
+if (threePets.Any(p => p.Pets.Count != 3))
+    throw new InvalidOperationException("Where did not filter");
+Fakes.Person.Seed(9).With(p => p.Home.City, "Oslo").Subtype<IContact, Email>().Use(Fake.Generated<Pet>()).VerifyRules().Generate(10);
+try
+{
+    Fakes.Person.Seed(9).Use(Fake.Generated<Ticket>()).VerifyRules().Generate(10); // nothing in a Person needs a Ticket
+    throw new InvalidOperationException("VerifyRules did not report an unused rule");
+}
+catch (InvalidOperationException e) when (e.Message.Contains("Use<Ticket>", StringComparison.Ordinal))
+{
+}
+
 // Time: a TimeProvider drives relative dates.
 var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
 if (Fakes.Person.Seed(1).TimeProvider(clock).Generate().BirthDate.Year < 1950)

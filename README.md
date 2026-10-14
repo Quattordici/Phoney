@@ -19,6 +19,7 @@
 - **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
 - **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
 - **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
+- **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `Use` or `WithConvention` never applied to anything.
 - **Type-wide rules**: `.Use(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
@@ -284,6 +285,45 @@ var orders = Fake.For<Order>()
 - Only objects can be registered. Scalars (strings, numbers, dates, enums) come from rules and conventions, so `Use` throws an `ArgumentException` that points to `WithConvention`.
 - Works the same with reflection and with the source generator: `Fake.Generated<Address>()` gives the AOT-safe generator to register.
 
+### Conditions with `Where`
+
+`Where` keeps only the objects that satisfy a condition: an object that does not is thrown away and generated again.
+
+```csharp
+var bigOrders = Fake.For<Order>().Seed(1)
+    .Where(o => o.Total > 100)
+    .Where(o => o.Status != OrderStatus.Cancelled)    // several conditions must all hold
+    .Generate(50);
+```
+
+- **Same seed, same data.** An object that already satisfies the condition is exactly the one the generator gives without it, so adding a condition only changes the objects it rejects. Retries draw from a seed derived from the seed, the position and the attempt, so item *n* is still the same whether you generate 1 or 1,000,000 items, sequentially, in parallel or as a `Stream()`.
+- **It sees the finished object**: dependent rules and `AfterCreate` actions have run, so the condition can look at anything.
+- **For conditions most objects meet.** A condition that is not met within `maxAttempts` (default 1000, `Where(…, maxAttempts: 50)`; with several conditions the smallest limit applies) throws an `InvalidOperationException` that says what to do: set the members it looks at with `With(...)` instead of waiting for luck. Creation runs for every attempt, so `AfterCreate` actions may run more than once per result, and a rejected object has used up its `Unique` values.
+- **Nested too**: a generator with a condition filters what it creates as a nested generator (`With(x => x.Ticket, generator)`, `Use(generator)`, `Fake.Generators`).
+- **`Populate`** supports a condition with `PopulateMode.All` (the object is filled in again until it passes). `MissingOnly` keeps the values it finds, which cannot be generated again, so it throws before touching the object. `InvalidCases()` and `BoundaryCases()` ignore conditions: their objects are made to sit outside or on the edge of the valid ones.
+- Works the same with reflection and with the source generator. A constant `maxAttempts` below 1 is reported by the analyzer (**PHONEY011**).
+
+### Checking that rules apply
+
+A rule that names a position in the object graph can silently do nothing: `.With(x => x.Lines.Each().Sku, "A")` when the lists happen to be empty, `.With(x => x.Billing.City, "Oslo")` after `.With(x => x.Billing, generator)` replaced the whole address, or a `Subtype` for an interface nothing uses. `VerifyRules()` turns that into a failure:
+
+```csharp
+var invoices = Fake.For<Invoice>().Seed(1)
+    .With(i => i.Billing.City, "Oslo")
+    .With(i => i.Lines.Each().Sku, f => f.Commerce.Ean13())
+    .Subtype<IPayment, Card>()
+    .WithConvention<string>(n => n.EndsWith("Code"), f => f.Random.Replace("??-###"))
+    .VerifyRules()
+    .Generate(20);      // InvalidOperationException listing every rule that did not apply to any of the 20 invoices
+```
+
+- **What is checked**: path rules (`With`, `WithOneOf`, `Ignore`, `Invalid`, `Boundary` on a nested member), `Subtype`, `Use` and `WithConvention`: the rules whose reach depends on what the graph contains. Rules for the generated object's own members always apply and are not checked.
+- **Used once is used**: a rule counts as soon as it applied to any object this generator produced, so a rule for a nullable member or a sometimes empty list passes when one object in the call had it. Usage adds up over the calls of one generator instance.
+- **Checked when generation ends**: after `Generate()`, `Generate(n)`, `GenerateParallel(n)` and `Populate(...)` (not when nothing was generated). `Stream()` never ends and throws a `NotSupportedException` instead of silently skipping the check. `InvalidCases()` and `BoundaryCases()` are not verified.
+- **Typical causes**: the object never exists (always null, an empty collection, `MaxDepth`, a cycle, another subtype), a rule for the enclosing member or a `Use` generator creates or skips it, `Populate` keeps an existing object (path rules only shape objects that are created), or the graph has no such member or type.
+- **A nested generator can't verify**: it has no `Generate` call of its own, so passing a verifying generator to `With`, `Use` or `Fake.Generators.Add` throws an `ArgumentException`; call `VerifyRules(false)` on it and verify the generator you call `Generate` on.
+- Works the same with reflection and with the source generator. Turn it off again with `VerifyRules(false)`. The analyzers' rules about discarded results and replaced rules (**PHONEY005**, **PHONEY008**) catch the mistakes that are visible in the code; this catches the ones that depend on the data.
+
 ### Filling in existing objects
 
 `Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:
@@ -452,7 +492,7 @@ The package also reports these diagnostics:
 | PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `Use` generator / `Subtype` mapping replaces an earlier one for the same type in the same chain |
 | PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
 | PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
-| PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`…) |
+| PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`, `Where(x => …, 0)`…) |
 | PHONEY012 | Info | `Fake.For<T>()`, `One`, `Many` or `Populate` generate a type with reflection because no `[FakeFor<T>]` covers it |
 
 The IDE offers fixes for two of them: **PHONEY001** (make the class and its containing types `partial`) and **PHONEY012** (add `[FakeFor<T>]` to the partial class that already lists types, or create a `FakeModels` class). PHONEY012 is only a suggestion, since reflection is fine unless the app is trimmed or published with Native AOT; silence it with `dotnet_diagnostic.PHONEY012.severity = none` in `.editorconfig`.

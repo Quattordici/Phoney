@@ -129,7 +129,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             case "Generate" or "GenerateParallel" or "Many":
                 Check(context, call, "count", v => v >= 0, "at least 0");
                 break;
-            case "Unique":
+            case "Unique" or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
                 break;
         }

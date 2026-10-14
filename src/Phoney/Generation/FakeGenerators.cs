@@ -44,6 +44,7 @@ public sealed class FakeGenerators
     {
         ArgumentNullException.ThrowIfNull(generator);
         NestedGenerators.ValidateType(typeof(TBase), nameof(generator));
+        NestedGenerators.RejectVerification(generator, nameof(generator));
         ImmutableInterlocked.Update(ref s_all, all => all.SetItem(typeof(TBase), generator));
     }
 
@@ -57,6 +58,17 @@ public sealed class FakeGenerators
 /// <summary>What generators registered for types (<c>Use</c>, <c>Fake.Generators</c>) have in common.</summary>
 internal static class NestedGenerators
 {
+    /// <summary>A nested generator has no <c>Generate</c> call of its own to verify at, so asking it to would silently check nothing.</summary>
+    public static void RejectVerification(INestedGenerator generator, string parameterName)
+    {
+        if (generator.VerifiesRules)
+        {
+            throw new ArgumentException(
+                $"The {generator.GeneratedType.Name} generator verifies its rules (VerifyRules), but a nested generator is never checked: it has no Generate call of its own. Call VerifyRules(false) on it and verify the generator you call Generate on.",
+                parameterName);
+        }
+    }
+
     /// <summary>Scalars and arrays never reach the nested-object path, so a generator for them would silently do nothing.</summary>
     public static void ValidateType(Type type, string parameterName)
     {

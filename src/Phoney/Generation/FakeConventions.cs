@@ -56,25 +56,26 @@ internal sealed record CustomConvention(Type Type, Func<string, bool> NameMatche
 /// The custom conventions of one compiled generator (its own, then the app-wide ones) for the nested objects it creates,
 /// bound to each nested type's members once and cached. Bound slots carry no state, so they are shared across threads.
 /// </summary>
-internal sealed class NestedConventions(ImmutableList<CustomConvention> conventions)
+internal sealed class NestedConventions(ImmutableList<CustomConvention> conventions, RuleUsage? usage)
 {
     private readonly ConcurrentDictionary<Type, RuleSlot?[]?> _slots = new();
 
     /// <summary>A convention holder, or <see langword="null"/> when there are no conventions (nested objects then need no slots).</summary>
-    public static NestedConventions? For(ImmutableList<CustomConvention> conventions) => conventions.IsEmpty ? null : new(conventions);
+    public static NestedConventions? For(ImmutableList<CustomConvention> conventions, RuleUsage? usage = null) => conventions.IsEmpty ? null : new(conventions, usage);
 
     /// <summary>Slots for the members of <paramref name="model"/> that a convention matches, or <see langword="null"/> when none does.</summary>
     public RuleSlot?[]? SlotsFor(Type type, IFakeModel model) =>
-        _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(conventions, model.Members));
+        _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(conventions, model.Members, usage));
 
     /// <summary>Binds the first matching convention to each member, like the root object's rules in <c>Generator&lt;T&gt;.Compile</c>.</summary>
-    private static RuleSlot?[]? Bind(ImmutableList<CustomConvention> conventions, IReadOnlyList<FakeMember> members)
+    private static RuleSlot?[]? Bind(ImmutableList<CustomConvention> conventions, IReadOnlyList<FakeMember> members, RuleUsage? usage)
     {
         RuleSlot?[]? slots = null;
         for (var i = 0; i < members.Count; i++)
         {
             if (conventions.FirstOrDefault(c => c.Matches(members[i])) is not { } match)
                 continue;
+            usage?.Convention(match);
             slots ??= new RuleSlot?[members.Count];
             slots[i] = new RuleSlot(RuleKind.Convention, match.Factory, unique: false, maxAttempts: 0);
         }

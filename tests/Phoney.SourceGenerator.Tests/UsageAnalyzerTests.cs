@@ -431,10 +431,11 @@ public sealed class UsageAnalyzerTests
             public static object G() => Fake.For<Product>().GenerateParallel(-5);
             public static object H() => Fake.For<Product>().Unique(p => p.Name, 0);
             public static object I() => Fake.Many<Product>(-1);
+            public static object J() => Fake.For<Product>().Where(p => p.Id > 0, 0);
             """, cancellationToken);
 
-        diagnostics.Count.ShouldBe(9);
-        diagnostics.Select(TextOf).ShouldBe(["1.5", "-0.1", "2", "-1", "-1", "-1", "-5", "0", "-1"], ignoreOrder: true);
+        diagnostics.Count.ShouldBe(10);
+        diagnostics.Select(TextOf).ShouldBe(["1.5", "-0.1", "2", "-1", "-1", "-1", "-5", "0", "-1", "0"], ignoreOrder: true);
         diagnostics.Single(d => TextOf(d) == "1.5").GetMessage().ShouldContain("NullProbability");
         diagnostics.Single(d => TextOf(d) == "2").GetMessage().ShouldContain("at least 5");
     }
@@ -444,7 +445,7 @@ public sealed class UsageAnalyzerTests
     {
         var diagnostics = await Diagnose("PHONEY011", """
             private const int Many = 3;
-            public static object A() => Fake.For<Product>().NullProbability(0).NullProbability(1).CollectionSize(0, 0).CollectionSize(2, Many).MaxDepth(0).Unique(p => p.Name).Unique(p => p.Id, 1);
+            public static object A() => Fake.For<Product>().NullProbability(0).NullProbability(1).CollectionSize(0, 0).CollectionSize(2, Many).MaxDepth(0).Unique(p => p.Name).Unique(p => p.Id, 1).Where(p => p.Id > 0).Where(p => p.Id > 1, 1);
             public static object B() => (Fake.For<Product>().Generate(0), Fake.For<Product>().Generate(Many));
             public static object C(int n, double p) => Fake.For<Product>().NullProbability(p).CollectionSize(n, 1).CollectionSize(2, n).MaxDepth(n).Generate(n);
             public static object D() => Fake.Many<Product>(0);

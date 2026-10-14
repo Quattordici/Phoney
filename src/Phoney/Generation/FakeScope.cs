@@ -15,7 +15,8 @@ internal sealed record GenerationSettings(
     int MaxDepth,
     ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
     NestedConventions? Conventions = null,
-    ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null)
+    ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null,
+    RuleUsage? Usage = null)
 {
     public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
 }
@@ -371,7 +372,10 @@ public sealed class FakeScope
             return CreateWith(declared, type);
 
         var declaredType = type;
-        if (Settings.Subtypes.TryGetValue(type, out var subtypes) || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
+        var registered = Settings.Subtypes.TryGetValue(type, out var subtypes);
+        if (registered)
+            Settings.Usage?.Subtype(type);
+        if (registered || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
             type = subtypes.Length == 1 ? subtypes[0] : subtypes[Faker.Random.Index(subtypes.Length)];
         else if (type.IsInterface || type.IsAbstract)
             return null;
@@ -404,7 +408,10 @@ public sealed class FakeScope
         for (var scope = this; scope is not null; scope = scope._parent)
         {
             if (scope.Settings.TypeGenerators is { } generators && generators.TryGetValue(type, out var generator))
+            {
+                scope.Settings.Usage?.Generator(type);
                 return generator;
+            }
         }
 
         return null;
@@ -447,6 +454,9 @@ internal interface INestedGenerator
 {
     /// <summary>The type of the objects the generator creates.</summary>
     Type GeneratedType { get; }
+
+    /// <summary>Whether the generator checks its rules with <c>VerifyRules</c>, which only happens at its own <c>Generate</c>: as a nested generator it would go unchecked.</summary>
+    bool VerifiesRules { get; }
 
     object? CreateNested(FakeScope parent);
 }

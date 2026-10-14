@@ -90,6 +90,24 @@ var shoppers = Fake.For<Customer>().Seed(2)
 foreach (var shopper in shoppers)
     Console.WriteLine($"{shopper.FirstName} lives in {shopper.Address.City}; orders: {string.Join(", ", shopper.Orders.Select(o => o.Status))}");
 
+// 7c2. Conditions and checked rules -------------------------------------------------------------
+Console.WriteLine("\n== Conditions and checked rules");
+foreach (var order in Fake.For<Order>().Seed(3).Where(o => o.Total > 100).Where(o => o.Status != OrderStatus.Pending).Generate(3))
+    Console.WriteLine($"order {order.Id:N}: {order.Total:C} ({order.Status})");
+try
+{
+    // Every customer has at least one order, so the Orders rule applies; nothing in a customer is a Shape, so the Use never does.
+    Fake.For<Customer>().Seed(2)
+        .With(c => c.Orders.Each().Status, OrderStatus.Shipped)
+        .Use(Fake.For<Circle>())
+        .VerifyRules()
+        .Generate(5);
+}
+catch (InvalidOperationException e)
+{
+    Console.WriteLine(e.Message.Split(Environment.NewLine)[0..2].Aggregate((a, b) => a + Environment.NewLine + b));
+}
+
 // 7d. Random but replayable --------------------------------------------------------------------
 Console.WriteLine("\n== Replayable seeds");
 var seed = FakeSeed.Pick();                      // PHONEY_SEED if set, else a new random seed
