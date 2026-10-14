@@ -5,6 +5,9 @@
 [![NuGet prerelease](https://img.shields.io/nuget/vpre/Phoney.svg?label=NuGet%20prerelease)](https://www.nuget.org/packages/Phoney)
 [![NuGet downloads](https://img.shields.io/nuget/dt/Phoney.svg?label=Downloads)](https://www.nuget.org/packages/Phoney)
 [![Phoney.TUnit](https://img.shields.io/nuget/vpre/Phoney.TUnit.svg?label=Phoney.TUnit)](https://www.nuget.org/packages/Phoney.TUnit)
+[![Phoney.Xunit](https://img.shields.io/nuget/vpre/Phoney.Xunit.svg?label=Phoney.Xunit)](https://www.nuget.org/packages/Phoney.Xunit)
+[![Phoney.NUnit](https://img.shields.io/nuget/vpre/Phoney.NUnit.svg?label=Phoney.NUnit)](https://www.nuget.org/packages/Phoney.NUnit)
+[![Phoney.MSTest](https://img.shields.io/nuget/vpre/Phoney.MSTest.svg?label=Phoney.MSTest)](https://www.nuget.org/packages/Phoney.MSTest)
 [![Phoney.DependencyInjection](https://img.shields.io/nuget/vpre/Phoney.DependencyInjection.svg?label=Phoney.DependencyInjection)](https://www.nuget.org/packages/Phoney.DependencyInjection)
 [![Phoney.EntityFrameworkCore](https://img.shields.io/nuget/vpre/Phoney.EntityFrameworkCore.svg?label=Phoney.EntityFrameworkCore)](https://www.nuget.org/packages/Phoney.EntityFrameworkCore)
 [![Phoney.NodaTime](https://img.shields.io/nuget/vpre/Phoney.NodaTime.svg?label=Phoney.NodaTime)](https://www.nuget.org/packages/Phoney.NodaTime)
@@ -32,6 +35,7 @@
 |---|---|
 | `Phoney` | fakers, generators, the source generator and the Strict analyzer |
 | `Phoney.TUnit` | [`[FakeData]` for TUnit](#test-data-in-tunit) |
+| `Phoney.Xunit`, `Phoney.NUnit`, `Phoney.MSTest` | [`[FakeData]` for xUnit.net v3, NUnit and MSTest](#test-data-in-xunit-nunit-and-mstest) |
 | `Phoney.DependencyInjection` | [`services.AddPhoney()`, `IFaker`, injectable generators](#dependency-injection-and-aspnet-core) |
 | `Phoney.EntityFrameworkCore` | [`HasFakeData` seed data](#ef-core-seeding) |
 | `Phoney.NodaTime` | [NodaTime values and members](#nodatime) |
@@ -650,6 +654,34 @@ public async Task Totals_add_up()
 - Other frameworks can do the same with `FakeSeed.Pick()` (`PHONEY_SEED`, else a new seed), `Fake.Seeded(seed)` and printing the seed when the test fails.
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
+
+## Test data in xUnit, NUnit and MSTest
+
+`Phoney.Xunit` ([xUnit.net](https://xunit.net) v3), `Phoney.NUnit` and `Phoney.MSTest` give the same `[FakeData]` as [Phoney.TUnit](#test-data-in-tunit), with the same options, seeds and rules, so a test gets the same values whichever framework runs it:
+
+```bash
+dotnet add package Phoney.Xunit     # or Phoney.NUnit, Phoney.MSTest
+```
+
+```csharp
+// xUnit.net v3
+[Theory, FakeData]
+public void Places_order(Customer customer, string email, [Range(1, 10)] int quantity) { … }
+
+// NUnit: [FakeData] replaces [Test], like [TestCase]
+[FakeData(Count = 5, Locale = "sv")] // five test cases with Swedish data
+public void Formats_address(string street, string city, string zipCode) { … }
+
+// MSTest
+[TestMethod, FakeData]
+public void Places_order(Customer customer, string email, [Range(1, 10)] int quantity) { … }
+```
+
+- Parameters are filled by name and type, objects and collections recursively, data annotations are honoured, and the parameters of one test case agree like the members of one object.
+- **Reproducible by default** (the seed is derived from the test), with `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`; `PHONEY_SEED=123 dotnet test` moves every test at once. The shared rules live in `FakeDataOptions` in the main package.
+- These attributes fill **method parameters**. Constructor and property injection (TUnit) and `[FakeSeed]` have no counterpart in the other frameworks.
+- Test data is created while the framework discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes before that, for example in a module initializer.
+- Packages target .NET 8 and .NET 10 and depend on xUnit.net v3 `xunit.v3.extensibility.core` 4.0.2, NUnit 5.0.0 and MSTest 4.5.1.
 
 ## Locales
 

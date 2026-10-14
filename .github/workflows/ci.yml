@@ -105,6 +105,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
           dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.TUnit -c Release -o artifacts/packages -p:Version="$VERSION"
+          dotnet pack src/Phoney.Xunit -c Release -o artifacts/packages -p:Version="$VERSION"
+          dotnet pack src/Phoney.NUnit -c Release -o artifacts/packages -p:Version="$VERSION"
+          dotnet pack src/Phoney.MSTest -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.DependencyInjection -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.EntityFrameworkCore -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.NodaTime -c Release -o artifacts/packages -p:Version="$VERSION"
