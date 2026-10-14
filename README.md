@@ -876,6 +876,51 @@ Run the benchmarks with:
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks -- --filter '*'
 ```
 
+### Compared with other libraries
+
+The same scenarios run against the best-known .NET libraries: [Bogus](https://github.com/bchavez/Bogus) 35.6.5, [AutoBogus](https://github.com/nickdodd79/AutoBogus) 2.13.1, [AutoFixture](https://github.com/AutoFixture/AutoFixture) 4.18.1, [NBuilder](https://github.com/nbuilder/nbuilder) 6.1.0 and [Faker.Net](https://github.com/slowmonkey/Faker.NET) 2.0.163. Every library is seeded, and each cell is the mean time per operation and the memory allocated per operation (BenchmarkDotNet 0.15.8, 15 iterations after 5 warm-up iterations, .NET 10.0.13, Intel Xeon 2.8 GHz with 4 cores, Linux). The fastest time in each row is bold, and "–" means the library has no such feature.
+
+| Scenario | Phoney | Phoney (reflection) | Bogus | AutoBogus | AutoFixture | NBuilder | Faker.Net |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| First name | **9.5 ns / 0 B** | – | 140 ns / 37 B | – | – | – | 108 µs / 139 KB |
+| Full name | 451 ns / 348 B | – | **300 ns / 127 B** | – | – | – | 170 µs / 194 KB |
+| Email | **523 ns / 277 B** | – | 2.57 µs / 1.5 KB | – | – | – | 153 µs / 196 KB |
+| Street address | **967 ns / 768 B** | – | 5.24 µs / 4.4 KB | – | – | – | 92.7 µs / 91 KB |
+| Sentence | **427 ns / 481 B** | – | 1.25 µs / 847 B | – | – | – | 73.7 µs / 78 KB |
+| Flat objects (×1,000) | **3.86 ms / 2.4 MB** | 4.59 ms / 2.9 MB | 13.8 ms / 8.9 MB | 614 ms / 649 MB | 131 ms / 49 MB | 6.54 ms / 3.9 MB | – |
+| Object graphs (×1,000) | 12.7 ms / 7.7 MB | **12.4 ms / 7.9 MB** | 29.1 ms / 14 MB | 3.46 s / 3.32 GB | 466 ms / 205 MB | 44.2 ms / 19 MB | – |
+
+"Phoney" is the source-generated model (`[FakeFor<T>]`) and "Phoney (reflection)" the reflection model; the value rows have only one column because they don't involve a model. A flat object has 11 members; a graph is a customer with an address and two purchases of two lines each, plus an enum. The run was repeated once: the numbers moved by up to about 15 %, no ranking changed except Phoney's two models on object graphs, which are within noise of each other.
+
+How to read the numbers:
+
+- **The libraries don't produce the same data.** Phoney and Bogus produce realistic values (names, emails and addresses that agree with each other). AutoBogus, AutoFixture and NBuilder fill members with random placeholder strings and numbers that don't resemble the member (run the `check` command below to see what each library produces).
+- **Bogus needs every rule written by hand.** The Bogus rows use `Faker<T>` classes with a rule per member, and the nested ones are composed by hand. Phoney gets the same shape from name conventions and the type's members. NBuilder has no object-graph support, so its graph is composed by hand with `.All().Do(...)`.
+- **Faker.Net only offers single values**, one static call each, which is why it has no object rows. Its cost is about 70–170 µs and 78–196 KB per value in this run.
+- **Bogus is faster at `Full name`** (300 ns against 451 ns).
+- **Start-up is where Phoney is slowest.** The first object takes a fresh process this long, from `Main` to the first generated object (median of 15 processes):
+
+| Library | Median | Fastest | Slowest |
+|---|---:|---:|---:|
+| Phoney (reflection) | 211 ms | 195 ms | 296 ms |
+| Phoney (source generated) | 171 ms | 156 ms | 281 ms |
+| Bogus | 153 ms | 143 ms | 184 ms |
+| AutoBogus | 133 ms | 115 ms | 168 ms |
+| AutoFixture | 70 ms | 65 ms | 122 ms |
+| NBuilder | 25 ms | 23 ms | 26 ms |
+| Faker.Net | 19 ms | 17 ms | 26 ms |
+
+Phoney loads its locale data (decompression and building the flattened lookup array of the `en` fallback chain) on the first call. It is paid once per process, so it matters for short-lived tools and not for services or test runs.
+
+Reproduce the tables with:
+
+```bash
+dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- --filter '*' --artifacts out   # the timed matrix
+dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- summarize out                   # prints it as a markdown table
+dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold                           # start-up, one process per measurement
+dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- check                          # what each library actually produces
+```
+
 ## How the faker.js data gets in
 
 ```
