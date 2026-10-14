@@ -327,6 +327,52 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>
+    /// Gives a collection member a random subset of <paramref name="values"/> in which heavier values are more likely to be included:
+    /// <c>.WithOneOf(u =&gt; u.Roles, roles, weights, 2)</c> gives each user two roles, the common ones more often than the rare ones.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The values are taken one at a time, each time by weight among those not taken yet, which is how the chance of being in the subset follows the weights: a value that is twice as
+    /// heavy as another is more than twice as likely to be taken first, and the more are taken the more the lighter ones get their turn. A subset of one is a plain weighted pick, and a subset of
+    /// all the values that can be taken is those values. A weight of zero is never included. Everything else is as for the subset without weights: the values are in the order of the list, one
+    /// random number is drawn per value (after the size, for a size range), a seed gives the same subsets, and the lists are copied when the rule is added.
+    /// </para>
+    /// <para>Every value costs a pass over the list, so a subset of 5 from a list of 100 000 is slower than without weights; for lists of up to a few thousand values it is not noticeable.</para>
+    /// </remarks>
+    /// <param name="member">The collection member: <c>x =&gt; x.Roles</c>.</param>
+    /// <param name="values">The values to take a subset of.</param>
+    /// <param name="weights">One weight per value (relative; zero is never included).</param>
+    /// <param name="size">How many values: a number (<c>3</c>) or an inclusive range (<c>(1, 3)</c>).</param>
+    /// <exception cref="ArgumentException">The lists differ in length, a weight is negative, not a number or infinite, the size is larger than the number of values with a weight above zero, or the member's type cannot hold a list.</exception>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, IEnumerable<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
+        RequireMemberAccepts(member, typeof(List<TValue>));
+        return With(member, f => (IEnumerable<TValue>)picker.List(f.Random));
+    }
+
+    /// <summary>Gives an array member a weighted random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, TValue[]>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
+        return With(member, f => picker.Array(f.Random));
+    }
+
+    /// <summary>Gives a <see cref="HashSet{T}"/> member a weighted random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, HashSet<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
+        return With(member, f => picker.Set(f.Random));
+    }
+
+    /// <summary>Gives an <see cref="ISet{T}"/> member a weighted random subset of <paramref name="values"/> (a <see cref="HashSet{T}"/>); see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, IReadOnlyList{double}, SubsetSize)"/>.</summary>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, ISet<TValue>>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, weights, size, nameof(values));
+        return With(member, f => (ISet<TValue>)picker.Set(f.Random));
+    }
+
+    /// <summary>
     /// Sets a member from a random item of <paramref name="source"/>, so object graphs line up:
     /// <c>.WithOneOf(o =&gt; o.CustomerId, customers, c =&gt; c.Id)</c>.
     /// </summary>

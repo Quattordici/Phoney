@@ -276,6 +276,18 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task A_weighted_WithOneOf_subset_takes_the_rule_slot_of_its_collection_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().WithOneOf(p => p.Addresses, new[] { new Address(), new Address() }, new[] { 3.0, 1.0 }, 1).With(p => p.Addresses, new List<Address>());
+            public static object B() => Fake.For<Product>().WithOneOf(p => p.Addresses, new[] { new Address() }, new[] { 1.0 }, (0, 1)).WithOneOf(p => p.Name, new[] { "a" });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(1);
+        diagnostics[0].GetMessage().ShouldContain("replaces");
+    }
+
+    [Test]
     public async Task WithNormal_takes_the_rule_slot_of_its_member(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """

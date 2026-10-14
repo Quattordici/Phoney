@@ -171,6 +171,11 @@ var crew = ShipmentFakes.Shipment.Seed(12).WithOneOf(s => s.Crew, roles, (2, 3))
 if (crew.Any(s => s.Crew.Count is < 2 or > 3 || s.Crew.Distinct().Count() != s.Crew.Count))
     throw new InvalidOperationException("subset off");
 
+// A weighted subset: the heavy value is almost always in it, taken one at a time by weight, without reflection.
+var weightedCrew = ShipmentFakes.Shipment.Seed(13).WithOneOf(s => s.Crew, new[] { "common", "rare", "unique" }, new[] { 1000.0, 5.0, 1.0 }, 2).Generate(200);
+if (weightedCrew.Any(s => s.Crew.Count != 2 || s.Crew.Distinct().Count() != 2) || weightedCrew.Count(s => s.Crew.Contains("common")) < 190)
+    throw new InvalidOperationException("weighted subset off");
+
 // Weighted choices: the running totals are made once and a pick allocates nothing.
 var picked = ShipmentFakes.Shipment.Seed(11).WithOneOf(s => s.Weight, (new System.Numerics.BigInteger(5), 9), (new System.Numerics.BigInteger(7), 1)).Generate(400);
 if (picked.Any(s => s.Weight != 5 && s.Weight != 7) || picked.Count(s => s.Weight == 5) < 320)

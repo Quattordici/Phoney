@@ -619,6 +619,16 @@ var users = Fake.For<User>().Seed(1)
     .Generate(100);
 ```
 
+Give the values weights and the heavier ones are more likely to be in the subset:
+
+```csharp
+var users = Fake.For<User>().Seed(1)
+    .WithOneOf(u => u.Roles, roles, new[] { 80.0, 15, 4, 1 }, 2)   // "viewer" nearly always, "owner" almost never
+    .Generate(100);
+```
+
+The values are taken one at a time, each time by weight among those not taken yet, so a subset of one is a plain weighted pick and the lighter values get their turn as the subset grows; a weight of zero is never included, and the size can't be larger than the number of values with a weight above zero. One random number is drawn per value (after the size, for a range), nothing is retried (very uneven weights cost no more than even ones), and every value costs a pass over the list: unnoticeable up to a few thousand values, slower for a subset of 5 from 100 000.
+
 A subset is made of distinct positions of the list (a list with equal values can give equal values), in the order of the list, and every value is equally likely to be in it. It is drawn from the object's own seeded randomness, so a seed gives the same subsets and item *n* is the same however you generate; a size range draws its size first, then one number per value, without work in proportion to the length of the list. The size can't be larger than the list, and the member must hold a list, array or set (`ImmutableArray<T>` and the like are refused when the rule is added, with a message saying what to use).
 
 Weights are relative (70/25/5 is the same as 14/5/1), a weight of zero is never picked, and a negative or non-finite weight, a missing weight or no weight above zero throws when the rule is added. The running totals are made once, so a pick is one random number and a binary search (`Randomizer.WeightedIndex`), and item *n* is the same however you generate.
