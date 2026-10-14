@@ -77,6 +77,14 @@ var edges = Fakes.Ticket.Seed(6).BoundaryCases();
 if (!edges.Where(c => c.Member == "Seats").Select(c => c.Value.Seats).Order().SequenceEqual([1, 8]) || !edges.Where(c => c.Member == "Code").Select(c => c.Value.Code.Length).Order().SequenceEqual([2, 6]))
     throw new InvalidOperationException("boundary cases were wrong: " + string.Join("; ", edges));
 
+// Rules for members of nested objects (paths through objects and collections), through generated models, no reflection.
+var oslo2 = Fakes.Person.Seed(7)
+    .With(p => p.Home.City, "Oslo")
+    .With(p => p.Pets.Each().PetName, "Rex")
+    .Generate(20);
+if (oslo2.Any(p => p.Home.City != "Oslo") || oslo2.SelectMany(p => p.Pets).Any(x => x.PetName != "Rex") || !oslo2.SelectMany(p => p.Pets).Any())
+    throw new InvalidOperationException("path rules were not applied");
+
 // Time: a TimeProvider drives relative dates.
 var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
 if (Fakes.Person.Seed(1).TimeProvider(clock).Generate().BirthDate.Year < 1950)

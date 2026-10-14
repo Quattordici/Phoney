@@ -426,7 +426,7 @@ internal sealed class ModelBuilder
     private static string Fq(ITypeSymbol type) => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
     /// <summary>The convention type category, looking through <c>Nullable&lt;T&gt;</c>.</summary>
-    private static TypeCategory Category(ITypeSymbol type)
+    internal static TypeCategory Category(ITypeSymbol type)
     {
         if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
             type = nullable.TypeArguments[0];

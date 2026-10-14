@@ -18,6 +18,7 @@
 - **Interfaces and polymorphism**: `.Subtype<IShape, Circle, Square>()`, app-wide `Fake.Subtypes`, and `[JsonDerivedType]` honoured out of the box.
 - **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
 - **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
+- **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
 - **Type-wide rules**: `.Use(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
@@ -218,6 +219,28 @@ var customers = Fake.For<Customer>()
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data. The included analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`, so a new member breaks the build instead of the test run. It can't see app-wide `Fake.Conventions` (registered at runtime): cover such members with `.Ignore(...)`/`.With(...)` or suppress the warning.
+
+### Rules for nested members
+
+A rule can name a member of a nested object with a path, so you don't need a generator for the whole object just to change one value:
+
+```csharp
+var invoices = Fake.For<Invoice>()
+    .With(i => i.Billing.City, "Oslo")                          // this address only: Shipping is another position
+    .With(i => i.Billing.Contact.Phone, f => f.Random.Replace("+47 ## ## ## ##"))
+    .With(i => i.Lines.Each().Sku, f => f.Commerce.Ean13())     // every element of a list, array or set
+    .With(i => i.ByCode.Values.Each().Quantity, 1)              // every value of a dictionary
+    .Ignore(i => i.Lines.Each().Supplier!.Email)
+    .Invalid(i => i.Lines.Each().Quantity)                      // see "Invalid and boundary data"
+    .Generate(10);
+```
+
+- **Which rules**: `With`, `WithOneOf`, `Ignore`, `Invalid` and `Boundary` accept paths. `Unique` and rules that depend on the object (`With(x => …, (f, x) => …)`) don't, since they belong to the generated object: you get an `ArgumentException`, and the analyzer reports it (**PHONEY007**).
+- **A position, not a type**: `Billing.City` and `Shipping.City` are both addresses, and only the first is changed. For every object of a type use [`Use`](#type-wide-generators).
+- **`Each()`** is only a marker the compiler needs (`FakePath.Each`): it says "every element" inside the expression and can't be called. `x.Lines[0]` is rejected for the same reason.
+- **Checked when the generator is first used**: a member that doesn't exist or can't be set, a string or number in the middle of a path, or `Invalid` on a member without annotations throws an `InvalidOperationException` that names the path. Below an interface or abstract class the picked subtype decides, so that part is checked when the object is created.
+- **Precedence**: a rule for the member itself (`With(i => i.Billing, generator)`), `Use` and `Fake.Generators` create the whole object with their own rules, so path rules inside it don't apply. `Populate` creates missing nested objects with the path rules and fills existing ones as before.
+- Works the same with reflection and with the source generator.
 
 ### Interfaces and subtypes
 

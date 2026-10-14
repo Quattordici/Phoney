@@ -227,10 +227,10 @@ public sealed class GenerationTests
     }
 
     [Test]
-    public void Unknown_members_in_rules_fail_clearly()
+    public void Selectors_that_are_not_member_paths_fail_clearly()
     {
 #pragma warning disable PHONEY007 // the analyzer reports this at compile time; the test checks what happens without it
-        var ex = Should.Throw<ArgumentException>(() => Fake.For<Customer>().With(x => x.HomeAddress.City, "x"));
+        var ex = Should.Throw<ArgumentException>(() => Fake.For<Customer>().With(x => x.FirstName.ToUpper(), "x"));
 #pragma warning restore PHONEY007
         ex.Message.ShouldContain("must select a member");
     }

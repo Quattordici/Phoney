@@ -69,6 +69,15 @@ public sealed class StrictAnalyzerTests
     }
 
     [Test]
+    public async Task Rules_for_members_of_nested_objects_do_not_cover_members_of_the_generated_type(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("public static object A() => Data.Product.Strict().With(p => p.Parent!.Flavor, \"x\").Generate();", cancellationToken);
+
+        var message = diagnostics.ShouldHaveSingleItem().GetMessage();
+        message.ShouldContain("Flavor, Shelf"); // Product.Flavor is not Product.Parent.Flavor
+    }
+
+    [Test]
     public async Task Turning_conventions_off_reports_convention_members_too(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("public static object A() => Data.Product.UseConventions(false).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);

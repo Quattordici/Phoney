@@ -27,6 +27,23 @@ internal static class ConstraintCases
 
     private enum Side { Min, Max }
 
+    /// <summary>Picks the producer of a <see cref="ConstraintRequest"/>: the requested case, or one per object when none was requested.</summary>
+    /// <exception cref="InvalidOperationException">The member has nothing to break (or to sit on the edge of).</exception>
+    public static Produce Resolve(string owner, FakeMember member, ConstraintRequest request)
+    {
+        var cases = request.Boundary ? Boundary(member) : Invalid(member);
+        if (cases.Count == 0)
+        {
+            throw new InvalidOperationException(request.Boundary
+                ? $"{owner}.{member.Name} has no limits to sit on: add [Range], [StringLength], [MinLength] or [MaxLength] to it."
+                : $"{owner}.{member.Name} has no data annotations that can be broken: add [Range], [StringLength], [MinLength], [MaxLength], [Required], [RegularExpression], [EmailAddress], [AllowedValues] or [DeniedValues] to it.");
+        }
+
+        if (request.Index is { } index)
+            return cases[index].Produce;
+        return cases.Count == 1 ? cases[0].Produce : (scope, valid) => cases[scope.Faker.Random.Index(cases.Count)].Produce(scope, valid);
+    }
+
     /// <summary>The ways to violate the member's annotations, in a fixed order (required, length, range, format, values).</summary>
     public static IReadOnlyList<ConstraintCase> Invalid(FakeMember member)
     {
@@ -283,3 +300,6 @@ internal static class ConstraintCases
         return CollectionTypes.IsGeneratedCollection(type) ? Shape.Collection : Shape.Other;
     }
 }
+
+/// <summary>What <c>Invalid</c> and <c>Boundary</c> ask for: <paramref name="Index"/> picks one case of the member, <see langword="null"/> lets each object pick.</summary>
+internal sealed record ConstraintRequest(bool Boundary, int? Index);

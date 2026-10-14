@@ -238,8 +238,23 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         var method = call.TargetMethod;
         if (selector.Kind == SelectorKind.NotDirect)
         {
-            Report(context, selector, "The rule must select a member of the generated type directly, like x => x.Name. For nested members use .With(x => x.Address, Fake.For<Address>().With(...)).");
+            Report(context, selector, "The rule must select a member of the generated type (x => x.Name), of a nested object (x => x.Address.City) or of each element of a collection (x => x.Lines.Each().Sku). A member of a string, number or date has no members to give a rule to.");
             return;
+        }
+
+        if (selector.IsNested)
+        {
+            if (method.Name == "Unique")
+            {
+                Report(context, selector, $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.");
+                return;
+            }
+
+            if (IsDependentRule(method))
+            {
+                Report(context, selector, $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.");
+                return;
+            }
         }
 
         if (method.ContainingType.TypeArguments.FirstOrDefault() is not INamedTypeSymbol type || StartsFromCustomModel(call, symbols))
@@ -269,9 +284,9 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
         if (HasEarlierInChain(call, symbols, earlier =>
-                SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Name == selector.Name))
+                SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path))
         {
-            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, selector.Name));
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, selector.Path));
         }
     }
 

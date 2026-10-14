@@ -4,6 +4,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
+using Phoney.Generation;
 
 namespace Phoney.SourceGenerator;
 
@@ -13,19 +14,26 @@ internal enum SelectorKind
     /// <summary>Not a lambda in the source (a variable or a call), so nothing can be said about it.</summary>
     Unknown,
 
-    /// <summary>A lambda that doesn't select a member of its parameter directly (<c>x =&gt; x.Address.Street</c>).</summary>
+    /// <summary>A lambda that doesn't select a member path (<c>x =&gt; x.Name.ToUpper()</c>, or a member of a value like <c>x =&gt; x.Name.Length</c>).</summary>
     NotDirect,
 
-    /// <summary>A lambda selecting one member of its parameter, also through a cast (<c>x =&gt; (object)x.Age</c>).</summary>
+    /// <summary>
+    /// A lambda selecting a member of its parameter, also through a cast (<c>x =&gt; (object)x.Age</c>), or a path through nested objects
+    /// (<c>x =&gt; x.Address.City</c>, <c>x =&gt; x.Lines.Each().Sku</c>).
+    /// </summary>
     Member,
 }
 
 /// <summary>The member selector of a rule call, like <c>MemberName</c> in <c>Generator&lt;T&gt;</c> reads it at runtime.</summary>
 /// <param name="Kind">What the selector is.</param>
-/// <param name="Name">The selected member's name for <see cref="SelectorKind.Member"/>.</param>
+/// <param name="Name">For <see cref="SelectorKind.Member"/>: the name of the member of the generated type the path starts with.</param>
 /// <param name="Location">Where the selector argument is.</param>
-internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Location Location)
+/// <param name="Path">For <see cref="SelectorKind.Member"/>: all member names joined with dots (<c>Address.City</c>); the same as <paramref name="Name"/> for a direct member.</param>
+internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Location Location, string? Path = null)
 {
+    /// <summary>Whether the selector names a member of a nested object rather than of the generated type.</summary>
+    public bool IsNested => Path is not null && Path != Name;
+
     /// <summary>Reads the first argument of <paramref name="call"/> (<c>With</c>, <c>Ignore</c>, <c>Unique</c>, <c>WithOneOf</c>).</summary>
     public static RuleSelector Read(IInvocationOperation call)
     {
@@ -55,15 +63,50 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
             returned = cast.Operand;
 
         var parameter = lambda.Symbol.Parameters.FirstOrDefault();
-        return returned switch
+        var names = new List<string>();
+        var current = returned;
+        while (!(current is IParameterReferenceOperation reference && SymbolEqualityComparer.Default.Equals(reference.Parameter, parameter)))
         {
-            IPropertyReferenceOperation { Instance: IParameterReferenceOperation p } property when SymbolEqualityComparer.Default.Equals(p.Parameter, parameter) =>
-                new RuleSelector(SelectorKind.Member, property.Property.Name, location),
-            IFieldReferenceOperation { Instance: IParameterReferenceOperation p } field when SymbolEqualityComparer.Default.Equals(p.Parameter, parameter) =>
-                new RuleSelector(SelectorKind.Member, field.Field.Name, location),
-            _ => new RuleSelector(SelectorKind.NotDirect, null, location),
-        };
+            IOperation? owner;
+            switch (current)
+            {
+                case IConversionOperation conversion:
+                    current = conversion.Operand;
+                    continue;
+                case IPropertyReferenceOperation { Property.IsIndexer: true }:
+                    return new RuleSelector(SelectorKind.NotDirect, null, location); // x.Lines[0]: which element? Each() means all of them
+                case IPropertyReferenceOperation property:
+                    owner = property.Instance;
+                    if (!IsTransparent(property.Property, owner?.Type))
+                        names.Add(property.Property.Name);
+                    break;
+                case IFieldReferenceOperation field:
+                    owner = field.Instance;
+                    names.Add(field.Field.Name);
+                    break;
+                case IInvocationOperation { TargetMethod: { Name: "Each", ContainingType: { Name: "FakePath" } } } each when each.Arguments.Length == 1:
+                    current = each.Arguments[0].Value;
+                    continue;
+                default:
+                    return new RuleSelector(SelectorKind.NotDirect, null, location);
+            }
+
+            // A member of a string, number or date (x.Name.Length) is not something Phoney generates; only objects have members to give rules to.
+            if (owner is null || (!(owner is IParameterReferenceOperation) && owner.Type is { } ownerType && ModelBuilder.Category(ownerType) != TypeCategory.Other))
+                return new RuleSelector(SelectorKind.NotDirect, null, location);
+            current = owner;
+        }
+
+        if (names.Count == 0)
+            return new RuleSelector(SelectorKind.NotDirect, null, location);
+        names.Reverse();
+        return new RuleSelector(SelectorKind.Member, names[0], location, string.Join(".", names));
     }
+
+    /// <summary>The values of a dictionary and the value of a nullable are what <c>Each()</c> and the path continue through.</summary>
+    private static bool IsTransparent(IPropertySymbol property, ITypeSymbol? owner) =>
+        (property.Name == "Values" && owner is INamedTypeSymbol { Name: "Dictionary" or "IDictionary" or "IReadOnlyDictionary" })
+        || (property.Name == "Value" && owner is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T });
 }
 
 /// <summary>Helpers shared by the analyzers.</summary>

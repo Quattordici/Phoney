@@ -85,9 +85,11 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             var name = call.TargetMethod.Name;
             if (MemberRules.Contains(name))
             {
-                if (SelectedMember(call) is not { } member)
+                var selector = RuleSelector.Read(call);
+                if (selector.Kind != SelectorKind.Member)
                     return; // the member can't be read from the source, so don't guess
-                covered.Add(member);
+                if (!selector.IsNested)
+                    covered.Add(selector.Name!); // a rule for Billing.City is not a rule for Billing
             }
             else if (name == "WithConvention")
             {
@@ -130,10 +132,6 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         var argument = arguments.FirstOrDefault();
         return argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue || argument.Value.ConstantValue is { HasValue: true, Value: true };
     }
-
-    /// <summary>The member named by the first argument, <c>x =&gt; x.Name</c> (also through a cast), or <see langword="null"/>.</summary>
-    private static string? SelectedMember(IInvocationOperation call) =>
-        RuleSelector.Read(call) is { Kind: SelectorKind.Member, Name: { } name } ? name : null;
 
     /// <summary>Whether a <c>WithConvention&lt;TValue&gt;</c> applies to a member type (also its nullable form), like <c>CustomConvention.Matches</c>.</summary>
     private static bool Matches(ITypeSymbol conventionType, ITypeSymbol? memberType)

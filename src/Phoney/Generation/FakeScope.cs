@@ -84,13 +84,16 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
 public sealed class FakeScope
 {
     private readonly RuleSlot?[]? _slots;
+    private readonly PathNode?[]? _children;
+    private int _member = -1;
     private readonly FakeScope? _parent;
     private readonly Type _type;
     private Identity? _identity;
     private IdentityHints? _hints;
 
-    internal FakeScope(Faker faker, GenerationSettings settings, RuleSlot?[]? slots, long index, Type type, FakeScope? parent = null)
+    internal FakeScope(Faker faker, GenerationSettings settings, RuleSlot?[]? slots, long index, Type type, FakeScope? parent = null, PathNode?[]? children = null)
     {
+        _children = children;
         Faker = faker;
         Settings = settings;
         _slots = slots;
@@ -247,6 +250,7 @@ public sealed class FakeScope
     /// <summary>Returns the value for <paramref name="member"/>: from a generator rule if there is one, otherwise from <paramref name="fallback"/>.</summary>
     public TValue Get<TValue>(int member, Func<FakeScope, TValue> fallback)
     {
+        _member = member; // the nested objects created for this member (also elements of its collection) learn their position from it
         var slot = _slots?[member];
         if (slot is null)
             return fallback(this);
@@ -382,8 +386,16 @@ public sealed class FakeScope
         var model = ModelRegistry.Get(type);
         if (model is null)
             return null;
-        // Custom conventions reach nested members through slots, so both kinds of model apply them in FakeScope.Get.
-        return model.CreateObject(new FakeScope(Faker, Settings, Settings.Conventions?.SlotsFor(type, model), Faker.Random.Long(0, int.MaxValue), type, this));
+        // Custom conventions and path rules reach nested members through slots, so both kinds of model apply them in FakeScope.Get.
+        var slots = Settings.Conventions?.SlotsFor(type, model);
+        PathNode?[]? children = null;
+        if (_children is not null && (uint)_member < (uint)_children.Length && _children[_member] is { } position)
+        {
+            var bound = position.Bind(type, model, Settings.Conventions);
+            (slots, children) = (bound.Slots, bound.Children);
+        }
+
+        return model.CreateObject(new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children));
     }
 
     /// <summary>The generator registered for <paramref name="type"/> by this scope's generator or, failing that, by the nearest enclosing one.</summary>

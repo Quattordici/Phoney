@@ -19,6 +19,7 @@ public sealed class UsageAnalyzerTests
             public string Code { get; } = "x";
             public decimal Price { get; set; }
             public Address? Address { get; set; }
+            public List<Address> Addresses { get; set; } = new();
         }
 
         public record Person(string FirstName, string LastName)
@@ -163,17 +164,44 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
-    public async Task Selector_that_is_not_a_direct_member_is_reported(CancellationToken cancellationToken)
+    public async Task Selector_that_is_not_a_member_path_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """
-            public static object A() => Fake.For<Product>().With(p => p.Address!.Street, "x");
-            public static object B() => Fake.For<Product>().With(p => p.Name.Length, 3);
-            public static object C() => Fake.For<Product>().Ignore(p => p.Name.ToUpper());
+            public static object A() => Fake.For<Product>().With(p => p.Name.Length, 3);
+            public static object B() => Fake.For<Product>().Ignore(p => p.Name.ToUpper());
+            public static object C() => Fake.For<Product>().With(p => p.Addresses[0].Street, "x");
+            public static object D() => Fake.For<Product>().With(p => p.Id.ToString(), "x");
             """, cancellationToken);
 
-        diagnostics.Count.ShouldBe(3);
-        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("directly"));
-        diagnostics[0].GetMessage().ShouldContain("Fake.For<");
+        diagnostics.Count.ShouldBe(4);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("nested object"));
+        diagnostics[0].GetMessage().ShouldContain("Each()");
+    }
+
+    [Test]
+    public async Task Paths_through_nested_objects_and_collections_are_accepted(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().With(p => p.Address!.Street, "x").Ignore(p => p.Address!.Street);
+            public static object B() => Fake.For<Product>().With(p => p.Addresses.Each().Street, "x").WithOneOf(p => p.Addresses.Each().Street, new[] { "a" });
+            public static object C() => Fake.For<Product>().Invalid(p => p.Address!.Street).Boundary(p => p.Addresses.Each().Street);
+            public static object D() => Fake.For<Product>().With(p => p.Address!, Fake.For<Address>());
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Unique_and_object_dependent_rules_cannot_target_nested_members(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Unique(p => p.Address!.Street);
+            public static object B() => Fake.For<Product>().With(p => p.Address!.Street, (f, p) => p.Name);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("directly");
+        diagnostics[1].GetMessage().ShouldContain("depend on the object");
     }
 
     [Test]
@@ -286,6 +314,19 @@ public sealed class UsageAnalyzerTests
             """, cancellationToken);
 
         diagnostics.ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Rules_for_the_same_nested_path_replace_each_other_but_other_paths_do_not(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().With(p => p.Address!.Street, "a").With(p => p.Address!.Street, "b");
+            public static object B() => Fake.For<Product>().With(p => p.Addresses.Each().Street, "a").Ignore(p => p.Addresses.Each().Street);
+            public static object C() => Fake.For<Product>().With(p => p.Address!.Street, "a").With(p => p.Address!, Fake.For<Address>()).With(p => p.Addresses.Each().Street, "b");
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Address.Street'") || d.GetMessage().Contains("'Addresses.Street'"));
     }
 
     [Test]

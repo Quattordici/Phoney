@@ -81,7 +81,16 @@ foreach (var c in Fake.For<Registration>().Seed(1).InvalidCases())
 foreach (var c in Fake.For<Registration>().Seed(1).BoundaryCases())
     Console.WriteLine($"boundary {c}  =>  {c.Value.Guests} guests, \"{c.Value.Name}\"");
 
-// 7c. Random but replayable --------------------------------------------------------------------
+// 7c. Rules for members of nested objects ------------------------------------------------------
+Console.WriteLine("\n== Rules for nested members");
+var shoppers = Fake.For<Customer>().Seed(2)
+    .With(c => c.Address.City, "Uppsala")                  // this address only
+    .With(c => c.Orders.Each().Status, OrderStatus.Shipped) // every order of the customer
+    .Generate(2);
+foreach (var shopper in shoppers)
+    Console.WriteLine($"{shopper.FirstName} lives in {shopper.Address.City}; orders: {string.Join(", ", shopper.Orders.Select(o => o.Status))}");
+
+// 7d. Random but replayable --------------------------------------------------------------------
 Console.WriteLine("\n== Replayable seeds");
 var seed = FakeSeed.Pick();                      // PHONEY_SEED if set, else a new random seed
 using (Fake.Seeded(seed))
