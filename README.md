@@ -216,11 +216,26 @@ var customers = Fake.For<Customer>()
     .Generate(100);                                                // also: Generate(), Stream(), GenerateParallel(n)
 ```
 
-- **Supported shapes**: classes with a parameterless constructor, records and classes with constructor parameters (the constructor with most parameters is used), `init` and `required` members, public fields, structs, nested objects, interfaces and abstract classes (through [subtypes](#interfaces-and-subtypes)), `T[]`, `List<T>` and its interfaces, `HashSet<T>`, `Dictionary<K,V>`, enums, nullable types, `byte[]`, and `Guid`, `DateTime(Offset)`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri` plus every numeric type.
+- **Supported shapes**: classes with a parameterless constructor, records and classes with constructor parameters (the constructor with most parameters is used), `init` and `required` members, public fields, structs, nested objects, interfaces and abstract classes (through [subtypes](#interfaces-and-subtypes)), `T[]`, `List<T>` and its interfaces, `HashSet<T>`, `Dictionary<K,V>` and [more collection types](#collection-types), enums, nullable types, `byte[]`, and `Guid`, `DateTime(Offset)`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri` plus every numeric type.
 - **Cycles** (`Customer → Order → Customer`) stop with `null`. `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members in declaration order, then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data. The included analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`, so a new member breaks the build instead of the test run. It can't see app-wide `Fake.Conventions` (registered at runtime): cover such members with `.Ignore(...)`/`.With(...)` or suppress the warning.
+
+### Collection types
+
+Besides arrays, `List<T>`, `HashSet<T>`, `Dictionary<K,V>` and their interfaces, members of these types are generated and filled:
+
+| Built like a list | Built like a set | Built like a dictionary |
+|---|---|---|
+| `ImmutableArray<T>`, `ImmutableList<T>`, `IImmutableList<T>` | `ImmutableHashSet<T>`, `IImmutableSet<T>`, `ImmutableSortedSet<T>` | `ImmutableDictionary<K,V>`, `IImmutableDictionary<K,V>`, `ImmutableSortedDictionary<K,V>` |
+| `ReadOnlyCollection<T>`, `Collection<T>`, `ObservableCollection<T>` | `SortedSet<T>` | `SortedDictionary<K,V>`, `SortedList<K,V>` |
+| `Queue<T>`, `Stack<T>`, `LinkedList<T>` | `FrozenSet<T>` | `FrozenDictionary<K,V>` |
+| `ConcurrentBag<T>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>` | | `ConcurrentDictionary<K,V>` |
+
+Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` counterpart (so a seed gives the same elements whichever type holds them) and converted. Sizes, `[MinLength]`/`[MaxLength]`, `CollectionSize`, `Invalid`/`Boundary`, `Populate` (a default `ImmutableArray<T>` counts as unset), `Each()` paths and the source generator all work the same. Collections that are only readable (`public List<T> Items { get; } = []`) are not filled.
+
+For code that works from `Type` values, `Fake.One(type)` and `Fake.Many(type, count)` create objects of a type known only at runtime (reflection, like `Fake.One<T>()`).
 
 ### Rules for nested members
 

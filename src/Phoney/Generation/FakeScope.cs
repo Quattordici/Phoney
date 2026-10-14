@@ -175,14 +175,21 @@ public sealed class FakeScope
 
     private static bool IsEmpty(IEnumerable sequence)
     {
-        var enumerator = sequence.GetEnumerator();
         try
         {
-            return !enumerator.MoveNext();
+            var enumerator = sequence.GetEnumerator();
+            try
+            {
+                return !enumerator.MoveNext();
+            }
+            finally
+            {
+                (enumerator as IDisposable)?.Dispose();
+            }
         }
-        finally
+        catch (InvalidOperationException)
         {
-            (enumerator as IDisposable)?.Dispose();
+            return true; // a default ImmutableArray<T> is not initialized and refuses to be enumerated: it holds nothing
         }
     }
 
@@ -303,6 +310,19 @@ public sealed class FakeScope
             list.Add(element(this));
         return list;
     }
+
+    /// <summary>Creates a collection of <typeparamref name="TCollection"/> from the <see cref="List{TElement}"/> that <see cref="List{TElement}"/> would build (immutable lists, queues, stacks…).</summary>
+    public TCollection ListAs<TCollection, TElement>(Func<List<TElement>, TCollection> convert, Func<FakeScope, TElement> element, MemberConstraints? constraints = null) =>
+        convert(List(element, constraints));
+
+    /// <summary>Creates a collection of <typeparamref name="TCollection"/> from the set that <see cref="Set{TElement}"/> would build (immutable and frozen sets, sorted sets).</summary>
+    public TCollection SetAs<TCollection, TElement>(Func<HashSet<TElement>, TCollection> convert, Func<FakeScope, TElement> element, MemberConstraints? constraints = null) =>
+        convert(Set(element, constraints));
+
+    /// <summary>Creates a collection of <typeparamref name="TCollection"/> from the dictionary that <see cref="Dictionary{TKey, TValue}"/> would build (immutable, frozen, sorted and concurrent dictionaries).</summary>
+    public TCollection DictionaryAs<TCollection, TKey, TValue>(Func<Dictionary<TKey, TValue>, TCollection> convert, Func<FakeScope, TKey> key, Func<FakeScope, TValue> value, MemberConstraints? constraints = null)
+        where TKey : notnull =>
+        convert(Dictionary(key, value, constraints));
 
     /// <summary>Creates an array of <see cref="CollectionCount"/> elements.</summary>
     public TElement[] Array<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)

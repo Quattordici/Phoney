@@ -250,6 +250,41 @@ internal sealed class ModelBuilder
         };
     }
 
+    private const string Immutable = "global::System.Collections.Immutable.";
+    private const string Frozen = "global::System.Collections.Frozen.";
+
+    /// <summary>
+    /// The collections that are built like a list ('L'), set ('S') or dictionary ('D') and converted: how to make one from the built collection <c>{p}</c>.
+    /// Mirrors <c>CollectionTypes</c> and <c>CollectionConverters</c> in the runtime; <c>{type}</c> is the member's type, <c>{T}</c>/<c>{K}</c> and <c>{V}</c> its type arguments.
+    /// </summary>
+    private static readonly Dictionary<string, (char Kind, string Convert)> OtherCollections = new()
+    {
+        ["System.Collections.Immutable.ImmutableArray<T>"] = ('L', Immutable + "ImmutableArray.CreateRange<{T}>({p})"),
+        ["System.Collections.Immutable.ImmutableList<T>"] = ('L', Immutable + "ImmutableList.CreateRange<{T}>({p})"),
+        ["System.Collections.Immutable.IImmutableList<T>"] = ('L', Immutable + "ImmutableList.CreateRange<{T}>({p})"),
+        ["System.Collections.ObjectModel.ReadOnlyCollection<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.ObjectModel.Collection<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.ObjectModel.ObservableCollection<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Generic.Queue<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Generic.Stack<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Generic.LinkedList<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Concurrent.ConcurrentBag<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Concurrent.ConcurrentQueue<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Concurrent.ConcurrentStack<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Immutable.ImmutableHashSet<T>"] = ('S', Immutable + "ImmutableHashSet.CreateRange<{T}>({p})"),
+        ["System.Collections.Immutable.IImmutableSet<T>"] = ('S', Immutable + "ImmutableHashSet.CreateRange<{T}>({p})"),
+        ["System.Collections.Immutable.ImmutableSortedSet<T>"] = ('S', Immutable + "ImmutableSortedSet.CreateRange<{T}>({p})"),
+        ["System.Collections.Generic.SortedSet<T>"] = ('S', "new {type}({p})"),
+        ["System.Collections.Frozen.FrozenSet<T>"] = ('S', Frozen + "FrozenSet.ToFrozenSet<{T}>({p})"),
+        ["System.Collections.Immutable.ImmutableDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableDictionary.CreateRange<{K}, {V}>({p})"),
+        ["System.Collections.Immutable.IImmutableDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableDictionary.CreateRange<{K}, {V}>({p})"),
+        ["System.Collections.Immutable.ImmutableSortedDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableSortedDictionary.CreateRange<{K}, {V}>({p})"),
+        ["System.Collections.Generic.SortedDictionary<TKey, TValue>"] = ('D', "new {type}({p})"),
+        ["System.Collections.Generic.SortedList<TKey, TValue>"] = ('D', "new {type}({p})"),
+        ["System.Collections.Concurrent.ConcurrentDictionary<TKey, TValue>"] = ('D', "new {type}({p})"),
+        ["System.Collections.Frozen.FrozenDictionary<TKey, TValue>"] = ('D', Frozen + "FrozenDictionary.ToFrozenDictionary<{K}, {V}>({p})"),
+    };
+
     /// <summary>The value expression for a member of <paramref name="type"/>; mirrors <c>ReflectionTypeModel.Producer</c>.</summary>
     private string Value(ITypeSymbol type, string memberName, ConventionKind kind, bool nullableReference, int depth, string? constraints = null, bool required = false)
     {
@@ -315,6 +350,23 @@ internal sealed class ModelBuilder
         {
             var definition = generic.OriginalDefinition.ToDisplayString();
             var args = generic.TypeArguments;
+            // Other collections are built like a list, set or dictionary and converted, as the reflection model does (see CollectionTypes).
+            if (OtherCollections.TryGetValue(definition, out var other))
+            {
+                var convert = "l" + depth;
+                var body = other.Convert.Replace("{type}", fq).Replace("{T}", Fq(args[0])).Replace("{K}", Fq(args[0])).Replace("{V}", args.Length > 1 ? Fq(args[1]) : "").Replace("{p}", convert);
+                switch (other.Kind)
+                {
+                    case 'L':
+                        return $"{s}.ListAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0])}{extra})";
+                    case 'S':
+                        return $"{s}.SetAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0])}{extra})";
+                    default:
+                        var otherKey = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
+                        return $"{s}.DictionaryAs<{fq}, {Fq(args[0])}, {Fq(args[1])}>(static {convert} => {body}, static {next} => {otherKey}, static {next} => {Element(args[1])}{extra})";
+                }
+            }
+
             switch (definition)
             {
                 case "System.Collections.Generic.List<T>" or "System.Collections.Generic.IList<T>" or "System.Collections.Generic.ICollection<T>"

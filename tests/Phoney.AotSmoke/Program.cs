@@ -106,6 +106,9 @@ var numbered = Fakes.Person.Seed(10).Sequence(p => p.FirstName, i => "P" + i).Cy
 if (!numbered.Select(p => p.FirstName).SequenceEqual(["P0", "P1", "P2", "P3", "P4", "P5"]) || numbered[3].Status != Status.Suspended)
     throw new InvalidOperationException("Sequence or Cycle was not applied");
 
+if (people.Any(p => p.Aliases.IsDefault || p.Aliases.Length == 0 || p.Visits.Count == 0))
+    throw new InvalidOperationException("immutable or frozen collections were not generated");
+
 // Rules for every member of a type, through generated models, no reflection.
 if (Fakes.Person.Seed(10).WithType(Status.Suspended).Generate(10).Any(p => p.Status != Status.Suspended))
     throw new InvalidOperationException("WithType was not applied");
@@ -159,6 +162,8 @@ public sealed class Person
     public IInsurance Insurance { get; set; } = null!;
     public IContact Contact { get; set; } = null!;
     public NodaTime.Instant CreatedAt { get; set; }
+    public System.Collections.Immutable.ImmutableArray<string> Aliases { get; set; }
+    public System.Collections.Frozen.FrozenDictionary<string, int> Visits { get; set; } = null!;
 }
 
 [JsonDerivedType(typeof(Car))]

@@ -214,30 +214,32 @@ internal sealed class ReflectionTypeModel : IFakeModel
         {
             var singular = memberName.EndsWith('s') ? memberName[..^1] : memberName;
             var elementProducer = Producer(element, singular, ConventionRules.Match(singular, FakeMember.ConventionCategory(element), ""), false);
+            // Built like List<T>, HashSet<T> or Dictionary<TKey, TValue> whatever the member's type is, then converted to it, as generated models do.
+            Func<FakeScope, object?> producer;
+            Type built;
             if (key is not null)
             {
                 var keyProducer = Producer(key, singular + "Key", ConventionKind.None, false);
-                return ReflectionCollections.DictionaryOf(key, element, keyProducer, elementProducer, constraints);
+                producer = ReflectionCollections.DictionaryOf(key, element, keyProducer, elementProducer, constraints);
+                built = typeof(Dictionary<,>).MakeGenericType(key, element);
             }
-
-            if (type.IsArray)
-                return ReflectionCollections.Of(element).Array(elementProducer, constraints);
-            if (IsSet(type))
-                return ReflectionCollections.Of(element).Set(elementProducer, constraints);
-            if (type.IsClass && !type.IsAbstract && typeof(IList).IsAssignableFrom(type) && type != typeof(List<>).MakeGenericType(element))
+            else if (type.IsArray)
             {
-                // A custom list class: created as itself.
-                return s =>
-                {
-                    var list = (IList)Activator.CreateInstance(type)!;
-                    var count = s.CollectionCount(constraints);
-                    for (var i = 0; i < count; i++)
-                        list.Add(elementProducer(s));
-                    return list;
-                };
+                return ReflectionCollections.Of(element).Array(elementProducer, constraints);
+            }
+            else if (CollectionTypes.KindOf(type) == CollectionKind.Set)
+            {
+                producer = ReflectionCollections.Of(element).Set(elementProducer, constraints);
+                built = typeof(HashSet<>).MakeGenericType(element);
+            }
+            else
+            {
+                producer = ReflectionCollections.Of(element).List(elementProducer, constraints);
+                built = typeof(List<>).MakeGenericType(element);
             }
 
-            return ReflectionCollections.Of(element).List(elementProducer, constraints);
+            var convert = CollectionConverters.Create(type, built);
+            return convert is null ? producer : s => producer(s) is { } value ? convert(value) : null;
         }
 
         // Framework types are not populated recursively, nor are concrete generic types; interfaces and abstract classes
@@ -247,10 +249,6 @@ internal sealed class ReflectionTypeModel : IFakeModel
 
         return s => s.NestedObject(type);
     }
-
-    /// <summary>Whether the type is <c>HashSet&lt;T&gt;</c>, <c>ISet&lt;T&gt;</c> or <c>IReadOnlySet&lt;T&gt;</c>.</summary>
-    private static bool IsSet(Type type) =>
-        type.IsGenericType && type.GetGenericTypeDefinition() is var d && (d == typeof(HashSet<>) || d == typeof(ISet<>) || d == typeof(IReadOnlySet<>));
 
     /// <summary>Public settable/init properties and non-readonly fields, base class members first, in declaration order.</summary>
     private static List<MemberInfo> WritableMembers(Type type)

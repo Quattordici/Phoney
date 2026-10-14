@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
 using Phoney.Generation;
 
@@ -29,6 +30,45 @@ public static partial class Fake
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
     public static List<T> Many<T>(int count) => For<T>().Generate(count);
+
+    /// <summary>
+    /// Creates one object of a type that is only known at runtime, like <see cref="One{T}"/>: <c>Fake.One(typeof(Customer))</c>. Useful for tools, test helpers
+    /// and code that works from <see cref="Type"/> values. Prefer the generic overload when the type is known at compile time.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is an open generic type.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static object One(Type type) => Invoke(nameof(One), type, null)!;
+
+    /// <summary>Creates <paramref name="count"/> objects of a type that is only known at runtime, like <see cref="Many{T}"/>.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is an open generic type.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static List<object> Many(Type type, int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        var list = (System.Collections.IList)Invoke(nameof(Many), type, [count])!;
+        var result = new List<object>(list.Count);
+        foreach (var item in list)
+            result.Add(item!);
+        return result;
+    }
+
+    /// <summary>Calls the generic method <paramref name="name"/> (<c>One&lt;T&gt;</c> or <c>Many&lt;T&gt;</c>) with <paramref name="type"/>, without wrapping its exceptions.</summary>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    private static object? Invoke(string name, Type type, object?[]? arguments)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        if (type.ContainsGenericParameters)
+            throw new ArgumentException($"{type.Name} is an open generic type: pass a closed one such as List<string>.", nameof(type));
+        var method = typeof(Fake).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(m => m.Name == name && m.IsGenericMethodDefinition);
+        return method.MakeGenericMethod(type).Invoke(null, BindingFlags.DoNotWrapExceptions, null, arguments, null);
+    }
 
     /// <summary>
     /// Fills in the members of <paramref name="instance"/> that are still unset (or all of them, see <paramref name="mode"/>),
