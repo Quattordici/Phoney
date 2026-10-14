@@ -878,7 +878,20 @@ dotnet run -c Release --project benchmarks/Phoney.Benchmarks -- --filter '*'
 
 ### Compared with other libraries
 
-The same scenarios run against the best-known .NET libraries: [Bogus](https://github.com/bchavez/Bogus) 35.6.5, [AutoBogus](https://github.com/nickdodd79/AutoBogus) 2.13.1, [AutoFixture](https://github.com/AutoFixture/AutoFixture) 4.18.1, [NBuilder](https://github.com/nbuilder/nbuilder) 6.1.0 and [Faker.Net](https://github.com/slowmonkey/Faker.NET) 2.0.163. Every library is seeded, and each cell is the mean time per operation and the memory allocated per operation (BenchmarkDotNet 0.15.8, 15 iterations after 5 warm-up iterations, .NET 10.0.13, Intel Xeon 2.8 GHz with 4 cores, Linux). The fastest time in each row is bold, and "–" means the library has no such feature.
+The same scenarios run against the best-known .NET libraries, at the versions below (release dates are the dates the packages were published on nuget.org):
+
+| Library | Version | Released |
+|---|---|---|
+| Phoney | 1.0.0 | not released yet (this repository) |
+| [Bogus](https://github.com/bchavez/Bogus) | 35.6.5 | 2025-10-26 |
+| [AutoBogus](https://github.com/nickdodd79/AutoBogus) | 2.13.1 | 2021-07-17 |
+| [AutoFixture](https://github.com/AutoFixture/AutoFixture) | 4.18.1 | 2023-11-28 |
+| [NBuilder](https://github.com/nbuilder/nbuilder) | 6.1.0 | 2019-12-17 |
+| [Faker.Net](https://github.com/slowmonkey/Faker.NET) | 2.0.163 | 2024-01-22 |
+| [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet) | 0.15.8 | 2025-11-30 |
+| .NET runtime | 10.0.13 | 2026-10-13 |
+
+Every library is seeded, and each cell is the mean time per operation and the memory allocated per operation (BenchmarkDotNet 0.15.8, 15 iterations after 5 warm-up iterations, .NET 10.0.13, Intel Xeon 2.8 GHz with 4 cores, Linux). The fastest time in each row is bold, and "–" means the library has no such feature.
 
 | Scenario | Phoney | Phoney (reflection) | Bogus | AutoBogus | AutoFixture | NBuilder | Faker.Net |
 |---|---:|---:|---:|---:|---:|---:|---:|
