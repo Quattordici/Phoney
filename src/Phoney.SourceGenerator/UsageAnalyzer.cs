@@ -26,10 +26,10 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
     private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "Use", "Subtype" };
 
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary" };
+    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
-    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Invalid", "Boundary" };
+    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
@@ -247,6 +247,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             if (method.Name == "Unique")
             {
                 Report(context, selector, $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.");
+                return;
+            }
+
+            if (method.Name is "Sequence" or "Cycle")
+            {
+                Report(context, selector, $"{method.Name} must select a member of the generated type directly, like x => x.Name: it numbers the generated objects, so it can't give a value to '{selector.Path}' in a nested object.");
                 return;
             }
 

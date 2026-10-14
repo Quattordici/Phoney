@@ -19,6 +19,7 @@
 - **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
 - **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
 - **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
+- **Numbering**: `.Sequence(x => x.Code, i => $"T{i + 1:D4}")` and `.Cycle(x => x.Queue, ["a", "b"])` give members values by the object's position, the same however you generate.
 - **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `Use` or `WithConvention` never applied to anything.
 - **Type-wide rules**: `.Use(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
@@ -337,6 +338,21 @@ var invoices = Fake.For<Invoice>().Seed(1)
 - **Typical causes**: the object never exists (always null, an empty collection, `MaxDepth`, a cycle, another subtype), a rule for the enclosing member or a `Use` generator creates or skips it, `Populate` keeps an existing object (path rules only shape objects that are created), or the graph has no such member or type.
 - **A nested generator can't verify**: it has no `Generate` call of its own, so passing a verifying generator to `With`, `Use` or `Fake.Generators.Add` throws an `ArgumentException`; call `VerifyRules(false)` on it and verify the generator you call `Generate` on.
 - Works the same with reflection and with the source generator. Turn it off again with `VerifyRules(false)`. The analyzers' rules about discarded results and replaced rules (**PHONEY005**, **PHONEY008**) catch the mistakes that are visible in the code; this catches the ones that depend on the data.
+
+### Numbering and cycling
+
+`Sequence` gives a member a value that depends on the object's position in the generator's sequence, and `Cycle` repeats a list of values in turn:
+
+```csharp
+var tickets = Fake.For<Ticket>().Seed(1)
+    .Sequence(t => t.Code, i => $"T{i + 1:D4}")                       // T0001, T0002, T0003…
+    .Cycle(t => t.Queue, ["north", "south", "east"])                  // north, south, east, north…
+    .Generate(100);
+```
+
+- **Position, not luck.** The first object a generator creates is 0 and the numbers continue over calls (`Generate(10)` then `Generate(10)` gives 0–9, then 10–19). Item *n* gets the value for *n* whatever the seed, the batch size, `GenerateParallel` or `Stream()`. An object that `Where` generates again keeps its position, so the numbers stay contiguous.
+- **Members of the generated object only.** A rule for a member of a nested object (`x.Billing.Code`) is rejected, and so is giving a generator with `Sequence`/`Cycle` rules to `With`, `Use` or `Fake.Generators.Add`: it counts the objects it generates itself, and every nested object would be number 0. The analyzer reports the first (**PHONEY007**).
+- A later rule for the member replaces it, and the other way round (**PHONEY008** reports that in one chain). `Populate` numbers the objects it fills in the same way and keeps members that are set. For the object's own `Id` the [convention](#conventions) already counts 1, 2, 3…
 
 ### Filling in existing objects
 

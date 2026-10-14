@@ -89,7 +89,7 @@ public sealed class Generator<T> : INestedGenerator
         where TGenerated : TValue
     {
         ArgumentNullException.ThrowIfNull(generator);
-        NestedGenerators.RejectVerification(generator, nameof(generator));
+        NestedGenerators.RejectIfNotNestable(generator, nameof(generator));
         return AddRule(member, new Rule(RuleKind.Generator, generator));
     }
 
@@ -155,7 +155,7 @@ public sealed class Generator<T> : INestedGenerator
         ArgumentNullException.ThrowIfNull(generator);
         var type = typeof(TBase);
         NestedGenerators.ValidateType(type, nameof(generator));
-        NestedGenerators.RejectVerification(generator, nameof(generator));
+        NestedGenerators.RejectIfNotNestable(generator, nameof(generator));
 
         return Derive(_config with { TypeGenerators = _config.TypeGenerators.SetItem(type, generator) });
     }
@@ -337,6 +337,41 @@ public sealed class Generator<T> : INestedGenerator
     {
         ArgumentOutOfRangeException.ThrowIfNegative(depth);
         return Derive(_config with { Settings = _config.Settings with { MaxDepth = depth } });
+    }
+
+    /// <summary>
+    /// Gives a member a value that depends on the object's position in the generator's sequence (0 for the first object it generates, continuing over calls), e.g.
+    /// <c>.Sequence(x =&gt; x.Code, i =&gt; $"C{i + 1:D4}")</c> gives C0001, C0002… Item <em>n</em> always gets the value for <em>n</em>, whatever the seed, the batch size or
+    /// <see cref="GenerateParallel"/>, and an object that <see cref="Where(Func{T, bool}, int)"/> generates again keeps its position.
+    /// </summary>
+    /// <remarks>
+    /// For members of the generated object only. The rule is replaced by a later rule for the member (and replaces an earlier one). A generator with
+    /// <c>Sequence</c> or <c>Cycle</c> rules can't be given to <c>With</c>, <c>Use</c> or <c>Fake.Generators.Add</c>: it counts the objects it generates itself, and every
+    /// nested object would be number 0. <see cref="Populate(T, PopulateMode)"/> numbers the objects it fills in the same way and keeps members that are set.
+    /// </remarks>
+    /// <param name="member">The member to number: <c>x =&gt; x.Code</c>.</param>
+    /// <param name="factory">The value for the object at a zero-based position.</param>
+    public Generator<T> Sequence<TValue>(Expression<Func<T, TValue>> member, Func<long, TValue> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        MemberName(member); // a position belongs to the generated object, not to a member of a nested one
+        return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)(scope => factory(scope.Index)), Positional: true));
+    }
+
+    /// <summary>
+    /// Gives a member the <paramref name="values"/> in turn, by the object's position: the first object gets the first value, the second the second, and after the last
+    /// the first again. See <see cref="Sequence{TValue}"/> for what that means for seeds, batches and nested generators.
+    /// </summary>
+    /// <param name="member">The member to give the values to: <c>x =&gt; x.Status</c>.</param>
+    /// <param name="values">The values, in order (copied when the method is called).</param>
+    /// <exception cref="ArgumentException"><paramref name="values"/> is empty.</exception>
+    public Generator<T> Cycle<TValue>(Expression<Func<T, TValue>> member, IReadOnlyList<TValue> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Count == 0)
+            throw new ArgumentException("Provide at least one value.", nameof(values));
+        var copy = values.ToArray();
+        return Sequence(member, i => copy[(int)(i % copy.Length)]);
     }
 
     /// <summary>
@@ -539,7 +574,12 @@ public sealed class Generator<T> : INestedGenerator
     Type INestedGenerator.GeneratedType => typeof(T);
 
     /// <inheritdoc />
-    bool INestedGenerator.VerifiesRules => _config.Verify;
+    string? INestedGenerator.CannotBeNested =>
+        _config.Verify
+            ? "verifies its rules (VerifyRules), but a nested generator is never checked: it has no Generate call of its own. Call VerifyRules(false) on it and verify the generator you call Generate on."
+            : _config.Rules.Values.Any(r => r.Positional)
+                ? "has Sequence or Cycle rules, which count the objects it generates itself, and as a nested generator every object would be number 0. Put the rule on the generator you call Generate on, or use With(x => x.Member, f => …) here."
+                : null;
 
     /// <inheritdoc />
     object? INestedGenerator.CreateNested(FakeScope parent) =>
@@ -883,8 +923,8 @@ public sealed class Generator<T> : INestedGenerator
     /// <summary>Rules bound to member indices, plus rules that run after creation.</summary>
     private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage);
 
-    /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added.</summary>
-    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0);
+    /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
+    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false);
 
     /// <summary>Mutable per-instance state; derived generators start fresh.</summary>
     private sealed class State

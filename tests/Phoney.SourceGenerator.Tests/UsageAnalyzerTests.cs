@@ -219,6 +219,20 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task Sequence_and_Cycle_target_members_of_the_generated_object_that_can_be_generated(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Sequence(p => p.Code, i => "x");
+            public static object B() => Fake.For<Product>().Cycle(p => p.Address!.Street, new[] { "a" });
+            public static object C() => Fake.For<Product>().Sequence(p => p.Name, i => "n" + i).Cycle(p => p.Id, new[] { 1, 2 });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("'Product.Code'");
+        diagnostics[1].GetMessage().ShouldContain("directly");
+    }
+
+    [Test]
     public async Task Dependent_rule_on_a_constructor_parameter_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """
@@ -246,6 +260,19 @@ public sealed class UsageAnalyzerTests
     }
 
     // PHONEY008: rules that replace each other
+
+    [Test]
+    public async Task Sequence_and_Cycle_take_the_rule_slot_of_their_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Sequence(p => p.Name, i => "a").With(p => p.Name, "b");
+            public static object B() => Fake.For<Product>().Cycle(p => p.Id, new[] { 1 }).Cycle(p => p.Id, new[] { 2 });
+            public static object C() => Fake.For<Product>().Sequence(p => p.Name, i => "a").Cycle(p => p.Id, new[] { 1 });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
+    }
 
     [Test]
     public async Task Rule_replaced_in_the_same_chain_is_reported(CancellationToken cancellationToken)
