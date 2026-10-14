@@ -356,6 +356,21 @@ public sealed class FakeScope
         return array;
     }
 
+    /// <summary>Creates a two-dimensional array of <see cref="CollectionCount"/> rows and as many columns, filled row by row.</summary>
+    public TElement[,] Array2<TElement>(Func<FakeScope, TElement> element)
+    {
+        var rows = CollectionCount();
+        var columns = CollectionCount();
+        var array = new TElement[rows, columns];
+        for (var row = 0; row < rows; row++)
+        {
+            for (var column = 0; column < columns; column++)
+                array[row, column] = element(this);
+        }
+
+        return array;
+    }
+
     /// <summary>Creates a set of up to <see cref="CollectionCount"/> distinct elements.</summary>
     public HashSet<TElement> Set<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)
     {

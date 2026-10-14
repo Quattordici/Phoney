@@ -12,13 +12,20 @@ namespace Phoney.Generation;
 [RequiresDynamicCode("Populates types with reflection.")]
 internal sealed class ReflectionModel<T> : FakeModel<T>
 {
-    private readonly ReflectionTypeModel _inner = ReflectionTypeModel.Get(typeof(T));
+    // A value type of its own (a number, a string, an address, a tuple…) has no members to populate: it is produced the way a member of that type is.
+    private readonly Func<FakeScope, object?>? _value = ReflectionTypeModel.RootValue(typeof(T));
+    private readonly ReflectionTypeModel _inner;
+
+    public ReflectionModel()
+    {
+        _inner = _value is null ? ReflectionTypeModel.Get(typeof(T)) : null!;
+    }
 
     /// <inheritdoc />
-    public override IReadOnlyList<FakeMember> Members => _inner.Members;
+    public override IReadOnlyList<FakeMember> Members => _value is null ? _inner.Members : [];
 
     /// <inheritdoc />
-    public override T Create(FakeScope scope) => (T)_inner.CreateObject(scope)!;
+    public override T Create(FakeScope scope) => (T)(_value is null ? _inner.CreateObject(scope) : _value(scope))!;
 
     /// <inheritdoc />
     public override T Set(T instance, int member, object? value) => (T)_inner.SetObject(instance!, member, value);
@@ -201,7 +208,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
         type = Nullable.GetUnderlyingType(type) ?? type;
         if (FakeMember.ConventionCategory(type) != TypeCategory.Other || type == typeof(byte[]) || CollectionTypes.ElementType(type, out _) is not null)
             return false;
-        return !IsFrameworkType(type) && (!type.IsGenericType || IsPolymorphic(type));
+        return !IsFrameworkType(type);
     }
 
     /// <summary>Framework types (System.*, Microsoft.*) are not populated recursively; their constructors expect real data.</summary>
@@ -211,8 +218,55 @@ internal sealed class ReflectionTypeModel : IFakeModel
         return ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) || ns.StartsWith("Microsoft.", StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The parts of a <see cref="ValueTuple"/>, <see cref="Tuple"/> (up to seven) or <see cref="KeyValuePair{TKey, TValue}"/>, the names their conventions are matched with
+    /// (<c>Item1</c>… or <c>Key</c>, <c>Value</c>) and the constructor taking them; <see langword="null"/> for other types.
+    /// </summary>
+    private static (Type[] Types, string[] Names, ConstructorInfo Constructor)? CompositeParts(Type type)
+    {
+        if (!type.IsGenericType)
+            return null;
+        var definition = type.GetGenericTypeDefinition();
+        var types = type.GetGenericArguments();
+        string[] names;
+        if (definition == typeof(KeyValuePair<,>))
+        {
+            names = ["Key", "Value"];
+        }
+        else if (types.Length <= 7 && definition.Namespace == "System" && definition.Name.StartsWith(definition.IsValueType ? "ValueTuple`" : "Tuple`", StringComparison.Ordinal))
+        {
+            names = new string[types.Length];
+            for (var i = 0; i < names.Length; i++)
+                names[i] = "Item" + (i + 1);
+        }
+        else
+        {
+            return null;
+        }
+
+        return type.GetConstructor(types) is { } constructor ? (types, names, constructor) : null;
+    }
+
+    /// <summary>A delegate calling a constructor with its arguments in an array.</summary>
+    private static Func<object?[], object> CompileConstructor(ConstructorInfo constructor)
+    {
+        var arguments = Expression.Parameter(typeof(object?[]), "arguments");
+        var parameters = constructor.GetParameters();
+        var call = Expression.New(constructor, parameters.Select((p, i) => (Expression)Expression.Convert(Expression.ArrayIndex(arguments, Expression.Constant(i)), p.ParameterType)));
+        return Expression.Lambda<Func<object?[], object>>(Expression.Convert(call, typeof(object)), arguments).Compile();
+    }
+
     /// <summary>Interfaces and abstract classes, which are created as one of their subtypes (also when generic).</summary>
     private static bool IsPolymorphic(Type type) => type.IsInterface || type.IsAbstract;
+
+    /// <summary>
+    /// The producer for a type that is generated as a value of its own when it is asked for directly (<c>Fake.One&lt;int&gt;()</c>, <c>Fake.Many&lt;Guid&gt;(5)</c>):
+    /// scalars, byte buffers, tuples and key/value pairs, produced like members of that type; <see langword="null"/> for objects, which have members to populate.
+    /// </summary>
+    internal static Func<FakeScope, object?>? RootValue(Type type) =>
+        FakeMember.ScalarCategory(type) != TypeCategory.Other || type == typeof(byte[]) || type == typeof(Memory<byte>) || type == typeof(ReadOnlyMemory<byte>) || CompositeParts(type) is not null
+            ? Producer(type, "", ConventionKind.None, false)
+            : null;
 
     /// <summary>Builds the value producer for a member type: scalar conventions, collections, nested objects.</summary>
     internal static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints = null)
@@ -239,6 +293,42 @@ internal sealed class ReflectionTypeModel : IFakeModel
 
         if (type == typeof(byte[]))
             return s => s.Bytes();
+        if (type == typeof(Memory<byte>))
+            return static s => new Memory<byte>(s.Bytes());
+        if (type == typeof(ReadOnlyMemory<byte>))
+            return static s => new ReadOnlyMemory<byte>(s.Bytes());
+
+        // Tuples and key/value pairs: every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
+        if (CompositeParts(type) is { } composite)
+        {
+            var producers = new Func<FakeScope, object?>[composite.Types.Length];
+            var unset = new object?[producers.Length];
+            for (var i = 0; i < producers.Length; i++)
+            {
+                producers[i] = Producer(composite.Types[i], composite.Names[i], ConventionRules.Match(composite.Names[i], FakeMember.ConventionCategory(composite.Types[i]), ""), false);
+                unset[i] = composite.Types[i].IsValueType ? Activator.CreateInstance(composite.Types[i]) : null;
+            }
+
+            var construct = CompileConstructor(composite.Constructor);
+            return s =>
+            {
+                var values = new object?[producers.Length];
+                for (var i = 0; i < values.Length; i++)
+                    values[i] = producers[i](s) ?? unset[i]; // missing: depth limit or cycle
+                return construct(values);
+            };
+        }
+
+        // Two-dimensional arrays are filled row by row; more dimensions are not generated (the member stays null, as for other types without a generator).
+        if (type.IsArray && type.GetArrayRank() > 1)
+        {
+            if (type.GetArrayRank() != 2)
+                return static _ => null;
+            var cell = type.GetElementType()!;
+            var singularName = memberName.EndsWith('s') ? memberName[..^1] : memberName;
+            var cellProducer = Producer(cell, singularName, ConventionRules.Match(singularName, FakeMember.ConventionCategory(cell), ""), false);
+            return ReflectionCollections.Of(cell).Array2(cellProducer);
+        }
 
         // Date and time types of add-on packages (NodaTime) are produced from the built-in type their category names.
         if (ScalarAdapters.TryGet(type, out var adapter))
@@ -279,10 +369,15 @@ internal sealed class ReflectionTypeModel : IFakeModel
             return convert is null ? producer : s => producer(s) is { } value ? convert(value) : null;
         }
 
-        // Framework types are not populated recursively, nor are concrete generic types; interfaces and abstract classes
-        // go through their subtypes.
-        if (IsFrameworkType(type) || (type.IsGenericType && !IsPolymorphic(type)))
-            return static _ => null;
+        // Framework types are not populated recursively (a struct among them keeps its default value, which is what a generated model leaves too);
+        // other classes, closed generic ones (Envelope<Order>) included, are created as nested objects, and interfaces and abstract classes go through their subtypes.
+        if (IsFrameworkType(type))
+        {
+            if (!type.IsValueType)
+                return static _ => null;
+            var unset = Activator.CreateInstance(type);
+            return _ => unset;
+        }
 
         return s => s.NestedObject(type);
     }

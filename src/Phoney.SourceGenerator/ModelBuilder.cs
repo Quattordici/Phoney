@@ -346,12 +346,29 @@ internal sealed class ModelBuilder
             case TypeCategory.TimeOnly: return $"{Values}TimeOnly({s}, {k}{extra})";
             case TypeCategory.TimeSpan: return $"{Values}TimeSpan({s}, {k}{extra})";
             case TypeCategory.Uri: return $"{Values}Uri({s}, {k}{extra})";
+            case TypeCategory.Rune: return $"{Values}Rune({s}, {k}{extra})";
+            case TypeCategory.IPAddress: return $"{Values}IPAddress({s}, {k}{extra})";
+            case TypeCategory.Version: return $"{Values}Version({s}, {k}{extra})";
             case TypeCategory.Enum: return $"{Values}Enum<{fq}>({s}, {k}{extra})";
             case var c when ConventionRules.IsNumber(c): return $"{Values}Number<{fq}>({s}, {k}{extra})";
         }
 
         if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, Rank: 1 })
             return $"{s}.Bytes()";
+        if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } memory && memory.TypeArguments[0].SpecialType == SpecialType.System_Byte &&
+            memory.OriginalDefinition.ToDisplayString() is "System.Memory<T>" or "System.ReadOnlyMemory<T>")
+        {
+            return $"new {fq}({s}.Bytes())";
+        }
+
+        // Tuples and key/value pairs: every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
+        if (type is INamedTypeSymbol composite && CompositeParts(composite) is { } parts)
+        {
+            var arguments = new List<string>();
+            for (var i = 0; i < parts.Types.Count; i++)
+                arguments.Add(Value(parts.Types[i], parts.Names[i], ConventionRules.Match(parts.Names[i], ConventionCategory(parts.Types[i]), ""), false, depth));
+            return $"new {parts.TypeName}({string.Join(", ", arguments)})";
+        }
 
         // Date and time types of add-on packages (NodaTime) are produced by the add-on from the member's convention.
         if (AdapterCall(type) is { } adapter)
@@ -365,6 +382,10 @@ internal sealed class ModelBuilder
 
         if (type is IArrayTypeSymbol { Rank: 1 } array)
             return $"{s}.Array<{Fq(array.ElementType)}>(static {next} => {Element(array.ElementType)}{extra})";
+
+        // Two-dimensional arrays are filled row by row; more dimensions are not generated (left default, like other types without a generator).
+        if (type is IArrayTypeSymbol { Rank: 2 } grid)
+            return $"{s}.Array2<{Fq(grid.ElementType)}>(static {next} => {Element(grid.ElementType)})";
 
         if (type is INamedTypeSymbol { IsGenericType: true } generic)
         {
@@ -417,6 +438,37 @@ internal sealed class ModelBuilder
         return $"default({fq})";
     }
 
+    /// <summary>
+    /// The parts of a <c>ValueTuple</c>, <c>Tuple</c> (up to seven) or <c>KeyValuePair</c>, the names their conventions are matched with (<c>Item1</c>… or <c>Key</c>, <c>Value</c>) and the
+    /// type to construct (a tuple type written <c>(int, string)</c> is constructed as <c>ValueTuple&lt;int, string&gt;</c>); <see langword="null"/> for other types.
+    /// Mirrors <c>ReflectionTypeModel.CompositeParts</c>.
+    /// </summary>
+    private static (List<ITypeSymbol> Types, string[] Names, string TypeName)? CompositeParts(INamedTypeSymbol type)
+    {
+        if (!type.IsGenericType)
+            return null;
+        var definition = FullName(type.OriginalDefinition); // the metadata name: a tuple type displays as "(T1, T2)", not as System.ValueTuple<T1, T2>
+        var arguments = type.TypeArguments.ToList();
+        string prefix;
+        string[] names;
+        if (definition == "System.Collections.Generic.KeyValuePair`2")
+        {
+            prefix = "global::System.Collections.Generic.KeyValuePair";
+            names = new[] { "Key", "Value" };
+        }
+        else if (arguments.Count <= 7 && (definition.StartsWith("System.ValueTuple`", StringComparison.Ordinal) || definition.StartsWith("System.Tuple`", StringComparison.Ordinal)))
+        {
+            prefix = "global::" + definition.Substring(0, definition.IndexOf('`'));
+            names = Enumerable.Range(1, arguments.Count).Select(i => "Item" + i).ToArray();
+        }
+        else
+        {
+            return null;
+        }
+
+        return (arguments, names, prefix + "<" + string.Join(", ", arguments.Select(Fq)) + ">");
+    }
+
     /// <summary>Generates models for the <c>[JsonDerivedType]</c> types of a polymorphic type and records them as its defaults.</summary>
     private void AddDerivedTypes(INamedTypeSymbol baseType)
     {
@@ -452,12 +504,17 @@ internal sealed class ModelBuilder
         (named.TypeKind == TypeKind.Interface || (named.TypeKind == TypeKind.Class && named.IsAbstract)) &&
         !IsFrameworkType(named);
 
-    /// <summary>Objects Phoney recurses into: concrete user types (framework types are left default, adapted date types are values).</summary>
+    /// <summary>Objects Phoney recurses into: concrete user types, closed generic ones included (framework types are left default, adapted date types are values).</summary>
     private static bool IsNestable(ITypeSymbol type) =>
-        type is INamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct, IsAbstract: false, IsGenericType: false } named &&
+        type is INamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct, IsAbstract: false } named &&
         named.SpecialType == SpecialType.None &&
         !IsFrameworkType(named) &&
+        !ContainsTypeParameter(named) &&
         ConventionRules.AdaptedCategoryOf(FullName(named)) == TypeCategory.Other;
+
+    /// <summary>Whether a type is, or has among its type arguments, a type parameter (an open generic type, for which no model can be generated).</summary>
+    private static bool ContainsTypeParameter(ITypeSymbol type) =>
+        type is ITypeParameterSymbol || (type is INamedTypeSymbol { IsGenericType: true } named && named.TypeArguments.Any(ContainsTypeParameter));
 
     /// <summary>
     /// The add-on method producing an adapted type (<c>global::Phoney.NodaTime.NodaTimeValues.Instant</c>), or

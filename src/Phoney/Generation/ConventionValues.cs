@@ -237,6 +237,22 @@ public static class ConventionValues
         _ => scope.Faker.Internet.Url(),
     });
 
+    /// <summary>Returns a letter as a <see cref="global::System.Text.Rune"/>.</summary>
+    public static global::System.Text.Rune Rune(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) => new(scope.Faker.Random.Letter());
+
+    /// <summary>Returns an IPv4 address; an IPv6 one when the member name says so (<c>Ipv6Address</c>), and either when it just says <c>Ip</c>.</summary>
+    public static global::System.Net.IPAddress IPAddress(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) =>
+        global::System.Net.IPAddress.Parse(Effective(scope, kind) switch
+        {
+            ConventionKind.Ipv6 => scope.Faker.Internet.Ipv6(),
+            ConventionKind.Ip => scope.Faker.Internet.Ip(),
+            _ => scope.Faker.Internet.Ipv4(),
+        });
+
+    /// <summary>Returns a version such as <c>3.14.2</c>.</summary>
+    public static global::System.Version Version(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) =>
+        global::System.Version.Parse(scope.Faker.System.Semver());
+
     /// <summary>
     /// Returns a random enum value. For sex/gender enums with <c>Female</c>/<c>Male</c> members the value matches
     /// the object's identity, so <c>Gender</c> agrees with <c>FirstName</c>.
@@ -280,6 +296,15 @@ public static class ConventionValues
         TypeCategory.TimeOnly => TimeOnly(scope, kind, c),
         TypeCategory.TimeSpan => TimeSpan(scope, kind, c),
         TypeCategory.Uri => Uri(scope, kind, c),
+        TypeCategory.Half => Number<Half>(scope, kind, c),
+        TypeCategory.Int128 => Number<Int128>(scope, kind, c),
+        TypeCategory.UInt128 => Number<UInt128>(scope, kind, c),
+        TypeCategory.BigInteger => Number<System.Numerics.BigInteger>(scope, kind, c),
+        TypeCategory.IntPtr => Number<nint>(scope, kind, c),
+        TypeCategory.UIntPtr => Number<nuint>(scope, kind, c),
+        TypeCategory.Rune => Rune(scope, kind, c),
+        TypeCategory.IPAddress => IPAddress(scope, kind, c),
+        TypeCategory.Version => Version(scope, kind, c),
         TypeCategory.Enum => c is { AllowedValues.Length: > 0 }
             ? Avoiding(scope, c, () => global::System.Enum.ToObject(type, scope.Faker.Random.Element(c.AllowedValues)!))
             : BoxedEnum(scope, type, kind),
@@ -404,8 +429,9 @@ public static class ConventionValues
         }
 
         // Integers: whole numbers inside the range and inside the type (CreateSaturating maps ±∞ to the type's limits).
-        var typeMin = double.CreateSaturating(T.CreateSaturating(double.NegativeInfinity));
-        var typeMax = double.CreateSaturating(T.CreateSaturating(double.PositiveInfinity));
+        var unbounded = typeof(T) == typeof(System.Numerics.BigInteger); // has no limits to saturate to
+        var typeMin = unbounded ? double.NegativeInfinity : double.CreateSaturating(T.CreateSaturating(double.NegativeInfinity));
+        var typeMax = unbounded ? double.PositiveInfinity : double.CreateSaturating(T.CreateSaturating(double.PositiveInfinity));
         var from = ToLong(Math.Max(Math.Ceiling(min), typeMin));
         var to = ToLong(Math.Min(Math.Floor(max), typeMax));
         return T.CreateSaturating(to < from ? from : scope.Faker.Random.Long(from, to));

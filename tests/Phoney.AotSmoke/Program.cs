@@ -153,6 +153,18 @@ if (!NationalIds.IsValid(NationalIdKind.Person, "SE", personnummer))
     throw new InvalidOperationException($"invalid personnummer '{personnummer}'");
 Check(faker.NationalId.Vat("GB"), "vat number");
 
+// Closed generic classes, tuples, memory, grids, addresses and big numbers as members of a generated model.
+var shipment = ShipmentFakes.Shipment.Seed(5).Generate();
+Check(shipment.Reply.Payload.Name, "generic member");
+Check(shipment.Reply.Items.Count > 0 ? shipment.Reply.Items[0].Name : null, "generic member items");
+Check(shipment.Pair.Item2, "tuple");
+Check(shipment.Entry.Key, "key/value pair");
+Check(shipment.Address.ToString(), "IP address");
+Check(shipment.Version.ToString(), "version");
+Check(shipment.Weight.ToString(), "big number");
+if (shipment.Buffer.Length == 0 || shipment.Grid.Length == 0 || shipment.Pair.Item1 == 0)
+    throw new InvalidOperationException("buffer, grid or tuple not filled");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 
@@ -243,6 +255,32 @@ public sealed class Document
     public string Name { get; set; } = "";
     public Folder? Folder { get; set; }
 }
+
+public sealed class Crate
+{
+    public string Name { get; set; } = "";
+}
+
+public sealed class Reply<T>
+{
+    public T Payload { get; set; } = default!;
+    public List<T> Items { get; set; } = [];
+}
+
+public sealed class Shipment
+{
+    public Reply<Crate> Reply { get; set; } = null!;
+    public (int, string) Pair { get; set; }
+    public KeyValuePair<string, int> Entry { get; set; }
+    public System.Net.IPAddress Address { get; set; } = null!;
+    public Version Version { get; set; } = null!;
+    public System.Numerics.BigInteger Weight { get; set; }
+    public Memory<byte> Buffer { get; set; }
+    public int[,] Grid { get; set; } = null!;
+}
+
+[FakeFor<Shipment>]
+internal static partial class ShipmentFakes;
 
 [FakeFor<Folder>, FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeSubtype<IInsurance, Policy>]
 internal static partial class Fakes;

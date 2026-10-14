@@ -24,6 +24,9 @@ internal abstract class ReflectionCollections
     /// <summary>A producer of <c>T[]</c>.</summary>
     public abstract Func<FakeScope, object?> Array(Func<FakeScope, object?> element, MemberConstraints? constraints);
 
+    /// <summary>A producer of <c>T[,]</c>.</summary>
+    public abstract Func<FakeScope, object?> Array2(Func<FakeScope, object?> element);
+
     /// <summary>A producer of <c>HashSet&lt;T&gt;</c>.</summary>
     public abstract Func<FakeScope, object?> Set(Func<FakeScope, object?> element, MemberConstraints? constraints);
 
@@ -43,6 +46,12 @@ internal abstract class ReflectionCollections
         {
             var typed = Typed<T>(element);
             return s => s.Array(typed, constraints);
+        }
+
+        public override Func<FakeScope, object?> Array2(Func<FakeScope, object?> element)
+        {
+            var typed = Typed<T>(element);
+            return s => s.Array2(typed);
         }
 
         public override Func<FakeScope, object?> Set(Func<FakeScope, object?> element, MemberConstraints? constraints)
@@ -72,6 +81,8 @@ internal abstract class ReflectionCollections
         }
 
         public override Func<FakeScope, object?> Array(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw new InvalidOperationException("Not a collection builder.");
+
+        public override Func<FakeScope, object?> Array2(Func<FakeScope, object?> element) => throw new InvalidOperationException("Not a collection builder.");
 
         public override Func<FakeScope, object?> Set(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw new InvalidOperationException("Not a collection builder.");
 
