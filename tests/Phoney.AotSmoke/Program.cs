@@ -109,6 +109,13 @@ if (!numbered.Select(p => p.FirstName).SequenceEqual(["P0", "P1", "P2", "P3", "P
 if (people.Any(p => p.Aliases.IsDefault || p.Aliases.Length == 0 || p.Visits.Count == 0))
     throw new InvalidOperationException("immutable or frozen collections were not generated");
 
+// Data feeds (CSV and JSON) through generated models, no reflection.
+var fed = Fakes.Person.Seed(12).WithFeed(DataFeed.FromCsv("FirstName,Status\nAnn,Suspended\n\"Bo, Jr.\",Active\n")).Generate(4);
+var fedFromJson = Fakes.Person.Seed(12).WithFeed(DataFeed.FromJson("[{\"firstName\":\"Cy\",\"status\":\"suspended\"}]")).Generate(2);
+if (!fed.Select(p => p.FirstName).SequenceEqual(["Ann", "Bo, Jr.", "Ann", "Bo, Jr."]) || fed[0].Status != Status.Suspended || fed[1].Status != Status.Active
+    || fedFromJson.Any(p => p.FirstName != "Cy" || p.Status != Status.Suspended))
+    throw new InvalidOperationException("feeds were not applied");
+
 // Back-references through generated models, no reflection.
 var folders = Fakes.Folder.Seed(11).WithBackReferences().Generate(5);
 if (folders.Any(f => f.Documents.Count == 0 || f.Documents.Any(d => !ReferenceEquals(d.Folder, f))))

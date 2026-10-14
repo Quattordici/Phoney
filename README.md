@@ -22,6 +22,7 @@
 - **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
 - **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
 - **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
+- **Data from files**: `.WithFeed(DataFeed.FromCsvFile("people.csv"))` fills members from the rows of a CSV or JSON file, one row per object.
 - **Numbering**: `.Sequence(x => x.Code, i => $"T{i + 1:D4}")` and `.Cycle(x => x.Queue, ["a", "b"])` give members values by the object's position, the same however you generate.
 - **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `Use` or `WithConvention` never applied to anything.
 - **Type-wide rules**: `.Use(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
@@ -240,6 +241,23 @@ Besides arrays, `List<T>`, `HashSet<T>`, `Dictionary<K,V>` and their interfaces,
 Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` counterpart (so a seed gives the same elements whichever type holds them) and converted. Sizes, `[MinLength]`/`[MaxLength]`, `CollectionSize`, `Invalid`/`Boundary`, `Populate` (a default `ImmutableArray<T>` counts as unset), `Each()` paths and the source generator all work the same. Collections that are only readable (`public List<T> Items { get; } = []`) are not filled.
 
 For code that works from `Type` values, `Fake.One(type)` and `Fake.Many(type, count)` create objects of a type known only at runtime (reflection, like `Fake.One<T>()`).
+
+### Data from CSV and JSON
+
+`WithFeed` fills members from the rows of a CSV or JSON file, for data you want to control (a product catalogue, a list of real-looking test accounts) while the rest is generated:
+
+```csharp
+var feed = DataFeed.FromCsvFile("customers.csv");        // FirstName,LastName,Country\nAda,Lovelace,GB\n…  (also FromCsv(text), FromJson(text), FromJsonFile(path))
+var customers = Fake.For<Customer>().WithFeed(feed).Generate(100);      // row 1, 2, 3… and round again; the other members are generated as usual
+var sample = Fake.For<Customer>().Seed(7).WithFeed(feed, FeedOrder.Random).Generate(100); // a reproducible random row per customer
+```
+
+- **One row per object**, so values that belong together stay together. The row depends on the object's position (or, for `FeedOrder.Random`, the seed and the position), so item *n* is the same however you generate: batches, `GenerateParallel`, `Stream()`.
+- **Columns fill members by name**, ignoring case, spaces and underscores (`first_name` fills `FirstName`), also constructor parameters of records. Values are converted with the invariant culture: strings, numbers, booleans (`true`/`1`/`yes`), enums by name, dates and times, `Guid`, `Uri`; an empty value of a nullable member is `null`.
+- **Strict about mistakes.** A column that no member matches, a value that doesn't fit its member's type (the message names the row, the column, the value and the type), ragged CSV rows, duplicate columns and unterminated quotes throw when the feed is read or the generator is first used, not in the middle of a run. `ignoreUnknownColumns: true` skips unmatched columns on purpose.
+- **Precedence**: a rule for the member (`With`, `Ignore`…) wins over the feed; the feed wins over name conventions and `WithType`. Members without a column are generated independently of the row (a `Email` convention doesn't know the `FirstName` from the file), so add the columns that must agree.
+- CSV follows RFC 4180 (quoted values with delimiters, `""` quotes and line breaks, CRLF, a byte order mark); pass `delimiter: ';'` for other separators. JSON must be an array of flat objects with the same properties.
+- A generator with a feed can't be given to `With`, `Use` or `Fake.Generators.Add`: every nested object would take the first row. `Populate` fills the members that are unset. Works the same with reflection and with the source generator.
 
 ### Back-references
 

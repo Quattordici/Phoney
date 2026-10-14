@@ -468,6 +468,32 @@ public sealed class Generator<T> : INestedGenerator
     /// <param name="enabled"><see langword="false"/> turns it off again.</param>
     public Generator<T> WithBackReferences(bool enabled = true) => Derive(_config with { BackReferences = enabled });
 
+    /// <summary>
+    /// Fills members from the rows of a CSV or JSON <see cref="DataFeed"/>: object <em>n</em> takes row <em>n</em> (the rows repeat), and each column fills the member of
+    /// the same name, e.g. <c>.WithFeed(DataFeed.FromCsvFile("customers.csv"))</c> with columns <c>FirstName,LastName,City</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Column and member names are compared ignoring case, spaces and underscores (<c>first_name</c> fills <c>FirstName</c>); values are converted to the member's
+    /// type with the invariant culture (strings, numbers, booleans, enums by name, dates and times, <see cref="Guid"/>, <see cref="Uri"/>; an empty value of a
+    /// nullable member is <see langword="null"/>). A rule for the member (<c>With</c>, <c>Ignore</c>…) wins over the feed, and the feed wins over name conventions
+    /// and <c>WithType</c>. Members without a column are generated as usual, independently of the row: add the columns the values must agree with.
+    /// </para>
+    /// <para>
+    /// The row depends on the object's position only, so results are the same whichever way the objects are generated. A generator with a feed can't be given to
+    /// <c>With</c>, <c>Use</c> or <c>Fake.Generators.Add</c>: every nested object would take the first row.
+    /// </para>
+    /// </remarks>
+    /// <param name="feed">The rows.</param>
+    /// <param name="order">Row <em>n</em> for object <em>n</em> (the default), or a reproducible random row for each object.</param>
+    /// <param name="ignoreUnknownColumns">Skip columns that no member of the generated type matches instead of throwing.</param>
+    /// <exception cref="InvalidOperationException">At <c>Generate</c>: a column matches no member (unless ignored), or a value can't be converted to its member's type; the message names the row and column.</exception>
+    public Generator<T> WithFeed(DataFeed feed, FeedOrder order = FeedOrder.InOrder, bool ignoreUnknownColumns = false)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+        return Derive(_config with { Feed = new FeedSettings(feed, order, ignoreUnknownColumns) });
+    }
+
     /// <summary>Runs <paramref name="action"/> on every generated object, after all members are set.</summary>
     public Generator<T> AfterCreate(Action<Faker, T> action) =>
         Derive(_config with { AfterCreate = _config.AfterCreate.Add(action ?? throw new ArgumentNullException(nameof(action))) });
@@ -599,7 +625,9 @@ public sealed class Generator<T> : INestedGenerator
             ? "verifies its rules (VerifyRules), but a nested generator is never checked: it has no Generate call of its own. Call VerifyRules(false) on it and verify the generator you call Generate on."
             : _config.Rules.Values.Any(r => r.Positional)
                 ? "has Sequence or Cycle rules, which count the objects it generates itself, and as a nested generator every object would be number 0. Put the rule on the generator you call Generate on, or use With(x => x.Member, f => …) here."
-                : null;
+                : _config.Feed is not null
+                    ? "has a data feed (WithFeed), which takes a row per object it generates itself, and as a nested generator every object would take the first row. Put the feed on the generator you call Generate on."
+                    : null;
 
     /// <inheritdoc />
     object? INestedGenerator.CreateNested(FakeScope parent) =>
@@ -725,6 +753,9 @@ public sealed class Generator<T> : INestedGenerator
             slots[index] ??= new RuleSlot(RuleKind.Default, null, unique: true, attempts);
         }
 
+        if (_config.Feed is { } feed)
+            ApplyFeed(feed, members, slots);
+
         // Custom conventions (per generator, then global) fill members that have no rule.
         var conventions = _config.Conventions.AddRange(FakeConventions.All);
         for (var i = 0; i < members.Count; i++)
@@ -787,6 +818,70 @@ public sealed class Generator<T> : INestedGenerator
             Usage = usage,
         };
         return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage);
+    }
+
+    /// <summary>
+    /// Gives each member that has a column in the feed (and no rule of its own) its values, converted once now so that a bad value fails here, with its row and column,
+    /// instead of in the middle of a run. The slot picks the row from the object's position.
+    /// </summary>
+    private void ApplyFeed(FeedSettings settings, IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
+    {
+        var feed = settings.Feed;
+        var unknown = new List<string>();
+        for (var column = 0; column < feed.Columns.Count; column++)
+        {
+            var name = DataFeed.Normalize(feed.Columns[column]);
+            var index = -1;
+            for (var i = 0; i < members.Count && index < 0; i++)
+            {
+                if (DataFeed.Normalize(members[i].Name) == name)
+                    index = i;
+            }
+
+            if (index < 0)
+            {
+                unknown.Add(feed.Columns[column]);
+                continue;
+            }
+
+            if (slots[index] is { Kind: not RuleKind.Default })
+                continue; // a rule for the member wins
+
+            var member = members[index];
+            var values = new object?[feed.Count];
+            for (var row = 0; row < values.Length; row++)
+            {
+                try
+                {
+                    values[row] = FeedValues.Convert(feed.Value(row, column), member.Type);
+                }
+                catch (FormatException e)
+                {
+                    throw new InvalidOperationException(
+                        $"Feed row {row + 1}, column '{feed.Columns[column]}' (value '{feed.Value(row, column)}') can't be used for {typeof(T).Name}.{member.Name} ({member.Type.Name}): {e.Message}.", e);
+                }
+            }
+
+            var rowOf = RowSelector(settings.Order, values.Length);
+            slots[index] = new RuleSlot(RuleKind.Convention, (Func<FakeScope, object?>)(scope => values[rowOf(scope.Index)]), slots[index]?.Unique == true, slots[index]?.MaxAttempts ?? 0);
+        }
+
+        if (unknown.Count > 0 && !settings.IgnoreUnknownColumns)
+        {
+            throw new InvalidOperationException(
+                $"The feed has columns that {typeof(T).Name} has no member for: {string.Join(", ", unknown.Select(c => $"'{c}'"))}. Its members are {string.Join(", ", members.Select(m => m.Name))}. "
+                + "Rename the columns (case, spaces and underscores don't matter), or pass ignoreUnknownColumns: true to skip them.");
+        }
+    }
+
+    /// <summary>The row an object takes: its position modulo the number of rows, or a hash of the generator's seed and the position.</summary>
+    private Func<long, int> RowSelector(FeedOrder order, int rows)
+    {
+        if (order == FeedOrder.InOrder)
+            return index => (int)(index % rows);
+
+        var seed = unchecked(BaseSeed ^ 0x5EEDFEEDL);
+        return index => (int)((ulong)Randomizer.DeriveSeed(seed, index) % (ulong)rows);
     }
 
     /// <summary>Registers the graph-dependent rules this generator was given (in a stable order) so their use can be recorded; path rules register while their nodes are built.</summary>
@@ -916,6 +1011,9 @@ public sealed class Generator<T> : INestedGenerator
         ConventionKind.BirthDate, ConventionKind.Gender, ConventionKind.Sex,
     ];
 
+    /// <summary>The feed of <see cref="WithFeed"/> and how it is used.</summary>
+    private sealed record FeedSettings(DataFeed Feed, FeedOrder Order, bool IgnoreUnknownColumns);
+
     /// <summary>A condition on one member from <c>Where(x =&gt; x.Member, …)</c> and how often the member may be drawn again for it.</summary>
     private sealed record MemberFilter(Func<object?, bool> Accepts, int MaxAttempts);
 
@@ -992,6 +1090,7 @@ public sealed class Generator<T> : INestedGenerator
         bool Strict,
         bool Verify,
         bool BackReferences,
+        FeedSettings? Feed,
         GenerationSettings Settings)
     {
         public static readonly Config Default = new(
@@ -1010,6 +1109,7 @@ public sealed class Generator<T> : INestedGenerator
             false,
             false,
             false,
+            null,
             GenerationSettings.Default);
     }
 

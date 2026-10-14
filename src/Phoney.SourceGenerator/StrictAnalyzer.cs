@@ -91,6 +91,10 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
                 if (!selector.IsNested)
                     covered.Add(selector.Name!); // a rule for Billing.City is not a rule for Billing
             }
+            else if (name == "WithFeed")
+            {
+                return; // the columns of the feed are read at runtime: which members they cover can't be known here
+            }
             else if (name is "WithConvention" or "WithType")
             {
                 conventionTypes.Add(call.TargetMethod.TypeArguments[0]);
