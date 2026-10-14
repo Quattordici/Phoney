@@ -99,6 +99,10 @@ catch (InvalidOperationException e) when (e.Message.Contains("Use<Ticket>", Stri
 {
 }
 
+// Rules for every member of a type, through generated models, no reflection.
+if (Fakes.Person.Seed(10).WithType(Status.Suspended).Generate(10).Any(p => p.Status != Status.Suspended))
+    throw new InvalidOperationException("WithType was not applied");
+
 // Time: a TimeProvider drives relative dates.
 var clock = new FixedTimeProvider(new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
 if (Fakes.Person.Seed(1).TimeProvider(clock).Generate().BirthDate.Year < 1950)

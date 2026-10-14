@@ -51,6 +51,7 @@ public sealed class StrictAnalyzerTests
             public static object A() => Fake.For<Product>().With(p => p.Flavor, "Mint").Strict().Ignore(p => (object)p.Shelf).Generate(3);
             public static object B() => Data.Product.Strict().WithOneOf(x => x.Flavor, new[] { "a" }).Unique(x => x.Shelf).Stream();
             public static object C() => new Generator<Product>(null!).WithConvention<string>(n => true, f => "x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
+            public static object D() => new Generator<Product>(null!).WithType("x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
             """, cancellationToken);
 
         diagnostics.ShouldBeEmpty();

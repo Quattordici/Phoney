@@ -441,6 +441,18 @@ Fake.For<Order>().WithConvention<decimal>(n => n == "Vat", f => 0.25m);         
 
 Both apply to every object in the graph, so `Order.Lines[0].Sku` is covered as well as `Order.Sku`. A generator's own conventions come before the app-wide ones, and explicit rules (`With`, `Ignore`…) come before both.
 
+To give **every member of a type** a value, whatever it is called, use `WithType` (or `Fake.Conventions.Add<T>(factory)` app-wide):
+
+```csharp
+var orders = Fake.For<Order>()
+    .WithType<DateOnly>(f => f.Date.Past().Date)    // every DateOnly member, nested objects included
+    .WithType("n/a")                                 // every string member, FirstName and Email too
+    .With(o => o.Reference, f => f.Random.Replace("ORD-####"))   // a rule for the member still wins
+    .Generate(10);
+```
+
+It sets members: the elements of collections keep their generated values, the nullable form of the type (`DateOnly?`) is matched too, and data annotations are not applied to the value. It is `WithConvention<T>(_ => true, factory)`, and `.Strict()` and the analyzer count it as covering the members of that type.
+
 ### NodaTime
 
 The `Phoney.NodaTime` package adds NodaTime values and NodaTime members:

@@ -36,6 +36,17 @@ public sealed class FakeConventions
         ImmutableInterlocked.Update(ref s_all, list => list.Add(convention));
     }
 
+    /// <summary>
+    /// Generates every member of type <typeparamref name="TValue"/> (also its nullable form) with <paramref name="factory"/>, whatever its name,
+    /// in every generator compiled afterwards. Members only: the elements of collections are not affected. Data annotations are not applied to the value.
+    /// </summary>
+    public void Add<TValue>(Func<Faker, TValue> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        var convention = new CustomConvention(typeof(TValue), static _ => true, s => factory(s.Faker), "Fake.Conventions.Add");
+        ImmutableInterlocked.Update(ref s_all, list => list.Add(convention));
+    }
+
     /// <summary>Generates members named <paramref name="memberName"/> (ignoring case) of type <typeparamref name="TValue"/> with <paramref name="factory"/>.</summary>
     public void Add<TValue>(string memberName, Func<Faker, TValue> factory) =>
         Add(name => string.Equals(name, memberName, StringComparison.OrdinalIgnoreCase), factory);
@@ -44,8 +55,8 @@ public sealed class FakeConventions
     public void Clear() => Volatile.Write(ref s_all, []);
 }
 
-/// <summary>A user-defined convention: member type plus a name predicate.</summary>
-internal sealed record CustomConvention(Type Type, Func<string, bool> NameMatches, Func<FakeScope, object?> Factory)
+/// <summary>A user-defined convention: member type plus a name predicate; <paramref name="Source"/> is the call that registered it, for messages.</summary>
+internal sealed record CustomConvention(Type Type, Func<string, bool> NameMatches, Func<FakeScope, object?> Factory, string Source = "WithConvention")
 {
     /// <summary>Whether the convention applies to <paramref name="member"/> (same type, or its nullable form, and a matching name).</summary>
     public bool Matches(FakeMember member) =>

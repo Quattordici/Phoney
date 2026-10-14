@@ -261,6 +261,25 @@ public sealed class Generator<T> : INestedGenerator
         return Derive(_config with { Conventions = _config.Conventions.Add(convention) });
     }
 
+    /// <summary>Gives every member of type <typeparamref name="TValue"/> (also its nullable form) the same <paramref name="value"/>. See <see cref="WithType{TValue}(Func{Faker, TValue})"/>.</summary>
+    public Generator<T> WithType<TValue>(TValue value) => WithType(_ => value);
+
+    /// <summary>
+    /// Generates every member of type <typeparamref name="TValue"/> (also its nullable form) with <paramref name="factory"/>, whatever its name and
+    /// also in nested objects, e.g. <c>.WithType&lt;DateOnly&gt;(f =&gt; f.Date.Past().Date)</c> or <c>.WithType("N/A")</c> for every string.
+    /// </summary>
+    /// <remarks>
+    /// A rule for the member itself (<c>With</c>, <c>Ignore</c>…) wins; this comes before name conventions and before app-wide conventions
+    /// (<c>Fake.Conventions</c>). It sets members: the elements of collections and dictionaries keep their generated values, and data
+    /// annotations are not applied to the value. Same as <c>WithConvention&lt;TValue&gt;(_ =&gt; true, factory)</c>.
+    /// </remarks>
+    public Generator<T> WithType<TValue>(Func<Faker, TValue> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        var convention = new CustomConvention(typeof(TValue), static _ => true, s => factory(s.Faker), nameof(WithType));
+        return Derive(_config with { Conventions = _config.Conventions.Add(convention) });
+    }
+
     /// <summary>
     /// Makes <c>Generate</c>, <c>GenerateParallel</c> and <c>Populate</c> throw when a rule whose reach depends on the object graph did not apply
     /// to anything that was generated: a path rule (<c>x =&gt; x.Billing.City</c>, <c>x =&gt; x.Lines.Each().Sku</c>), <see cref="Subtype{TBase, T1}"/>,
@@ -658,7 +677,7 @@ public sealed class Generator<T> : INestedGenerator
         for (var i = 0; i < _config.Conventions.Count; i++)
         {
             var convention = _config.Conventions[i];
-            usage.AddConvention(convention, $"WithConvention<{convention.Type.Name}>" + (_config.Conventions.Count > 1 ? $" (number {i + 1} of {_config.Conventions.Count})" : ""));
+            usage.AddConvention(convention, $"{convention.Source}<{convention.Type.Name}>" + (_config.Conventions.Count > 1 ? $" (number {i + 1} of {_config.Conventions.Count})" : ""));
         }
 
         return usage;
