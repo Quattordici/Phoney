@@ -610,6 +610,17 @@ var orders = Fake.For<Order>()
     .Generate(1000);
 ```
 
+For a collection member, `WithOneOf` gives every object its own random subset of the values:
+
+```csharp
+var users = Fake.For<User>().Seed(1)
+    .WithOneOf(u => u.Roles, roles, 2)                  // two of the roles, never the same one twice
+    .WithOneOf(u => u.Tags, tags, (1, 3))               // one to three; Tags can be an array, a HashSet, an ISet or any list interface
+    .Generate(100);
+```
+
+A subset is made of distinct positions of the list (a list with equal values can give equal values), in the order of the list, and every value is equally likely to be in it. It is drawn from the object's own seeded randomness, so a seed gives the same subsets and item *n* is the same however you generate; a size range draws its size first, then one number per value, without work in proportion to the length of the list. The size can't be larger than the list, and the member must hold a list, array or set (`ImmutableArray<T>` and the like are refused when the rule is added, with a message saying what to use).
+
 Weights are relative (70/25/5 is the same as 14/5/1), a weight of zero is never picked, and a negative or non-finite weight, a missing weight or no weight above zero throws when the rule is added. The running totals are made once, so a pick is one random number and a binary search (`Randomizer.WeightedIndex`), and item *n* is the same however you generate.
 
 ### Validation attributes

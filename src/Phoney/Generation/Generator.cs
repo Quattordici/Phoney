@@ -280,6 +280,53 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>
+    /// Gives a collection member a random subset of <paramref name="values"/>, a different one for every object:
+    /// <c>.WithOneOf(u =&gt; u.Roles, roles, 2)</c> gives each user two of the roles, <c>.WithOneOf(u =&gt; u.Roles, roles, (1, 3))</c> one to three.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The values of a subset are distinct positions of the list (a list with equal values can give equal values), returned in the order of the list, and every value is equally likely to be in
+    /// it. It is taken from the object's own seeded randomness, so a seed gives the same subsets, item <em>n</em> is the same however you generate, and the two models agree. A subset of a size range
+    /// draws its size first, then one number per value. The list is copied when the rule is added.
+    /// </para>
+    /// <para>
+    /// This overload is for members of type <c>List&lt;T&gt;</c>, <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c> and
+    /// <c>IEnumerable&lt;T&gt;</c> (a <c>List&lt;T&gt;</c> is made); there are overloads for arrays and sets. Other collection types are refused when the rule is added.
+    /// </para>
+    /// </remarks>
+    /// <param name="member">The collection member: <c>x =&gt; x.Roles</c> (also in a nested object or on every element: <c>x =&gt; x.Teams.Each().Members</c>).</param>
+    /// <param name="values">The values to take a subset of.</param>
+    /// <param name="size">How many values: a number (<c>3</c>) or an inclusive range (<c>(1, 3)</c>).</param>
+    /// <exception cref="ArgumentException">The size is larger than the list, or the member's type cannot hold a list.</exception>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, IEnumerable<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
+        RequireMemberAccepts(member, typeof(List<TValue>));
+        return With(member, f => (IEnumerable<TValue>)picker.List(f.Random));
+    }
+
+    /// <summary>Gives an array member a random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, TValue[]>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
+        return With(member, f => picker.Array(f.Random));
+    }
+
+    /// <summary>Gives a <see cref="HashSet{T}"/> member a random subset of <paramref name="values"/>; see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, HashSet<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
+        return With(member, f => picker.Set(f.Random));
+    }
+
+    /// <summary>Gives an <see cref="ISet{T}"/> member a random subset of <paramref name="values"/> (a <see cref="HashSet{T}"/>); see <see cref="WithOneOf{TValue}(Expression{Func{T, IEnumerable{TValue}}}, IReadOnlyList{TValue}, SubsetSize)"/>.</summary>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, ISet<TValue>>> member, IReadOnlyList<TValue> values, SubsetSize size)
+    {
+        var picker = SubsetPicker<TValue>.Create(values, size, nameof(values));
+        return With(member, f => (ISet<TValue>)picker.Set(f.Random));
+    }
+
+    /// <summary>
     /// Sets a member from a random item of <paramref name="source"/>, so object graphs line up:
     /// <c>.WithOneOf(o =&gt; o.CustomerId, customers, c =&gt; c.Id)</c>.
     /// </summary>
@@ -1228,6 +1275,25 @@ public sealed class Generator<T> : INestedGenerator
     /// <c>x =&gt; x.Lines.Each().Sku</c> is <c>[Lines, Sku]</c> (<c>Each()</c> only marks the collection; <c>Dictionary.Values</c> and
     /// <c>Nullable.Value</c> are skipped the same way).
     /// </summary>
+    /// <summary>
+    /// Refuses a member whose own type (before the conversion to the interface a subset overload takes) cannot hold <paramref name="produced"/>:
+    /// a <c>List&lt;T&gt;</c> cannot be assigned to an <c>ImmutableArray&lt;T&gt;</c>, and failing here names the member and says what to use, where failing at the first <c>Generate</c> would not.
+    /// </summary>
+    private static void RequireMemberAccepts<TValue>(Expression<Func<T, TValue>> member, Type produced)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        var body = member.Body;
+        while (body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
+            body = convert.Operand;
+        if (body.Type.IsAssignableFrom(produced))
+            return;
+
+        static string Name(Type type) => type.IsGenericType ? type.Name[..type.Name.IndexOf('`')] + "<" + string.Join(", ", type.GetGenericArguments().Select(Name)) + ">" : type.Name;
+        throw new ArgumentException(
+            $"'{member}' is a {Name(body.Type)}, which a subset cannot be assigned to: a {Name(produced)} is made. Use a list, array or set member, or set the member with With(x => …, f => …).",
+            nameof(member));
+    }
+
     private static string[] MemberPath<TValue>(Expression<Func<T, TValue>> expression)
     {
         ArgumentNullException.ThrowIfNull(expression);

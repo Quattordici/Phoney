@@ -165,6 +165,12 @@ Check(shipment.Weight.ToString(), "big number");
 if (shipment.Buffer.Length == 0 || shipment.Grid.Length == 0 || shipment.Pair.Item1 == 0)
     throw new InvalidOperationException("buffer, grid or tuple not filled");
 
+// A random subset per object, for a list member: no reflection, positions in stack memory.
+var roles = new[] { "admin", "editor", "viewer", "billing", "support" };
+var crew = ShipmentFakes.Shipment.Seed(12).WithOneOf(s => s.Crew, roles, (2, 3)).Generate(100);
+if (crew.Any(s => s.Crew.Count is < 2 or > 3 || s.Crew.Distinct().Count() != s.Crew.Count))
+    throw new InvalidOperationException("subset off");
+
 // Weighted choices: the running totals are made once and a pick allocates nothing.
 var picked = ShipmentFakes.Shipment.Seed(11).WithOneOf(s => s.Weight, (new System.Numerics.BigInteger(5), 9), (new System.Numerics.BigInteger(7), 1)).Generate(400);
 if (picked.Any(s => s.Weight != 5 && s.Weight != 7) || picked.Count(s => s.Weight == 5) < 320)
@@ -289,6 +295,7 @@ public sealed class Shipment
     public System.Numerics.BigInteger Weight { get; set; }
     public Memory<byte> Buffer { get; set; }
     public int[,] Grid { get; set; } = null!;
+    public List<string> Crew { get; set; } = [];
 }
 
 [FakeFor<Shipment>]
