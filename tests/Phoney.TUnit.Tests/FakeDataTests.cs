@@ -141,3 +141,45 @@ public sealed class PropertyInjectionTests
     [Test]
     public void Properties_are_filled() => Customer.Email.ShouldContain("@");
 }
+
+/// <summary>PHONEY_SEED moves the seeds [FakeData] derives, so a whole suite can be run on other data and replayed.</summary>
+public sealed class FakeDataEnvironmentSeedTests
+{
+    private static readonly FakeArgument[] Email = [new("email", typeof(string))];
+
+    [Test]
+    public void Without_PHONEY_SEED_the_default_seed_is_the_stable_one()
+    {
+        FakeDataAttribute.ResolveSeed(null, null, Email, null).ShouldBe(FakeDataAttribute.DefaultSeed(null, Email));
+    }
+
+    [Test]
+    public void PHONEY_SEED_moves_the_default_seed_reproducibly()
+    {
+        var plain = FakeDataAttribute.ResolveSeed(null, null, Email, null);
+        var moved = FakeDataAttribute.ResolveSeed(null, null, Email, 5);
+
+        moved.ShouldNotBe(plain);
+        FakeDataAttribute.ResolveSeed(null, null, Email, 5).ShouldBe(moved);
+        FakeDataAttribute.ResolveSeed(null, null, Email, 6).ShouldNotBe(moved);
+        FakeDataAttribute.ResolveSeed(null, null, [new("contact", typeof(string))], 5).ShouldNotBe(moved); // tests still differ from each other
+    }
+
+    [Test]
+    public void An_explicit_seed_stays_as_it_is()
+    {
+        FakeDataAttribute.ResolveSeed(42, null, Email, 5).ShouldBe(42);
+    }
+
+    [Test]
+    public void The_generator_follows_the_environment_seed()
+    {
+        var attribute = new FakeDataAttribute();
+
+        var plain = (string)attribute.CreateGenerator(Email, null, null).Row(0)[0]!;
+        var moved = (string)attribute.CreateGenerator(Email, null, 5).Row(0)[0]!;
+
+        moved.ShouldNotBe(plain);
+        ((string)attribute.CreateGenerator(Email, null, 5).Row(0)[0]!).ShouldBe(moved);
+    }
+}

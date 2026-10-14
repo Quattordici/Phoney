@@ -19,7 +19,8 @@ namespace Phoney.TUnit;
 /// <para>
 /// Values are reproducible: without a <see cref="Seed"/>, the seed is derived from the test's class, method and
 /// parameter types, so every run and machine gets the same values and a failing test fails again. Set
-/// <see cref="Seed"/> to get other values.
+/// <see cref="Seed"/> to get other values, or set the <c>PHONEY_SEED</c> environment variable to move the seed of every
+/// <c>[FakeData]</c> test at once (<c>PHONEY_SEED=123 dotnet test</c> runs the suite on other data; use the same value to replay it).
 /// </para>
 /// <para>
 /// Custom conventions registered with <see cref="Fake.Conventions"/> and source-generated models
@@ -89,18 +90,35 @@ public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
     }
 
     /// <summary>Configures the generator from the attribute's properties.</summary>
+    internal ArgumentGenerator CreateGenerator(IReadOnlyList<FakeArgument> arguments, MethodMetadata? test) =>
+        CreateGenerator(arguments, test, FakeSeed.FromEnvironment());
+
+    /// <summary>Configures the generator; <paramref name="environmentSeed"/> is the <c>PHONEY_SEED</c> value, if any.</summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "[FakeData] reads the parameters of test methods with reflection by design; TUnit test projects are not trimmed.")]
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "[FakeData] reads the parameters of test methods with reflection by design; TUnit test projects are not published with Native AOT.")]
-    internal ArgumentGenerator CreateGenerator(IReadOnlyList<FakeArgument> arguments, MethodMetadata? test)
+    internal ArgumentGenerator CreateGenerator(IReadOnlyList<FakeArgument> arguments, MethodMetadata? test, long? environmentSeed)
     {
         var generator = new ArgumentGenerator(arguments)
-            .Seed(_seed ?? DefaultSeed(test, arguments))
+            .Seed(ResolveSeed(_seed, test, arguments, environmentSeed))
             .NullProbability(NullProbability);
         if (Locale is { } locale)
             generator = generator.Locale(locale);
         if (ReferenceDate is { } date)
             generator = generator.ReferenceDate(DateTimeOffset.Parse(date, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal));
         return generator;
+    }
+
+    /// <summary>
+    /// The seed of the rows: the explicit one; else the stable one derived from the test, moved by <c>PHONEY_SEED</c> when that is set, so
+    /// a whole suite can run on other data (and be replayed with the same value) while each test keeps its own data.
+    /// </summary>
+    internal static long ResolveSeed(long? explicitSeed, MethodMetadata? test, IEnumerable<FakeArgument> arguments, long? environmentSeed)
+    {
+        if (explicitSeed is { } seed)
+            return seed;
+
+        var derived = DefaultSeed(test, arguments);
+        return environmentSeed is { } moved ? unchecked(derived ^ ((moved + 1) * unchecked((long)0x9E3779B97F4A7C15UL))) : derived;
     }
 
     /// <summary>
