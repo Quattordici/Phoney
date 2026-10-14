@@ -7,7 +7,7 @@ using FizzWare.NBuilder;
 
 // Timed comparison:  dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- --filter '*'
 // Cold start:        dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold [library...]   (all libraries, or just the ones named)
-// Cold start AOT:    dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-aot <published benchmarks/Phoney.Benchmarks.ColdAot executable>
+// Native AOT:        dotnet publish benchmarks/Phoney.Benchmarks.Comparison -c Release -r linux-x64 -p:AotComparison=true -o out-aot, then run out-aot/Phoney.Benchmarks.Comparison with `cold`, `check` or `sanity`
 // Cold phases:       dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-phases        (where Phoney's first call spends its time; set DOTNET_* variables to try runtime settings)
 // Check:             dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- check   (prints one object per library, to see that they make comparable data)
 // Summary:           dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- summarize <artifacts directory of the timed run>   (prints the README's comparison matrix)
@@ -19,11 +19,6 @@ if (args is ["cold-child", var library])
 if (args is ["cold", ..var only])
 {
     return ColdStart.Run(only);
-}
-
-if (args is ["cold-aot", var binary])
-{
-    return ColdStart.RunExecutable("Phoney (Native AOT, source generated)", binary);
 }
 
 if (args is ["cold-phases-child"])
@@ -92,31 +87,27 @@ internal static class ColdStart
         return 0;
     }
 
-    /// <summary>Measures an executable that prints the milliseconds to its first object (the Native AOT build).</summary>
-    public static int RunExecutable(string label, string path)
-    {
-        Console.WriteLine("| Library | Median (ms) | Fastest (ms) | Slowest (ms) |");
-        Console.WriteLine("|---|---:|---:|---:|");
-        Print(label, Measure(Path.GetFullPath(path), []));
-        return 0;
-    }
-
-    private static List<double> Measure(string executable, string[] arguments)
+    /// <summary>The sorted times of 15 fresh processes, or <see langword="null"/> when the library can't run (it throws, as several do in the Native AOT build).</summary>
+    private static List<double>? Measure(string executable, string[] arguments)
     {
         var samples = new List<double>();
         for (var run = 0; run < 15; run++)
         {
-            using var process = Process.Start(new ProcessStartInfo(executable, arguments) { RedirectStandardOutput = true })!;
-            samples.Add(double.Parse(process.StandardOutput.ReadToEnd().Trim(), CultureInfo.InvariantCulture));
+            using var process = Process.Start(new ProcessStartInfo(executable, arguments) { RedirectStandardOutput = true, RedirectStandardError = true })!;
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            process.StandardError.ReadToEnd();
             process.WaitForExit();
+            if (process.ExitCode != 0 || !double.TryParse(output, NumberStyles.Float, CultureInfo.InvariantCulture, out var milliseconds))
+                return null;
+            samples.Add(milliseconds);
         }
 
         samples.Sort();
         return samples;
     }
 
-    private static void Print(string library, List<double> samples) =>
-        Console.WriteLine($"| {library} | {samples[samples.Count / 2].ToString("F1", CultureInfo.InvariantCulture)} | {samples[0].ToString("F1", CultureInfo.InvariantCulture)} | {samples[^1].ToString("F1", CultureInfo.InvariantCulture)} |");
+    private static void Print(string library, List<double>? samples) =>
+        Console.WriteLine(samples is null ? $"| {library} | fails | | |" : $"| {library} | {samples[samples.Count / 2].ToString("F1", CultureInfo.InvariantCulture)} | {samples[0].ToString("F1", CultureInfo.InvariantCulture)} | {samples[^1].ToString("F1", CultureInfo.InvariantCulture)} |");
 }
 
 /// <summary>Times the steps of Phoney's first call one after the other in fresh processes, to see which of them the start-up goes to.</summary>
@@ -346,6 +337,7 @@ internal static class Summary
     {
         var results = new Dictionary<(string Scenario, string Library), (double Nanoseconds, double Bytes)>();
         var scenarios = new List<string>();
+        var failed = new HashSet<(string Scenario, string Library)>(); // NA: the library couldn't run, or made incomplete objects (see Verify in Comparisons.cs)
         foreach (var file in Directory.GetFiles(Path.Combine(directory, "results"), "*-report.csv").Order(StringComparer.Ordinal))
         {
             var lines = File.ReadAllLines(file);
@@ -365,7 +357,10 @@ internal static class Summary
                 };
                 if (!scenarios.Contains(scenario))
                     scenarios.Add(scenario);
-                results[(scenario, library)] = (Nanoseconds(fields[mean]), Bytes(fields[allocated]));
+                if (fields[mean].Trim() == "NA")
+                    failed.Add((scenario, library));
+                else
+                    results[(scenario, library)] = (Nanoseconds(fields[mean]), Bytes(fields[allocated]));
             }
         }
 
@@ -374,11 +369,11 @@ internal static class Summary
         Console.WriteLine("|---|" + string.Join("|", Libraries.Select(_ => "---:")) + "|");
         foreach (var scenario in order.Where(scenarios.Contains))
         {
-            var fastest = Libraries.Where(l => results.ContainsKey((scenario, l))).Min(l => results[(scenario, l)].Nanoseconds);
+            var fastest = Libraries.Where(l => results.ContainsKey((scenario, l))).DefaultIfEmpty().Min(l => l is null ? 0 : results[(scenario, l)].Nanoseconds);
             var cells = Libraries.Select(library =>
             {
                 if (!results.TryGetValue((scenario, library), out var r))
-                    return "–";
+                    return failed.Contains((scenario, library)) ? "fails" : "–";
                 var text = $"{Time(r.Nanoseconds)} / {Size(r.Bytes)}";
                 return r.Nanoseconds == fastest ? $"**{text}**" : text;
             });

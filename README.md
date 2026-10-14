@@ -895,36 +895,50 @@ Every library is seeded, and each cell is the mean time per operation and the me
 
 | Scenario | Phoney | Phoney (reflection) | Bogus | AutoBogus | AutoFixture | NBuilder | Faker.Net |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| First name | **9.1 ns / 0 B** | – | 130 ns / 37 B | – | – | – | 96.1 µs / 139 KB |
-| Full name | 479 ns / 412 B | – | **285 ns / 127 B** | – | – | – | 154 µs / 193 KB |
-| Email | **309 ns / 129 B** | – | 2.36 µs / 1.5 KB | – | – | – | 153 µs / 196 KB |
-| Street address | **537 ns / 595 B** | – | 4.63 µs / 4.4 KB | – | – | – | 82.1 µs / 92 KB |
-| Sentence | **420 ns / 481 B** | – | 1.23 µs / 847 B | – | – | – | 72.0 µs / 77 KB |
-| Flat objects (×1,000) | **2.81 ms / 2.1 MB** | 3.46 ms / 2.6 MB | 14.3 ms / 8.9 MB | 594 ms / 649 MB | 106 ms / 49 MB | 6.53 ms / 3.9 MB | – |
-| Object graphs (×1,000) | 12.0 ms / 7.4 MB | **11.8 ms / 7.6 MB** | 31.2 ms / 14 MB | 3.57 s / 3.32 GB | 491 ms / 205 MB | 46.1 ms / 19 MB | – |
+| First name | **10.6 ns / 0 B** | – | 159 ns / 37 B | – | – | – | 100 µs / 139 KB |
+| Full name | 453 ns / 348 B | – | **306 ns / 127 B** | – | – | – | 157 µs / 194 KB |
+| Email | **308 ns / 129 B** | – | 2.27 µs / 1.5 KB | – | – | – | 160 µs / 196 KB |
+| Street address | **527 ns / 595 B** | – | 4.57 µs / 4.4 KB | – | – | – | 84.0 µs / 90 KB |
+| Sentence | **420 ns / 481 B** | – | 1.25 µs / 847 B | – | – | – | 72.7 µs / 77 KB |
+| Flat objects (×1,000) | **2.93 ms / 2.1 MB** | 3.48 ms / 2.6 MB | 14.4 ms / 8.9 MB | 623 ms / 649 MB | 122 ms / 49 MB | 6.35 ms / 3.9 MB | – |
+| Object graphs (×1,000) | **12.2 ms / 7.4 MB** | 12.2 ms / 7.6 MB | 28.3 ms / 14 MB | 3.67 s / 3.32 GB | 526 ms / 205 MB | 41.9 ms / 20 MB | – |
 | **Data it makes** | realistic, and the parts of an object agree (the email matches the name) | same | realistic, with a rule written by hand for every member | random unrelated words and numbers | the member name and a GUID | the member name and a counter | realistic values, but every call is independent |
 
 "Phoney" is the source-generated model (`[FakeFor<T>]`) and "Phoney (reflection)" the reflection model; the value rows have only one column because they don't involve a model. A flat object has 11 members; a graph is a customer with an address and two purchases of two lines each, plus an enum.
 
 How to read the numbers:
 
-- **The libraries don't produce the same data.** Phoney and Bogus produce realistic values (names, emails and addresses that agree with each other). AutoBogus, AutoFixture and NBuilder fill members with random placeholder strings and numbers that don't resemble the member (run the `check` command below to see what each library produces).
+- **The libraries don't produce the same data.** Phoney and Bogus produce realistic values (names, emails and addresses that agree with each other). AutoBogus fills members with random unrelated words and numbers, AutoFixture with the member name and a GUID, and NBuilder with the member name and a counter (run the `check` command below to see what each library produces). Faker.Net's values look real, but each call is independent of the others.
 - **Bogus needs every rule written by hand.** The Bogus rows use `Faker<T>` classes with a rule per member, and the nested ones are composed by hand. Phoney gets the same shape from name conventions and the type's members. NBuilder has no object-graph support, so its graph is composed by hand with `.All().Do(...)`.
-- **Faker.Net only offers single values**, one static call each, which is why it has no object rows. Its cost is about 72–154 µs and 77–196 KB per value in this run.
-- **Bogus is faster at `Full name`** (285 ns against 479 ns).
-- **Start-up is the other thing to know.** The first object of a fresh process takes this long, from `Main` to the first generated object (median of 15 processes). The left column is a plain `dotnet` run, the right one the same app published with ReadyToRun (`-p:PublishReadyToRun=true`), which precompiles the libraries and removes most of the JIT time:
+- **Faker.Net only offers single values**, one static call each, which is why it has no object rows. Its cost is about 73–160 µs and 77–196 KB per value in this run.
+- **Bogus is faster at `Full name`** (306 ns against 453 ns).
+#### Native AOT
 
-| Library | JIT | ReadyToRun |
-|---|---:|---:|
-| Phoney (reflection) | 150 ms | 97 ms |
-| Phoney (source generated) | 105 ms | 59 ms |
-| Bogus | 164 ms | 119 ms |
-| AutoBogus | 133 ms | 90 ms |
-| AutoFixture | 77 ms | 47 ms |
-| NBuilder | 25 ms | 20 ms |
-| Faker.Net | 25 ms | 19 ms |
+The same scenarios, built and run with Native AOT (the .NET 10.0.13 ILCompiler, instruction set x86-64-v3). Before a library is timed, a check makes sure it really makes what is timed: "fails" means it throws, or in the case of a graph makes incomplete objects. The reflection model of Phoney isn't available with Native AOT (it is marked `RequiresDynamicCode`).
 
-With Native AOT, Phoney's first object takes about 5 ms (source-generated model, the reflection model isn't available there). The other libraries were not measured with Native AOT.
+| Scenario | Phoney | Phoney (reflection) | Bogus | AutoBogus | AutoFixture | NBuilder | Faker.Net |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| First name | **14.9 ns / 0 B** | – | 164 ns / 37 B | – | – | – | 112 µs / 139 KB |
+| Full name | 602 ns / 460 B | – | **356 ns / 127 B** | – | – | – | 143 µs / 194 KB |
+| Email | **355 ns / 129 B** | – | 2.79 µs / 1.5 KB | – | – | – | 154 µs / 195 KB |
+| Street address | **556 ns / 595 B** | – | 8.28 µs / 4.7 KB | – | – | – | 79.6 µs / 91 KB |
+| Sentence | **422 ns / 481 B** | – | 1.64 µs / 831 B | – | – | – | 68.0 µs / 77 KB |
+| Flat objects (×1,000) | **3.32 ms / 2.0 MB** | fails | fails | 1.31 s / 865 MB | 549 ms / 130 MB | 15.4 ms / 8.8 MB | – |
+| Object graphs (×1,000) | **14.3 ms / 7.4 MB** | fails | fails | fails | fails | 68.9 ms / 29 MB | – |
+
+Bogus works with Native AOT for single values but not for objects (it builds its property setters with `MakeGenericMethod`, which has no native code). AutoBogus works for flat objects but not for graphs, and AutoFixture makes graphs without their collections. Phoney's source-generated model makes the same data as with the JIT, for the same seed.
+
+- **Start-up is the other thing to know.** The first object of a fresh process takes this long, from `Main` to the first generated object (median of 15 processes). "JIT" is a plain `dotnet` run, "ReadyToRun" the same app published with `-p:PublishReadyToRun=true`, which precompiles the libraries and removes most of the JIT time, and "Native AOT" the app published with Native AOT. "fails" means the library throws:
+
+| Library | JIT | ReadyToRun | Native AOT |
+|---|---:|---:|---:|
+| Phoney (reflection) | 150 ms | 97 ms | fails |
+| Phoney (source generated) | 105 ms | 59 ms | 5.4 ms |
+| Bogus | 164 ms | 119 ms | fails |
+| AutoBogus | 133 ms | 90 ms | 24 ms |
+| AutoFixture | 77 ms | 47 ms | 2.2 ms |
+| NBuilder | 25 ms | 20 ms | 0.8 ms |
+| Faker.Net | 25 ms | 19 ms | 4.2 ms |
 
 Most of Phoney's first call is JIT compilation of its own code, not reading data: a locale file is indexed when it is opened and each entry is decoded the first time its key is read, so a process that uses a few dozen of the ~270 keys of `en` never builds the rest. It is paid once per process, so it matters for short-lived tools and not for services or test runs. `cold-phases` shows the time and the JIT time of each step.
 
@@ -933,10 +947,12 @@ Reproduce the tables with:
 ```bash
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- --filter '*' --artifacts out   # the timed matrix
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- summarize out                   # prints it as a markdown table
+PHONEY_BENCH_AOT=1 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- --filter '*' --artifacts out-aot   # the same with Native AOT
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold                           # start-up, one process per measurement
+dotnet publish benchmarks/Phoney.Benchmarks.Comparison -c Release -r linux-x64 -p:AotComparison=true -o out-aot-app   # the app built with Native AOT:
+out-aot-app/Phoney.Benchmarks.Comparison cold                                                              # its start-up
+out-aot-app/Phoney.Benchmarks.Comparison sanity                                                            # 1,000 objects per library: how many differ, how many are incomplete
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-phases                    # where Phoney's first call spends its time (and JIT time)
-dotnet publish benchmarks/Phoney.Benchmarks.ColdAot -c Release -o artifacts/cold-aot                       # start-up with Native AOT:
-dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-aot artifacts/cold-aot/Phoney.Benchmarks.ColdAot
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- check                          # what each library actually produces
 ```
 
