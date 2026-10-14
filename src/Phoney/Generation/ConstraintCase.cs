@@ -2,7 +2,7 @@ namespace Phoney;
 
 /// <summary>
 /// A generated object that breaks, or sits exactly on, one limit of one member, as listed by
-/// <see cref="Generator{T}.InvalidCases"/> and <see cref="Generator{T}.BoundaryCases"/>. Every other member holds the value
+/// <see cref="ObjectGenerator{T}.InvalidCases"/> and <see cref="ObjectGenerator{T}.BoundaryCases"/>. Every other member holds the value
 /// the generator gives a valid object for the same seed.
 /// </summary>
 /// <typeparam name="T">The generated type.</typeparam>

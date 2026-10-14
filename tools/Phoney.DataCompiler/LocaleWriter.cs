@@ -5,7 +5,7 @@ namespace Phoney.DataCompiler;
 
 /// <summary>
 /// Writes a locale's own (unmerged) entries in Phoney's binary format, Brotli-compressed.
-/// The reader lives in <c>src/Phoney/Data/LocaleResourceReader.cs</c>; keep both in sync and bump
+/// The reader lives in <c>src/Phoney/Data/LocaleResource.cs</c>; keep both in sync and bump
 /// <see cref="FormatVersion"/> on any layout change.
 /// </summary>
 /// <remarks>

@@ -21,6 +21,8 @@ enum TypeCategory
 #pragma warning disable CS1591 // self-explanatory
     String, Char, Bool, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Single, Double, Decimal,
     Guid, DateTime, DateTimeOffset, DateOnly, TimeOnly, TimeSpan, Uri, Enum,
+    // New categories are appended, like the convention kinds below.
+    Half, Int128, UInt128, BigInteger, IntPtr, UIntPtr, Rune, IPAddress, Version,
 #pragma warning restore CS1591
 }
 
@@ -88,14 +90,14 @@ static class ConventionRules
             return Fits(Accepts.Text, category) ? ContextualName(name, Normalize(declaringTypeName)) : ConventionKind.None;
 
         if (Names.TryGetValue(name, out var exact))
-            return Fits(exact.Accepts, category) ? exact.Kind : ConventionKind.None;
+            return Fits(exact.Accepts, category, exact.Kind) ? exact.Kind : ConventionKind.None;
 
         // Try trailing word runs, longest first: "HomeEmailAddress" → "emailaddress" before "address".
         var words = Words(memberName);
         for (var start = 1; start < words.Count; start++)
         {
             var suffix = string.Concat(words.GetRange(start, words.Count - start));
-            if (Names.TryGetValue(suffix, out var match) && Fits(match.Accepts, category))
+            if (Names.TryGetValue(suffix, out var match) && Fits(match.Accepts, category, match.Kind))
                 return match.Kind == ConventionKind.Id ? ConventionKind.ReferenceId : match.Kind; // CustomerId is a reference, not this object's id
         }
 
@@ -172,6 +174,15 @@ static class ConventionRules
         "System.TimeOnly" => TypeCategory.TimeOnly,
         "System.TimeSpan" => TypeCategory.TimeSpan,
         "System.Uri" => TypeCategory.Uri,
+        "System.Half" => TypeCategory.Half,
+        "System.Int128" => TypeCategory.Int128,
+        "System.UInt128" => TypeCategory.UInt128,
+        "System.Numerics.BigInteger" => TypeCategory.BigInteger,
+        "System.IntPtr" => TypeCategory.IntPtr,
+        "System.UIntPtr" => TypeCategory.UIntPtr,
+        "System.Text.Rune" => TypeCategory.Rune,
+        "System.Net.IPAddress" => TypeCategory.IPAddress,
+        "System.Version" => TypeCategory.Version,
         _ => TypeCategory.Other,
     };
 
@@ -194,18 +205,21 @@ static class ConventionRules
         CategoryOf(fullTypeName, isEnum) is var category && category != TypeCategory.Other ? category : AdaptedCategoryOf(fullTypeName);
 
     /// <summary>Whether a category is numeric.</summary>
-    public static bool IsNumber(TypeCategory c) => c >= TypeCategory.Byte && c <= TypeCategory.Decimal;
+    public static bool IsNumber(TypeCategory c) => (c >= TypeCategory.Byte && c <= TypeCategory.Decimal) || c == TypeCategory.Half || IsInteger(c);
 
     /// <summary>Whether a category is an integer type.</summary>
-    private static bool IsInteger(TypeCategory c) => c >= TypeCategory.Byte && c <= TypeCategory.UInt64;
+    private static bool IsInteger(TypeCategory c) =>
+        (c >= TypeCategory.Byte && c <= TypeCategory.UInt64) || c == TypeCategory.Int128 || c == TypeCategory.UInt128 || c == TypeCategory.BigInteger || c == TypeCategory.IntPtr || c == TypeCategory.UIntPtr;
 
     /// <summary>Whether a category represents a date.</summary>
     private static bool IsDate(TypeCategory c) => c == TypeCategory.DateTime || c == TypeCategory.DateTimeOffset || c == TypeCategory.DateOnly;
 
     /// <summary>Whether a name convention applies to a member of category <paramref name="c"/>.</summary>
-    private static bool Fits(Accepts accepts, TypeCategory c) => accepts switch
+    private static bool Fits(Accepts accepts, TypeCategory c, ConventionKind kind = ConventionKind.None) => accepts switch
     {
-        Accepts.Text => c == TypeCategory.String,
+        Accepts.Text => c == TypeCategory.String ||
+            (c == TypeCategory.IPAddress && (kind == ConventionKind.Ip || kind == ConventionKind.Ipv4 || kind == ConventionKind.Ipv6)) ||
+            (c == TypeCategory.Version && kind == ConventionKind.Version),
         Accepts.Integer => IsInteger(c),
         Accepts.Number => IsNumber(c),
         Accepts.Date => IsDate(c),

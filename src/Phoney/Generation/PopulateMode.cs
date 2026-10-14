@@ -1,6 +1,6 @@
 namespace Phoney;
 
-/// <summary>Which members <see cref="Generator{T}.Populate(T, PopulateMode)"/> fills in.</summary>
+/// <summary>Which members <see cref="ObjectGenerator{T}.Populate(T, PopulateMode)"/> fills in.</summary>
 public enum PopulateMode
 {
     /// <summary>

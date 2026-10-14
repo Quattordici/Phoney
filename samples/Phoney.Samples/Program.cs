@@ -71,7 +71,7 @@ foreach (var drawing in Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle, Squa
     Console.WriteLine($"{drawing.Title}: {drawing.Shape}");
 
 // Every Circle in the drawing comes from one generator, whatever member or collection it sits in.
-var big = Fake.For<Drawing>().Seed(1).Use<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 10)).Generate(2);
+var big = Fake.For<Drawing>().Seed(1).WithGeneratorFor<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 10)).Generate(2);
 Console.WriteLine(string.Join(", ", big.Select(d => d.Shape)));
 
 // 7b. Invalid and boundary data, from the data annotations ------------------------------------
@@ -89,6 +89,24 @@ var shoppers = Fake.For<Customer>().Seed(2)
     .Generate(2);
 foreach (var shopper in shoppers)
     Console.WriteLine($"{shopper.FirstName} lives in {shopper.Address.City}; orders: {string.Join(", ", shopper.Orders.Select(o => o.Status))}");
+
+// 7c2. Conditions and checked rules -------------------------------------------------------------
+Console.WriteLine("\n== Conditions and checked rules");
+foreach (var order in Fake.For<Order>().Seed(3).Where(o => o.Total > 100).Where(o => o.Status != OrderStatus.Pending).Generate(3))
+    Console.WriteLine($"order {order.Id:N}: {order.Total:C} ({order.Status})");
+try
+{
+    // Every customer has at least one order, so the Orders rule applies; nothing in a customer is a Shape, so the Use never does.
+    Fake.For<Customer>().Seed(2)
+        .With(c => c.Orders.Each().Status, OrderStatus.Shipped)
+        .WithGeneratorFor(Fake.For<Circle>())
+        .VerifyRules()
+        .Generate(5);
+}
+catch (InvalidOperationException e)
+{
+    Console.WriteLine(e.Message.Split(Environment.NewLine)[0..2].Aggregate((a, b) => a + Environment.NewLine + b));
+}
 
 // 7d. Random but replayable --------------------------------------------------------------------
 Console.WriteLine("\n== Replayable seeds");

@@ -8,10 +8,10 @@ builder.Services.AddPhoney(o =>
         o.Locale = "sv";
         o.Seed = 42;                                            // every scope starts at the same seed
     })
-    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // a singleton Generator<Customer>
+    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // a singleton ObjectGenerator<Customer>
     .AddGenerator(TestData.Order);                              // a [FakeFor<Order>] generator: no reflection, AOT safe
 
-public class DemoController(IFaker faker, Generator<Customer> customers)
+public class DemoController(IFaker faker, ObjectGenerator<Customer> customers)
 {
     public Customer Get() => customers.Generate();
     public string Name() => faker.Person.FullName();

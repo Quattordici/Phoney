@@ -17,19 +17,19 @@ namespace Phoney.SourceGenerator;
 /// seed in a loop (PHONEY010) and constant arguments that make a call throw (PHONEY011).
 /// </summary>
 /// <remarks>
-/// The member checks mirror <c>Generator&lt;T&gt;.Compile</c> and use <see cref="ModelBuilder.DescribeMembers"/>, so they
-/// are skipped for generators over a hand-written model (<c>new Generator&lt;T&gt;(model)</c>), whose members are unknown.
+/// The member checks mirror <c>ObjectGenerator&lt;T&gt;.Compile</c> and use <see cref="ModelBuilder.DescribeMembers"/>, so they
+/// are skipped for generators over a hand-written model (<c>new ObjectGenerator&lt;T&gt;(model)</c>), whose members are unknown.
 /// </remarks>
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class UsageAnalyzer : DiagnosticAnalyzer
 {
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
-    private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "Use", "Subtype" };
+    private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "WithGeneratorFor", "Subtype" };
 
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary" };
+    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
-    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Invalid", "Boundary" };
+    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
@@ -44,7 +44,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(start =>
         {
-            var generator = start.Compilation.GetTypeByMetadataName("Phoney.Generator`1");
+            var generator = start.Compilation.GetTypeByMetadataName("Phoney.ObjectGenerator`1");
             var fake = start.Compilation.GetTypeByMetadataName("Phoney.Fake");
             if (generator is null || fake is null)
                 return;
@@ -129,7 +129,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             case "Generate" or "GenerateParallel" or "Many":
                 Check(context, call, "count", v => v >= 0, "at least 0");
                 break;
-            case "Unique":
+            case "Unique" or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
                 break;
         }
@@ -221,7 +221,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (!RuleMethods.Contains(name))
+        if (!RuleMethods.Contains(name) && !IsMemberCondition(call.TargetMethod))
             return;
 
         var selector = RuleSelector.Read(call);
@@ -232,7 +232,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             CheckReplaced(context, call, selector, symbols);
     }
 
-    /// <summary>PHONEY007: what <c>Generator&lt;T&gt;.Compile</c> and <c>MemberName</c> reject at runtime.</summary>
+    /// <summary>PHONEY007: what <c>ObjectGenerator&lt;T&gt;.Compile</c> and <c>MemberName</c> reject at runtime.</summary>
     private static void CheckRule(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
         var method = call.TargetMethod;
@@ -247,6 +247,18 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             if (method.Name == "Unique")
             {
                 Report(context, selector, $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.");
+                return;
+            }
+
+            if (method.Name is "Sequence" or "Cycle")
+            {
+                Report(context, selector, $"{method.Name} must select a member of the generated type directly, like x => x.Name: it numbers the generated objects, so it can't give a value to '{selector.Path}' in a nested object.");
+                return;
+            }
+
+            if (method.Name == "Where")
+            {
+                Report(context, selector, $"Where must select a member of the generated type directly, like x => x.Name: a condition on a member applies to the generated object's own members, not to '{selector.Path}' in a nested object.");
                 return;
             }
 
@@ -271,7 +283,15 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         {
             Report(context, selector, $"'{type.Name}.{selector.Name}' is a constructor parameter, so it can't depend on the object. Use a rule without the object parameter.");
         }
+        else if (member.FillsExisting && IsDependentRule(method))
+        {
+            Report(context, selector, $"'{type.Name}.{selector.Name}' is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
+        }
     }
+
+    /// <summary><c>Where(x =&gt; x.Member, condition)</c>: a condition on one member, unlike <c>Where(x =&gt; …)</c> on the whole object.</summary>
+    private static bool IsMemberCondition(IMethodSymbol method) =>
+        method.Name == "Where" && method.Parameters.Length >= 2 && method.Parameters[0].Type is INamedTypeSymbol { Name: "Expression" };
 
     private static void Report(OperationAnalysisContext context, RuleSelector selector, string message) =>
         context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleNotGenerated, selector.Location, message));
@@ -291,12 +311,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// PHONEY008 for type registrations: <c>Use</c> or <c>Subtype</c> for a type that an earlier call of the same method in the same chain
-    /// registered replaces it. (<c>Use</c> and <c>Subtype</c> for one type are not the same thing: the generator wins over the subtype.)
+    /// PHONEY008 for type registrations: <c>WithGeneratorFor</c> or <c>Subtype</c> for a type that an earlier call of the same method in the same chain
+    /// registered replaces it. (<c>WithGeneratorFor</c> and <c>Subtype</c> for one type are not the same thing: the generator wins over the subtype.)
     /// </summary>
     private static void CheckTypeRuleReplaced(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
     {
-        // Use<TNested>, Use<TBase, TGenerated>, Subtype<TBase, T1…> and Subtype<TBase>(types) all register TypeArguments[0].
+        // WithGeneratorFor<TNested>, WithGeneratorFor<TBase, TGenerated>, Subtype<TBase, T1…> and Subtype<TBase>(types) all register TypeArguments[0].
         if (call.TargetMethod.TypeArguments.FirstOrDefault() is not { } type)
             return;
         var method = call.TargetMethod.Name;
@@ -321,7 +341,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    /// <summary>Whether the chain starts with <c>new Generator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>
+    /// <summary>Whether the chain starts with <c>new ObjectGenerator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>
     private static bool StartsFromCustomModel(IInvocationOperation call, Symbols symbols)
     {
         var receiver = call.Instance;

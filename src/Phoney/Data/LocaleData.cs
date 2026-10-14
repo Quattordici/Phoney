@@ -7,11 +7,16 @@ namespace Phoney.Data;
 public sealed class LocaleData
 {
     private readonly Entry?[] _entries;
+    private readonly LocaleResource?[] _origin;
 
-    internal LocaleData(LocaleInfo info, Entry?[] entries)
+    /// <param name="info">The locale.</param>
+    /// <param name="entries">The entries that are already there (user data); a slot that is <see langword="null"/> is read from <paramref name="origin"/> when asked for.</param>
+    /// <param name="origin">By key, the embedded file the entry is decoded from on first use, or <see langword="null"/> when there is none.</param>
+    internal LocaleData(LocaleInfo info, Entry?[] entries, LocaleResource?[] origin)
     {
         Info = info;
         _entries = entries;
+        _origin = origin;
     }
 
     /// <summary>The locale this data belongs to.</summary>
@@ -25,7 +30,20 @@ public sealed class LocaleData
     public bool Has(string path) => Get(path) is { Kind: not EntryKind.Unavailable };
 
     /// <summary>Entry by key id; <see langword="null"/> when missing.</summary>
-    internal Entry? Get(int key) => (uint)key < (uint)_entries.Length ? _entries[key] : null;
+    internal Entry? Get(int key)
+    {
+        var entries = _entries;
+        return (uint)key < (uint)entries.Length ? entries[key] ?? Decode(key) : null;
+    }
+
+    /// <summary>Decodes an embedded entry on first use. Every caller gets the instance the resource published, so a race only repeats the lookup.</summary>
+    private Entry? Decode(int key)
+    {
+        var entry = _origin[key]?.Get(key);
+        if (entry is not null)
+            _entries[key] = entry;
+        return entry;
+    }
 
     /// <summary>Whether usable data exists for the key.</summary>
     internal bool Has(int key) => Get(key) is { Kind: not EntryKind.Unavailable };

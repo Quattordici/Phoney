@@ -72,19 +72,19 @@ public sealed class SourceGeneratedTests
         Member viaGenerated;
         Member viaFor;
         using (Fake.Seeded(5))
-            viaGenerated = Fake.Generated<Member>().ReferenceDate(Reference).Generate();
+            viaGenerated = Fake.ForGenerated<Member>().ReferenceDate(Reference).Generate();
         using (Fake.Seeded(5))
             viaFor = Fake.For<Member>().ReferenceDate(Reference).Generate();
         viaGenerated.Email.ShouldBe(viaFor.Email);
         viaGenerated.Username.ShouldBe(viaFor.Username);
 
-        Fake.Generated<Member>().Seed(3).Generate().Email.ShouldBe(TestFakes.Member.Seed(3).Generate().Email);
+        Fake.ForGenerated<Member>().Seed(3).Generate().Email.ShouldBe(TestFakes.Member.Seed(3).Generate().Email);
     }
 
     [Test]
     public void Fake_Generated_explains_how_to_fix_a_type_without_a_generated_model()
     {
-        var exception = Should.Throw<InvalidOperationException>(() => Fake.Generated<NotGenerated>());
+        var exception = Should.Throw<InvalidOperationException>(() => Fake.ForGenerated<NotGenerated>());
         exception.Message.ShouldContain("[FakeFor<NotGenerated>]");
     }
 
@@ -101,7 +101,7 @@ public sealed class SourceGeneratedTests
     public void Generated_and_reflection_models_produce_identical_data()
     {
         var generated = TestFakes.Member.Seed(7).ReferenceDate(Reference).Generate(25);
-        var reflected = new Generator<Member>(new ReflectionModel<Member>()).Seed(7).ReferenceDate(Reference).Generate(25);
+        var reflected = new ObjectGenerator<Member>(new ReflectionModel<Member>()).Seed(7).ReferenceDate(Reference).Generate(25);
 
         reflected.Select(Describe).ShouldBe(generated.Select(Describe));
 
@@ -115,11 +115,11 @@ public sealed class SourceGeneratedTests
     [Test]
     public void Generated_and_reflection_models_apply_conventions_to_nested_objects_identically()
     {
-        Generator<Member> Configure(Generator<Member> g) =>
+        ObjectGenerator<Member> Configure(ObjectGenerator<Member> g) =>
             g.Seed(11).ReferenceDate(Reference).WithConvention<string>(n => n is "City" or "CompanyName", f => "X" + f.Random.Int(1, 99));
 
         var generated = Configure(TestFakes.Member).Generate(10);
-        var reflected = Configure(new Generator<Member>(new ReflectionModel<Member>())).Generate(10);
+        var reflected = Configure(new ObjectGenerator<Member>(new ReflectionModel<Member>())).Generate(10);
 
         generated.ShouldAllBe(m => m.Address.City.StartsWith('X') && m.Memberships.All(x => x.CompanyName.StartsWith('X')));
         reflected.Select(m => $"{m.Email}|{m.Address.City}|{m.Address.Street}|{string.Join(",", m.Memberships.Select(x => x.CompanyName))}")

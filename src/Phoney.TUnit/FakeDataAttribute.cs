@@ -1,6 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.Text;
 using Phoney.Generation;
 using TUnit.Core;
 
@@ -40,39 +38,45 @@ namespace Phoney.TUnit;
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class | AttributeTargets.Property, AllowMultiple = true)]
 public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
 {
-    private long? _seed;
-    private int _count = 1;
-    private double _nullProbability;
+    private readonly FakeDataOptions _options = new();
 
     /// <summary>Number of test cases to generate. Default 1.</summary>
     public int Count
     {
-        get => _count;
-        set => _count = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(Count), value, "At least one test case is needed.");
+        get => _options.Count;
+        set => _options.Count = value;
     }
 
     /// <summary>Seed for the values. Default: derived from the test's name, so values are stable between runs.</summary>
     public long Seed
     {
-        get => _seed ?? 0;
-        set => _seed = value;
+        get => _options.Seed ?? 0;
+        set => _options.Seed = value;
     }
 
     /// <summary>Locale of the data, e.g. <c>sv</c> or <c>de-AT</c>. Default: <see cref="Fake.Locale"/>.</summary>
-    public string? Locale { get; set; }
+    public string? Locale
+    {
+        get => _options.Locale;
+        set => _options.Locale = value;
+    }
 
     /// <summary>Probability (0–1) that nullable parameters (<c>string?</c>, <c>int?</c>…) are <see langword="null"/>. Default 0.</summary>
     public double NullProbability
     {
-        get => _nullProbability;
-        set => _nullProbability = value is >= 0 and <= 1 ? value : throw new ArgumentOutOfRangeException(nameof(NullProbability), value, "Must be between 0 and 1.");
+        get => _options.NullProbability;
+        set => _options.NullProbability = value;
     }
 
     /// <summary>
     /// The point in time relative dates (past, recent, birthdates, ages) are computed from, in ISO 8601
     /// (<c>2030-01-01</c>). Default: <see cref="Faker.DefaultSeededReferenceDate"/>.
     /// </summary>
-    public string? ReferenceDate { get; set; }
+    public string? ReferenceDate
+    {
+        get => _options.ReferenceDate;
+        set => _options.ReferenceDate = value;
+    }
 
     /// <inheritdoc />
     protected override IEnumerable<Func<object?[]?>> GenerateDataSources(DataGeneratorMetadata dataGeneratorMetadata)
@@ -96,52 +100,19 @@ public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
     /// <summary>Configures the generator; <paramref name="environmentSeed"/> is the <c>PHONEY_SEED</c> value, if any.</summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "[FakeData] reads the parameters of test methods with reflection by design; TUnit test projects are not trimmed.")]
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "[FakeData] reads the parameters of test methods with reflection by design; TUnit test projects are not published with Native AOT.")]
-    internal ArgumentGenerator CreateGenerator(IReadOnlyList<FakeArgument> arguments, MethodMetadata? test, long? environmentSeed)
-    {
-        var generator = new ArgumentGenerator(arguments)
-            .Seed(ResolveSeed(_seed, test, arguments, environmentSeed))
-            .NullProbability(NullProbability);
-        if (Locale is { } locale)
-            generator = generator.Locale(locale);
-        if (ReferenceDate is { } date)
-            generator = generator.ReferenceDate(DateTimeOffset.Parse(date, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal));
-        return generator;
-    }
+    internal ArgumentGenerator CreateGenerator(IReadOnlyList<FakeArgument> arguments, MethodMetadata? test, long? environmentSeed) =>
+        _options.CreateGenerator(arguments, TestName(test), environmentSeed);
 
-    /// <summary>
-    /// The seed of the rows: the explicit one; else the stable one derived from the test, moved by <c>PHONEY_SEED</c> when that is set, so
-    /// a whole suite can run on other data (and be replayed with the same value) while each test keeps its own data.
-    /// </summary>
-    internal static long ResolveSeed(long? explicitSeed, MethodMetadata? test, IEnumerable<FakeArgument> arguments, long? environmentSeed)
-    {
-        if (explicitSeed is { } seed)
-            return seed;
+    /// <summary>See <see cref="FakeDataOptions.ResolveSeed"/>.</summary>
+    internal static long ResolveSeed(long? explicitSeed, MethodMetadata? test, IEnumerable<FakeArgument> arguments, long? environmentSeed) =>
+        FakeDataOptions.ResolveSeed(explicitSeed, TestName(test), arguments, environmentSeed);
 
-        var derived = DefaultSeed(test, arguments);
-        return environmentSeed is { } moved ? unchecked(derived ^ ((moved + 1) * unchecked((long)0x9E3779B97F4A7C15UL))) : derived;
-    }
+    /// <summary>See <see cref="FakeDataOptions.DefaultSeed"/>.</summary>
+    internal static long DefaultSeed(MethodMetadata? test, IEnumerable<FakeArgument> arguments) =>
+        FakeDataOptions.DefaultSeed(TestName(test), arguments);
 
-    /// <summary>
-    /// A seed that depends only on the test's identity and the generated members, hashed with FNV-1a rather than
-    /// <see cref="string.GetHashCode()"/> (which differs per process), so it is the same on every run and machine.
-    /// </summary>
-    internal static long DefaultSeed(MethodMetadata? test, IEnumerable<FakeArgument> arguments)
-    {
-        var identity = new StringBuilder();
-        identity.Append(test?.Class?.Type.FullName).Append('.').Append(test?.Name);
-        foreach (var argument in arguments)
-            identity.Append('|').Append(argument.Type.FullName).Append(' ').Append(argument.Name);
-
-        const ulong offset = 14695981039346656037, prime = 1099511628211;
-        var hash = offset;
-        foreach (var c in identity.ToString())
-        {
-            hash = (hash ^ (byte)c) * prime;
-            hash = (hash ^ (byte)(c >> 8)) * prime;
-        }
-
-        return unchecked((long)hash);
-    }
+    /// <summary>The class and method of the test, the identity the seed is derived from.</summary>
+    private static string TestName(MethodMetadata? test) => $"{test?.Class?.Type.FullName}.{test?.Name}";
 
     /// <summary>
     /// Describes a parameter or property TUnit asks for, preferring its reflection info (which carries data

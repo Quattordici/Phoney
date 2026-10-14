@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.Frozen;
 
 namespace Phoney.Data;
 
@@ -9,21 +8,27 @@ namespace Phoney.Data;
 /// </summary>
 internal static class KeyRegistry
 {
-    private static readonly FrozenDictionary<string, int> Catalog =
-        DataKeys.Paths.Select((path, id) => (path, id)).ToFrozenDictionary(x => x.path, x => x.id, StringComparer.Ordinal);
+    // Plain dictionaries, filled once and never written again: building a FrozenDictionary costs tens of milliseconds on the first call
+    // of a process (specialising and analysing the keys), and lookups by path are not on the hot path (generation uses the integer ids).
+    private static readonly Dictionary<string, int> Catalog = BuildCatalog();
 
-    private static readonly FrozenDictionary<string, int> CatalogGroups = BuildCatalogGroups();
+    private static readonly Dictionary<string, int> CatalogGroups = BuildCatalogGroups();
 
     private static readonly ConcurrentDictionary<string, int> CustomKeys = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, int> CustomGroups = new(StringComparer.Ordinal);
     private static readonly List<int> CustomKeyGroups = [];
     private static readonly object Gate = new();
 
+    // Counts are kept next to the dictionaries: ConcurrentDictionary.Count takes every lock of the dictionary, and the first call of it in a
+    // process initialises an EventSource (about 12 ms) that nothing here needs.
+    private static int _customKeyCount;
+    private static int _customGroupCount;
+
     /// <summary>Total number of key ids handed out so far.</summary>
-    public static int Count => DataKeys.Count + CustomKeys.Count;
+    public static int Count => DataKeys.Count + Volatile.Read(ref _customKeyCount);
 
     /// <summary>Total number of entry groups known so far.</summary>
-    public static int GroupCount => DataKeys.GroupCount + CustomGroups.Count;
+    public static int GroupCount => DataKeys.GroupCount + Volatile.Read(ref _customGroupCount);
 
     /// <summary>Looks up the id of a catalog or custom path.</summary>
     public static bool TryGetId(string path, out int id) =>
@@ -41,11 +46,17 @@ internal static class KeyRegistry
             if (CustomKeys.TryGetValue(path, out id))
                 return id;
             var group = GroupName(path);
-            if (!CatalogGroups.TryGetValue(group, out var groupId))
-                groupId = CustomGroups.GetOrAdd(group, _ => DataKeys.GroupCount + CustomGroups.Count);
+            if (!CatalogGroups.TryGetValue(group, out var groupId) && !CustomGroups.TryGetValue(group, out groupId))
+            {
+                groupId = DataKeys.GroupCount + _customGroupCount;
+                CustomGroups[group] = groupId;
+                Volatile.Write(ref _customGroupCount, _customGroupCount + 1);
+            }
+
             id = DataKeys.Count + CustomKeyGroups.Count;
             CustomKeyGroups.Add(groupId);
             CustomKeys[path] = id;
+            Volatile.Write(ref _customKeyCount, _customKeyCount + 1);
             return id;
         }
     }
@@ -90,12 +101,21 @@ internal static class KeyRegistry
             throw new ArgumentException($"'{path}' is not a valid data path. Use dotted paths such as 'person.nickname' or 'person.first_name.generic'.", nameof(path));
     }
 
-    /// <summary>Maps group names of the compiled catalog to their ids, so custom keys join existing groups.</summary>
-    private static FrozenDictionary<string, int> BuildCatalogGroups()
+    /// <summary>Maps the paths of the compiled catalog to their ids.</summary>
+    private static Dictionary<string, int> BuildCatalog()
     {
-        var groups = new Dictionary<string, int>(StringComparer.Ordinal);
+        var catalog = new Dictionary<string, int>(DataKeys.Count, StringComparer.Ordinal);
+        for (var id = 0; id < DataKeys.Count; id++)
+            catalog.Add(DataKeys.Paths[id], id);
+        return catalog;
+    }
+
+    /// <summary>Maps group names of the compiled catalog to their ids, so custom keys join existing groups.</summary>
+    private static Dictionary<string, int> BuildCatalogGroups()
+    {
+        var groups = new Dictionary<string, int>(DataKeys.GroupCount, StringComparer.Ordinal);
         for (var i = 0; i < DataKeys.Count; i++)
             groups.TryAdd(GroupName(DataKeys.Paths[i]), DataKeys.GroupOf[i]);
-        return groups.ToFrozenDictionary(StringComparer.Ordinal);
+        return groups;
     }
 }

@@ -179,13 +179,16 @@ internal static class ConstraintCases
                 return type == typeof(DateTime) ? date.UtcDateTime : type == typeof(DateTimeOffset) ? date : DateOnly.FromDateTime(date.UtcDateTime);
             }
 
-            if (type == typeof(double) || type == typeof(float))
-                return Convert.ChangeType(double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture) + step, type, CultureInfo.InvariantCulture);
+            if (type == typeof(double) || type == typeof(float) || type == typeof(Half))
+            {
+                var fractional = double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture) + step;
+                return type == typeof(Half) ? (Half)fractional : Convert.ChangeType(fractional, type, CultureInfo.InvariantCulture);
+            }
 
             var number = decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
             if (type != typeof(decimal)) // whole-number types: the nearest whole number inside the range
                 number = side == Side.Min ? Math.Ceiling(number) : Math.Floor(number);
-            return Convert.ChangeType(number + step, type, CultureInfo.InvariantCulture);
+            return ToNumber(type, number + step);
         }
         catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException or ArgumentOutOfRangeException)
         {
@@ -193,12 +196,23 @@ internal static class ConstraintCases
         }
     }
 
+    /// <summary>A decimal as a number of <paramref name="type"/>, which may be one <see cref="Convert"/> does not support; throws <see cref="OverflowException"/> when it does not fit.</summary>
+    private static object ToNumber(Type type, decimal value) => type switch
+    {
+        _ when type == typeof(Int128) => checked((Int128)value),
+        _ when type == typeof(UInt128) => checked((UInt128)value),
+        _ when type == typeof(System.Numerics.BigInteger) => new System.Numerics.BigInteger(value),
+        _ when type == typeof(nint) => checked((nint)value),
+        _ when type == typeof(nuint) => checked((nuint)value),
+        _ => Convert.ChangeType(value, type, CultureInfo.InvariantCulture),
+    };
+
     /// <summary>A number that is not in the list of allowed values: one more than the largest.</summary>
     private static object? NotAllowedNumber(Type type, object?[] allowed)
     {
         try
         {
-            return Convert.ChangeType(allowed.Max(a => Convert.ToDecimal(a, CultureInfo.InvariantCulture)) + 1, type, CultureInfo.InvariantCulture);
+            return ToNumber(type, allowed.Max(a => Convert.ToDecimal(a, CultureInfo.InvariantCulture)) + 1);
         }
         catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException)
         {
@@ -295,8 +309,8 @@ internal static class ConstraintCases
             return Shape.Date;
         if (type.IsEnum)
             return Shape.Other;
-        if (Type.GetTypeCode(type) is >= TypeCode.SByte and <= TypeCode.Decimal)
-            return Shape.Number;
+        if (Type.GetTypeCode(type) is >= TypeCode.SByte and <= TypeCode.Decimal || ConventionRules.IsNumber(FakeMember.ScalarCategory(type)))
+            return Shape.Number; // also Half, Int128, UInt128, BigInteger and nint/nuint, which Convert does not know
         return CollectionTypes.IsGeneratedCollection(type) ? Shape.Collection : Shape.Other;
     }
 }

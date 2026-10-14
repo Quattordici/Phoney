@@ -129,7 +129,7 @@ public static partial class Fake
     }
 
     /// <summary>Source of randomness of the current thread's faker.</summary>
-    public static Randomizer Random => Faker.Random;
+    public static SeededRandom Random => Faker.Random;
 
     /// <inheritdoc cref="Faker.Helpers"/>
     public static HelpersModule Helpers => Faker.Helpers;

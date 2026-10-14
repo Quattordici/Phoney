@@ -24,7 +24,7 @@ internal enum SelectorKind
     Member,
 }
 
-/// <summary>The member selector of a rule call, like <c>MemberName</c> in <c>Generator&lt;T&gt;</c> reads it at runtime.</summary>
+/// <summary>The member selector of a rule call, like <c>MemberName</c> in <c>ObjectGenerator&lt;T&gt;</c> reads it at runtime.</summary>
 /// <param name="Kind">What the selector is.</param>
 /// <param name="Name">For <see cref="SelectorKind.Member"/>: the name of the member of the generated type the path starts with.</param>
 /// <param name="Location">Where the selector argument is.</param>
@@ -115,7 +115,7 @@ internal static class AnalyzerSupport
     /// <summary>The generator calls that produce objects, which end a fluent chain.</summary>
     public static readonly HashSet<string> Terminals = new(StringComparer.Ordinal) { "Generate", "Stream", "GenerateParallel", "Populate" };
 
-    /// <summary>Whether the chain starts a new generator (<c>Fake.For&lt;T&gt;()</c>, <c>new Generator&lt;T&gt;(…)</c> or a <c>[FakeFor]</c> property), so no rules can have been added elsewhere.</summary>
+    /// <summary>Whether the chain starts a new generator (<c>Fake.For&lt;T&gt;()</c>, <c>new ObjectGenerator&lt;T&gt;(…)</c> or a <c>[FakeFor]</c> property), so no rules can have been added elsewhere.</summary>
     public static bool IsStart(IOperation? receiver, INamedTypeSymbol? fake, INamedTypeSymbol? fakeFor) => receiver switch
     {
         IInvocationOperation { TargetMethod.Name: "For" } call => SymbolEqualityComparer.Default.Equals(call.TargetMethod.ContainingType, fake),

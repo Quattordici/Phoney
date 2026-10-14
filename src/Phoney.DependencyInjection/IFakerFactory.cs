@@ -27,7 +27,7 @@ internal sealed class FakerFactory(PhoneyOptions options, TimeProvider? containe
     }
 
     /// <summary>Applies the locale, seed and clock of the options to <paramref name="generator"/>.</summary>
-    public Generator<T> Apply<T>(Generator<T> generator)
+    public ObjectGenerator<T> Apply<T>(ObjectGenerator<T> generator)
     {
         if (options.Locale is { } locale)
             generator = generator.Locale(locale);

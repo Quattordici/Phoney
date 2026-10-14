@@ -50,7 +50,12 @@ public sealed class StrictAnalyzerTests
         var diagnostics = await Diagnose("""
             public static object A() => Fake.For<Product>().With(p => p.Flavor, "Mint").Strict().Ignore(p => (object)p.Shelf).Generate(3);
             public static object B() => Data.Product.Strict().WithOneOf(x => x.Flavor, new[] { "a" }).Unique(x => x.Shelf).Stream();
-            public static object C() => new Generator<Product>(null!).WithConvention<string>(n => true, f => "x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
+            public static object C() => new ObjectGenerator<Product>(null!).WithConvention<string>(n => true, f => "x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
+            public static object F() => new ObjectGenerator<Product>(null!).Strict().WithFeed(null!).Generate(2);
+            public static object E() => new ObjectGenerator<Product>(null!).Sequence(p => p.Flavor, i => "f" + i).Cycle(p => p.Shelf, new int?[] { 1 }).Strict().Generate(2);
+            public static object D() => new ObjectGenerator<Product>(null!).WithEveryMemberOfType("x").With(p => p.Shelf, f => 1).Strict().GenerateParallel(2);
+            public static object G() => Fake.For<Product>().WithNormalDistribution(p => p.Shelf, 5, 1).With(p => p.Flavor, "Mint").Strict().Generate(2);
+            public static object H() => Fake.For<Product>().WithOneOf(p => p.Flavor, ("a", 3), ("b", 1)).WithOneOf(p => p.Shelf, new[] { 1, 2 }, new[] { 9.0, 1.0 }).Strict().Generate(2);
             """, cancellationToken);
 
         diagnostics.ShouldBeEmpty();
@@ -80,7 +85,7 @@ public sealed class StrictAnalyzerTests
     [Test]
     public async Task Turning_conventions_off_reports_convention_members_too(CancellationToken cancellationToken)
     {
-        var diagnostics = await Diagnose("public static object A() => Data.Product.UseConventions(false).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);
+        var diagnostics = await Diagnose("public static object A() => Data.Product.WithNameConventions(false).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);
 
         var message = diagnostics.ShouldHaveSingleItem().GetMessage();
         message.ShouldContain("Id, Name, Price");
@@ -91,8 +96,8 @@ public sealed class StrictAnalyzerTests
     public async Task Chains_that_may_get_more_rules_elsewhere_are_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("""
-            public static Generator<Product> Configured() => Fake.For<Product>().Strict();
-            public static object FromVariable(Generator<Product> g) => g.Strict().Generate();
+            public static ObjectGenerator<Product> Configured() => Fake.For<Product>().Strict();
+            public static object FromVariable(ObjectGenerator<Product> g) => g.Strict().Generate();
             public static object NotStrict() => Fake.For<Product>().Strict(false).Generate();
             public static object Unknown(bool strict) => Fake.For<Product>().Strict(strict).Generate();
             public static object UnknownMember(System.Linq.Expressions.Expression<Func<Product, string>> e) => Fake.For<Product>().Strict().Ignore(e).Generate();

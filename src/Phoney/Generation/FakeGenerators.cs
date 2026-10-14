@@ -4,12 +4,12 @@ namespace Phoney.Generation;
 
 /// <summary>
 /// App-wide generators for types: every nested object of a registered type, in every generator compiled afterwards, is created by
-/// the registered generator. A generator's own <see cref="Generator{T}.Use{TNested}"/> overrides these for the same type.
+/// the registered generator. A generator's own <see cref="ObjectGenerator{T}.WithGeneratorFor{TNested}"/> overrides these for the same type.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Like <see cref="Fake.Subtypes"/> and <see cref="Fake.Conventions"/>, registrations are read when a generator is first used, so register
-/// them at startup (a test setup hook, a module initializer). See <see cref="Generator{T}.Use{TNested}"/> for what a type generator does:
+/// them at startup (a test setup hook, a module initializer). See <see cref="ObjectGenerator{T}.WithGeneratorFor{TNested}"/> for what a type generator does:
 /// it is self-contained, a rule for the member wins over it, and it wins over subtypes. A registered generator is shared, so its
 /// <c>Unique</c> members are unique across everything it creates.
 /// </para>
@@ -32,18 +32,19 @@ public sealed class FakeGenerators
 
     /// <summary>Creates every nested <typeparamref name="TNested"/> with <paramref name="generator"/>, replacing an earlier registration for the type.</summary>
     /// <exception cref="ArgumentException"><typeparamref name="TNested"/> is a scalar (string, number, date, enum…) or an array.</exception>
-    public void Add<TNested>(Generator<TNested> generator) => Add<TNested, TNested>(generator);
+    public void Add<TNested>(ObjectGenerator<TNested> generator) => Add<TNested, TNested>(generator);
 
     /// <summary>
     /// Creates every nested <typeparamref name="TBase"/> (an interface, abstract class or base class) with the generator of a subtype,
     /// replacing an earlier registration for the type.
     /// </summary>
     /// <exception cref="ArgumentException"><typeparamref name="TBase"/> is a scalar (string, number, date, enum…) or an array.</exception>
-    public void Add<TBase, TGenerated>(Generator<TGenerated> generator)
+    public void Add<TBase, TGenerated>(ObjectGenerator<TGenerated> generator)
         where TGenerated : TBase
     {
         ArgumentNullException.ThrowIfNull(generator);
         NestedGenerators.ValidateType(typeof(TBase), nameof(generator));
+        NestedGenerators.RejectIfNotNestable(generator, nameof(generator));
         ImmutableInterlocked.Update(ref s_all, all => all.SetItem(typeof(TBase), generator));
     }
 
@@ -54,9 +55,16 @@ public sealed class FakeGenerators
     public void Clear() => Volatile.Write(ref s_all, ImmutableDictionary<Type, INestedGenerator>.Empty);
 }
 
-/// <summary>What generators registered for types (<c>Use</c>, <c>Fake.Generators</c>) have in common.</summary>
+/// <summary>What generators registered for types (<c>WithGeneratorFor</c>, <c>Fake.Generators</c>) have in common.</summary>
 internal static class NestedGenerators
 {
+    /// <summary>Refuses a generator that would silently misbehave as a nested one (it verifies rules nobody would check, or numbers objects that are all number 0).</summary>
+    public static void RejectIfNotNestable(INestedGenerator generator, string parameterName)
+    {
+        if (generator.CannotBeNested is { } reason)
+            throw new ArgumentException($"The {generator.GeneratedType.Name} generator {reason}", parameterName);
+    }
+
     /// <summary>Scalars and arrays never reach the nested-object path, so a generator for them would silently do nothing.</summary>
     public static void ValidateType(Type type, string parameterName)
     {

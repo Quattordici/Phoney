@@ -35,16 +35,27 @@ public class ValueBenchmarks
     [Benchmark(Description = "Helpers.FromRegExp")]
     public string FromRegExp() => _faker.Helpers.FromRegExp("[A-Z]{3}-\\d{4}");
 
-    [Benchmark(Description = "Randomizer.Int")]
+    [Benchmark(Description = "SeededRandom.Int")]
     public int RandomInt() => _faker.Random.Int(0, 1000);
+
+    private static readonly double[] CumulativeWeights = [70, 95, 100];
+
+    [Benchmark(Description = "SeededRandom.WeightedIndex (3 weights)")]
+    public int RandomWeightedIndex() => _faker.Random.WeightedIndex(CumulativeWeights);
+
+    [Benchmark(Description = "SeededRandom.Normal")]
+    public double RandomNormal() => _faker.Random.Normal(175, 8);
+
+    [Benchmark(Description = "Number.Normal<int> (limits, rounded)")]
+    public int NumberNormal() => _faker.Number.Normal<int>(100, 15, min: 40, max: 160);
 }
 
 /// <summary>Object generation through the reflection model and the source-generated model.</summary>
 [MemoryDiagnoser]
 public class GenerationBenchmarks
 {
-    private Generator<Customer> _reflection = null!;
-    private Generator<Customer> _generated = null!;
+    private ObjectGenerator<Customer> _reflection = null!;
+    private ObjectGenerator<Customer> _generated = null!;
 
     [Params(1_000)]
     public int Count { get; set; }
@@ -52,7 +63,7 @@ public class GenerationBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _reflection = new Generator<Customer>(new ReflectionModel<Customer>()).Seed(1);
+        _reflection = new ObjectGenerator<Customer>(new ReflectionModel<Customer>()).Seed(1);
         _generated = BenchmarkFakes.Customer.Seed(1);
         _reflection.Generate(10);
         _generated.Generate(10);
@@ -72,8 +83,8 @@ public class GenerationBenchmarks
 [MemoryDiagnoser]
 public class CollectionBenchmarks
 {
-    private Generator<Basket> _reflection = null!;
-    private Generator<Basket> _generated = null!;
+    private ObjectGenerator<Basket> _reflection = null!;
+    private ObjectGenerator<Basket> _generated = null!;
 
     [Params(1_000)]
     public int Count { get; set; }
@@ -81,7 +92,7 @@ public class CollectionBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _reflection = new Generator<Basket>(new ReflectionModel<Basket>()).Seed(1).CollectionSize(5, 10);
+        _reflection = new ObjectGenerator<Basket>(new ReflectionModel<Basket>()).Seed(1).CollectionSize(5, 10);
         _generated = BenchmarkFakes.Basket.Seed(1).CollectionSize(5, 10);
         _reflection.Generate(10);
         _generated.Generate(10);
@@ -98,9 +109,9 @@ public class CollectionBenchmarks
 [MemoryDiagnoser]
 public class EnumBenchmarks
 {
-    private readonly Randomizer _random = new(1);
+    private readonly SeededRandom _random = new(1);
 
-    [Benchmark(Description = "Randomizer.Enum")]
+    [Benchmark(Description = "SeededRandom.Enum")]
     public DayOfWeek Enum() => _random.Enum<DayOfWeek>();
 }
 
@@ -111,8 +122,11 @@ public class LocaleLoadBenchmarks
     [Params("en", "de", "ja")]
     public string Locale { get; set; } = "en";
 
-    [Benchmark(Description = "Read embedded locale")]
-    public Entry?[]? Load() => LocaleResourceReader.ReadEmbedded(Locale);
+    [Benchmark(Description = "Open embedded locale (decodes nothing)")]
+    public int Open() => LocaleResource.Open(Locale)?.DecodedEntries ?? -1;
+
+    [Benchmark(Description = "Open and decode every entry")]
+    public Entry?[]? OpenAndDecodeAll() => LocaleResource.Open(Locale)?.DecodeAll();
 }
 
 public sealed class Customer

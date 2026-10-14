@@ -22,6 +22,12 @@ public sealed class UsageAnalyzerTests
             public List<Address> Addresses { get; set; } = new();
         }
 
+        public class Cart
+        {
+            public List<string> Items { get; } = new();
+            public Queue<string> Waiting { get; } = new();
+        }
+
         public record Person(string FirstName, string LastName)
         {
             public string Email { get; set; } = "";
@@ -86,7 +92,7 @@ public sealed class UsageAnalyzerTests
     public async Task Used_results_and_class_populate_are_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY005", """
-            public static Generator<Product> A() => Fake.For<Product>().With(p => p.Name, "x");
+            public static ObjectGenerator<Product> A() => Fake.For<Product>().With(p => p.Name, "x");
             public static void B()
             {
                 var generator = Fake.For<Product>();
@@ -205,6 +211,110 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task A_member_condition_is_checked_like_a_rule_but_a_condition_on_the_object_is_not(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Where(p => p.Code, c => true);
+            public static object B() => Fake.For<Product>().Where(p => p.Address!.Street, s => true);
+            public static object C() => Fake.For<Product>().Where(p => p.Name != null).Where(p => p.Name != null, 5).Where(p => p.Name, n => n != null);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("'Product.Code'");
+        diagnostics[1].GetMessage().ShouldContain("directly");
+    }
+
+    [Test]
+    public async Task Sequence_and_Cycle_target_members_of_the_generated_object_that_can_be_generated(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Sequence(p => p.Code, i => "x");
+            public static object B() => Fake.For<Product>().Cycle(p => p.Address!.Street, new[] { "a" });
+            public static object C() => Fake.For<Product>().Sequence(p => p.Name, i => "n" + i).Cycle(p => p.Id, new[] { 1, 2 });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics[0].GetMessage().ShouldContain("'Product.Code'");
+        diagnostics[1].GetMessage().ShouldContain("directly");
+    }
+
+    [Test]
+    public async Task WithNormal_targets_number_members_of_the_generated_type_or_of_nested_objects(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2).WithNormalDistribution(p => p.Id, 5, 1);
+            public static object B() => Fake.For<Product>().WithNormalDistribution(p => p.Name.Length, 10, 2);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(1); // a member of a string is no member to give a rule to
+        diagnostics[0].GetMessage().ShouldContain("must select a member");
+    }
+
+    [Test]
+    public async Task Weighted_WithOneOf_takes_the_rule_slot_of_its_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().WithOneOf(p => p.Name, ("a", 3), ("b", 1)).With(p => p.Name, "c");
+            public static object B() => Fake.For<Product>().With(p => p.Name, "c").WithOneOf(p => p.Name, new[] { "a", "b" }, new[] { 3.0, 1.0 });
+            public static object C() => Fake.For<Product>().WithOneOf(p => p.Name, ("a", 3)).WithOneOf(p => p.Id, new[] { 1 }, new[] { 1.0 });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
+    }
+
+    [Test]
+    public async Task A_WithSubsetOf_takes_the_rule_slot_of_its_collection_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address() }, 1).With(p => p.Addresses, new List<Address>());
+            public static object B() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address() }, (0, 1)).WithOneOf(p => p.Name, new[] { "a" });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(1);
+        diagnostics[0].GetMessage().ShouldContain("replaces");
+    }
+
+    [Test]
+    public async Task A_weighted_WithSubsetOf_takes_the_rule_slot_of_its_collection_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address(), new Address() }, new[] { 3.0, 1.0 }, 1).With(p => p.Addresses, new List<Address>());
+            public static object B() => Fake.For<Product>().WithSubsetOf(p => p.Addresses, new[] { new Address() }, new[] { 1.0 }, (0, 1)).WithOneOf(p => p.Name, new[] { "a" });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(1);
+        diagnostics[0].GetMessage().ShouldContain("replaces");
+    }
+
+    [Test]
+    public async Task WithNormal_takes_the_rule_slot_of_its_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2).With(p => p.Price, 1m);
+            public static object B() => Fake.For<Product>().With(p => p.Price, 1m).WithNormalDistribution(p => p.Price, 10, 2);
+            public static object C() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2).WithNormalDistribution(p => p.Id, 5, 1);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
+    }
+
+    [Test]
+    public async Task Read_only_collections_that_are_filled_in_place_accept_rules_but_not_object_dependent_ones(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Cart>().With(c => c.Items, new List<string>()).Ignore(c => c.Items).Invalid(c => c.Items);
+            public static object B() => Fake.For<Cart>().With(c => c.Items, (f, c) => new List<string>());
+            public static object C() => Fake.For<Cart>().With(c => c.Waiting, new Queue<string>());
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2); // A is accepted; B depends on the object, and C is a queue, which is not filled
+        diagnostics.Where(d => d.GetMessage().Contains("filled in place")).Count().ShouldBe(1);
+        diagnostics.Where(d => d.GetMessage().Contains("'Cart.Waiting'")).Count().ShouldBe(1);
+    }
+
+    [Test]
     public async Task Dependent_rule_on_a_constructor_parameter_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """
@@ -223,7 +333,7 @@ public sealed class UsageAnalyzerTests
             public static object A() => Fake.For<Product>().With(p => p.Name, "x").With(p => (object)p.Id, 1).With(p => p.Price, f => 2m).Ignore(p => p.Address).Unique(p => p.Name!);
             public static object B() => Fake.For<Product>().With(p => p.Name!, (f, p) => "x").WithOneOf(p => p.Id, new[] { 1, 2 }).With(p => p.Address, Fake.For<Address>().With(a => a.Street, "s"));
             public static object C() => Fake.For<Person>().With(p => p.FirstName, "Ada").With(p => p.Email, (f, p) => p.FirstName + "@x.se").Ignore(p => p.LastName);
-            public static object D() => new Generator<Product>(null!).With(p => p.Code, "custom model, members unknown");
+            public static object D() => new ObjectGenerator<Product>(null!).With(p => p.Code, "custom model, members unknown");
             public static object E() => Fake.For<Shape>().With(s => s.Label, "abstract types are not analyzed");
             public static object F(System.Linq.Expressions.Expression<Func<Product, string>> member) => Fake.For<Product>().With(member, "unknown selector");
             """, cancellationToken);
@@ -232,6 +342,19 @@ public sealed class UsageAnalyzerTests
     }
 
     // PHONEY008: rules that replace each other
+
+    [Test]
+    public async Task Sequence_and_Cycle_take_the_rule_slot_of_their_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Sequence(p => p.Name, i => "a").With(p => p.Name, "b");
+            public static object B() => Fake.For<Product>().Cycle(p => p.Id, new[] { 1 }).Cycle(p => p.Id, new[] { 2 });
+            public static object C() => Fake.For<Product>().Sequence(p => p.Name, i => "a").Cycle(p => p.Id, new[] { 1 });
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
+    }
 
     [Test]
     public async Task Rule_replaced_in_the_same_chain_is_reported(CancellationToken cancellationToken)
@@ -265,14 +388,14 @@ public sealed class UsageAnalyzerTests
     public async Task Use_that_replaces_an_earlier_Use_for_the_same_type_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Seed(1).Use(Fake.For<Address>().With(a => a.Street, "x"));
-            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Use<Shape, Circle>(Fake.For<Circle>().With(c => c.Radius, 2));
+            public static object A() => Fake.For<Product>().WithGeneratorFor(Fake.For<Address>()).Seed(1).WithGeneratorFor(Fake.For<Address>().With(a => a.Street, "x"));
+            public static object B() => Fake.For<Product>().WithGeneratorFor<Shape, Circle>(Fake.For<Circle>()).WithGeneratorFor<Shape, Circle>(Fake.For<Circle>().With(c => c.Radius, 2));
             """, cancellationToken);
 
         diagnostics.Count.ShouldBe(2);
         diagnostics[0].GetMessage().ShouldContain("'Address'");
         diagnostics[1].GetMessage().ShouldContain("'Shape'");
-        TextOf(diagnostics[0]).ShouldBe("Use");
+        TextOf(diagnostics[0]).ShouldBe("WithGeneratorFor");
     }
 
     [Test]
@@ -292,9 +415,9 @@ public sealed class UsageAnalyzerTests
     public async Task Subtype_and_Use_do_not_replace_each_other(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().Use<Shape, Circle>(Fake.For<Circle>());
-            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Subtype<Shape, Circle>();
-            public static object C(Generator<Product> baseline) => baseline.Subtype<Shape, Circle>();
+            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().WithGeneratorFor<Shape, Circle>(Fake.For<Circle>());
+            public static object B() => Fake.For<Product>().WithGeneratorFor<Shape, Circle>(Fake.For<Circle>()).Subtype<Shape, Circle>();
+            public static object C(ObjectGenerator<Product> baseline) => baseline.Subtype<Shape, Circle>();
             """, cancellationToken);
 
         diagnostics.ShouldBeEmpty();
@@ -304,12 +427,12 @@ public sealed class UsageAnalyzerTests
     public async Task Use_for_different_types_or_on_derived_generators_is_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
-            public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Use<Shape, Circle>(Fake.For<Circle>()).Use(Fake.For<Circle>());
-            public static object B(Generator<Product> baseline) => baseline.Use(Fake.For<Address>());
+            public static object A() => Fake.For<Product>().WithGeneratorFor(Fake.For<Address>()).WithGeneratorFor<Shape, Circle>(Fake.For<Circle>()).WithGeneratorFor(Fake.For<Circle>());
+            public static object B(ObjectGenerator<Product> baseline) => baseline.WithGeneratorFor(Fake.For<Address>());
             public static object C()
             {
-                var baseline = Fake.For<Product>().Use(Fake.For<Address>());
-                return baseline.Use(Fake.For<Address>().With(a => a.Street, "x"));
+                var baseline = Fake.For<Product>().WithGeneratorFor(Fake.For<Address>());
+                return baseline.WithGeneratorFor(Fake.For<Address>().With(a => a.Street, "x"));
             }
             """, cancellationToken);
 
@@ -334,7 +457,7 @@ public sealed class UsageAnalyzerTests
     {
         var diagnostics = await Diagnose("PHONEY008", """
             public static object A() => Fake.For<Product>().With(p => p.Name, "a").With(p => p.Price, 1m).Unique(p => p.Name);
-            public static object B(Generator<Product> baseline) => baseline.With(p => p.Name, "variant");
+            public static object B(ObjectGenerator<Product> baseline) => baseline.With(p => p.Name, "variant");
             public static object C()
             {
                 var baseline = Fake.For<Product>().With(p => p.Name, "a");
@@ -431,10 +554,11 @@ public sealed class UsageAnalyzerTests
             public static object G() => Fake.For<Product>().GenerateParallel(-5);
             public static object H() => Fake.For<Product>().Unique(p => p.Name, 0);
             public static object I() => Fake.Many<Product>(-1);
+            public static object J() => Fake.For<Product>().Where(p => p.Id > 0, 0);
             """, cancellationToken);
 
-        diagnostics.Count.ShouldBe(9);
-        diagnostics.Select(TextOf).ShouldBe(["1.5", "-0.1", "2", "-1", "-1", "-1", "-5", "0", "-1"], ignoreOrder: true);
+        diagnostics.Count.ShouldBe(10);
+        diagnostics.Select(TextOf).ShouldBe(["1.5", "-0.1", "2", "-1", "-1", "-1", "-5", "0", "-1", "0"], ignoreOrder: true);
         diagnostics.Single(d => TextOf(d) == "1.5").GetMessage().ShouldContain("NullProbability");
         diagnostics.Single(d => TextOf(d) == "2").GetMessage().ShouldContain("at least 5");
     }
@@ -444,7 +568,7 @@ public sealed class UsageAnalyzerTests
     {
         var diagnostics = await Diagnose("PHONEY011", """
             private const int Many = 3;
-            public static object A() => Fake.For<Product>().NullProbability(0).NullProbability(1).CollectionSize(0, 0).CollectionSize(2, Many).MaxDepth(0).Unique(p => p.Name).Unique(p => p.Id, 1);
+            public static object A() => Fake.For<Product>().NullProbability(0).NullProbability(1).CollectionSize(0, 0).CollectionSize(2, Many).MaxDepth(0).Unique(p => p.Name).Unique(p => p.Id, 1).Where(p => p.Id > 0).Where(p => p.Id > 1, 1);
             public static object B() => (Fake.For<Product>().Generate(0), Fake.For<Product>().Generate(Many));
             public static object C(int n, double p) => Fake.For<Product>().NullProbability(p).CollectionSize(n, 1).CollectionSize(2, n).MaxDepth(n).Generate(n);
             public static object D() => Fake.Many<Product>(0);

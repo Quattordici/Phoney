@@ -33,8 +33,8 @@ public sealed class ConstraintCaseTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static Generator<Booking> Make(bool generated) =>
-        (generated ? ConstraintFakes.Booking : new Generator<Booking>(new ReflectionModel<Booking>())).Seed(3).ReferenceDate(Reference);
+    private static ObjectGenerator<Booking> Make(bool generated) =>
+        (generated ? ConstraintFakes.Booking : new ObjectGenerator<Booking>(new ReflectionModel<Booking>())).Seed(3).ReferenceDate(Reference);
 
     /// <summary>The members whose data annotations fail, found with the real validators.</summary>
     private static string[] Failing(Booking booking)

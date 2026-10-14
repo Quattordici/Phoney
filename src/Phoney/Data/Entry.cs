@@ -75,7 +75,7 @@ public class StringsEntry : Entry
     internal int Count => ((string[])Values).Length;
 
     /// <summary>Picks a value index; uniform here, weighted in <see cref="WeightedEntry"/>.</summary>
-    internal virtual int PickIndex(Randomizer random) => random.Index(Count);
+    internal virtual int PickIndex(SeededRandom random) => random.Index(Count);
 
     /// <summary>Returns the value at <paramref name="index"/> with any templates evaluated.</summary>
     internal string Resolve(int index, Faker faker)
@@ -116,7 +116,7 @@ public sealed class WeightedEntry : StringsEntry
     public IReadOnlyList<int> Weights { get; }
 
     /// <summary>Picks an index with probability proportional to its weight.</summary>
-    internal override int PickIndex(Randomizer random) => random.WeightedIndex(_cumulative);
+    internal override int PickIndex(SeededRandom random) => random.WeightedIndex(_cumulative);
 }
 
 /// <summary>A list of integers.</summary>

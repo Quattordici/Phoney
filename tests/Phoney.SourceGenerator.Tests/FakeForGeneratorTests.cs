@@ -131,7 +131,7 @@ public sealed class FakeForGeneratorTests
         output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
         var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
         source.ShouldContain("partial record TestData");
-        source.ShouldContain("Generator<global::Thing> Thing =>");
+        source.ShouldContain("ObjectGenerator<global::Thing> Thing =>");
         source.ShouldContain("Fake.Subtypes.Add<global::IShape, global::Circle>();");
     }
 

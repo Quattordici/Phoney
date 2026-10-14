@@ -39,7 +39,7 @@ public sealed class Line
 /// <summary>Rules for members of nested objects: <c>With(x =&gt; x.Billing.City, …)</c> and <c>With(x =&gt; x.Lines.Each().Sku, …)</c>.</summary>
 public sealed class PathRuleTests
 {
-    private static Generator<Statement> Make() => Fake.For<Statement>().Seed(1);
+    private static ObjectGenerator<Statement> Make() => Fake.For<Statement>().Seed(1);
 
     [Test]
     public void A_nested_member_gets_its_own_rule_and_siblings_of_the_same_type_do_not()
@@ -136,7 +136,7 @@ public sealed class PathRuleTests
     [Test]
     public void Path_rules_are_reproducible_with_a_seed()
     {
-        Generator<Statement> Configure() => Make().With(i => i.Billing.City, f => f.Location.City()).With(i => i.Lines.Each().Sku, f => f.Commerce.ProductName());
+        ObjectGenerator<Statement> Configure() => Make().With(i => i.Billing.City, f => f.Location.City()).With(i => i.Lines.Each().Sku, f => f.Commerce.ProductName());
 
         string Describe(Statement i) => $"{i.Number}|{i.Billing.City}|{i.Shipping.City}|{string.Join(",", i.Lines.Select(l => l.Sku + l.Quantity))}";
 
@@ -167,7 +167,7 @@ public sealed class PathRuleTests
     [Test]
     public void A_type_generator_creates_the_whole_object_so_its_path_rules_do_not_apply()
     {
-        var invoice = Make().Use(Fake.For<Counterparty>().With(p => p.City, "Rome")).With(i => i.Billing.City, "Oslo").Generate();
+        var invoice = Make().WithGeneratorFor(Fake.For<Counterparty>().With(p => p.City, "Rome")).With(i => i.Billing.City, "Oslo").Generate();
 
         invoice.Billing.City.ShouldBe("Rome"); // Use is self-contained, like a generator given to With
     }

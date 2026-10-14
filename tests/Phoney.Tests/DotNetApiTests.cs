@@ -138,7 +138,7 @@ public sealed class DotNetApiTests
     [Test]
     public void Weighted_picks_follow_the_weights()
     {
-        var random = new Randomizer(8);
+        var random = new SeededRandom(8);
         var gold = Enumerable.Range(0, 4000).Count(_ => random.Weighted(("gold", 1.0), ("silver", 3.0)) == "gold");
         gold.ShouldBeInRange(800, 1200);
         Should.Throw<ArgumentException>(() => random.Weighted(("x", 0.0)));

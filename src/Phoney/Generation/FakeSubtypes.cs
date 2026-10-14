@@ -10,7 +10,7 @@ namespace Phoney.Generation;
 /// <summary>
 /// App-wide subtypes for interfaces, abstract classes and base classes: members declared as the base type get an
 /// instance of one of its subtypes, in every generator compiled afterwards. A generator's own
-/// <see cref="Generator{T}.Subtype{TBase, T1}"/> overrides these for the same base type.
+/// <see cref="ObjectGenerator{T}.Subtype{TBase, T1}"/> overrides these for the same base type.
 /// </summary>
 /// <remarks>
 /// Without a registration, an interface or abstract class uses the types listed with <c>[JsonDerivedType]</c> on it,

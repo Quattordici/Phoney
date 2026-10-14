@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Phoney.NUnit</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Not IsAotCompatible ([FakeData] reads test parameters with reflection by design), but the analyzers still flag reflection that is added unannounced. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <IsPackable>true</IsPackable>
+    <PackageId>Phoney.NUnit</PackageId>
+    <Description>Phoney fake data for NUnit tests: [FakeData] fills test method parameters, constructor parameters and properties with realistic, reproducible values that agree with each other.</Description>
+    <PackageTags>$(PackageTags);nunit;autodata;testing</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NUnit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Phoney.NUnit.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PrivateAssets=none: installing only Phoney.NUnit still brings Phoney's [FakeFor<T>] source generator. -->
+    <ProjectReference Include="../Phoney/Phoney.csproj" PrivateAssets="none" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

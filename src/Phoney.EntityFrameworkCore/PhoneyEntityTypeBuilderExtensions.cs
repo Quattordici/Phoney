@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq.Expressions;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -39,7 +40,7 @@ public static class PhoneyEntityTypeBuilderExtensions
     /// <exception cref="InvalidOperationException">A key other than a single integer has default or duplicate values.</exception>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static IReadOnlyList<T> HasFakeData<T>(this EntityTypeBuilder<T> builder, int count, Func<Generator<T>, Generator<T>>? configure = null, long? seed = null)
+    public static IReadOnlyList<T> HasFakeData<T>(this EntityTypeBuilder<T> builder, int count, Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure = null, long? seed = null)
         where T : class
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -47,7 +48,7 @@ public static class PhoneyEntityTypeBuilderExtensions
 
         var model = ModelRegistry.For<T>();
         var dataSeed = seed ?? StableSeed(typeof(T).FullName ?? typeof(T).Name);
-        var generator = new Generator<T>(model).Seed(dataSeed);
+        var generator = IgnoreFilledNavigations(new ObjectGenerator<T>(model).Seed(dataSeed), model, builder.Metadata);
         if (configure is not null)
             generator = configure(generator) ?? throw new InvalidOperationException($"The configure delegate for {typeof(T).Name} returned null; return the configured generator.");
 
@@ -60,6 +61,26 @@ public static class PhoneyEntityTypeBuilderExtensions
         seeder.LinkForeignKeys();
         builder.HasData(items);
         return items;
+    }
+
+    /// <summary>
+    /// Navigations and other object collections that only have a getter are filled in place by Phoney, but seed data cannot hold them, so they are ignored (before the
+    /// caller's configuration, which can still give them a rule). Settable ones are emptied after generation instead.
+    /// </summary>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    private static ObjectGenerator<T> IgnoreFilledNavigations<T>(ObjectGenerator<T> generator, FakeModel<T> model, IMutableEntityType entityType)
+    {
+        var navigations = entityType.GetNavigations().Select(n => n.Name).Concat(entityType.GetSkipNavigations().Select(n => n.Name)).ToHashSet(StringComparer.Ordinal);
+        foreach (var member in model.Members)
+        {
+            if (!member.FillsExisting || !(navigations.Contains(member.Name) || Seeder<T>.IsObjectCollection(member.Type)))
+                continue;
+            var parameter = Expression.Parameter(typeof(T), "e");
+            var access = Expression.Convert(Expression.PropertyOrField(parameter, member.Name), typeof(object));
+            generator = generator.Ignore(Expression.Lambda<Func<T, object>>(access, parameter));
+        }
+
+        return generator;
     }
 
     /// <summary>FNV-1a hash of a name: stable across processes, unlike <see cref="string.GetHashCode()"/>.</summary>
@@ -155,7 +176,7 @@ public static class PhoneyEntityTypeBuilderExtensions
         /// <summary>Points single-property foreign keys that match no seeded principal at one, reproducibly.</summary>
         public void LinkForeignKeys()
         {
-            var random = new Randomizer(seed ^ 0x5EED_F00D);
+            var random = new SeededRandom(seed ^ 0x5EED_F00D);
             foreach (var foreignKey in entityType.GetForeignKeys())
             {
                 if (foreignKey.Properties.Count != 1 || foreignKey.PrincipalKey.Properties.Count != 1 || !TryMember(foreignKey.Properties[0].Name, out var index))
@@ -191,7 +212,7 @@ public static class PhoneyEntityTypeBuilderExtensions
         }
 
         /// <summary>Collections of objects (not of strings, numbers…), which are navigations or unmapped.</summary>
-        private static bool IsObjectCollection(Type type)
+        internal static bool IsObjectCollection(Type type)
         {
             if (type == typeof(string) || type == typeof(byte[]) || !typeof(IEnumerable).IsAssignableFrom(type))
                 return false;

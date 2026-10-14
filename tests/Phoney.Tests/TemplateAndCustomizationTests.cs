@@ -32,7 +32,7 @@ public sealed class TemplateAndCustomizationTests
     [Test]
     public void Custom_template_functions_can_be_registered()
     {
-        TemplateFunctions.Register("test.sku", (f, _) => f.Random.Replace("SKU-####"));
+        TemplateFunctions.Register("test.sku", (f, _) => f.Random.ReplaceSymbols("SKU-####"));
         _faker.Parse("{{test.sku}}").ShouldMatch("^SKU-\\d{4}$");
     }
 

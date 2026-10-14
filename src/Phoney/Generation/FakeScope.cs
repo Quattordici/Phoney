@@ -8,14 +8,15 @@ namespace Phoney.Generation;
 
 /// <summary>Options shared by every object created in one generation run.</summary>
 internal sealed record GenerationSettings(
-    bool UseConventions,
+    bool WithNameConventions,
     double NullProbability,
     int MinCollectionSize,
     int MaxCollectionSize,
     int MaxDepth,
     ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
     NestedConventions? Conventions = null,
-    ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null)
+    ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null,
+    RuleUsage? Usage = null)
 {
     public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
 }
@@ -35,7 +36,7 @@ internal enum RuleKind
     /// <summary>Leave the member at its default value.</summary>
     Ignore,
 
-    /// <summary>A nested <see cref="Generator{T}"/>.</summary>
+    /// <summary>A nested <see cref="ObjectGenerator{T}"/>.</summary>
     Generator,
 
     /// <summary><c>Func&lt;FakeScope, object?&gt;</c> from a custom convention.</summary>
@@ -64,6 +65,18 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
 
     /// <summary>Whether produced values must be unique.</summary>
     public bool Unique => _seen is not null;
+
+    /// <summary>A condition from <c>Where(x =&gt; x.Member, …)</c> that produced values must satisfy, or <see langword="null"/>. Set while the generator compiles, before the slot is shared.</summary>
+    public Func<object?, bool>? Filter { get; set; }
+
+    /// <summary>Attempts per value before <see cref="Filter"/> gives up.</summary>
+    public int FilterAttempts { get; set; }
+
+    /// <summary>The name of the member the slot belongs to, for messages about <see cref="Filter"/>.</summary>
+    public string? MemberName { get; set; }
+
+    /// <summary>How many values may be produced for one result: the smallest limit of the checks that apply (uniqueness, condition).</summary>
+    public int Attempts => Unique ? (Filter is null ? MaxAttempts : Math.Min(MaxAttempts, FilterAttempts)) : FilterAttempts;
 
     /// <summary>Attempts per value before uniqueness gives up.</summary>
     public int MaxAttempts { get; } = maxAttempts;
@@ -162,14 +175,21 @@ public sealed class FakeScope
 
     private static bool IsEmpty(IEnumerable sequence)
     {
-        var enumerator = sequence.GetEnumerator();
         try
         {
-            return !enumerator.MoveNext();
+            var enumerator = sequence.GetEnumerator();
+            try
+            {
+                return !enumerator.MoveNext();
+            }
+            finally
+            {
+                (enumerator as IDisposable)?.Dispose();
+            }
         }
-        finally
+        catch (InvalidOperationException)
         {
-            (enumerator as IDisposable)?.Dispose();
+            return true; // a default ImmutableArray<T> is not initialized and refuses to be enumerated: it holds nothing
         }
     }
 
@@ -254,18 +274,25 @@ public sealed class FakeScope
         var slot = _slots?[member];
         if (slot is null)
             return fallback(this);
-        if (!slot.Unique)
+        if (!slot.Unique && slot.Filter is null)
             return Produce(slot, fallback);
 
-        for (var attempt = 0; attempt < slot.MaxAttempts; attempt++)
+        // A condition is checked first, so only accepted values use up the unique ones.
+        var attempts = slot.Attempts;
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             var value = Produce(slot, fallback);
-            if (slot.TryClaim(value))
+            if (slot.Filter is { } accepts && !accepts(value))
+                continue;
+            if (!slot.Unique || slot.TryClaim(value))
                 return value;
         }
 
-        throw new InvalidOperationException(
-            $"Could not generate a unique value for member {member} of {_type.Name} after {slot.MaxAttempts} attempts. Use a source with more distinct values.");
+        throw slot.Filter is null
+            ? new InvalidOperationException($"Could not generate a unique value for member {member} of {_type.Name} after {attempts} attempts. Use a source with more distinct values.")
+            : new InvalidOperationException(
+                $"Could not generate {_type.Name}.{slot.MemberName} {(slot.Unique ? "unique and " : "")}satisfying its Where condition after {attempts} attempts. "
+                + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");
     }
 
     /// <summary>Untyped <see cref="Get{TValue}"/> used by the reflection model.</summary>
@@ -284,12 +311,63 @@ public sealed class FakeScope
         return list;
     }
 
+    /// <summary>Adds <paramref name="values"/> to <paramref name="target"/> (a read-only member's collection); with <paramref name="replace"/> it is emptied first. Does nothing without a target or for a read-only one.</summary>
+    public static void AddAll<TElement>(ICollection<TElement>? target, IEnumerable<TElement>? values, bool replace = false)
+    {
+        if (target is null || values is null || target.IsReadOnly)
+            return;
+        if (replace)
+            target.Clear();
+        foreach (var value in values)
+            target.Add(value);
+    }
+
+    /// <summary>Adds the entries of <paramref name="values"/> to <paramref name="target"/> (a read-only member's dictionary); with <paramref name="replace"/> it is emptied first.</summary>
+    public static void AddAll<TKey, TValue>(IDictionary<TKey, TValue>? target, IEnumerable<KeyValuePair<TKey, TValue>>? values, bool replace = false)
+        where TKey : notnull
+    {
+        if (target is null || values is null || target.IsReadOnly)
+            return;
+        if (replace)
+            target.Clear();
+        foreach (var (key, value) in values)
+            target[key] = value;
+    }
+
+    /// <summary>Creates a collection of <typeparamref name="TCollection"/> from the <see cref="List{TElement}"/> that <see cref="List{TElement}"/> would build (immutable lists, queues, stacks…).</summary>
+    public TCollection ListAs<TCollection, TElement>(Func<List<TElement>, TCollection> convert, Func<FakeScope, TElement> element, MemberConstraints? constraints = null) =>
+        convert(List(element, constraints));
+
+    /// <summary>Creates a collection of <typeparamref name="TCollection"/> from the set that <see cref="Set{TElement}"/> would build (immutable and frozen sets, sorted sets).</summary>
+    public TCollection SetAs<TCollection, TElement>(Func<HashSet<TElement>, TCollection> convert, Func<FakeScope, TElement> element, MemberConstraints? constraints = null) =>
+        convert(Set(element, constraints));
+
+    /// <summary>Creates a collection of <typeparamref name="TCollection"/> from the dictionary that <see cref="Dictionary{TKey, TValue}"/> would build (immutable, frozen, sorted and concurrent dictionaries).</summary>
+    public TCollection DictionaryAs<TCollection, TKey, TValue>(Func<Dictionary<TKey, TValue>, TCollection> convert, Func<FakeScope, TKey> key, Func<FakeScope, TValue> value, MemberConstraints? constraints = null)
+        where TKey : notnull =>
+        convert(Dictionary(key, value, constraints));
+
     /// <summary>Creates an array of <see cref="CollectionCount"/> elements.</summary>
     public TElement[] Array<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)
     {
         var array = new TElement[CollectionCount(constraints)];
         for (var i = 0; i < array.Length; i++)
             array[i] = element(this);
+        return array;
+    }
+
+    /// <summary>Creates a two-dimensional array of <see cref="CollectionCount"/> rows and as many columns, filled row by row.</summary>
+    public TElement[,] Array2<TElement>(Func<FakeScope, TElement> element)
+    {
+        var rows = CollectionCount();
+        var columns = CollectionCount();
+        var array = new TElement[rows, columns];
+        for (var row = 0; row < rows; row++)
+        {
+            for (var column = 0; column < columns; column++)
+                array[row, column] = element(this);
+        }
+
         return array;
     }
 
@@ -357,8 +435,8 @@ public sealed class FakeScope
 
     /// <summary>
     /// Creates a nested object, stopping at the depth limit and on cycles. A generator registered for the type
-    /// (<see cref="Generator{T}.Use{TNested}"/>) creates it; otherwise a type with subtypes
-    /// (<see cref="Generator{T}.Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c>, <c>[JsonDerivedType]</c>) is created as one of
+    /// (<see cref="ObjectGenerator{T}.WithGeneratorFor{TNested}"/>) creates it; otherwise a type with subtypes
+    /// (<see cref="ObjectGenerator{T}.Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c>, <c>[JsonDerivedType]</c>) is created as one of
     /// them through its model, and an interface or abstract class without subtypes stays <see langword="null"/>.
     /// </summary>
     internal object? NestedObject(Type type)
@@ -371,7 +449,10 @@ public sealed class FakeScope
             return CreateWith(declared, type);
 
         var declaredType = type;
-        if (Settings.Subtypes.TryGetValue(type, out var subtypes) || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
+        var registered = Settings.Subtypes.TryGetValue(type, out var subtypes);
+        if (registered)
+            Settings.Usage?.Subtype(type);
+        if (registered || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
             type = subtypes.Length == 1 ? subtypes[0] : subtypes[Faker.Random.Index(subtypes.Length)];
         else if (type.IsInterface || type.IsAbstract)
             return null;
@@ -404,7 +485,10 @@ public sealed class FakeScope
         for (var scope = this; scope is not null; scope = scope._parent)
         {
             if (scope.Settings.TypeGenerators is { } generators && generators.TryGetValue(type, out var generator))
+            {
+                scope.Settings.Usage?.Generator(type);
                 return generator;
+            }
         }
 
         return null;
@@ -447,6 +531,12 @@ internal interface INestedGenerator
 {
     /// <summary>The type of the objects the generator creates.</summary>
     Type GeneratedType { get; }
+
+    /// <summary>
+    /// Why the generator can't create nested objects (it verifies its rules, which only happens at its own <c>Generate</c>; it numbers its objects, and every nested
+    /// object is position 0), or <see langword="null"/>. Registering it anyway would silently do the wrong thing, so <c>With</c>, <c>WithGeneratorFor</c> and <c>Fake.Generators</c> refuse it.
+    /// </summary>
+    string? CannotBeNested { get; }
 
     object? CreateNested(FakeScope parent);
 }

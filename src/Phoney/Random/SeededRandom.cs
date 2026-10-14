@@ -11,7 +11,7 @@ namespace Phoney;
 /// sequence on every platform and .NET version. Instances are not thread-safe; create one per thread
 /// (every <see cref="Faker"/> owns its own) instead of sharing.
 /// </remarks>
-public sealed class Randomizer
+public sealed class SeededRandom
 {
     private const string UpperAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private const string LowerAlpha = "abcdefghijklmnopqrstuvwxyz";
@@ -20,13 +20,13 @@ public sealed class Randomizer
 
     /// <summary>Creates a randomizer with a random seed.</summary>
 #pragma warning disable RS0030 // An unseeded randomizer is random by definition; seeded ones never reach this.
-    public Randomizer() : this(System.Random.Shared.NextInt64())
+    public SeededRandom() : this(System.Random.Shared.NextInt64())
 #pragma warning restore RS0030
     {
     }
 
     /// <summary>Creates a randomizer that produces a reproducible sequence for <paramref name="seed"/>.</summary>
-    public Randomizer(long seed) => Reseed(seed);
+    public SeededRandom(long seed) => Reseed(seed);
 
     /// <summary>The seed this randomizer was last (re)seeded with.</summary>
     public long Seed { get; private set; }
@@ -93,6 +93,26 @@ public sealed class Randomizer
     /// <summary>Returns a double in <c>[0, 1)</c>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public double Double() => (NextUInt64() >> 11) * (1.0 / (1UL << 53));
+
+    /// <summary>
+    /// Returns a number from a normal (Gaussian) distribution, with the Box–Muller transform. It always draws two numbers, whatever the result, so what is drawn after it does not
+    /// depend on its value, and it keeps no state, so reseeding gives the same sequence. The logarithm and cosine are made without the system's maths library
+    /// (see <see cref="PureMath"/>), so a seed gives the same numbers on every platform.
+    /// </summary>
+    /// <param name="mean">The centre of the distribution.</param>
+    /// <param name="standardDeviation">How far values spread: about 68 % lie within one deviation of the mean, 95 % within two. Zero gives the mean every time.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mean"/> is not finite, or <paramref name="standardDeviation"/> is negative or not finite.</exception>
+    public double Normal(double mean = 0, double standardDeviation = 1)
+    {
+        if (!double.IsFinite(mean))
+            throw new ArgumentOutOfRangeException(nameof(mean), mean, "The mean must be a finite number.");
+        if (!double.IsFinite(standardDeviation) || standardDeviation < 0)
+            throw new ArgumentOutOfRangeException(nameof(standardDeviation), standardDeviation, "The standard deviation must be a finite number that is not negative.");
+
+        var radius = Math.Sqrt(-2.0 * PureMath.Ln(1.0 - Double())); // 1 - [0, 1) is in (0, 1]
+        var turns = Double();
+        return mean + (standardDeviation * radius * PureMath.CosTurns(turns));
+    }
 
     /// <summary>Returns a double in <c>[min, max)</c>.</summary>
     public double Double(double min, double max)
@@ -190,6 +210,28 @@ public sealed class Randomizer
         return items[^1].Value; // rounding: the target landed exactly on the total
     }
 
+    /// <summary>
+    /// Picks an index according to <paramref name="cumulativeWeights"/>, the running totals of positive weights (<c>[1, 4, 10]</c> for the weights 1, 3 and 6), with one binary search
+    /// and exactly one number drawn. For a pick that is made many times from the same weights this is cheaper than <see cref="Weighted{T}"/>, which adds the weights up on every call.
+    /// </summary>
+    /// <param name="cumulativeWeights">Strictly increasing running totals; the last is the total weight.</param>
+    public int WeightedIndex(ReadOnlySpan<double> cumulativeWeights)
+    {
+        var target = Double() * cumulativeWeights[^1];
+        // First running total strictly greater than the target.
+        int lo = 0, hi = cumulativeWeights.Length - 1;
+        while (lo < hi)
+        {
+            var mid = (lo + hi) >>> 1;
+            if (cumulativeWeights[mid] > target)
+                hi = mid;
+            else
+                lo = mid + 1;
+        }
+
+        return lo; // also when rounding put the target exactly on the total: the last one
+    }
+
     /// <summary>Picks an index according to <paramref name="cumulativeWeights"/> (running totals of the weights).</summary>
     public int WeightedIndex(ReadOnlySpan<int> cumulativeWeights)
     {
@@ -219,7 +261,7 @@ public sealed class Randomizer
     /// Replaces symbols in <paramref name="pattern"/>: <c>#</c> → digit, <c>?</c> → upper-case letter,
     /// <c>*</c> → digit or upper-case letter. All other characters are kept.
     /// </summary>
-    public string Replace(string pattern)
+    public string ReplaceSymbols(string pattern)
     {
         ArgumentNullException.ThrowIfNull(pattern);
         return string.Create(pattern.Length, (pattern, this), static (span, state) =>

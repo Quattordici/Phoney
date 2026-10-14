@@ -127,7 +127,7 @@ public sealed class ArgumentGenerator
     /// <summary>Row <paramref name="index"/>: one scope for all arguments, so they share identity and timeline.</summary>
     private object?[] Row(Faker faker, long index)
     {
-        faker.Random.Reseed(Randomizer.DeriveSeed(_seed ?? _randomSeed, index));
+        faker.Random.Reseed(SeededRandom.DeriveSeed(_seed ?? _randomSeed, index));
         var scope = new FakeScope(faker, _settings, null, index, typeof(ArgumentList));
         var row = new object?[_producers.Length];
         for (var i = 0; i < row.Length; i++)
@@ -137,7 +137,7 @@ public sealed class ArgumentGenerator
 
     private Faker CreateFaker()
     {
-        var faker = new Faker(LocaleStore.Get(_locale ?? Fake.Locale), new Randomizer(0)) { TimeProvider = _referenceDate is null ? _timeProvider : null };
+        var faker = new Faker(LocaleStore.Get(_locale ?? Fake.Locale), new SeededRandom(0)) { TimeProvider = _referenceDate is null ? _timeProvider : null };
         if (faker.TimeProvider is null && (_referenceDate ?? (_seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
             faker.ReferenceDate = date;
         return faker;

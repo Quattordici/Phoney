@@ -10,11 +10,11 @@ using Phoney.Generation;
 namespace Phoney.SourceGenerator;
 
 /// <summary>
-/// Reports at compile time what <c>Generator&lt;T&gt;.Strict()</c> would throw at runtime: scalar members that have
+/// Reports at compile time what <c>ObjectGenerator&lt;T&gt;.Strict()</c> would throw at runtime: scalar members that have
 /// neither a rule, a name convention nor a data annotation defining their value.
 /// </summary>
 /// <remarks>
-/// Only fluent chains that start a generator (<c>Fake.For&lt;T&gt;()</c>, <c>new Generator&lt;T&gt;(…)</c> or a
+/// Only fluent chains that start a generator (<c>Fake.For&lt;T&gt;()</c>, <c>new ObjectGenerator&lt;T&gt;(…)</c> or a
 /// <c>[FakeFor]</c> property) and end in <c>Generate</c>, <c>Stream</c>, <c>GenerateParallel</c> or <c>Populate</c> are
 /// checked, because only then are all rules known. App-wide <c>Fake.Conventions</c> are registered at runtime and
 /// can't be seen, so a member they cover is still reported; suppress it with <c>.Ignore(...)</c> or <c>#pragma</c>.
@@ -22,7 +22,7 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class StrictAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary" };
+    private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Diagnostics.StrictUncovered);
@@ -34,7 +34,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(start =>
         {
-            var generator = start.Compilation.GetTypeByMetadataName("Phoney.Generator`1");
+            var generator = start.Compilation.GetTypeByMetadataName("Phoney.ObjectGenerator`1");
             var fake = start.Compilation.GetTypeByMetadataName("Phoney.Fake");
             var fakeFor = start.Compilation.GetTypeByMetadataName("Phoney.Generation.FakeForAttribute`1");
             if (generator is null)
@@ -91,11 +91,15 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
                 if (!selector.IsNested)
                     covered.Add(selector.Name!); // a rule for Billing.City is not a rule for Billing
             }
-            else if (name == "WithConvention")
+            else if (name == "WithFeed")
+            {
+                return; // the columns of the feed are read at runtime: which members they cover can't be known here
+            }
+            else if (name is "WithConvention" or "WithEveryMemberOfType")
             {
                 conventionTypes.Add(call.TargetMethod.TypeArguments[0]);
             }
-            else if (name == "UseConventions")
+            else if (name == "WithNameConventions")
             {
                 var argument = call.Arguments.FirstOrDefault();
                 if (argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue)

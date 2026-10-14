@@ -46,11 +46,30 @@ public sealed class Tag
     public string Code { get; set; } = "";
 }
 
+/// <summary>An entity whose navigation has a getter only: Phoney fills such collections in place, which seed data must not contain.</summary>
+public sealed class Author
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public List<Book> Books { get; } = [];
+    public List<string> Aliases { get; } = [];
+}
+
+public sealed class Book
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public int AuthorId { get; set; }
+    public Author? Author { get; set; }
+}
+
 public sealed class ShopContext(DbContextOptions<ShopContext> options, Action<ModelBuilder> seed) : DbContext(options)
 {
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<Author> Authors => Set<Author>();
+    public DbSet<Book> Books => Set<Book>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -98,6 +117,25 @@ public sealed class HasFakeDataTests
         customers.ShouldAllBe(c => c.Orders.Count == 0 && c.Address == null);
         customers.ShouldAllBe(c => c.Email.Length <= 12);
         customers.Select(c => c.Id).ShouldBe(Enumerable.Range(1, 20));
+    }
+
+    [Test]
+    public void Navigations_with_a_getter_only_are_not_filled()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Author> authors = [];
+        using var context = Context(connection, mb =>
+        {
+            authors = mb.Entity<Author>().HasFakeData(5);
+            mb.Entity<Book>().HasFakeData(10);
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue();
+
+        context.Authors.Count().ShouldBe(5);
+        context.Books.Count().ShouldBe(10);
+        authors.ShouldAllBe(a => a.Books.Count == 0); // a navigation is not seed data
     }
 
     [Test]

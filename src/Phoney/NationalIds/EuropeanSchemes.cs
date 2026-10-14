@@ -27,7 +27,7 @@ internal static class EuropeanSchemes
     private static readonly string[] NinoForbiddenPrefixes = ["BG", "GB", "KN", "NK", "NT", "TN", "ZZ"];
 
     /// <summary>National Insurance number <c>AB 12 34 56 C</c>. There is no check digit; the prefix letters and suffix follow HMRC's rules.</summary>
-    private static string UnitedKingdomPerson(Randomizer r, NationalIdRequest q)
+    private static string UnitedKingdomPerson(SeededRandom r, NationalIdRequest q)
     {
         string prefix;
         do
@@ -55,7 +55,7 @@ internal static class EuropeanSchemes
     private static readonly int[] UnitedKingdomVatWeights = [8, 7, 6, 5, 4, 3, 2];
 
     /// <summary>Standard UK VAT number <c>GB 123 4567 89</c>: the last two digits make the weighted sum divisible by 97.</summary>
-    private static string UnitedKingdomVat(Randomizer r, NationalIdRequest q)
+    private static string UnitedKingdomVat(SeededRandom r, NationalIdRequest q)
     {
         var body = Digit(r, 1, 9) + RandomDigits(r, 6);
         var check = (97 - (Weighted(body, UnitedKingdomVatWeights) % 97)) % 97;
@@ -79,7 +79,7 @@ internal static class EuropeanSchemes
     private static readonly int[] PeselWeights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
 
     /// <summary>PESEL: birth date with a century offset on the month, a serial, a sex digit (even = women) and a mod-10 check.</summary>
-    private static string PolandPerson(Randomizer r, NationalIdRequest q)
+    private static string PolandPerson(SeededRandom r, NationalIdRequest q)
     {
         var b = q.BirthDate;
         RequireYear(b, 1800, 2299, "Polish PESEL");
@@ -102,7 +102,7 @@ internal static class EuropeanSchemes
     private static readonly int[] RegonWeights = [8, 9, 2, 3, 4, 5, 6, 7];
 
     /// <summary>REGON (9 digits): weighted sum mod 11 (10 becomes 0).</summary>
-    private static string PolandCompany(Randomizer r, NationalIdRequest q)
+    private static string PolandCompany(SeededRandom r, NationalIdRequest q)
     {
         var body = RandomDigits(r, 8);
         return body + (char)('0' + (Weighted(body, RegonWeights) % 11 % 10));
@@ -117,7 +117,7 @@ internal static class EuropeanSchemes
     private static readonly int[] NipWeights = [6, 5, 7, 2, 3, 4, 5, 6, 7];
 
     /// <summary>VAT number <c>PL</c> + NIP (<c>NNN-NNN-NN-NN</c>): weighted sum mod 11 is the last digit.</summary>
-    private static string PolandVat(Randomizer r, NationalIdRequest q)
+    private static string PolandVat(SeededRandom r, NationalIdRequest q)
     {
         for (var attempt = 0; attempt < 10_000; attempt++)
         {
@@ -145,7 +145,7 @@ internal static class EuropeanSchemes
     private static readonly int[] BsnWeights = [9, 8, 7, 6, 5, 4, 3, 2];
 
     /// <summary>Burgerservicenummer: nine digits that pass the 11-proef (weights 9…2, −1).</summary>
-    private static string NetherlandsPerson(Randomizer r, NationalIdRequest q)
+    private static string NetherlandsPerson(SeededRandom r, NationalIdRequest q)
     {
         for (var attempt = 0; attempt < 10_000; attempt++)
         {
@@ -171,7 +171,7 @@ internal static class EuropeanSchemes
     private const string DniLetters = "TRWAGMYFPDXBNJZSQVHLCKE";
 
     /// <summary>DNI: eight digits and the control letter <c>number mod 23</c> picks from <c>TRWAGMYFPDXBNJZSQVHLCKE</c>.</summary>
-    private static string SpainPerson(Randomizer r, NationalIdRequest q)
+    private static string SpainPerson(SeededRandom r, NationalIdRequest q)
     {
         var number = r.Int(1_000_000, 99_999_999);
         return Pad(number, 8) + DniLetters[number % 23];
@@ -189,7 +189,7 @@ internal static class EuropeanSchemes
     /// NIR (sécurité sociale) <c>S YY MM DD CCC OOO KK</c>: sex digit (1 = men), birth year and month, département and commune,
     /// an order number and the key <c>97 − (first 13 digits mod 97)</c>.
     /// </summary>
-    private static string FrancePerson(Randomizer r, NationalIdRequest q)
+    private static string FrancePerson(SeededRandom r, NationalIdRequest q)
     {
         var b = q.BirthDate;
         var department = r.Int(1, 94);
@@ -215,7 +215,7 @@ internal static class EuropeanSchemes
     }
 
     /// <summary>SIREN <c>NNN NNN NNN</c>: nine digits with a Luhn check.</summary>
-    private static string FranceCompany(Randomizer r, NationalIdRequest q)
+    private static string FranceCompany(SeededRandom r, NationalIdRequest q)
     {
         var body = Digit(r, 1, 9) + RandomDigits(r, 7);
         var d = body + Luhn(body);
@@ -229,7 +229,7 @@ internal static class EuropeanSchemes
     }
 
     /// <summary>VAT number <c>FR KK NNN NNN NNN</c>: the key is <c>(12 + 3 × (SIREN mod 97)) mod 97</c>.</summary>
-    private static string FranceVat(Randomizer r, NationalIdRequest q)
+    private static string FranceVat(SeededRandom r, NationalIdRequest q)
     {
         var siren = Compact(FranceCompany(r, q with { Formatted = false }));
         var key = Pad((12 + (3 * (long.Parse(siren, System.Globalization.CultureInfo.InvariantCulture) % 97))) % 97, 2);

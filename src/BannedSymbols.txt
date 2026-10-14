@@ -1,12 +1,12 @@
-# Generated values must be reproducible for a seed: draw randomness from the faker's Randomizer and read "now" from
+# Generated values must be reproducible for a seed: draw randomness from the faker's SeededRandom and read "now" from
 # Faker.ReferenceDate / TimeProvider. A use that is deliberate (seeding an unseeded generator, the system clock fallback)
 # is allowed with a '#pragma warning disable RS0030' and a comment that says why.
-T:System.Random;Draw from the faker's Randomizer so results are reproducible for a seed
+T:System.Random;Draw from the faker's SeededRandom so results are reproducible for a seed
 P:System.DateTime.Now;Use Faker.ReferenceDate (or a TimeProvider) so seeded dates don't drift
 P:System.DateTime.UtcNow;Use Faker.ReferenceDate (or a TimeProvider) so seeded dates don't drift
 P:System.DateTime.Today;Use Faker.ReferenceDate (or a TimeProvider) so seeded dates don't drift
 P:System.DateTimeOffset.Now;Use Faker.ReferenceDate (or a TimeProvider) so seeded dates don't drift
 P:System.DateTimeOffset.UtcNow;Use Faker.ReferenceDate (or a TimeProvider) so seeded dates don't drift
-M:System.Guid.NewGuid();Generate ids from the faker's Randomizer so results are reproducible for a seed
+M:System.Guid.NewGuid();Generate ids from the faker's SeededRandom so results are reproducible for a seed
 P:System.Environment.TickCount;Not reproducible; derive values from the seed
 P:System.Environment.TickCount64;Not reproducible; derive values from the seed

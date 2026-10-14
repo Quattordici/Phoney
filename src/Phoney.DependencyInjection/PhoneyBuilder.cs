@@ -17,32 +17,32 @@ public sealed class PhoneyBuilder
     public IServiceCollection Services { get; }
 
     /// <summary>
-    /// Registers a singleton <see cref="Generator{T}"/> (generators are immutable and thread-safe) with the locale, seed
+    /// Registers a singleton <see cref="ObjectGenerator{T}"/> (generators are immutable and thread-safe) with the locale, seed
     /// and clock of <see cref="PhoneyOptions"/>, then <paramref name="configure"/> applied:
     /// <c>.AddGenerator&lt;Customer&gt;(g =&gt; g.With(c =&gt; c.Country, "SE"))</c>.
     /// </summary>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public PhoneyBuilder AddGenerator<T>(Func<Generator<T>, Generator<T>>? configure = null) =>
-        Register(() => new Generator<T>(ModelRegistry.For<T>()), configure);
+    public PhoneyBuilder AddGenerator<T>(Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure = null) =>
+        Register(() => new ObjectGenerator<T>(ModelRegistry.For<T>()), configure);
 
     /// <summary>
     /// Registers a singleton generator built from <paramref name="generator"/>, typically a source-generated one
     /// (<c>TestData.Customer</c>), so no reflection is needed: the options are applied to it, then <paramref name="configure"/>.
     /// </summary>
-    public PhoneyBuilder AddGenerator<T>(Generator<T> generator, Func<Generator<T>, Generator<T>>? configure = null)
+    public PhoneyBuilder AddGenerator<T>(ObjectGenerator<T> generator, Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(generator);
         return Register(() => generator, configure);
     }
 
-    private PhoneyBuilder Register<T>(Func<Generator<T>> create, Func<Generator<T>, Generator<T>>? configure)
+    private PhoneyBuilder Register<T>(Func<ObjectGenerator<T>> create, Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure)
     {
-        Services.RemoveAll<Generator<T>>();
+        Services.RemoveAll<ObjectGenerator<T>>();
         Services.AddSingleton(sp =>
         {
             var generator = ((FakerFactory)sp.GetRequiredService<IFakerFactory>()).Apply(create());
-            return configure is null ? generator : configure(generator) ?? throw new InvalidOperationException($"The configure delegate for Generator<{typeof(T).Name}> returned null; return the configured generator.");
+            return configure is null ? generator : configure(generator) ?? throw new InvalidOperationException($"The configure delegate for ObjectGenerator<{typeof(T).Name}> returned null; return the configured generator.");
         });
         return this;
     }

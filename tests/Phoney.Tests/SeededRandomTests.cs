@@ -1,12 +1,12 @@
 namespace Phoney.Tests;
 
-public sealed class RandomizerTests
+public sealed class SeededRandomTests
 {
     [Test]
     public void Same_seed_gives_the_same_sequence()
     {
-        var a = new Randomizer(42);
-        var b = new Randomizer(42);
+        var a = new SeededRandom(42);
+        var b = new SeededRandom(42);
         for (var i = 0; i < 1000; i++)
             a.NextUInt64().ShouldBe(b.NextUInt64());
     }
@@ -15,7 +15,7 @@ public sealed class RandomizerTests
     public void Sequence_is_stable_across_platforms_and_versions()
     {
         // Golden values: xoshiro256** seeded through SplitMix64. Changing them breaks every seeded user test.
-        var random = new Randomizer(42);
+        var random = new SeededRandom(42);
         var values = Enumerable.Range(0, 3).Select(_ => random.NextUInt64()).ToArray();
         values.ShouldBe(GoldenValues);
     }
@@ -23,7 +23,7 @@ public sealed class RandomizerTests
     [Test]
     public void Enum_picks_a_value_without_allocating()
     {
-        var random = new Randomizer(1);
+        var random = new SeededRandom(1);
         random.Enum<DayOfWeek>(); // warm up the per-enum cache
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 1000; i++)
@@ -34,7 +34,7 @@ public sealed class RandomizerTests
     [Test]
     public void Reseed_restarts_the_sequence()
     {
-        var random = new Randomizer(7);
+        var random = new SeededRandom(7);
         var first = random.Int(0, 1_000_000);
         random.Reseed(7);
         random.Int(0, 1_000_000).ShouldBe(first);
@@ -44,7 +44,7 @@ public sealed class RandomizerTests
     [Test]
     public void Int_is_inclusive_and_covers_the_whole_range()
     {
-        var random = new Randomizer(1);
+        var random = new SeededRandom(1);
         var seen = new HashSet<int>();
         for (var i = 0; i < 10_000; i++)
         {
@@ -59,7 +59,7 @@ public sealed class RandomizerTests
     [Test]
     public void Extreme_ranges_do_not_overflow()
     {
-        var random = new Randomizer(1);
+        var random = new SeededRandom(1);
         _ = random.Int(int.MinValue, int.MaxValue);
         _ = random.Long(long.MinValue, long.MaxValue);
         random.Int(5, 5).ShouldBe(5);
@@ -69,7 +69,7 @@ public sealed class RandomizerTests
     [Test]
     public void Double_is_in_the_half_open_unit_interval()
     {
-        var random = new Randomizer(3);
+        var random = new SeededRandom(3);
         for (var i = 0; i < 10_000; i++)
             random.Double().ShouldBeInRange(0, 0.9999999999999999);
     }
@@ -77,7 +77,7 @@ public sealed class RandomizerTests
     [Test]
     public void Weighted_index_follows_the_weights()
     {
-        var random = new Randomizer(5);
+        var random = new SeededRandom(5);
         int[] cumulative = [1, 1, 10]; // weights 1, 0, 9
         var counts = new int[3];
         for (var i = 0; i < 10_000; i++)
@@ -90,7 +90,7 @@ public sealed class RandomizerTests
     [Test]
     public void Guid_is_version_4()
     {
-        var guid = new Randomizer(9).Guid().ToString();
+        var guid = new SeededRandom(9).Guid().ToString();
         guid[14].ShouldBe('4');
         "89ab".ShouldContain(guid[19]);
     }
@@ -98,22 +98,22 @@ public sealed class RandomizerTests
     [Test]
     public void Derived_seeds_are_distinct_and_deterministic()
     {
-        var seeds = Enumerable.Range(0, 1000).Select(i => Randomizer.DeriveSeed(42, i)).ToList();
+        var seeds = Enumerable.Range(0, 1000).Select(i => SeededRandom.DeriveSeed(42, i)).ToList();
         seeds.Distinct().Count().ShouldBe(1000);
-        Randomizer.DeriveSeed(42, 10).ShouldBe(seeds[10]);
+        SeededRandom.DeriveSeed(42, 10).ShouldBe(seeds[10]);
     }
 
     [Test]
     public void Replace_substitutes_symbols()
     {
-        var value = new Randomizer(2).Replace("##-??-**");
+        var value = new SeededRandom(2).ReplaceSymbols("##-??-**");
         value.ShouldMatch("^[0-9]{2}-[A-Z]{2}-[0-9A-Z]{2}$");
     }
 
     private static readonly ulong[] GoldenValues = ComputeGolden();
 
     /// <summary>
-    /// Reference implementation written independently from <see cref="Randomizer"/> (straight from the
+    /// Reference implementation written independently from <see cref="SeededRandom"/> (straight from the
     /// published xoshiro256** and SplitMix64 algorithms) to pin the output.
     /// </summary>
     private static ulong[] ComputeGolden()

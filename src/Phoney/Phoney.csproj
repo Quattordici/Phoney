@@ -18,6 +18,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Phoney.Tests" />
     <InternalsVisibleTo Include="Phoney.Benchmarks" />
+    <InternalsVisibleTo Include="Phoney.Benchmarks.Comparison" />
     <!-- The add-on tests compare the reflection and generated models. -->
     <InternalsVisibleTo Include="Phoney.NodaTime.Tests" />
   </ItemGroup>

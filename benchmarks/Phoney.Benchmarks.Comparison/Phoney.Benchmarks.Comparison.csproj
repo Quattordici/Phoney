@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- The competitors target .NET Framework / .NET Standard 1.x; they run fine on .NET 10. -->
+    <NoWarn>$(NoWarn);NU1701;NU1903;NU1904</NoWarn>
+  </PropertyGroup>
+
+  <!-- `dotnet publish -p:AotComparison=true` publishes the app with Native AOT, to see which libraries still work there (`check`) and how fast they start (`cold`). The instruction set is
+       pinned because the compiler's detection of the host's fails on CPUs with AVX-512. Set on this project only: the analyzer projects it references can't be published with AOT. -->
+  <PropertyGroup Condition="'$(AotComparison)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <IlcInstructionSet>x86-64-v3</IlcInstructionSet>
+    <!-- The libraries compared are not AOT-safe and the reflection model of Phoney is not either: the warnings are the point, not errors. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="AutoFixture" />
+    <PackageReference Include="AutoBogus" />
+    <PackageReference Include="Bogus" />
+    <PackageReference Include="Faker.Net" />
+    <PackageReference Include="NBuilder" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Phoney/Phoney.csproj" />
+    <ProjectReference Include="../../src/Phoney.SourceGenerator/Phoney.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
