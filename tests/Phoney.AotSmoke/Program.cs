@@ -165,6 +165,13 @@ Check(shipment.Weight.ToString(), "big number");
 if (shipment.Buffer.Length == 0 || shipment.Grid.Length == 0 || shipment.Pair.Item1 == 0)
     throw new InvalidOperationException("buffer, grid or tuple not filled");
 
+// Normally distributed numbers: generic math over a BigInteger and a nullable, in a generated model, without reflection.
+var heavy = ShipmentFakes.Shipment.Seed(9).WithNormal(s => s.Weight, 1000, 50).Generate(200);
+var average = heavy.Average(s => (double)s.Weight);
+if (average is < 980 or > 1020)
+    throw new InvalidOperationException($"normal distribution off: {average}");
+Check(faker.Number.Normal<decimal>(100, 15, min: 50, max: 150).ToString(System.Globalization.CultureInfo.InvariantCulture), "normal decimal");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 

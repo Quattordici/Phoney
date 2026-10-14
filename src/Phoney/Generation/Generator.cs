@@ -1,8 +1,10 @@
 using System.Collections.Immutable;
 using System.Linq.Expressions;
+using System.Numerics;
 using System.Reflection;
 using Phoney.Data;
 using Phoney.Generation;
+using Phoney.Modules;
 
 namespace Phoney;
 
@@ -356,6 +358,39 @@ public sealed class Generator<T> : INestedGenerator
         ArgumentNullException.ThrowIfNull(factory);
         MemberName(member); // a position belongs to the generated object, not to a member of a nested one
         return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)(scope => factory(scope.Index)), Positional: true));
+    }
+
+    /// <summary>
+    /// Gives a number member values from a normal (Gaussian) distribution, e.g. <c>.WithNormal(x =&gt; x.Height, 175, 8)</c>: most heights are near 175, about two thirds within 8 of it.
+    /// Realistic measurements, ages, scores and durations look like this, where a plain range gives every value the same chance.
+    /// </summary>
+    /// <remarks>
+    /// Works for every numeric member type (<c>int</c>, <c>decimal</c>, <c>double</c>, <c>byte</c>, <c>Half</c>, <c>BigInteger</c>…, also nullable) and for members of nested objects and collection elements
+    /// (<c>x =&gt; x.Lines.Each().Quantity</c>); like <c>With</c> it takes the member's rule slot, so a later rule for the member replaces it. Whole-number types are rounded to integers, other types to two
+    /// decimals; a value the type cannot hold becomes its largest or smallest, so give <paramref name="min"/> and <paramref name="max"/> when that matters. The rule does not read the member's
+    /// <c>[Range]</c>: pass the same limits to keep the values valid. Item <em>n</em> is the same however you generate, and the numbers are the same on every platform.
+    /// </remarks>
+    /// <param name="member">The number member: <c>x =&gt; x.Height</c>.</param>
+    /// <param name="mean">The centre of the distribution.</param>
+    /// <param name="standardDeviation">The spread: about 68 % of the values lie within one deviation of the mean, 95 % within two. Zero gives the mean every time.</param>
+    /// <param name="min">The smallest value (a value below it is drawn again), or <see langword="null"/> for none.</param>
+    /// <param name="max">The largest value (a value above it is drawn again), or <see langword="null"/> for none.</param>
+    /// <param name="decimals">The number of decimals to round to (0 to 15), or <see langword="null"/> for the type's default.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mean"/> or a limit is not a number, <paramref name="standardDeviation"/> is negative or not finite, or <paramref name="decimals"/> is not 0 to 15.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public Generator<T> WithNormal<TNumber>(Expression<Func<T, TNumber>> member, double mean, double standardDeviation, double? min = null, double? max = null, int? decimals = null)
+        where TNumber : INumber<TNumber>
+    {
+        NumberModule.ValidateNormal(mean, standardDeviation, min, max, decimals);
+        return With(member, faker => faker.Number.Normal<TNumber>(mean, standardDeviation, min, max, decimals));
+    }
+
+    /// <inheritdoc cref="WithNormal{TNumber}(Expression{Func{T, TNumber}}, double, double, double?, double?, int?)"/>
+    public Generator<T> WithNormal<TNumber>(Expression<Func<T, TNumber?>> member, double mean, double standardDeviation, double? min = null, double? max = null, int? decimals = null)
+        where TNumber : struct, INumber<TNumber>
+    {
+        NumberModule.ValidateNormal(mean, standardDeviation, min, max, decimals);
+        return With(member, faker => (TNumber?)faker.Number.Normal<TNumber>(mean, standardDeviation, min, max, decimals));
     }
 
     /// <summary>

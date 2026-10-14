@@ -239,6 +239,31 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task WithNormal_targets_number_members_of_the_generated_type_or_of_nested_objects(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().WithNormal(p => p.Price, 10, 2).WithNormal(p => p.Id, 5, 1);
+            public static object B() => Fake.For<Product>().WithNormal(p => p.Name.Length, 10, 2);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(1); // a member of a string is no member to give a rule to
+        diagnostics[0].GetMessage().ShouldContain("must select a member");
+    }
+
+    [Test]
+    public async Task WithNormal_takes_the_rule_slot_of_its_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().WithNormal(p => p.Price, 10, 2).With(p => p.Price, 1m);
+            public static object B() => Fake.For<Product>().With(p => p.Price, 1m).WithNormal(p => p.Price, 10, 2);
+            public static object C() => Fake.For<Product>().WithNormal(p => p.Price, 10, 2).WithNormal(p => p.Id, 5, 1);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
+    }
+
+    [Test]
     public async Task Read_only_collections_that_are_filled_in_place_accept_rules_but_not_object_dependent_ones(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY007", """

@@ -100,7 +100,7 @@ A `Faker` groups values by topic:
 | `NationalId` | `Person()`, `Company()`, `Vat()`, e.g. a Swedish personnummer, a US SSN, a Brazilian CPF, valid check digits |
 | `Date` | `Past()`, `Future()`, `Recent()`, `Soon()`, `Between(...)`, `Birthdate(18, 65)`, `Month()`, `Weekday()` |
 | `Lorem` / `Word` | `Sentence()`, `Paragraphs()`, `Slug()`, `Noun(minLength: 5)` |
-| `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)` |
+| `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)`, `Normal(175, 8)` ([normal distribution](#normally-distributed-numbers)) |
 | `Color` | `Human()`, `Hex()`, `Rgb()` (typed, with `ToCss()`/`ToHex()`), `Hsl()`, `Lab()` |
 | `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `DataUri()` (self-contained SVG) |
 | `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `Slugify()`, `LuhnCheck()`, `Multiple(f => …, 5)`, `UniqueValues(…, 10)` |
@@ -527,6 +527,28 @@ var invoices = Fake.For<Invoice>().Seed(1)
 - **Typical causes**: the object never exists (always null, an empty collection, `MaxDepth`, a cycle, another subtype), a rule for the enclosing member or a `Use` generator creates or skips it, `Populate` keeps an existing object (path rules only shape objects that are created), or the graph has no such member or type.
 - **A nested generator can't verify**: it has no `Generate` call of its own, so passing a verifying generator to `With`, `Use` or `Fake.Generators.Add` throws an `ArgumentException`; call `VerifyRules(false)` on it and verify the generator you call `Generate` on.
 - Works the same with reflection and with the source generator. Turn it off again with `VerifyRules(false)`. The analyzers' rules about discarded results and replaced rules (**PHONEY005**, **PHONEY008**) catch the mistakes that are visible in the code; this catches the ones that depend on the data.
+
+### Normally distributed numbers
+
+A plain range gives every value the same chance. Measurements, scores, ages and durations cluster around an average instead, which is what a normal (Gaussian) distribution describes. `WithNormal` gives a number member that shape:
+
+```csharp
+var people = Fake.For<Person>().Seed(1)
+    .WithNormal(p => p.Height, mean: 175, standardDeviation: 8)             // 175.34, 168.9, 181.72… two thirds within 8 of 175
+    .WithNormal(p => p.Iq, 100, 15)                                         // whole numbers for int members
+    .WithNormal(p => p.Steps, 8000, 2500, min: 0)                           // a value below 0 is drawn again
+    .WithNormal(p => p.Lines.Each().Pulse, 70, 8, min: 40, max: 120)        // also for collection elements and nested objects
+    .Generate(1000);
+
+var iq = faker.Number.Normal<int>(100, 15);                                 // the same on a Faker: Normal(), Normal<T>(), and faker.Random.Normal()
+var fake = faker.Parse("{{number.normal(50, 5)}}");                         // and in templates
+```
+
+- **Any numeric type**: `int`, `long`, `byte`, `decimal`, `double`, `Half`, `BigInteger`… and their nullable forms. Whole-number types are rounded to integers, other types to two decimals (`decimals: 4` changes that, 0 to 15). A value the type cannot hold becomes the type's largest or smallest, so give `min` and `max` when that matters, for instance `byte` with a mean near 255.
+- **Limits cut the bell off, they don't flatten it**: a value outside `min` and `max` is drawn again, so the shape inside the limits stays that of the normal distribution. If the limits lie so far in a tail that 100 draws miss them, the nearest limit is returned.
+- **`[Range]` is not read.** `WithNormal` is a rule, and rules win over annotations, so pass the same limits to keep the values valid.
+- **Reproducible everywhere**: a sample draws exactly two numbers from the seeded generator and keeps no state, so item *n* is the same whichever way you generate. The logarithm and cosine of the Box–Muller transform are computed with `+ - * /` only, not with `Math.Log` and `Math.Cos`, which round the last bit differently on some platforms, so a seed gives the same numbers on Linux, Windows and ARM (a test pins exact values).
+- **Checked early**: a negative deviation, a limit that is not a number or `min` above `max` throws when the rule is added.
 
 ### Numbering and cycling
 

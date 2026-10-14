@@ -102,6 +102,7 @@ public static partial class TemplateFunctions
         f["number.romanNumeral"] = (faker, a) => faker.Number.RomanNumeral(a.Int(0, "min") ?? 1, a.Int(0, "max") ?? a.Int(0) ?? 3999);
         f["number.long"] = (faker, a) => faker.Number.Long(a.Int(0, "min") ?? 0, a.Int(1) ?? a.Int(0, "max") ?? long.MaxValue).ToString(inv);
         f["number.double"] = f["number.float"];
+        f["number.normal"] = (faker, a) => faker.Number.Normal(a.Double(0, "mean") ?? 0, a.Double(1, "standardDeviation") ?? 1, a.Double(2, "min"), a.Double(3, "max")).ToString(CultureInfo.InvariantCulture);
         f["number.decimal"] = (faker, a) => faker.Number.Decimal((decimal)(a.Double(0) ?? 0), (decimal)(a.Double(1) ?? 1), a.Int(2) ?? 2).ToString(inv);
     }
 

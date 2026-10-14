@@ -26,10 +26,10 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
     private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "Use", "Subtype" };
 
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
+    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormal", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
-    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
+    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithNormal", "WithOneOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =

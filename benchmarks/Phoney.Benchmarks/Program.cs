@@ -37,6 +37,12 @@ public class ValueBenchmarks
 
     [Benchmark(Description = "Randomizer.Int")]
     public int RandomInt() => _faker.Random.Int(0, 1000);
+
+    [Benchmark(Description = "Randomizer.Normal")]
+    public double RandomNormal() => _faker.Random.Normal(175, 8);
+
+    [Benchmark(Description = "Number.Normal<int> (limits, rounded)")]
+    public int NumberNormal() => _faker.Number.Normal<int>(100, 15, min: 40, max: 160);
 }
 
 /// <summary>Object generation through the reflection model and the source-generated model.</summary>

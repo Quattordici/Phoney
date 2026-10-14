@@ -94,6 +94,26 @@ public sealed class Randomizer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public double Double() => (NextUInt64() >> 11) * (1.0 / (1UL << 53));
 
+    /// <summary>
+    /// Returns a number from a normal (Gaussian) distribution, with the Box–Muller transform. It always draws two numbers, whatever the result, so what is drawn after it does not
+    /// depend on its value, and it keeps no state, so reseeding gives the same sequence. The logarithm and cosine are made without the system's maths library
+    /// (see <see cref="PureMath"/>), so a seed gives the same numbers on every platform.
+    /// </summary>
+    /// <param name="mean">The centre of the distribution.</param>
+    /// <param name="standardDeviation">How far values spread: about 68 % lie within one deviation of the mean, 95 % within two. Zero gives the mean every time.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mean"/> is not finite, or <paramref name="standardDeviation"/> is negative or not finite.</exception>
+    public double Normal(double mean = 0, double standardDeviation = 1)
+    {
+        if (!double.IsFinite(mean))
+            throw new ArgumentOutOfRangeException(nameof(mean), mean, "The mean must be a finite number.");
+        if (!double.IsFinite(standardDeviation) || standardDeviation < 0)
+            throw new ArgumentOutOfRangeException(nameof(standardDeviation), standardDeviation, "The standard deviation must be a finite number that is not negative.");
+
+        var radius = Math.Sqrt(-2.0 * PureMath.Ln(1.0 - Double())); // 1 - [0, 1) is in (0, 1]
+        var turns = Double();
+        return mean + (standardDeviation * radius * PureMath.CosTurns(turns));
+    }
+
     /// <summary>Returns a double in <c>[min, max)</c>.</summary>
     public double Double(double min, double max)
     {

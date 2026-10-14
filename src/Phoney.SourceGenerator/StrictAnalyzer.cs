@@ -22,7 +22,7 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class StrictAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
+    private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithNormal", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Diagnostics.StrictUncovered);
