@@ -11,7 +11,7 @@ namespace Phoney.SourceGenerator;
 
 /// <summary>
 /// Generates reflection-free <c>FakeModel&lt;T&gt;</c> implementations for every type listed with
-/// <c>[FakeFor&lt;T&gt;]</c> on a partial class (plus the types they contain), a <c>Generator&lt;T&gt;</c> property
+/// <c>[FakeFor&lt;T&gt;]</c> on a partial class (plus the types they contain), a <c>ObjectGenerator&lt;T&gt;</c> property
 /// per listed type, and a module initializer that registers the models so <c>Fake.For&lt;T&gt;()</c> uses them too.
 /// </summary>
 [Generator(LanguageNames.CSharp)]

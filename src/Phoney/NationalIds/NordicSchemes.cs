@@ -25,7 +25,7 @@ internal static class NordicSchemes
     // ---------------------------------------------------------------- Sweden
 
     /// <summary>Personnummer <c>YYYYMMDD-NNNC</c>: the 9th digit is odd for men, the last digit is a Luhn check over <c>YYMMDDNNNC</c>.</summary>
-    private static string SwedenPerson(Randomizer r, NationalIdRequest q)
+    private static string SwedenPerson(SeededRandom r, NationalIdRequest q)
     {
         var b = q.BirthDate;
         RequireYear(b, 1800, 2099, "Swedish personnummer");
@@ -62,7 +62,7 @@ internal static class NordicSchemes
     private static readonly char[] SwedishOrganisationGroups = ['5', '5', '5', '5', '6', '7', '8', '9', '2'];
 
     /// <summary>Organisationsnummer <c>NNNNNN-NNNN</c>: Luhn check, third digit at least 2 (so it is never a date).</summary>
-    private static string SwedenCompany(Randomizer r, NationalIdRequest q)
+    private static string SwedenCompany(SeededRandom r, NationalIdRequest q)
     {
         var body = r.Element(SwedishOrganisationGroups).ToString() + r.Digit() + Digit(r, 2, 9) + RandomDigits(r, 6);
         return Join(q.Formatted, "-", body[..6], body[6..] + Luhn(body));
@@ -75,7 +75,7 @@ internal static class NordicSchemes
     }
 
     /// <summary>VAT number <c>SE</c> + organisationsnummer + <c>01</c>.</summary>
-    private static string SwedenVat(Randomizer r, NationalIdRequest q) =>
+    private static string SwedenVat(SeededRandom r, NationalIdRequest q) =>
         "SE" + Compact(SwedenCompany(r, q with { Formatted = false })) + "01";
 
     private static bool SwedenVatValid(string value)
@@ -90,7 +90,7 @@ internal static class NordicSchemes
     private static readonly int[] NorwayWeights2 = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
 
     /// <summary>Fødselsnummer <c>DDMMYY IIIKK</c>: the century follows from the individual number, its third digit is odd for men, K are two mod-11 checks.</summary>
-    private static string NorwayPerson(Randomizer r, NationalIdRequest q)
+    private static string NorwayPerson(SeededRandom r, NationalIdRequest q)
     {
         var b = q.BirthDate;
         RequireYear(b, 1854, 2039, "Norwegian fødselsnummer");
@@ -136,7 +136,7 @@ internal static class NordicSchemes
     private static readonly int[] NorwayOrganisationWeights = [3, 2, 7, 6, 5, 4, 3, 2];
 
     /// <summary>Organisasjonsnummer <c>NNN NNN NNN</c>: mod-11 check, new numbers start with 8 or 9.</summary>
-    private static string NorwayCompany(Randomizer r, NationalIdRequest q)
+    private static string NorwayCompany(SeededRandom r, NationalIdRequest q)
     {
         for (var attempt = 0; attempt < 10_000; attempt++)
         {
@@ -158,7 +158,7 @@ internal static class NordicSchemes
     }
 
     /// <summary>VAT number <c>NO</c> + organisasjonsnummer + <c>MVA</c>.</summary>
-    private static string NorwayVat(Randomizer r, NationalIdRequest q)
+    private static string NorwayVat(SeededRandom r, NationalIdRequest q)
     {
         var d = NorwayCompany(r, q with { Formatted = false });
         return q.Formatted ? $"NO {d[..3]} {d[3..6]} {d[6..]} MVA" : $"NO{d}MVA";
@@ -178,7 +178,7 @@ internal static class NordicSchemes
     /// CPR <c>DDMMYY-SSSS</c>: the first serial digit selects the century, the last digit is odd for men. Generated numbers
     /// also satisfy the classic mod-11 rule (dropped for new numbers in 2007), so old and new validators accept them.
     /// </summary>
-    private static string DenmarkPerson(Randomizer r, NationalIdRequest q)
+    private static string DenmarkPerson(SeededRandom r, NationalIdRequest q)
     {
         var b = q.BirthDate;
         RequireYear(b, 1858, 2057, "Danish CPR");
@@ -220,7 +220,7 @@ internal static class NordicSchemes
     private static readonly int[] DenmarkCompanyWeights = [2, 7, 6, 5, 4, 3, 2, 1];
 
     /// <summary>CVR <c>NN NN NN NN</c>: weighted mod-11 sum of 0.</summary>
-    private static string DenmarkCompany(Randomizer r, NationalIdRequest q)
+    private static string DenmarkCompany(SeededRandom r, NationalIdRequest q)
     {
         for (var attempt = 0; attempt < 10_000; attempt++)
         {
@@ -243,7 +243,7 @@ internal static class NordicSchemes
     }
 
     /// <summary>VAT number <c>DK</c> + CVR.</summary>
-    private static string DenmarkVat(Randomizer r, NationalIdRequest q)
+    private static string DenmarkVat(SeededRandom r, NationalIdRequest q)
     {
         var d = DenmarkCompany(r, q with { Formatted = false });
         return q.Formatted ? $"DK {d[..2]} {d[2..4]} {d[4..6]} {d[6..]}" : "DK" + d;
@@ -263,7 +263,7 @@ internal static class NordicSchemes
     /// Henkilötunnus <c>DDMMYYCZZZQ</c>: C is the century sign (<c>+</c> 1800s, <c>-</c> 1900s, <c>A</c> 2000s), ZZZ is even for women,
     /// Q is the number DDMMYYZZZ mod 31 as a character.
     /// </summary>
-    private static string FinlandPerson(Randomizer r, NationalIdRequest q)
+    private static string FinlandPerson(SeededRandom r, NationalIdRequest q)
     {
         var b = q.BirthDate;
         RequireYear(b, 1800, 2099, "Finnish henkilötunnus");
@@ -296,7 +296,7 @@ internal static class NordicSchemes
     private static readonly int[] FinlandCompanyWeights = [7, 9, 10, 5, 8, 4, 2];
 
     /// <summary>Y-tunnus <c>NNNNNNN-C</c>: mod-11 check digit.</summary>
-    private static string FinlandCompany(Randomizer r, NationalIdRequest q)
+    private static string FinlandCompany(SeededRandom r, NationalIdRequest q)
     {
         for (var attempt = 0; attempt < 10_000; attempt++)
         {
@@ -315,7 +315,7 @@ internal static class NordicSchemes
     }
 
     /// <summary>VAT number <c>FI</c> + Y-tunnus without the hyphen.</summary>
-    private static string FinlandVat(Randomizer r, NationalIdRequest q) => "FI" + FinlandCompany(r, q with { Formatted = false });
+    private static string FinlandVat(SeededRandom r, NationalIdRequest q) => "FI" + FinlandCompany(r, q with { Formatted = false });
 
     private static bool FinlandVatValid(string value)
     {

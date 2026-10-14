@@ -137,7 +137,7 @@ public void Creates_an_invoice()
 Fake.Seed(42);                                // or seed the facade app-wide (every thread starts the same sequence)
 ```
 
-`Generator<T>.Seed(n)` does the same for a generator. For tests that should run on random data but be replayable, see [`[FakeSeed]`](#test-data-in-tunit) and `FakeSeed.Pick()`. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
+`ObjectGenerator<T>.Seed(n)` does the same for a generator. For tests that should run on random data but be replayable, see [`[FakeSeed]`](#test-data-in-tunit) and `FakeSeed.Pick()`. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
 
 ### Controlling "now" with `TimeProvider`
 
@@ -631,7 +631,7 @@ The values are taken one at a time, each time by weight among those not taken ye
 
 A subset is made of distinct positions of the list (a list with equal values can give equal values), in the order of the list, and every value is equally likely to be in it. It is drawn from the object's own seeded randomness, so a seed gives the same subsets and item *n* is the same however you generate; a size range draws its size first, then one number per value, without work in proportion to the length of the list. The size can't be larger than the list, and the member must hold a list, array or set (`ImmutableArray<T>` and the like are refused when the rule is added, with a message saying what to use).
 
-Weights are relative (70/25/5 is the same as 14/5/1), a weight of zero is never picked, and a negative or non-finite weight, a missing weight or no weight above zero throws when the rule is added. The running totals are made once, so a pick is one random number and a binary search (`Randomizer.WeightedIndex`), and item *n* is the same however you generate.
+Weights are relative (70/25/5 is the same as 14/5/1), a weight of zero is never picked, and a negative or non-finite weight, a missing weight or no weight above zero throws when the rule is added. The running totals are made once, so a pick is one random number and a binary search (`SeededRandom.WeightedIndex`), and item *n* is the same however you generate.
 
 ### Validation attributes
 
@@ -735,7 +735,7 @@ It sets members: the elements of collections keep their generated values, the nu
 [FakeFor<Customer>, FakeFor<Order>]
 internal static partial class TestData;
 
-var customers = TestData.Customer.Seed(1).Generate(100); // a Generator<Customer>, no reflection
+var customers = TestData.Customer.Seed(1).Generate(100); // a ObjectGenerator<Customer>, no reflection
 ```
 
 The generator (included in the package) writes a model for each listed type and every type it contains, and registers them at startup, so `Fake.For<Customer>()` uses them as well. `Fake.For`, `One`, `Many` and `Populate` fall back to reflection for other types, so the compiler flags them in trimmed and AOT apps even when a model exists; **`Fake.Generated<Customer>()`** is the same facade (seed, locale and clock of `Fake.Seeded`) without any reflection, so it is warning free there, and it throws with the fix when the type has no generated model:
@@ -859,10 +859,10 @@ dotnet add package Phoney.DependencyInjection
 
 ```csharp
 builder.Services.AddPhoney(o => { o.Locale = "sv"; o.Seed = 42; })
-    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // singleton Generator<Customer>
+    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // singleton ObjectGenerator<Customer>
     .AddGenerator(TestData.Order);                              // source-generated: no reflection, AOT safe
 
-app.MapGet("/demo/customers", (Generator<Customer> customers) => customers.Generate(10));
+app.MapGet("/demo/customers", (ObjectGenerator<Customer> customers) => customers.Generate(10));
 app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 ```
 
@@ -917,7 +917,7 @@ Indicative numbers (Apple Silicon, .NET 10, BenchmarkDotNet short run):
 | Operation | Time | Allocated |
 |---|---:|---:|
 | `Person.FirstName()` | 3.6 ns | 0 B |
-| `Randomizer.Int(0, 1000)` | 2.2 ns | 0 B |
+| `SeededRandom.Int(0, 1000)` | 2.2 ns | 0 B |
 | `Helpers.FromRegExp("[A-Z]{3}-\\d{4}")` | 52 ns | 144 B |
 | `Parse("{{person.firstName}} {{person.lastName}} lives in {{location.city}}")` | 174 ns | 418 B |
 | `Person.FullName()` | 186 ns | 348 B |

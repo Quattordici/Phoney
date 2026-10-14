@@ -5,11 +5,11 @@ using Phoney.Modules;
 namespace Phoney.Schemes;
 
 /// <summary>A scheme assembled from a generator and a validator, used for the built-in countries.</summary>
-internal sealed class Scheme(string country, NationalIdKind kind, Func<Randomizer, NationalIdRequest, string> generate, Func<string, bool> isValid)
+internal sealed class Scheme(string country, NationalIdKind kind, Func<SeededRandom, NationalIdRequest, string> generate, Func<string, bool> isValid)
     : NationalIdScheme(country, kind)
 {
     /// <inheritdoc />
-    public override string Generate(Randomizer random, NationalIdRequest request) => generate(random, request);
+    public override string Generate(SeededRandom random, NationalIdRequest request) => generate(random, request);
 
     /// <inheritdoc />
     public override bool IsValid(string value) => isValid(value);
@@ -58,7 +58,7 @@ internal static class Checks
     }
 
     /// <summary><paramref name="count"/> random digits.</summary>
-    public static string RandomDigits(Randomizer random, int count)
+    public static string RandomDigits(SeededRandom random, int count)
     {
         var chars = new char[count];
         for (var i = 0; i < count; i++)
@@ -67,7 +67,7 @@ internal static class Checks
     }
 
     /// <summary>A random digit between <paramref name="min"/> and <paramref name="max"/>.</summary>
-    public static char Digit(Randomizer random, int min, int max) => (char)('0' + random.Int(min, max));
+    public static char Digit(SeededRandom random, int min, int max) => (char)('0' + random.Int(min, max));
 
     /// <summary><paramref name="value"/> as decimal digits, zero-padded to <paramref name="width"/>.</summary>
     public static string Pad(long value, int width) => value.ToString(CultureInfo.InvariantCulture).PadLeft(width, '0');

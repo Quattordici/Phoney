@@ -118,7 +118,7 @@ public enum WordLengthStrategy
 internal static class WordPicker
 {
     /// <summary>Picks a word from <paramref name="entry"/> honouring the length range and fallback strategy.</summary>
-    public static bool TryPick(StringsEntry entry, Randomizer random, int? minLength, int? maxLength, WordLengthStrategy strategy, out string word)
+    public static bool TryPick(StringsEntry entry, SeededRandom random, int? minLength, int? maxLength, WordLengthStrategy strategy, out string word)
     {
         word = "";
         var values = (string[])entry.Values;
@@ -175,7 +175,7 @@ internal static class WordPicker
     }
 
     /// <summary>Picks uniformly among words with a length in range, without allocating.</summary>
-    private static bool PickInRange(string[] values, Randomizer random, int min, int max, out string word)
+    private static bool PickInRange(string[] values, SeededRandom random, int min, int max, out string word)
     {
         var count = 0;
         foreach (var v in values)
@@ -198,7 +198,7 @@ internal static class WordPicker
     }
 
     /// <summary>Picks among words of exactly <paramref name="length"/> characters.</summary>
-    private static bool PickByLength(string[] values, Randomizer random, int length, out string word) =>
+    private static bool PickByLength(string[] values, SeededRandom random, int length, out string word) =>
         PickInRange(values, random, length, length, out word);
 
     /// <summary>Length of the shortest word.</summary>

@@ -11,7 +11,7 @@ namespace Phoney;
 /// sequence on every platform and .NET version. Instances are not thread-safe; create one per thread
 /// (every <see cref="Faker"/> owns its own) instead of sharing.
 /// </remarks>
-public sealed class Randomizer
+public sealed class SeededRandom
 {
     private const string UpperAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private const string LowerAlpha = "abcdefghijklmnopqrstuvwxyz";
@@ -20,13 +20,13 @@ public sealed class Randomizer
 
     /// <summary>Creates a randomizer with a random seed.</summary>
 #pragma warning disable RS0030 // An unseeded randomizer is random by definition; seeded ones never reach this.
-    public Randomizer() : this(System.Random.Shared.NextInt64())
+    public SeededRandom() : this(System.Random.Shared.NextInt64())
 #pragma warning restore RS0030
     {
     }
 
     /// <summary>Creates a randomizer that produces a reproducible sequence for <paramref name="seed"/>.</summary>
-    public Randomizer(long seed) => Reseed(seed);
+    public SeededRandom(long seed) => Reseed(seed);
 
     /// <summary>The seed this randomizer was last (re)seeded with.</summary>
     public long Seed { get; private set; }

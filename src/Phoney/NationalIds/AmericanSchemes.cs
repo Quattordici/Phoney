@@ -17,7 +17,7 @@ internal static class AmericanSchemes
     // ---------------------------------------------------------------- United States
 
     /// <summary>Social Security number <c>AAA-GG-SSSS</c>. There is no check digit; the area is never 000, 666 or 9xx, group and serial are never zero.</summary>
-    private static string UnitedStatesPerson(Randomizer r, NationalIdRequest q)
+    private static string UnitedStatesPerson(SeededRandom r, NationalIdRequest q)
     {
         var area = r.Int(1, 898);
         if (area >= 666)
@@ -45,7 +45,7 @@ internal static class AmericanSchemes
     ];
 
     /// <summary>Employer identification number <c>NN-NNNNNNN</c> with an assigned prefix; there is no check digit.</summary>
-    private static string UnitedStatesCompany(Randomizer r, NationalIdRequest q) =>
+    private static string UnitedStatesCompany(SeededRandom r, NationalIdRequest q) =>
         Join(q.Formatted, "-", r.Element(EinPrefixes), RandomDigits(r, 7));
 
     private static bool UnitedStatesCompanyValid(string value)
@@ -69,7 +69,7 @@ internal static class AmericanSchemes
     }
 
     /// <summary>CPF <c>NNN.NNN.NNN-NN</c>: two mod-11 check digits.</summary>
-    private static string BrazilPerson(Randomizer r, NationalIdRequest q)
+    private static string BrazilPerson(SeededRandom r, NationalIdRequest q)
     {
         string body;
         do
@@ -91,7 +91,7 @@ internal static class AmericanSchemes
     }
 
     /// <summary>CNPJ <c>NN.NNN.NNN/NNNN-NN</c>: a head office (branch 0001) with two mod-11 check digits.</summary>
-    private static string BrazilCompany(Randomizer r, NationalIdRequest q)
+    private static string BrazilCompany(SeededRandom r, NationalIdRequest q)
     {
         var body = Digit(r, 1, 9) + RandomDigits(r, 7) + "0001";
         var first = BrazilCheck(body, CnpjWeights1);
@@ -109,7 +109,7 @@ internal static class AmericanSchemes
     // ---------------------------------------------------------------- Canada
 
     /// <summary>Social insurance number <c>NNN-NNN-NNN</c>: Luhn check, never starting with 0 or 8 (9 marks temporary residents).</summary>
-    private static string CanadaPerson(Randomizer r, NationalIdRequest q)
+    private static string CanadaPerson(SeededRandom r, NationalIdRequest q)
     {
         var body = r.Element(['1', '2', '3', '4', '5', '6', '7', '9']) + RandomDigits(r, 7);
         var d = body + Luhn(body);

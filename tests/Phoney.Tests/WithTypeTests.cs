@@ -30,7 +30,7 @@ public sealed class WithTypeTests
 {
     static WithTypeTests() => Fake.Conventions.Add<SupportPlan>(_ => SupportPlan.Premium); // a type no other test uses
 
-    private static Generator<Subscriber> Make() => Fake.For<Subscriber>().Seed(1);
+    private static ObjectGenerator<Subscriber> Make() => Fake.For<Subscriber>().Seed(1);
 
     [Test]
     public void Every_member_of_the_type_gets_the_value_also_in_nested_objects_and_whatever_its_name()

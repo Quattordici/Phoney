@@ -92,7 +92,7 @@ public sealed class UsageAnalyzerTests
     public async Task Used_results_and_class_populate_are_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY005", """
-            public static Generator<Product> A() => Fake.For<Product>().With(p => p.Name, "x");
+            public static ObjectGenerator<Product> A() => Fake.For<Product>().With(p => p.Name, "x");
             public static void B()
             {
                 var generator = Fake.For<Product>();
@@ -333,7 +333,7 @@ public sealed class UsageAnalyzerTests
             public static object A() => Fake.For<Product>().With(p => p.Name, "x").With(p => (object)p.Id, 1).With(p => p.Price, f => 2m).Ignore(p => p.Address).Unique(p => p.Name!);
             public static object B() => Fake.For<Product>().With(p => p.Name!, (f, p) => "x").WithOneOf(p => p.Id, new[] { 1, 2 }).With(p => p.Address, Fake.For<Address>().With(a => a.Street, "s"));
             public static object C() => Fake.For<Person>().With(p => p.FirstName, "Ada").With(p => p.Email, (f, p) => p.FirstName + "@x.se").Ignore(p => p.LastName);
-            public static object D() => new Generator<Product>(null!).With(p => p.Code, "custom model, members unknown");
+            public static object D() => new ObjectGenerator<Product>(null!).With(p => p.Code, "custom model, members unknown");
             public static object E() => Fake.For<Shape>().With(s => s.Label, "abstract types are not analyzed");
             public static object F(System.Linq.Expressions.Expression<Func<Product, string>> member) => Fake.For<Product>().With(member, "unknown selector");
             """, cancellationToken);
@@ -417,7 +417,7 @@ public sealed class UsageAnalyzerTests
         var diagnostics = await Diagnose("PHONEY008", """
             public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().Use<Shape, Circle>(Fake.For<Circle>());
             public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Subtype<Shape, Circle>();
-            public static object C(Generator<Product> baseline) => baseline.Subtype<Shape, Circle>();
+            public static object C(ObjectGenerator<Product> baseline) => baseline.Subtype<Shape, Circle>();
             """, cancellationToken);
 
         diagnostics.ShouldBeEmpty();
@@ -428,7 +428,7 @@ public sealed class UsageAnalyzerTests
     {
         var diagnostics = await Diagnose("PHONEY008", """
             public static object A() => Fake.For<Product>().Use(Fake.For<Address>()).Use<Shape, Circle>(Fake.For<Circle>()).Use(Fake.For<Circle>());
-            public static object B(Generator<Product> baseline) => baseline.Use(Fake.For<Address>());
+            public static object B(ObjectGenerator<Product> baseline) => baseline.Use(Fake.For<Address>());
             public static object C()
             {
                 var baseline = Fake.For<Product>().Use(Fake.For<Address>());
@@ -457,7 +457,7 @@ public sealed class UsageAnalyzerTests
     {
         var diagnostics = await Diagnose("PHONEY008", """
             public static object A() => Fake.For<Product>().With(p => p.Name, "a").With(p => p.Price, 1m).Unique(p => p.Name);
-            public static object B(Generator<Product> baseline) => baseline.With(p => p.Name, "variant");
+            public static object B(ObjectGenerator<Product> baseline) => baseline.With(p => p.Name, "variant");
             public static object C()
             {
                 var baseline = Fake.For<Product>().With(p => p.Name, "a");

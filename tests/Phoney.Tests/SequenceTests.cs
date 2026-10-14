@@ -3,7 +3,7 @@ namespace Phoney.Tests;
 /// <summary><c>Sequence</c> and <c>Cycle</c> give a member a value that depends on the object's position in the generator's sequence.</summary>
 public sealed class SequenceTests
 {
-    private static Generator<Ticket> Make() => Fake.For<Ticket>().Seed(21);
+    private static ObjectGenerator<Ticket> Make() => Fake.For<Ticket>().Seed(21);
 
     [Test]
     public void Sequence_numbers_the_objects_from_zero_and_continues_over_calls()

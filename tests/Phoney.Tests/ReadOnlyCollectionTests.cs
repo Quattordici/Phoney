@@ -60,11 +60,11 @@ public static partial class BasketFakes;
 
 public sealed class ReadOnlyCollectionTests
 {
-    private static Generator<Basket> Make() => Fake.For<Basket>().Seed(6);
+    private static ObjectGenerator<Basket> Make() => Fake.For<Basket>().Seed(6);
 
-    private static Generator<Basket> Generated() => BasketFakes.Basket.Seed(6);
+    private static ObjectGenerator<Basket> Generated() => BasketFakes.Basket.Seed(6);
 
-    private static Generator<Basket> Reflected() => new Generator<Basket>(new ReflectionModel<Basket>()).Seed(6);
+    private static ObjectGenerator<Basket> Reflected() => new ObjectGenerator<Basket>(new ReflectionModel<Basket>()).Seed(6);
 
     [Test]
     [Arguments(true)]
@@ -189,7 +189,7 @@ public sealed class ReadOnlyCollectionTests
     [Arguments(false)]
     public void Back_references_reach_through_collections_that_are_filled_in_place(bool generated)
     {
-        var generator = generated ? BasketFakes.Volume : new Generator<Volume>(new ReflectionModel<Volume>());
+        var generator = generated ? BasketFakes.Volume : new ObjectGenerator<Volume>(new ReflectionModel<Volume>());
 
         var volumes = generator.Seed(3).WithBackReferences().Generate(5);
 

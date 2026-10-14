@@ -124,8 +124,8 @@ public class ValueComparison
 [Config(typeof(ComparisonConfig))]
 public class FlatComparison
 {
-    private Phoney.Generator<FlatCustomer> _reflection = null!;
-    private Phoney.Generator<FlatCustomer> _generated = null!;
+    private Phoney.ObjectGenerator<FlatCustomer> _reflection = null!;
+    private Phoney.ObjectGenerator<FlatCustomer> _generated = null!;
     private Bogus.Faker<FlatCustomer> _bogus = null!;
     private AutoFaker<FlatCustomer> _autoBogus = null!;
     private Fixture _fixture = null!;
@@ -198,8 +198,8 @@ public class FlatComparison
 [Config(typeof(ComparisonConfig))]
 public class GraphComparison
 {
-    private Phoney.Generator<Shopper> _reflection = null!;
-    private Phoney.Generator<Shopper> _generated = null!;
+    private Phoney.ObjectGenerator<Shopper> _reflection = null!;
+    private Phoney.ObjectGenerator<Shopper> _generated = null!;
     private Bogus.Faker<Shopper> _bogus = null!;
     private AutoFaker<Shopper> _autoBogus = null!;
     private Fixture _fixture = null!;

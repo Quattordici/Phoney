@@ -26,7 +26,7 @@ public sealed class FakeGeneratorsTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static Generator<Item> Sku(string sku) => Fake.For<Item>().With(i => i.Sku, sku);
+    private static ObjectGenerator<Item> Sku(string sku) => Fake.For<Item>().With(i => i.Sku, sku);
 
     private static void With(Action<FakeGenerators> register, Action test)
     {
@@ -123,7 +123,7 @@ public sealed class FakeGeneratorsTests
         With(g => g.Add(Fake.Generated<Item>().With(i => i.Sku, f => "APP-" + f.Random.Int(100, 999))), () =>
         {
             var generated = ManifestFakes.Manifest.Seed(5).ReferenceDate(Reference).Generate(15);
-            var reflected = new Generator<Manifest>(new ReflectionModel<Manifest>()).Seed(5).ReferenceDate(Reference).Generate(15);
+            var reflected = new ObjectGenerator<Manifest>(new ReflectionModel<Manifest>()).Seed(5).ReferenceDate(Reference).Generate(15);
 
             generated.ShouldAllBe(m => m.Main.Sku.StartsWith("APP-"));
             reflected.Select(Describe).ShouldBe(generated.Select(Describe));

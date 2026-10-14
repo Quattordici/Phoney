@@ -30,7 +30,7 @@ public static partial class GraphFakes;
 /// <summary><c>WithBackReferences</c> points members that would close a cycle at the object that contains them.</summary>
 public sealed class BackReferenceTests
 {
-    private static Generator<Buyer> Make() => Fake.For<Buyer>().Seed(4);
+    private static ObjectGenerator<Buyer> Make() => Fake.For<Buyer>().Seed(4);
 
     [Test]
     public void Without_it_a_cycle_stops_with_null()
@@ -126,7 +126,7 @@ public sealed class BackReferenceTests
             $"{b.Name}|{string.Join(",", b.Purchases.Select(p => $"{p.Reference}:{ReferenceEquals(p.Buyer, b)}:{string.Join("/", p.Lines.Select(l => $"{l.Sku}{ReferenceEquals(l.Purchase, p)}{ReferenceEquals(l.Owner, b)}"))}"))}";
 
         var generated = GraphFakes.Buyer.Seed(9).WithBackReferences().Generate(15);
-        var reflected = new Generator<Buyer>(new ReflectionModel<Buyer>()).Seed(9).WithBackReferences().Generate(15);
+        var reflected = new ObjectGenerator<Buyer>(new ReflectionModel<Buyer>()).Seed(9).WithBackReferences().Generate(15);
 
         reflected.Select(Describe).ShouldBe(generated.Select(Describe));
         generated.SelectMany(b => b.Purchases).ShouldAllBe(p => p.Buyer != null);

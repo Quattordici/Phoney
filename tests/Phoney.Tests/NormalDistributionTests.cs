@@ -29,7 +29,7 @@ public static partial class NormalFakes;
 /// <summary>Numbers drawn from a normal (Gaussian) distribution: the primitive, the number module and the <c>WithNormal</c> rule.</summary>
 public sealed class NormalDistributionTests
 {
-    private static Randomizer Seeded(long seed = 7) => new(seed);
+    private static SeededRandom Seeded(long seed = 7) => new(seed);
 
     private static double[] Samples(int count, double mean = 0, double deviation = 1, long seed = 7)
     {
@@ -210,11 +210,11 @@ public sealed class NormalDistributionTests
 
     // --- the rule
 
-    private static Generator<Person180> Generated() => NormalFakes.Person180.Seed(21);
+    private static ObjectGenerator<Person180> Generated() => NormalFakes.Person180.Seed(21);
 
-    private static Generator<Person180> Reflected() => new Generator<Person180>(new ReflectionModel<Person180>()).Seed(21);
+    private static ObjectGenerator<Person180> Reflected() => new ObjectGenerator<Person180>(new ReflectionModel<Person180>()).Seed(21);
 
-    private static Generator<Person180> WithRules(Generator<Person180> generator) => generator
+    private static ObjectGenerator<Person180> WithRules(ObjectGenerator<Person180> generator) => generator
         .WithNormal(p => p.Height, 175, 8)
         .WithNormal(p => p.Weight, 75, 10)
         .WithNormal(p => p.Iq, 100, 15)

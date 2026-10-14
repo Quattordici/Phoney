@@ -13,13 +13,13 @@ internal static class Libraries
     public const int Seed = 1;
 
     // Phoney: no configuration, member names and types decide.
-    public static Phoney.Generator<FlatCustomer> PhoneyFlatReflection() => new Phoney.Generator<FlatCustomer>(new ReflectionModel<FlatCustomer>()).Seed(Seed);
+    public static Phoney.ObjectGenerator<FlatCustomer> PhoneyFlatReflection() => new Phoney.ObjectGenerator<FlatCustomer>(new ReflectionModel<FlatCustomer>()).Seed(Seed);
 
-    public static Phoney.Generator<FlatCustomer> PhoneyFlatGenerated() => ComparisonFakes.FlatCustomer.Seed(Seed);
+    public static Phoney.ObjectGenerator<FlatCustomer> PhoneyFlatGenerated() => ComparisonFakes.FlatCustomer.Seed(Seed);
 
-    public static Phoney.Generator<Shopper> PhoneyGraphReflection() => new Phoney.Generator<Shopper>(new ReflectionModel<Shopper>()).Seed(Seed).CollectionSize(2, 2);
+    public static Phoney.ObjectGenerator<Shopper> PhoneyGraphReflection() => new Phoney.ObjectGenerator<Shopper>(new ReflectionModel<Shopper>()).Seed(Seed).CollectionSize(2, 2);
 
-    public static Phoney.Generator<Shopper> PhoneyGraphGenerated() => ComparisonFakes.Shopper.Seed(Seed).CollectionSize(2, 2);
+    public static Phoney.ObjectGenerator<Shopper> PhoneyGraphGenerated() => ComparisonFakes.Shopper.Seed(Seed).CollectionSize(2, 2);
 
     // Bogus: explicit rules per member, coherent where Phoney is (the email is built from the names).
     public static Bogus.Faker<FlatCustomer> BogusFlat() => new Bogus.Faker<FlatCustomer>("en").UseSeed(Seed)

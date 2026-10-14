@@ -16,7 +16,7 @@ public interface IFaker
     LocaleData Data { get; }
 
     /// <inheritdoc cref="Faker.Random"/>
-    Randomizer Random { get; }
+    SeededRandom Random { get; }
 
     /// <inheritdoc cref="Faker.ReferenceDate"/>
     DateTimeOffset ReferenceDate { get; set; }

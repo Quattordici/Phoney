@@ -32,7 +32,7 @@ public sealed class Mentee
 /// <summary><c>Use</c> replaces the generator of a type everywhere it is nested in the generated objects.</summary>
 public sealed class TypeGeneratorTests
 {
-    private static Generator<Stopover> Oslo() => Fake.For<Stopover>().With(s => s.Place, "Oslo");
+    private static ObjectGenerator<Stopover> Oslo() => Fake.For<Stopover>().With(s => s.Place, "Oslo");
 
     [Test]
     public void Applies_to_members_collection_elements_and_dictionary_values()
@@ -66,7 +66,7 @@ public sealed class TypeGeneratorTests
     [Test]
     public void Is_reproducible_with_a_seed()
     {
-        Generator<Trip> Configure() =>
+        ObjectGenerator<Trip> Configure() =>
             Fake.For<Trip>().Seed(4).Use(Fake.For<Stopover>().With(s => s.Place, f => f.Location.City()));
 
         string Describe(Trip t) => $"{t.Name}|{t.Start.Place}|{t.Start.Night}|{string.Join(",", t.Stops.Select(s => s.Place + s.Night))}|{t.First!.To.Place}|{t.First.Km}";

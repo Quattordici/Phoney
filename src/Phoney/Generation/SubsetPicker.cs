@@ -57,7 +57,7 @@ internal sealed class SubsetPicker<TValue>
     }
 
     /// <summary>A subset as a list.</summary>
-    public List<TValue> List(Randomizer random)
+    public List<TValue> List(SeededRandom random)
     {
         var size = DrawSize(random);
         Span<int> positions = size <= StackLimit ? stackalloc int[size] : new int[size];
@@ -69,7 +69,7 @@ internal sealed class SubsetPicker<TValue>
     }
 
     /// <summary>A subset as an array.</summary>
-    public TValue[] Array(Randomizer random)
+    public TValue[] Array(SeededRandom random)
     {
         var size = DrawSize(random);
         Span<int> positions = size <= StackLimit ? stackalloc int[size] : new int[size];
@@ -81,7 +81,7 @@ internal sealed class SubsetPicker<TValue>
     }
 
     /// <summary>A subset as a set (equal values in the list make the set smaller).</summary>
-    public HashSet<TValue> Set(Randomizer random)
+    public HashSet<TValue> Set(SeededRandom random)
     {
         var size = DrawSize(random);
         Span<int> positions = size <= StackLimit ? stackalloc int[size] : new int[size];
@@ -93,10 +93,10 @@ internal sealed class SubsetPicker<TValue>
     }
 
     /// <summary>The size of the next subset: fixed, or drawn from the range.</summary>
-    private int DrawSize(Randomizer random) => _min == _max ? _min : random.Int(_min, _max);
+    private int DrawSize(SeededRandom random) => _min == _max ? _min : random.Int(_min, _max);
 
     /// <summary>Fills <paramref name="positions"/> with that many distinct positions of the list, ascending.</summary>
-    private void DrawPositions(Randomizer random, Span<int> positions)
+    private void DrawPositions(SeededRandom random, Span<int> positions)
     {
         var size = positions.Length;
         if (size == 0)
@@ -126,7 +126,7 @@ internal sealed class SubsetPicker<TValue>
     /// <summary>
     /// Takes the positions one at a time, each by weight among those not taken yet (one draw each); nothing is retried, so very uneven weights cost no more than even ones.
     /// </summary>
-    private void DrawWeightedPositions(Randomizer random, Span<int> positions)
+    private void DrawWeightedPositions(SeededRandom random, Span<int> positions)
     {
         var weights = _weights!;
         var n = weights.Length;

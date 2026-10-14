@@ -104,12 +104,12 @@ public sealed class AddPhoneyTests
             .AddGenerator<Customer>(g => g.With(c => c.FirstName, "Ada"))
             .Services.BuildServiceProvider();
 
-        var generator = provider.GetRequiredService<Generator<Customer>>();
-        generator.ShouldBeSameAs(provider.GetRequiredService<Generator<Customer>>());
+        var generator = provider.GetRequiredService<ObjectGenerator<Customer>>();
+        generator.ShouldBeSameAs(provider.GetRequiredService<ObjectGenerator<Customer>>());
         var customer = generator.Generate();
         customer.FirstName.ShouldBe("Ada");
         customer.CreatedAt.ShouldBeLessThanOrEqualTo(Now.UtcDateTime);
-        customer.Email.ShouldBe(new Generator<Customer>(ModelRegistry.For<Customer>()).Seed(5).TimeProvider(time).With(c => c.FirstName, "Ada").Generate().Email);
+        customer.Email.ShouldBe(new ObjectGenerator<Customer>(ModelRegistry.For<Customer>()).Seed(5).TimeProvider(time).With(c => c.FirstName, "Ada").Generate().Email);
     }
 
     [Test]
@@ -120,7 +120,7 @@ public sealed class AddPhoneyTests
             .AddGenerator(TestData.Customer, g => g.Ignore(c => c.Email))
             .Services.BuildServiceProvider();
 
-        var customers = provider.GetRequiredService<Generator<Customer>>().Generate(3);
+        var customers = provider.GetRequiredService<ObjectGenerator<Customer>>().Generate(3);
         customers.ShouldAllBe(c => c.Email == "");
         customers.Select(c => c.FirstName).ShouldBe(TestData.Customer.Seed(6).Generate(3).Select(c => c.FirstName));
     }

@@ -34,7 +34,7 @@ public sealed partial class Faker : IFaker
     /// <see cref="ReferenceDate"/> to <see cref="DefaultSeededReferenceDate"/> unless you set it or a <see cref="TimeProvider"/>.
     /// </param>
     public Faker(string locale = Locales.Default, long? seed = null)
-        : this(LocaleStore.Get(locale), seed is { } s ? new Randomizer(s) : new Randomizer())
+        : this(LocaleStore.Get(locale), seed is { } s ? new SeededRandom(s) : new SeededRandom())
     {
         _seeded = seed is not null;
     }
@@ -46,7 +46,7 @@ public sealed partial class Faker : IFaker
     }
 
     /// <summary>Creates a faker over existing locale data and randomizer.</summary>
-    public Faker(LocaleData data, Randomizer random)
+    public Faker(LocaleData data, SeededRandom random)
     {
         Data = data ?? throw new ArgumentNullException(nameof(data));
         Random = random ?? throw new ArgumentNullException(nameof(random));
@@ -59,7 +59,7 @@ public sealed partial class Faker : IFaker
     public LocaleData Data { get; }
 
     /// <summary>The source of randomness. Use it for custom values so seeding stays reproducible.</summary>
-    public Randomizer Random { get; }
+    public SeededRandom Random { get; }
 
     /// <summary>
     /// The point in time that relative dates (past, future, recent, birthdates…) are computed from: the value you set,

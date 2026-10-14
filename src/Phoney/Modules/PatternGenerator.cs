@@ -45,7 +45,7 @@ internal sealed class PatternGenerator
     }
 
     /// <summary>Generates one matching string.</summary>
-    public string Generate(Randomizer random)
+    public string Generate(SeededRandom random)
     {
         var sb = new StringBuilder();
         _root.Append(sb, random);
@@ -56,7 +56,7 @@ internal sealed class PatternGenerator
     private abstract class Node
     {
         /// <summary>Appends generated text.</summary>
-        public abstract void Append(StringBuilder sb, Randomizer random);
+        public abstract void Append(StringBuilder sb, SeededRandom random);
     }
 
     /// <summary>Fixed text.</summary>
@@ -66,7 +66,7 @@ internal sealed class PatternGenerator
         public string Text { get; } = text;
 
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, Randomizer random) => sb.Append(Text);
+        public override void Append(StringBuilder sb, SeededRandom random) => sb.Append(Text);
     }
 
     /// <summary>One character out of a set (character class, <c>\d</c>, <c>.</c>, or a case-insensitive letter).</summary>
@@ -76,14 +76,14 @@ internal sealed class PatternGenerator
         public string Characters { get; } = characters;
 
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, Randomizer random) => sb.Append(Characters[random.Index(Characters.Length)]);
+        public override void Append(StringBuilder sb, SeededRandom random) => sb.Append(Characters[random.Index(Characters.Length)]);
     }
 
     /// <summary>Nodes generated one after another.</summary>
     private sealed class SequenceNode(Node[] items) : Node
     {
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, Randomizer random)
+        public override void Append(StringBuilder sb, SeededRandom random)
         {
             foreach (var item in items)
                 item.Append(sb, random);
@@ -94,14 +94,14 @@ internal sealed class PatternGenerator
     private sealed class AlternationNode(Node[] options) : Node
     {
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, Randomizer random) => options[random.Index(options.Length)].Append(sb, random);
+        public override void Append(StringBuilder sb, SeededRandom random) => options[random.Index(options.Length)].Append(sb, random);
     }
 
     /// <summary>Repeats a node; <c>Max == -1</c> means unbounded (faker.js doubling distribution).</summary>
     private sealed class RepeatNode(Node node, int min, int max) : Node
     {
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, Randomizer random)
+        public override void Append(StringBuilder sb, SeededRandom random)
         {
             int count;
             if (max >= 0)

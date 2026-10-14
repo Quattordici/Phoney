@@ -26,9 +26,9 @@ public sealed class WeightedSubsetTests
     private static readonly string[] Pool = ["common", "usual", "rare", "unique"];
     private static readonly double[] Weights = [8, 4, 2, 1];
 
-    private static Generator<Crew> Generated() => WeightedSubsetFakes.Crew.Seed(8);
+    private static ObjectGenerator<Crew> Generated() => WeightedSubsetFakes.Crew.Seed(8);
 
-    private static Generator<Crew> Reflected() => new Generator<Crew>(new ReflectionModel<Crew>()).Seed(8);
+    private static ObjectGenerator<Crew> Reflected() => new ObjectGenerator<Crew>(new ReflectionModel<Crew>()).Seed(8);
 
     /// <summary>The chance that each value is in a sample of two taken one at a time, each time by weight among those left: P(first) + Σ P(other first) · w / (rest).</summary>
     private static double[] ExpectedInclusionOfTwo(double[] weights)
@@ -114,8 +114,8 @@ public sealed class WeightedSubsetTests
     public void It_draws_the_size_when_it_is_a_range_and_then_one_number_per_value()
     {
         var picker = SubsetPicker<string>.Create(Pool, Weights, (2, 2), "values");
-        var random = new Randomizer(5);
-        var expected = new Randomizer(5);
+        var random = new SeededRandom(5);
+        var expected = new SeededRandom(5);
 
         picker.List(random);
         expected.Double();
@@ -124,8 +124,8 @@ public sealed class WeightedSubsetTests
         random.Long(0, long.MaxValue).ShouldBe(expected.Long(0, long.MaxValue));
 
         var ranged = SubsetPicker<string>.Create(Pool, Weights, (1, 3), "values");
-        var other = new Randomizer(5);
-        var otherExpected = new Randomizer(5);
+        var other = new SeededRandom(5);
+        var otherExpected = new SeededRandom(5);
         var size = ranged.List(other).Count;
         otherExpected.Int(1, 3);
         for (var i = 0; i < size; i++)
@@ -136,7 +136,7 @@ public sealed class WeightedSubsetTests
     [Test]
     public void The_two_models_make_the_same_subsets_a_seed_repeats_them_and_item_n_is_stable()
     {
-        Generator<Crew> Ruled(Generator<Crew> g) => g.WithOneOf(c => c.Roles, Pool, Weights, (1, 3)).WithOneOf(c => c.Tags, Pool, Weights, 2);
+        ObjectGenerator<Crew> Ruled(ObjectGenerator<Crew> g) => g.WithOneOf(c => c.Roles, Pool, Weights, (1, 3)).WithOneOf(c => c.Tags, Pool, Weights, 2);
         string Text(Crew c) => $"{string.Join(',', c.Roles)}|{string.Join(',', c.Tags)}";
 
         var generated = Ruled(Generated()).Generate(100).Select(Text).ToList();

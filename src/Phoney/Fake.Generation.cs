@@ -76,7 +76,7 @@ public static partial class Fake
     /// </summary>
     /// <returns><paramref name="instance"/>, or a populated copy when <typeparamref name="T"/> is a struct.</returns>
     /// <example><code>var order = Fake.Populate(new Order { CustomerId = 42 });</code></example>
-    /// <seealso cref="Generator{T}.Populate(T, PopulateMode)"/>
+    /// <seealso cref="ObjectGenerator{T}.Populate(T, PopulateMode)"/>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
     public static T Populate<T>(T instance, PopulateMode mode = PopulateMode.MissingOnly) => For<T>().Populate(instance, mode);
@@ -96,7 +96,7 @@ public static partial class Fake
     /// </example>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static Generator<T> For<T>() => Configured(new Generator<T>(ModelRegistry.For<T>()));
+    public static ObjectGenerator<T> For<T>() => Configured(new ObjectGenerator<T>(ModelRegistry.For<T>()));
 
     /// <summary>
     /// Like <see cref="For{T}"/> for a type with a source-generated model (<see cref="FakeForAttribute{T}"/>), but without any
@@ -105,10 +105,10 @@ public static partial class Fake
     /// </summary>
     /// <example><code>var order = Fake.Populate(new Order { CustomerId = 42 }); // reflection
     /// var safe = Fake.Generated&lt;Order&gt;().Populate(new Order { CustomerId = 42 }); // AOT safe</code></example>
-    public static Generator<T> Generated<T>() => Configured(new Generator<T>(ModelRegistry.Generated<T>()));
+    public static ObjectGenerator<T> Generated<T>() => Configured(new ObjectGenerator<T>(ModelRegistry.Generated<T>()));
 
     /// <summary>Applies the facade's seed, locale, reference date and clock to a new generator.</summary>
-    private static Generator<T> Configured<T>(Generator<T> generator)
+    private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator)
     {
         if (!IsSeeded)
             return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;

@@ -53,9 +53,9 @@ public sealed class MemberOrderTests
         string DescribeDerived(MixedDerived m) => $"{m.P}|{m.Q}|{m.R}|{m.S}";
 
         var generated = MixedFakes.Mixed.Seed(5).Generate(20);
-        var reflected = new Generator<Mixed>(new ReflectionModel<Mixed>()).Seed(5).Generate(20);
+        var reflected = new ObjectGenerator<Mixed>(new ReflectionModel<Mixed>()).Seed(5).Generate(20);
         var generatedDerived = MixedFakes.MixedDerived.Seed(5).Generate(20);
-        var reflectedDerived = new Generator<MixedDerived>(new ReflectionModel<MixedDerived>()).Seed(5).Generate(20);
+        var reflectedDerived = new ObjectGenerator<MixedDerived>(new ReflectionModel<MixedDerived>()).Seed(5).Generate(20);
 
         reflected.Select(Describe).ShouldBe(generated.Select(Describe));
         reflectedDerived.Select(DescribeDerived).ShouldBe(generatedDerived.Select(DescribeDerived));
@@ -65,7 +65,7 @@ public sealed class MemberOrderTests
     public void Both_models_populate_the_same_way()
     {
         var generated = MixedFakes.Mixed.Seed(5).Populate(new Mixed());
-        var reflected = new Generator<Mixed>(new ReflectionModel<Mixed>()).Seed(5).Populate(new Mixed());
+        var reflected = new ObjectGenerator<Mixed>(new ReflectionModel<Mixed>()).Seed(5).Populate(new Mixed());
 
         $"{reflected.A}|{reflected.B}|{reflected.C}|{reflected.D}|{reflected.E}".ShouldBe($"{generated.A}|{generated.B}|{generated.C}|{generated.D}|{generated.E}");
     }

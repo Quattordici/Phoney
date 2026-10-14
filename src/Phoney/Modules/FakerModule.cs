@@ -10,7 +10,7 @@ public abstract class FakerModule
     private protected Faker Faker { get; }
 
     /// <summary>Shortcut for <c>Faker.Random</c>.</summary>
-    private protected Randomizer Random => Faker.Random;
+    private protected SeededRandom Random => Faker.Random;
 }
 
 /// <summary>Biological sex used to pick gendered names and prefixes.</summary>

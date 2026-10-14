@@ -29,9 +29,9 @@ public sealed class GeneratedPathRuleTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static Generator<Dossier> Reflected() => new(new ReflectionModel<Dossier>());
+    private static ObjectGenerator<Dossier> Reflected() => new(new ReflectionModel<Dossier>());
 
-    private static Generator<Dossier> Configure(Generator<Dossier> g) =>
+    private static ObjectGenerator<Dossier> Configure(ObjectGenerator<Dossier> g) =>
         g.Seed(9).ReferenceDate(Reference)
             .With(d => d.Main.City, "Oslo")
             .With(d => d.Entries.Each().Code, f => "E-" + f.Random.Int(100, 999))

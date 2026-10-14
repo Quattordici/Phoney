@@ -44,9 +44,9 @@ public static partial class CatalogFakes;
 
 public sealed class CollectionShapeTests
 {
-    private static Generator<Catalog> Generated() => CatalogFakes.Catalog.Seed(8);
+    private static ObjectGenerator<Catalog> Generated() => CatalogFakes.Catalog.Seed(8);
 
-    private static Generator<Catalog> Reflected() => new Generator<Catalog>(new ReflectionModel<Catalog>()).Seed(8);
+    private static ObjectGenerator<Catalog> Reflected() => new ObjectGenerator<Catalog>(new ReflectionModel<Catalog>()).Seed(8);
 
     private static IEnumerable<PropertyInfo> Collections() => typeof(Catalog).GetProperties();
 

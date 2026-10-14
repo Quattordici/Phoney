@@ -6,7 +6,7 @@ namespace Phoney.Tests;
 /// </summary>
 public sealed class VerifyRulesTests
 {
-    private static Generator<Statement> Make() => Fake.For<Statement>().Seed(1);
+    private static ObjectGenerator<Statement> Make() => Fake.For<Statement>().Seed(1);
 
     [Test]
     public void Rules_that_applied_pass()

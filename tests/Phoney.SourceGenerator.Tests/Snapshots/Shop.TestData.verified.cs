@@ -9,7 +9,7 @@ namespace Shop;
 static partial class TestData
 {
     /// <summary>A new generator for <see cref="global::Shop.Customer"/> using the source-generated, reflection-free model.</summary>
-    public static global::Phoney.Generator<global::Shop.Customer> Customer => new(__phoneyModel_Shop_Customer);
+    public static global::Phoney.ObjectGenerator<global::Shop.Customer> Customer => new(__phoneyModel_Shop_Customer);
 
     private static readonly __PhoneyModel_Shop_Swish __phoneyModel_Shop_Swish = new();
     private static readonly __PhoneyModel_Shop_Customer __phoneyModel_Shop_Customer = new();

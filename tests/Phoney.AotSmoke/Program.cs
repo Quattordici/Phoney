@@ -143,7 +143,7 @@ using (var services = new ServiceCollection().AddPhoney(o => o.Seed = 1).AddGene
 {
     using var scope = services.CreateScope();
     Check(scope.ServiceProvider.GetRequiredService<IFaker>().Person.FullName(), "injected faker");
-    if (scope.ServiceProvider.GetRequiredService<Generator<Person>>().Generate().Email != Fakes.Person.Seed(1).Generate().Email)
+    if (scope.ServiceProvider.GetRequiredService<ObjectGenerator<Person>>().Generate().Email != Fakes.Person.Seed(1).Generate().Email)
         throw new InvalidOperationException("injected generator differs");
 }
 

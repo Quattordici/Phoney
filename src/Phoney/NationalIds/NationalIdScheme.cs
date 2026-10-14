@@ -44,7 +44,7 @@ public abstract class NationalIdScheme
     public NationalIdKind Kind { get; }
 
     /// <summary>Generates a valid identifier. Take all randomness from <paramref name="random"/> so seeding stays reproducible.</summary>
-    public abstract string Generate(Randomizer random, NationalIdRequest request);
+    public abstract string Generate(SeededRandom random, NationalIdRequest request);
 
     /// <summary>Whether <paramref name="value"/> is a well-formed identifier with correct check digits (separators allowed).</summary>
     public abstract bool IsValid(string value);

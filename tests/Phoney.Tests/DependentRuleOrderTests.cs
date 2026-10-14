@@ -23,7 +23,7 @@ public sealed class DependentRuleOrderTests
     }
 
     /// <summary>Adds a dependent rule for <paramref name="member"/> that records when it runs.</summary>
-    private static Generator<Wide> Record(Generator<Wide> generator, Expression<Func<Wide, string>> member, List<string> ran)
+    private static ObjectGenerator<Wide> Record(ObjectGenerator<Wide> generator, Expression<Func<Wide, string>> member, List<string> ran)
     {
         var name = ((MemberExpression)member.Body).Member.Name;
         return generator.With(member, (_, _) =>

@@ -81,13 +81,13 @@ public sealed class GeneratedSubtypeTests
     public void Generated_and_reflection_models_produce_identical_subtypes()
     {
         var generated = GalleryFakes.Gallery.Subtype<IExhibit, Painting, Sculpture>().Seed(7).ReferenceDate(Reference).Generate(25);
-        var reflected = new Generator<Gallery>(new ReflectionModel<Gallery>()).Subtype<IExhibit, Painting, Sculpture>().Seed(7).ReferenceDate(Reference).Generate(25);
+        var reflected = new ObjectGenerator<Gallery>(new ReflectionModel<Gallery>()).Subtype<IExhibit, Painting, Sculpture>().Seed(7).ReferenceDate(Reference).Generate(25);
 
         reflected.Select(Describe).ShouldBe(generated.Select(Describe));
 
         // Without subtypes for IExhibit the members stay null, in both models alike.
         var plainGenerated = GalleryFakes.Gallery.Seed(8).Generate(10);
-        var plainReflected = new Generator<Gallery>(new ReflectionModel<Gallery>()).Seed(8).Generate(10);
+        var plainReflected = new ObjectGenerator<Gallery>(new ReflectionModel<Gallery>()).Seed(8).Generate(10);
         plainGenerated.ShouldAllBe(g => g.Highlight == null);
         plainReflected.Select(Describe).ShouldBe(plainGenerated.Select(Describe));
     }
@@ -98,7 +98,7 @@ public sealed class GeneratedSubtypeTests
         Gallery Existing() => new() { Highlight = new Painting { Title = "Kept" }, Host = new Curator() };
 
         var generated = GalleryFakes.Gallery.Seed(5).Populate(Existing());
-        var reflected = new Generator<Gallery>(new ReflectionModel<Gallery>()).Seed(5).Populate(Existing());
+        var reflected = new ObjectGenerator<Gallery>(new ReflectionModel<Gallery>()).Seed(5).Populate(Existing());
 
         generated.Highlight.ShouldBeOfType<Painting>().Title.ShouldBe("Kept");
         ((Painting)generated.Highlight).Price.ShouldNotBe(0);

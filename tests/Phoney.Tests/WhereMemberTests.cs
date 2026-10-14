@@ -3,7 +3,7 @@ namespace Phoney.Tests;
 /// <summary><c>Where(x =&gt; x.Member, condition)</c> generates just that member again until the condition holds.</summary>
 public sealed class WhereMemberTests
 {
-    private static Generator<Ticket> Make() => Fake.For<Ticket>().Seed(11);
+    private static ObjectGenerator<Ticket> Make() => Fake.For<Ticket>().Seed(11);
 
     [Test]
     public void The_member_is_generated_again_until_it_satisfies_the_condition()

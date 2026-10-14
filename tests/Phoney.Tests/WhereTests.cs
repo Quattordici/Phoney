@@ -19,7 +19,7 @@ public sealed class Parcel
 /// <summary><c>Where</c> keeps only objects that satisfy a condition, by generating again.</summary>
 public sealed class WhereTests
 {
-    private static Generator<Ticket> Make() => Fake.For<Ticket>().Seed(7);
+    private static ObjectGenerator<Ticket> Make() => Fake.For<Ticket>().Seed(7);
 
     private static string Describe(Ticket t) => $"{t.Priority}|{t.Code}|{t.Price}";
 

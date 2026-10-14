@@ -50,7 +50,7 @@ internal static class Emitter
                 continue;
             var name = usedNames.Add(root.Name) ? root.Name : model.Key;
             sb.Append(indent).AppendLine($"/// <summary>A new generator for <see cref=\"{fullName}\"/> using the source-generated, reflection-free model.</summary>");
-            sb.Append(indent).AppendLine($"public static global::Phoney.Generator<{fullName}> {name} => new(__phoneyModel_{model.Key});");
+            sb.Append(indent).AppendLine($"public static global::Phoney.ObjectGenerator<{fullName}> {name} => new(__phoneyModel_{model.Key});");
             sb.AppendLine();
         }
 

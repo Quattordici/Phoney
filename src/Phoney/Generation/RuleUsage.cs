@@ -2,7 +2,7 @@ namespace Phoney.Generation;
 
 /// <summary>
 /// Records which of a generator's graph-dependent rules (path rules, <c>Subtype</c>, <c>Use</c>, <c>WithConvention</c>) took effect, for
-/// <see cref="Generator{T}.VerifyRules"/>. Everything is registered when the generator is compiled and only read afterwards, so
+/// <see cref="ObjectGenerator{T}.VerifyRules"/>. Everything is registered when the generator is compiled and only read afterwards, so
 /// concurrent runs just flip flags; a generator that does not verify has no instance and pays nothing.
 /// </summary>
 internal sealed class RuleUsage

@@ -58,7 +58,7 @@ public async Task Totals_add_up()
 
 ## Invalid and boundary data as test cases
 
-`Generator<T>.InvalidCases()` and `BoundaryCases()` (see the main README) make good TUnit data sources: every case is a test case named after what it is.
+`ObjectGenerator<T>.InvalidCases()` and `BoundaryCases()` (see the main README) make good TUnit data sources: every case is a test case named after what it is.
 
 ```csharp
 public static IEnumerable<Func<ConstraintCase<Order>>> Violations() =>

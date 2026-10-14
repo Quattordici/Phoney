@@ -31,9 +31,9 @@ public sealed class SubsetOfTests
 {
     private static readonly string[] Pool = ["admin", "editor", "viewer", "billing", "support", "auditor", "owner", "guest", "bot", "ops"];
 
-    private static Generator<Roster> Generated() => SubsetFakes.Roster.Seed(6);
+    private static ObjectGenerator<Roster> Generated() => SubsetFakes.Roster.Seed(6);
 
-    private static Generator<Roster> Reflected() => new Generator<Roster>(new ReflectionModel<Roster>()).Seed(6);
+    private static ObjectGenerator<Roster> Reflected() => new ObjectGenerator<Roster>(new ReflectionModel<Roster>()).Seed(6);
 
     private static void ShouldBeSubsetInPoolOrder(IEnumerable<string> subset, int size)
     {
@@ -129,7 +129,7 @@ public sealed class SubsetOfTests
     [Test]
     public void The_two_models_make_the_same_subsets_and_a_seed_gives_the_same_ones()
     {
-        Generator<Roster> Ruled(Generator<Roster> g) => g.WithOneOf(a => a.Roles, Pool, (1, 4)).WithOneOf(a => a.Tags, Pool, 2);
+        ObjectGenerator<Roster> Ruled(ObjectGenerator<Roster> g) => g.WithOneOf(a => a.Roles, Pool, (1, 4)).WithOneOf(a => a.Tags, Pool, 2);
         string Text(Roster a) => $"{a.Name}|{string.Join(',', a.Roles)}|{string.Join(',', a.Tags)}";
 
         var generated = Ruled(Generated()).Generate(100).Select(Text).ToList();
@@ -142,7 +142,7 @@ public sealed class SubsetOfTests
     [Test]
     public void Item_n_is_the_same_however_it_is_generated()
     {
-        Generator<Roster> Ruled() => Generated().WithOneOf(a => a.Roles, Pool, (1, 4));
+        ObjectGenerator<Roster> Ruled() => Generated().WithOneOf(a => a.Roles, Pool, (1, 4));
 
         Ruled().GenerateParallel(100).Select(a => string.Join(',', a.Roles)).ShouldBe(Ruled().Generate(100).Select(a => string.Join(',', a.Roles)));
         var split = Ruled();

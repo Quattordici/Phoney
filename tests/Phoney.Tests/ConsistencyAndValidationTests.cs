@@ -104,7 +104,7 @@ public sealed class ConsistencyAndValidationTests
     {
         var generator = path == "generated"
             ? ValidationFakes.Account
-            : new Generator<Account>(new ReflectionModel<Account>());
+            : new ObjectGenerator<Account>(new ReflectionModel<Account>());
 
         foreach (var a in generator.Seed(1).ReferenceDate(Reference).Locale("de_AT").NullProbability(0).Generate(50))
         {
@@ -130,11 +130,11 @@ public sealed class ConsistencyAndValidationTests
     public void Generated_and_reflection_models_agree_with_annotations_and_consistency()
     {
         var generated = ValidationFakes.SignUp.Seed(3).Generate(20);
-        var reflected = new Generator<SignUp>(new ReflectionModel<SignUp>()).Seed(3).Generate(20);
+        var reflected = new ObjectGenerator<SignUp>(new ReflectionModel<SignUp>()).Seed(3).Generate(20);
         reflected.Select(Describe).ShouldBe(generated.Select(Describe));
 
         var generatedAccounts = ValidationFakes.Account.Seed(3).Generate(20);
-        var reflectedAccounts = new Generator<Account>(new ReflectionModel<Account>()).Seed(3).Generate(20);
+        var reflectedAccounts = new ObjectGenerator<Account>(new ReflectionModel<Account>()).Seed(3).Generate(20);
         reflectedAccounts.Select(a => (a.Age, a.DateOfBirth, a.City, a.CreatedAt, a.UpdatedAt))
             .ShouldBe(generatedAccounts.Select(a => (a.Age, a.DateOfBirth, a.City, a.CreatedAt, a.UpdatedAt)));
 
@@ -150,7 +150,7 @@ public sealed class ConsistencyAndValidationTests
     {
         var generator = path == "generated"
             ? ValidationFakes.SignUp
-            : new Generator<SignUp>(new ReflectionModel<SignUp>());
+            : new ObjectGenerator<SignUp>(new ReflectionModel<SignUp>());
 
         foreach (var signUp in generator.Seed(5).NullProbability(0.5).Generate(200))
         {

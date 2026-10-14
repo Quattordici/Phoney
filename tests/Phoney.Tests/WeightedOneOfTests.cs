@@ -32,9 +32,9 @@ public static partial class WeightedFakes;
 /// <summary><c>WithOneOf</c> with weights: some choices are more likely than others.</summary>
 public sealed class WeightedOneOfTests
 {
-    private static Generator<Payment> Generated() => WeightedFakes.Payment.Seed(4);
+    private static ObjectGenerator<Payment> Generated() => WeightedFakes.Payment.Seed(4);
 
-    private static Generator<Payment> Reflected() => new Generator<Payment>(new ReflectionModel<Payment>()).Seed(4);
+    private static ObjectGenerator<Payment> Reflected() => new ObjectGenerator<Payment>(new ReflectionModel<Payment>()).Seed(4);
 
     private static double Share<TValue>(IEnumerable<TValue> values, TValue wanted)
     {
@@ -115,7 +115,7 @@ public sealed class WeightedOneOfTests
     [Test]
     public void The_two_models_make_the_same_choices_and_a_seed_gives_the_same_ones()
     {
-        Generator<Payment> Ruled(Generator<Payment> g) => g.WithOneOf(p => p.Outcome, (Outcome.Paid, 70), (Outcome.Pending, 25), (Outcome.Failed, 5));
+        ObjectGenerator<Payment> Ruled(ObjectGenerator<Payment> g) => g.WithOneOf(p => p.Outcome, (Outcome.Paid, 70), (Outcome.Pending, 25), (Outcome.Failed, 5));
 
         var generated = Ruled(Generated()).Generate(200).Select(p => p.Outcome);
 
@@ -126,7 +126,7 @@ public sealed class WeightedOneOfTests
     [Test]
     public void Item_n_is_the_same_however_it_is_generated()
     {
-        Generator<Payment> Ruled() => Generated().WithOneOf(p => p.Outcome, (Outcome.Paid, 70), (Outcome.Pending, 25), (Outcome.Failed, 5));
+        ObjectGenerator<Payment> Ruled() => Generated().WithOneOf(p => p.Outcome, (Outcome.Paid, 70), (Outcome.Pending, 25), (Outcome.Failed, 5));
 
         Ruled().GenerateParallel(100).Select(p => p.Outcome).ShouldBe(Ruled().Generate(100).Select(p => p.Outcome));
     }
@@ -172,8 +172,8 @@ public sealed class WeightedOneOfTests
     [Test]
     public void WeightedIndex_with_running_totals_picks_by_weight_with_one_draw()
     {
-        var random = new Randomizer(3);
-        var expected = new Randomizer(3);
+        var random = new SeededRandom(3);
+        var expected = new SeededRandom(3);
         double[] cumulative = [1, 4, 10]; // weights 1, 3, 6
 
         var picks = Enumerable.Range(0, 30_000).Select(_ => random.WeightedIndex(cumulative)).ToList();

@@ -66,5 +66,5 @@ internal sealed class WeightedPicker<TValue>
     }
 
     /// <summary>Picks a value; exactly one number is drawn.</summary>
-    public TValue Pick(Randomizer random) => _values[random.WeightedIndex(_cumulative)];
+    public TValue Pick(SeededRandom random) => _values[random.WeightedIndex(_cumulative)];
 }

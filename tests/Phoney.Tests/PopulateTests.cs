@@ -8,7 +8,7 @@ public sealed class PopulateTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static Generator<Customer> Customers => Fake.For<Customer>().Seed(7).ReferenceDate(Reference);
+    private static ObjectGenerator<Customer> Customers => Fake.For<Customer>().Seed(7).ReferenceDate(Reference);
 
     private static string Json<T>(T value) => JsonSerializer.Serialize(value);
 
@@ -175,7 +175,7 @@ public sealed class PopulateTests
         };
 
         var generated = TestFakes.Member.Seed(5).ReferenceDate(Reference).Populate(Partial());
-        var reflected = new Generator<Member>(new ReflectionModel<Member>()).Seed(5).ReferenceDate(Reference).Populate(Partial());
+        var reflected = new ObjectGenerator<Member>(new ReflectionModel<Member>()).Seed(5).ReferenceDate(Reference).Populate(Partial());
 
         Json(reflected).ShouldBe(Json(generated));
         generated.FirstName.ShouldBe("Anna");
@@ -191,7 +191,7 @@ public sealed class PopulateTests
     public void Generated_models_populate_structs_with_init_members()
     {
         var generated = TestFakes.Coordinates.Seed(1).Populate(new Coordinates { Latitude = 1.5 });
-        var reflected = new Generator<Coordinates>(new ReflectionModel<Coordinates>()).Seed(1).Populate(new Coordinates { Latitude = 1.5 });
+        var reflected = new ObjectGenerator<Coordinates>(new ReflectionModel<Coordinates>()).Seed(1).Populate(new Coordinates { Latitude = 1.5 });
 
         generated.Latitude.ShouldBe(1.5);
         generated.Longitude.ShouldNotBe(0);

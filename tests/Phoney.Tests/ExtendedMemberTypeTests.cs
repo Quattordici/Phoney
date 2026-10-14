@@ -84,7 +84,7 @@ public static partial class ExtendedMemberFakes;
 /// <summary>More of the .NET types are filled as members: no member type ends in a bare exception, and both models make the same data.</summary>
 public sealed class ExtendedMemberTypeTests
 {
-    private static Generator<T> Reflected<T>() where T : class => new Generator<T>(new ReflectionModel<T>()).Seed(17);
+    private static ObjectGenerator<T> Reflected<T>() where T : class => new ObjectGenerator<T>(new ReflectionModel<T>()).Seed(17);
 
     private static string Json<T>(IEnumerable<T> items) => JsonSerializer.Serialize(items, new JsonSerializerOptions { IncludeFields = true });
 

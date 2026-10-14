@@ -105,7 +105,7 @@ public sealed class NodaTimeTests
     public void Generated_and_reflection_models_produce_identical_data()
     {
         var generated = TestData.Booking.Seed(7).ReferenceDate(Reference).Generate(25);
-        var reflected = new Generator<Booking>(new ReflectionModel<Booking>()).Seed(7).ReferenceDate(Reference).Generate(25);
+        var reflected = new ObjectGenerator<Booking>(new ReflectionModel<Booking>()).Seed(7).ReferenceDate(Reference).Generate(25);
 
         reflected.Select(Describe).ShouldBe(generated.Select(Describe));
         generated.ShouldAllBe(b => b.CreatedAt != default && b.DueDate.ToInstant() > Now && b.Events.Length > 0);

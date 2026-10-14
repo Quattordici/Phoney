@@ -78,7 +78,7 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
     public RuleSlot?[]? SlotsFor(Type type, IFakeModel model) =>
         _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(conventions, model.Members, usage));
 
-    /// <summary>Binds the first matching convention to each member, like the root object's rules in <c>Generator&lt;T&gt;.Compile</c>.</summary>
+    /// <summary>Binds the first matching convention to each member, like the root object's rules in <c>ObjectGenerator&lt;T&gt;.Compile</c>.</summary>
     private static RuleSlot?[]? Bind(ImmutableList<CustomConvention> conventions, IReadOnlyList<FakeMember> members, RuleUsage? usage)
     {
         RuleSlot?[]? slots = null;
@@ -97,7 +97,7 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
 
 /// <summary>
 /// Generates a reflection-free, trim- and Native AOT-safe model for <typeparamref name="T"/> (and the types it
-/// contains) at compile time. Put it on a <c>partial</c> class; the class gets a <c>Generator&lt;T&gt;</c> property per type.
+/// contains) at compile time. Put it on a <c>partial</c> class; the class gets a <c>ObjectGenerator&lt;T&gt;</c> property per type.
 /// </summary>
 /// <example>
 /// <code>

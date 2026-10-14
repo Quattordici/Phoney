@@ -36,7 +36,7 @@ internal enum RuleKind
     /// <summary>Leave the member at its default value.</summary>
     Ignore,
 
-    /// <summary>A nested <see cref="Generator{T}"/>.</summary>
+    /// <summary>A nested <see cref="ObjectGenerator{T}"/>.</summary>
     Generator,
 
     /// <summary><c>Func&lt;FakeScope, object?&gt;</c> from a custom convention.</summary>
@@ -435,8 +435,8 @@ public sealed class FakeScope
 
     /// <summary>
     /// Creates a nested object, stopping at the depth limit and on cycles. A generator registered for the type
-    /// (<see cref="Generator{T}.Use{TNested}"/>) creates it; otherwise a type with subtypes
-    /// (<see cref="Generator{T}.Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c>, <c>[JsonDerivedType]</c>) is created as one of
+    /// (<see cref="ObjectGenerator{T}.Use{TNested}"/>) creates it; otherwise a type with subtypes
+    /// (<see cref="ObjectGenerator{T}.Subtype{TBase, T1}"/>, <c>Fake.Subtypes</c>, <c>[JsonDerivedType]</c>) is created as one of
     /// them through its model, and an interface or abstract class without subtypes stays <see langword="null"/>.
     /// </summary>
     internal object? NestedObject(Type type)

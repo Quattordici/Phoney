@@ -17,8 +17,8 @@ namespace Phoney.SourceGenerator;
 /// seed in a loop (PHONEY010) and constant arguments that make a call throw (PHONEY011).
 /// </summary>
 /// <remarks>
-/// The member checks mirror <c>Generator&lt;T&gt;.Compile</c> and use <see cref="ModelBuilder.DescribeMembers"/>, so they
-/// are skipped for generators over a hand-written model (<c>new Generator&lt;T&gt;(model)</c>), whose members are unknown.
+/// The member checks mirror <c>ObjectGenerator&lt;T&gt;.Compile</c> and use <see cref="ModelBuilder.DescribeMembers"/>, so they
+/// are skipped for generators over a hand-written model (<c>new ObjectGenerator&lt;T&gt;(model)</c>), whose members are unknown.
 /// </remarks>
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class UsageAnalyzer : DiagnosticAnalyzer
@@ -44,7 +44,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(start =>
         {
-            var generator = start.Compilation.GetTypeByMetadataName("Phoney.Generator`1");
+            var generator = start.Compilation.GetTypeByMetadataName("Phoney.ObjectGenerator`1");
             var fake = start.Compilation.GetTypeByMetadataName("Phoney.Fake");
             if (generator is null || fake is null)
                 return;
@@ -232,7 +232,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             CheckReplaced(context, call, selector, symbols);
     }
 
-    /// <summary>PHONEY007: what <c>Generator&lt;T&gt;.Compile</c> and <c>MemberName</c> reject at runtime.</summary>
+    /// <summary>PHONEY007: what <c>ObjectGenerator&lt;T&gt;.Compile</c> and <c>MemberName</c> reject at runtime.</summary>
     private static void CheckRule(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
         var method = call.TargetMethod;
@@ -341,7 +341,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    /// <summary>Whether the chain starts with <c>new Generator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>
+    /// <summary>Whether the chain starts with <c>new ObjectGenerator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>
     private static bool StartsFromCustomModel(IInvocationOperation call, Symbols symbols)
     {
         var receiver = call.Instance;

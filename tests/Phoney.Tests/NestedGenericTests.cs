@@ -42,9 +42,9 @@ public static partial class ApiReplyFakes;
 /// <summary>Closed generic classes (<c>Envelope&lt;Ticket&gt;</c>) are objects like any other when they are members.</summary>
 public sealed class NestedGenericTests
 {
-    private static Generator<ApiReply> Generated() => ApiReplyFakes.ApiReply.Seed(31);
+    private static ObjectGenerator<ApiReply> Generated() => ApiReplyFakes.ApiReply.Seed(31);
 
-    private static Generator<ApiReply> Reflected() => new Generator<ApiReply>(new ReflectionModel<ApiReply>()).Seed(31);
+    private static ObjectGenerator<ApiReply> Reflected() => new ObjectGenerator<ApiReply>(new ReflectionModel<ApiReply>()).Seed(31);
 
     [Test]
     [Arguments(true)]

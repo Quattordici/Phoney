@@ -28,7 +28,7 @@ public sealed class DataFeedTests
 {
     private const string People = "FirstName,LastName,Age\nAda,Lovelace,36\nGrace,Hopper,85\nAlan,Turing,41\n";
 
-    private static Generator<Employee> Make(DataFeed feed, FeedOrder order = FeedOrder.InOrder) =>
+    private static ObjectGenerator<Employee> Make(DataFeed feed, FeedOrder order = FeedOrder.InOrder) =>
         Fake.For<Employee>().Seed(3).WithFeed(feed, order);
 
     [Test]

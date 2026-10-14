@@ -7,9 +7,9 @@ public sealed class GeneratedTypeGeneratorTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static Generator<Member> Reflected() => new(new ReflectionModel<Member>());
+    private static ObjectGenerator<Member> Reflected() => new(new ReflectionModel<Member>());
 
-    private static Generator<Gallery> ReflectedGallery() => new(new ReflectionModel<Gallery>());
+    private static ObjectGenerator<Gallery> ReflectedGallery() => new(new ReflectionModel<Gallery>());
 
     [Test]
     public void Generated_models_use_the_type_generator_for_members_collections_and_records()
@@ -28,7 +28,7 @@ public sealed class GeneratedTypeGeneratorTests
     [Test]
     public void Generated_and_reflection_models_produce_identical_data_with_type_generators()
     {
-        Generator<Member> Configure(Generator<Member> g, Generator<MemberAddress> address, Generator<Membership> membership) =>
+        ObjectGenerator<Member> Configure(ObjectGenerator<Member> g, ObjectGenerator<MemberAddress> address, ObjectGenerator<Membership> membership) =>
             g.Seed(7).ReferenceDate(Reference)
                 .Use(address.With(a => a.City, f => "City " + f.Random.Int(1, 99)))
                 .Use(membership.With(m => m.CompanyName, f => f.Company.Name()));
@@ -36,8 +36,8 @@ public sealed class GeneratedTypeGeneratorTests
         var generated = Configure(TestFakes.Member, Fake.Generated<MemberAddress>(), Fake.Generated<Membership>()).Generate(25);
         var reflected = Configure(
                 Reflected(),
-                new Generator<MemberAddress>(new ReflectionModel<MemberAddress>()),
-                new Generator<Membership>(new ReflectionModel<Membership>()))
+                new ObjectGenerator<MemberAddress>(new ReflectionModel<MemberAddress>()),
+                new ObjectGenerator<Membership>(new ReflectionModel<Membership>()))
             .Generate(25);
 
         generated.ShouldAllBe(m => m.Address.City.StartsWith("City "));
@@ -47,13 +47,13 @@ public sealed class GeneratedTypeGeneratorTests
     [Test]
     public void Generated_and_reflection_models_produce_identical_data_for_interfaces_and_subtypes()
     {
-        Generator<Gallery> Configure(Generator<Gallery> g, Generator<Painting> painting) =>
+        ObjectGenerator<Gallery> Configure(ObjectGenerator<Gallery> g, ObjectGenerator<Painting> painting) =>
             g.Seed(9).ReferenceDate(Reference)
                 .Subtype<IExhibit, Sculpture>() // loses against the type generator below
                 .Use<IExhibit, Painting>(painting.With(p => p.Price, 12.5m));
 
         var generated = Configure(GalleryFakes.Gallery, Fake.Generated<Painting>()).Generate(20);
-        var reflected = Configure(ReflectedGallery(), new Generator<Painting>(new ReflectionModel<Painting>())).Generate(20);
+        var reflected = Configure(ReflectedGallery(), new ObjectGenerator<Painting>(new ReflectionModel<Painting>())).Generate(20);
 
         generated.ShouldAllBe(g => g.Highlight is Painting);
         generated.SelectMany(g => g.Exhibits).ShouldAllBe(e => e is Painting);
@@ -67,7 +67,7 @@ public sealed class GeneratedTypeGeneratorTests
         Member Existing() => new() { Username = "kept", FirstName = "Grace" };
 
         var generated = TestFakes.Member.Seed(3).ReferenceDate(Reference).Use(Fake.Generated<MemberAddress>().With(a => a.City, "Oslo")).Populate(Existing());
-        var reflected = Reflected().Seed(3).ReferenceDate(Reference).Use(new Generator<MemberAddress>(new ReflectionModel<MemberAddress>()).With(a => a.City, "Oslo")).Populate(Existing());
+        var reflected = Reflected().Seed(3).ReferenceDate(Reference).Use(new ObjectGenerator<MemberAddress>(new ReflectionModel<MemberAddress>()).With(a => a.City, "Oslo")).Populate(Existing());
 
         generated.Address.City.ShouldBe("Oslo");
         generated.Username.ShouldBe("kept");
