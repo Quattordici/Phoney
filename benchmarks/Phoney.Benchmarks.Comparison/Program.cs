@@ -6,7 +6,8 @@ using BenchmarkDotNet.Running;
 using FizzWare.NBuilder;
 
 // Timed comparison:  dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- --filter '*'
-// Cold start:        dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold
+// Cold start:        dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold [library...]   (all libraries, or just the ones named)
+// Cold phases:       dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-phases        (where Phoney's first call spends its time; set DOTNET_* variables to try runtime settings)
 // Check:             dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- check   (prints one object per library, to see that they make comparable data)
 // Summary:           dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- summarize <artifacts directory of the timed run>   (prints the README's comparison matrix)
 if (args is ["cold-child", var library])
@@ -14,9 +15,19 @@ if (args is ["cold-child", var library])
     return ColdChild(library);
 }
 
-if (args is ["cold"])
+if (args is ["cold", ..var only])
 {
-    return ColdStart.Run();
+    return ColdStart.Run(only);
+}
+
+if (args is ["cold-phases-child"])
+{
+    return ColdPhases.Child();
+}
+
+if (args is ["cold-phases"])
+{
+    return ColdPhases.Run();
 }
 
 if (args is ["check"])
@@ -55,14 +66,14 @@ static int ColdChild(string library)
 
 internal static class ColdStart
 {
-    public static int Run()
+    public static int Run(string[] only)
     {
         // Run through the `dotnet` host, the app's own executable otherwise.
         var host = Environment.ProcessPath!;
         string[] prefix = Path.GetFileNameWithoutExtension(host) == "dotnet" ? [typeof(ColdStart).Assembly.Location] : [];
         Console.WriteLine("| Library | Median (ms) | Fastest (ms) | Slowest (ms) |");
         Console.WriteLine("|---|---:|---:|---:|");
-        foreach (var library in new[] { "Phoney (reflection)", "Phoney (source generated)", "Bogus", "AutoBogus", "AutoFixture", "NBuilder", "Faker.Net" })
+        foreach (var library in new[] { "Phoney (reflection)", "Phoney (source generated)", "Bogus", "AutoBogus", "AutoFixture", "NBuilder", "Faker.Net" }.Where(l => only.Length == 0 || only.Contains(l)))
         {
             var samples = new List<double>();
             for (var run = 0; run < 15; run++)
@@ -74,6 +85,88 @@ internal static class ColdStart
 
             samples.Sort();
             Console.WriteLine($"| {library} | {samples[samples.Count / 2].ToString("F1", CultureInfo.InvariantCulture)} | {samples[0].ToString("F1", CultureInfo.InvariantCulture)} | {samples[^1].ToString("F1", CultureInfo.InvariantCulture)} |");
+        }
+
+        return 0;
+    }
+}
+
+/// <summary>Times the steps of Phoney's first call one after the other in fresh processes, to see which of them the start-up goes to.</summary>
+internal static class ColdPhases
+{
+    public static int Child()
+    {
+        var clock = Stopwatch.StartNew();
+        var marks = new List<(string Name, double Ms)>();
+        void Mark(string name)
+        {
+            marks.Add((name, clock.Elapsed.TotalMilliseconds));
+            clock.Restart();
+        }
+
+        using (var resource = typeof(Phoney.Faker).Assembly.GetManifestResourceStream("Phoney.Locales.en.bin.br")!)
+        using (var brotli = new System.IO.Compression.BrotliStream(resource, System.IO.Compression.CompressionMode.Decompress))
+        {
+            brotli.CopyTo(Stream.Null);
+        }
+
+        Mark("locale en: decompress only");
+        _ = Phoney.Data.LocaleStore.Get("en");
+        Mark("locale en: load + flatten (decompress warm)");
+        var faker = new Phoney.Faker();
+        Mark("new Faker()");
+        _ = faker.Person.FirstName();
+        Mark("Person.FirstName()");
+        _ = faker.Person.FullName();
+        Mark("Person.FullName() (first template)");
+        _ = new System.Text.RegularExpressions.Regex("[^A-Za-z0-9._+-]+").Replace("a b", "");
+        Mark("(probe) first Regex");
+        _ = "abc".Normalize(System.Text.NormalizationForm.FormKD);
+        Mark("(probe) string.Normalize");
+        _ = Phoney.Modules.CharMappings.Map.Count;
+        Mark("(probe) CharMappings.Map");
+        _ = faker.Internet.Email();
+        Mark("Internet.Email()");
+        var generator = Libraries.PhoneyFlatGenerated();
+        Mark("source generated generator (model)");
+        _ = generator.Generate();
+        Mark("first Generate() (compile + object)");
+        _ = generator.Generate();
+        Mark("second Generate()");
+        Console.WriteLine(string.Join(';', marks.Select(m => m.Name + "=" + m.Ms.ToString("F2", CultureInfo.InvariantCulture))));
+        return 0;
+    }
+
+    public static int Run()
+    {
+        var host = Environment.ProcessPath!;
+        string[] prefix = Path.GetFileNameWithoutExtension(host) == "dotnet" ? [typeof(ColdPhases).Assembly.Location] : [];
+        var samples = new Dictionary<string, List<double>>();
+        var order = new List<string>();
+        for (var run = 0; run < 15; run++)
+        {
+            using var process = Process.Start(new ProcessStartInfo(host, [.. prefix, "cold-phases-child"]) { RedirectStandardOutput = true })!;
+            foreach (var part in process.StandardOutput.ReadToEnd().Trim().Split(';'))
+            {
+                var (name, value) = (part[..part.LastIndexOf('=')], double.Parse(part[(part.LastIndexOf('=') + 1)..], CultureInfo.InvariantCulture));
+                if (!samples.TryGetValue(name, out var list))
+                {
+                    samples[name] = list = [];
+                    order.Add(name);
+                }
+
+                list.Add(value);
+            }
+
+            process.WaitForExit();
+        }
+
+        Console.WriteLine("| Step | Median (ms) |");
+        Console.WriteLine("|---|---:|");
+        foreach (var name in order)
+        {
+            samples[name].Sort();
+            Console.WriteLine($"| {name} | {samples[name][samples[name].Count / 2].ToString("F2", CultureInfo.InvariantCulture)} |");
         }
 
         return 0;
