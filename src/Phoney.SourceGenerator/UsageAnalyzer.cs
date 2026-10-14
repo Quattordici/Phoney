@@ -23,6 +23,9 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class UsageAnalyzer : DiagnosticAnalyzer
 {
+    /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
+    private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "Use", "Subtype" };
+
     private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithOneOf", "Ignore", "Unique", "Invalid", "Boundary" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
@@ -212,9 +215,9 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     {
         CheckDiscarded(context, call, symbols);
         var name = call.TargetMethod.Name;
-        if (name == "Use")
+        if (TypeRules.Contains(name))
         {
-            CheckUseReplaced(context, call, symbols);
+            CheckTypeRuleReplaced(context, call, symbols);
             return;
         }
 
@@ -272,14 +275,18 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    /// <summary>PHONEY008 for type-wide generators: <c>Use</c> for a type that an earlier <c>Use</c> in the same chain registered replaces it.</summary>
-    private static void CheckUseReplaced(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
+    /// <summary>
+    /// PHONEY008 for type registrations: <c>Use</c> or <c>Subtype</c> for a type that an earlier call of the same method in the same chain
+    /// registered replaces it. (<c>Use</c> and <c>Subtype</c> for one type are not the same thing: the generator wins over the subtype.)
+    /// </summary>
+    private static void CheckTypeRuleReplaced(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
     {
-        // Use<TNested>(generator) and Use<TBase, TGenerated>(generator) both register TypeArguments[0].
+        // Use<TNested>, Use<TBase, TGenerated>, Subtype<TBase, T1…> and Subtype<TBase>(types) all register TypeArguments[0].
         if (call.TargetMethod.TypeArguments.FirstOrDefault() is not { } type)
             return;
+        var method = call.TargetMethod.Name;
         if (HasEarlierInChain(call, symbols, earlier =>
-                earlier.TargetMethod.Name == "Use" && earlier.TargetMethod.TypeArguments.FirstOrDefault() is { } previous && SymbolEqualityComparer.Default.Equals(previous, type)))
+                earlier.TargetMethod.Name == method && earlier.TargetMethod.TypeArguments.FirstOrDefault() is { } previous && SymbolEqualityComparer.Default.Equals(previous, type)))
         {
             context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, AnalyzerSupport.NameLocation(call), type.Name));
         }

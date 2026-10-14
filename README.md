@@ -425,7 +425,7 @@ The package also reports these diagnostics:
 | PHONEY005 | Warning | the result of a generator method is discarded (`gen.With(...);`: generators are immutable), or of `Populate` on a struct (it returns the populated copy) |
 | PHONEY006 | Warning | `Fake.Seeded(...)` is never disposed, so everything after it stays seeded; use `using var _ = Fake.Seeded(1);` |
 | PHONEY007 | Warning | a rule would throw when the generator is first used: the member isn't a public settable member or constructor parameter, the selector isn't `x => x.Member`, or an object-dependent rule targets a constructor parameter |
-| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `Use` generator replaces an earlier `Use` for the same type |
+| PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `Use` generator / `Subtype` mapping replaces an earlier one for the same type in the same chain |
 | PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
 | PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
 | PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`…) |

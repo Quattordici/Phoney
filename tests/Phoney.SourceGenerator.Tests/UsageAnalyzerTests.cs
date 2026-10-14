@@ -248,6 +248,31 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task Subtype_that_replaces_an_earlier_Subtype_for_the_same_base_type_is_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().Seed(1).Subtype<Shape, Circle>();
+            public static object B() => Fake.For<Product>().Subtype<Shape>(typeof(Circle)).Subtype<Shape>(typeof(Circle), typeof(Circle));
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Shape'"));
+        TextOf(diagnostics[0]).ShouldStartWith("Subtype");
+    }
+
+    [Test]
+    public async Task Subtype_and_Use_do_not_replace_each_other(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Subtype<Shape, Circle>().Use<Shape, Circle>(Fake.For<Circle>());
+            public static object B() => Fake.For<Product>().Use<Shape, Circle>(Fake.For<Circle>()).Subtype<Shape, Circle>();
+            public static object C(Generator<Product> baseline) => baseline.Subtype<Shape, Circle>();
+            """, cancellationToken);
+
+        diagnostics.ShouldBeEmpty();
+    }
+
+    [Test]
     public async Task Use_for_different_types_or_on_derived_generators_is_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """
