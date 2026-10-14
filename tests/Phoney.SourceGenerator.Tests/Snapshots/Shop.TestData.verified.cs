@@ -85,22 +85,22 @@ static partial class TestData
 
     private sealed class __PhoneyModel_Shop_Customer : global::Phoney.Generation.FakeModel<global::Shop.Customer>
     {
-        private static readonly global::Phoney.Generation.MemberConstraints __c1 = new() { MaxLength = 20, MinLength = 2 };
-        private static readonly global::Phoney.Generation.MemberConstraints __c2 = new() { Pattern = "[A-Z]{3}" };
-        private static readonly global::Phoney.Generation.MemberConstraints __c3 = new() { RangeMin = "0", RangeMax = "10000", Required = true };
-        private static readonly global::Phoney.Generation.MemberConstraints __c6 = new() { MaxLength = 2 };
-        private static readonly global::Phoney.Generation.MemberConstraints __c7 = new() { AllowedValues = new object[] { (global::Shop.Status)0 } };
+        private static readonly global::Phoney.Generation.MemberConstraints __c0 = new() { AllowedValues = new object[] { (global::Shop.Status)0 } };
+        private static readonly global::Phoney.Generation.MemberConstraints __c2 = new() { MaxLength = 20, MinLength = 2 };
+        private static readonly global::Phoney.Generation.MemberConstraints __c3 = new() { Pattern = "[A-Z]{3}" };
+        private static readonly global::Phoney.Generation.MemberConstraints __c4 = new() { RangeMin = "0", RangeMax = "10000", Required = true };
+        private static readonly global::Phoney.Generation.MemberConstraints __c7 = new() { MaxLength = 2 };
 
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
+            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None, false, false, __c0, true, false),
             new global::Phoney.Generation.FakeMember("Id", typeof(int), global::Phoney.Generation.ConventionKind.Id, false, false, null, true, false),
-            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName, false, false, __c1, true, false),
-            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username, false, false, __c2, true, false),
-            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price, false, false, __c3, true, false),
+            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName, false, false, __c2, true, false),
+            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username, false, false, __c3, true, false),
+            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price, false, false, __c4, true, false),
             new global::Phoney.Generation.FakeMember("Email", typeof(string), global::Phoney.Generation.ConventionKind.Email, false, true, null, true, false),
             new global::Phoney.Generation.FakeMember("Address", typeof(global::Shop.Address), global::Phoney.Generation.ConventionKind.None, false, true, null, true, true),
-            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None, false, false, __c6, true, false),
-            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None, false, false, __c7, true, false),
+            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None, false, false, __c7, true, false),
             new global::Phoney.Generation.FakeMember("Payment", typeof(global::Shop.IPayment), global::Phoney.Generation.ConventionKind.None, false, false, null, true, true),
         };
 
@@ -108,26 +108,26 @@ static partial class TestData
 
         public override global::Shop.Customer Create(global::Phoney.Generation.FakeScope scope)
         {
-            var v0 = scope.Include(0) ? scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id)) : default(int);
-            var v1 = scope.Include(1) ? scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c1)) : default(string);
-            var v2 = scope.Include(2) ? scope.Get(2, static s0 => (s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c2))) : default(string);
-            var v3 = scope.Include(3) ? scope.Get(3, static s0 => (decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c3)) : default(decimal?);
-            var v4 = scope.Include(4) ? scope.Get(4, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email)) : default(string);
-            var v5 = scope.Include(5) ? scope.Get(5, static s0 => s0.Nested<global::Shop.Address>()) : default(global::Shop.Address);
-            var v6 = scope.Include(6) ? scope.Get(6, static s0 => s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c6)) : default(global::System.Collections.Generic.List<global::Shop.Order>);
-            var v7 = scope.Include(7) ? scope.Get(7, static s0 => global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c7)) : default(global::Shop.Status);
+            var v0 = scope.Include(0) ? scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c0)) : default(global::Shop.Status);
+            var v1 = scope.Include(1) ? scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id)) : default(int);
+            var v2 = scope.Include(2) ? scope.Get(2, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c2)) : default(string);
+            var v3 = scope.Include(3) ? scope.Get(3, static s0 => (s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c3))) : default(string);
+            var v4 = scope.Include(4) ? scope.Get(4, static s0 => (decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c4)) : default(decimal?);
+            var v5 = scope.Include(5) ? scope.Get(5, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email)) : default(string);
+            var v6 = scope.Include(6) ? scope.Get(6, static s0 => s0.Nested<global::Shop.Address>()) : default(global::Shop.Address);
+            var v7 = scope.Include(7) ? scope.Get(7, static s0 => s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c7)) : default(global::System.Collections.Generic.List<global::Shop.Order>);
             var v8 = scope.Include(8) ? scope.Get(8, static s0 => (s0.MaybeNull() ? null : s0.Nested<global::Shop.IPayment>())) : default(global::Shop.IPayment);
             var o = new global::Shop.Customer()
             {
-                Email = v4,
-                Address = v5,
+                Email = v5,
+                Address = v6,
             };
-            if (scope.Include(0)) o.Id = v0;
-            if (scope.Include(1)) o.FirstName = v1;
-            if (scope.Include(2)) o.Nickname = v2;
-            if (scope.Include(3)) o.Balance = v3;
-            if (scope.Include(6)) o.Orders = v6;
-            if (scope.Include(7)) o.Status = v7;
+            if (scope.Include(0)) o.Status = v0;
+            if (scope.Include(1)) o.Id = v1;
+            if (scope.Include(2)) o.FirstName = v2;
+            if (scope.Include(3)) o.Nickname = v3;
+            if (scope.Include(4)) o.Balance = v4;
+            if (scope.Include(7)) o.Orders = v7;
             if (scope.Include(8)) o.Payment = v8;
             return o;
         }
@@ -136,14 +136,14 @@ static partial class TestData
         {
             switch (member)
             {
-                case 0: instance.Id = (int)value; return instance;
-                case 1: instance.FirstName = (string)value; return instance;
-                case 2: instance.Nickname = (string)value; return instance;
-                case 3: instance.Balance = (decimal?)value; return instance;
-                case 4: __set_4(instance, (string)value); return instance;
-                case 5: __set_5(instance, (global::Shop.Address)value); return instance;
-                case 6: instance.Orders = (global::System.Collections.Generic.List<global::Shop.Order>)value; return instance;
-                case 7: instance.Status = (global::Shop.Status)value; return instance;
+                case 0: instance.Status = (global::Shop.Status)value; return instance;
+                case 1: instance.Id = (int)value; return instance;
+                case 2: instance.FirstName = (string)value; return instance;
+                case 3: instance.Nickname = (string)value; return instance;
+                case 4: instance.Balance = (decimal?)value; return instance;
+                case 5: __set_5(instance, (string)value); return instance;
+                case 6: __set_6(instance, (global::Shop.Address)value); return instance;
+                case 7: instance.Orders = (global::System.Collections.Generic.List<global::Shop.Order>)value; return instance;
                 case 8: instance.Payment = (global::Shop.IPayment)value; return instance;
                 default: throw new global::System.InvalidOperationException(__members[member].Name + " is a constructor parameter and cannot be set after creation.");
             }
@@ -153,14 +153,14 @@ static partial class TestData
         {
             switch (member)
             {
-                case 0: return (object)instance.Id;
-                case 1: return (object)instance.FirstName;
-                case 2: return (object)instance.Nickname;
-                case 3: return (object)instance.Balance;
-                case 4: return (object)instance.Email;
-                case 5: return (object)instance.Address;
-                case 6: return (object)instance.Orders;
-                case 7: return (object)instance.Status;
+                case 0: return (object)instance.Status;
+                case 1: return (object)instance.Id;
+                case 2: return (object)instance.FirstName;
+                case 3: return (object)instance.Nickname;
+                case 4: return (object)instance.Balance;
+                case 5: return (object)instance.Email;
+                case 6: return (object)instance.Address;
+                case 7: return (object)instance.Orders;
                 case 8: return (object)instance.Payment;
                 default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
             }
@@ -170,14 +170,14 @@ static partial class TestData
         {
             switch (member)
             {
-                case 0: return global::Phoney.Generation.FakeScope.IsUnset(instance.Id);
-                case 1: return global::Phoney.Generation.FakeScope.IsUnset(instance.FirstName);
-                case 2: return global::Phoney.Generation.FakeScope.IsUnset(instance.Nickname);
-                case 3: return global::Phoney.Generation.FakeScope.IsUnset(instance.Balance);
-                case 4: return global::Phoney.Generation.FakeScope.IsUnset(instance.Email);
-                case 5: return global::Phoney.Generation.FakeScope.IsUnset(instance.Address);
-                case 6: return global::Phoney.Generation.FakeScope.IsUnset(instance.Orders);
-                case 7: return global::Phoney.Generation.FakeScope.IsUnset(instance.Status);
+                case 0: return global::Phoney.Generation.FakeScope.IsUnset(instance.Status);
+                case 1: return global::Phoney.Generation.FakeScope.IsUnset(instance.Id);
+                case 2: return global::Phoney.Generation.FakeScope.IsUnset(instance.FirstName);
+                case 3: return global::Phoney.Generation.FakeScope.IsUnset(instance.Nickname);
+                case 4: return global::Phoney.Generation.FakeScope.IsUnset(instance.Balance);
+                case 5: return global::Phoney.Generation.FakeScope.IsUnset(instance.Email);
+                case 6: return global::Phoney.Generation.FakeScope.IsUnset(instance.Address);
+                case 7: return global::Phoney.Generation.FakeScope.IsUnset(instance.Orders);
                 case 8: return global::Phoney.Generation.FakeScope.IsUnset(instance.Payment);
                 default: throw new global::System.InvalidOperationException(__members[member].Name + " cannot be read from an existing object.");
             }
@@ -187,24 +187,24 @@ static partial class TestData
         {
             switch (member)
             {
-                case 0: return static s0 => (object)(global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id));
-                case 1: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c1));
-                case 2: return static s0 => (object)((s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c2)));
-                case 3: return static s0 => (object)((decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c3));
-                case 4: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email));
-                case 5: return static s0 => (object)(s0.Nested<global::Shop.Address>());
-                case 6: return static s0 => (object)(s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c6));
-                case 7: return static s0 => (object)(global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c7));
+                case 0: return static s0 => (object)(global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c0));
+                case 1: return static s0 => (object)(global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id));
+                case 2: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c2));
+                case 3: return static s0 => (object)((s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c3)));
+                case 4: return static s0 => (object)((decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c4));
+                case 5: return static s0 => (object)(global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email));
+                case 6: return static s0 => (object)(s0.Nested<global::Shop.Address>());
+                case 7: return static s0 => (object)(s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c7));
                 case 8: return static s0 => (object)((s0.MaybeNull() ? null : s0.Nested<global::Shop.IPayment>()));
                 default: throw new global::System.ArgumentOutOfRangeException(nameof(member));
             }
         }
 
         [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "set_Email")]
-        private static extern void __set_4(global::Shop.Customer target, string value);
+        private static extern void __set_5(global::Shop.Customer target, string value);
 
         [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "set_Address")]
-        private static extern void __set_5(global::Shop.Customer target, global::Shop.Address value);
+        private static extern void __set_6(global::Shop.Customer target, global::Shop.Address value);
     }
 
     private sealed class __PhoneyModel_Shop_Address : global::Phoney.Generation.FakeModel<global::Shop.Address>

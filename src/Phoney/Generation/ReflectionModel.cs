@@ -134,7 +134,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
     /// <summary>The populated type.</summary>
     public Type Type { get; }
 
-    /// <summary>Constructor parameters first, then writable members in declaration order.</summary>
+    /// <summary>Constructor parameters first, then writable members (base class first; fields, then properties, each in declaration order), then read-only collections.</summary>
     public IReadOnlyList<FakeMember> Members { get; }
 
     /// <summary>The cached model for <paramref name="type"/>.</summary>
@@ -287,7 +287,10 @@ internal sealed class ReflectionTypeModel : IFakeModel
         return s => s.NestedObject(type);
     }
 
-    /// <summary>Public settable/init properties and non-readonly fields, base class members first, in declaration order.</summary>
+    /// <summary>
+    /// Public settable/init properties and non-readonly fields, base class members first. Within a class the order is that of the metadata tokens, which puts all fields before all
+    /// properties (each in declaration order); the source generator sorts the same way (<c>ModelBuilder.InReflectionOrder</c>) so both models draw members in the same order.
+    /// </summary>
     private static List<MemberInfo> WritableMembers(Type type)
     {
         var members = new List<MemberInfo>();

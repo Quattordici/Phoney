@@ -531,8 +531,7 @@ internal sealed class ModelBuilder
         var members = new List<ISymbol>();
         foreach (var t in chain)
         {
-            // Fields before properties within a type: the order the reflection model gets from metadata tokens, which is what the two models must agree on.
-            foreach (var member in t.GetMembers().OrderBy(m => m is IFieldSymbol ? 0 : 1))
+            foreach (var member in InReflectionOrder(t))
             {
                 var include = member switch
                 {
@@ -552,6 +551,12 @@ internal sealed class ModelBuilder
         return members;
     }
 
+    /// <summary>
+    /// The members declared by <paramref name="type"/> in the order the reflection model sorts them (by metadata token): all fields, then all properties, each in
+    /// declaration order. The two models draw members in this order, so they must agree on it for a seed to give the same data.
+    /// </summary>
+    private static IEnumerable<ISymbol> InReflectionOrder(INamedTypeSymbol type) => type.GetMembers().OrderBy(m => m is IFieldSymbol ? 0 : 1);
+
     private static bool IsFillable(ITypeSymbol type) => type is INamedTypeSymbol { IsGenericType: true } named && FillableCollections.Contains(named.OriginalDefinition.ToDisplayString());
 
     private static List<ISymbol> WritableMembers(INamedTypeSymbol type)
@@ -563,7 +568,7 @@ internal sealed class ModelBuilder
         var members = new List<ISymbol>();
         foreach (var t in chain)
         {
-            foreach (var member in t.GetMembers())
+            foreach (var member in InReflectionOrder(t))
             {
                 var include = member switch
                 {

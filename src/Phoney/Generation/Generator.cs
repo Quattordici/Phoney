@@ -20,7 +20,7 @@ namespace Phoney;
 /// With a <see cref="Seed"/>, item <c>n</c> is always the same object regardless of how many items are generated
 /// per call or whether <see cref="GenerateParallel"/> is used, because every item gets its own derived seed.
 /// </para>
-/// <para>Order of population: constructor arguments, then members in declaration order, then rules that depend
+/// <para>Order of population: constructor arguments, then members (base class first; within a class fields, then properties, each in declaration order; read-only collections last), then rules that depend
 /// on the object (<c>With(x =&gt; x.Email, (f, x) =&gt; …)</c>) in the order they were added, then <see cref="AfterCreate"/> actions.</para>
 /// </remarks>
 /// <typeparam name="T">The type to generate.</typeparam>
