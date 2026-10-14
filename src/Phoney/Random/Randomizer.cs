@@ -210,6 +210,28 @@ public sealed class Randomizer
         return items[^1].Value; // rounding: the target landed exactly on the total
     }
 
+    /// <summary>
+    /// Picks an index according to <paramref name="cumulativeWeights"/>, the running totals of positive weights (<c>[1, 4, 10]</c> for the weights 1, 3 and 6), with one binary search
+    /// and exactly one number drawn. For a pick that is made many times from the same weights this is cheaper than <see cref="Weighted{T}"/>, which adds the weights up on every call.
+    /// </summary>
+    /// <param name="cumulativeWeights">Strictly increasing running totals; the last is the total weight.</param>
+    public int WeightedIndex(ReadOnlySpan<double> cumulativeWeights)
+    {
+        var target = Double() * cumulativeWeights[^1];
+        // First running total strictly greater than the target.
+        int lo = 0, hi = cumulativeWeights.Length - 1;
+        while (lo < hi)
+        {
+            var mid = (lo + hi) >>> 1;
+            if (cumulativeWeights[mid] > target)
+                hi = mid;
+            else
+                lo = mid + 1;
+        }
+
+        return lo; // also when rounding put the target exactly on the total: the last one
+    }
+
     /// <summary>Picks an index according to <paramref name="cumulativeWeights"/> (running totals of the weights).</summary>
     public int WeightedIndex(ReadOnlySpan<int> cumulativeWeights)
     {

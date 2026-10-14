@@ -38,6 +38,11 @@ public class ValueBenchmarks
     [Benchmark(Description = "Randomizer.Int")]
     public int RandomInt() => _faker.Random.Int(0, 1000);
 
+    private static readonly double[] CumulativeWeights = [70, 95, 100];
+
+    [Benchmark(Description = "Randomizer.WeightedIndex (3 weights)")]
+    public int RandomWeightedIndex() => _faker.Random.WeightedIndex(CumulativeWeights);
+
     [Benchmark(Description = "Randomizer.Normal")]
     public double RandomNormal() => _faker.Random.Normal(175, 8);
 

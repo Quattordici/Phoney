@@ -226,6 +226,60 @@ public sealed class Generator<T> : INestedGenerator
     }
 
     /// <summary>
+    /// Sets a member to one of the values, some more often than others: <c>.WithOneOf(o =&gt; o.Status, (Status.Paid, 70), (Status.Pending, 25), (Status.Failed, 5))</c>
+    /// gives 70 % paid, 25 % pending and 5 % failed.
+    /// </summary>
+    /// <remarks>
+    /// The weights are relative (70, 25 and 5 mean the same as 14, 5 and 1), a weight of zero is never picked, and a value can only be missing from the choices by leaving it out. Each
+    /// object makes exactly one random draw for the member, whatever the weights are, and the choices are checked and copied when the rule is added.
+    /// </remarks>
+    /// <param name="member">The member to set: <c>x =&gt; x.Status</c> (also a member of a nested object or a collection element).</param>
+    /// <param name="choices">The values with their weights. A weight is not negative and finite; at least one is greater than zero.</param>
+    /// <exception cref="ArgumentException">There are no choices, a weight is negative, not a number or infinite, or no weight is greater than zero.</exception>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, TValue>> member, params (TValue Value, double Weight)[] choices)
+    {
+        ArgumentNullException.ThrowIfNull(choices);
+        var picker = WeightedPicker<TValue>.Create(choices.Select(c => c.Value), choices.Select(c => c.Weight), nameof(choices));
+        return With(member, f => picker.Pick(f.Random));
+    }
+
+    /// <summary>
+    /// Sets a member to one of <paramref name="values"/>, the one at the same position in <paramref name="weights"/> deciding how often:
+    /// <c>.WithOneOf(o =&gt; o.Country, countries, populations)</c>.
+    /// </summary>
+    /// <param name="member">The member to set: <c>x =&gt; x.Country</c>.</param>
+    /// <param name="values">The values to choose from.</param>
+    /// <param name="weights">One weight per value (relative; zero is never picked; at least one is greater than zero).</param>
+    /// <exception cref="ArgumentException">There are no values, the lists differ in length, a weight is negative, not a number or infinite, or no weight is greater than zero.</exception>
+    public Generator<T> WithOneOf<TValue>(Expression<Func<T, TValue>> member, IReadOnlyList<TValue> values, IReadOnlyList<double> weights)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(weights);
+        if (values.Count != weights.Count)
+            throw new ArgumentException($"Provide one weight per value: {values.Count} values and {weights.Count} weights.", nameof(weights));
+        var picker = WeightedPicker<TValue>.Create(values, weights, nameof(values));
+        return With(member, f => picker.Pick(f.Random));
+    }
+
+    /// <summary>
+    /// Sets a member from a random item of <paramref name="source"/>, the items with a larger <paramref name="weight"/> more often:
+    /// <c>.WithOneOf(o =&gt; o.CustomerId, customers, c =&gt; c.Id, c =&gt; c.OrderCount)</c>. The weights are read once, when the rule is added.
+    /// </summary>
+    /// <param name="member">The member to set: <c>x =&gt; x.CustomerId</c>.</param>
+    /// <param name="source">The items to choose from.</param>
+    /// <param name="select">What the member gets from the chosen item.</param>
+    /// <param name="weight">How much an item counts (relative; zero is never picked; at least one is greater than zero).</param>
+    /// <exception cref="ArgumentException">There are no items, a weight is negative, not a number or infinite, or no weight is greater than zero.</exception>
+    public Generator<T> WithOneOf<TSource, TValue>(Expression<Func<T, TValue>> member, IReadOnlyList<TSource> source, Func<TSource, TValue> select, Func<TSource, double> weight)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(select);
+        ArgumentNullException.ThrowIfNull(weight);
+        var picker = WeightedPicker<TSource>.Create(source, source.Select(weight), nameof(source));
+        return With(member, f => select(picker.Pick(f.Random)));
+    }
+
+    /// <summary>
     /// Sets a member from a random item of <paramref name="source"/>, so object graphs line up:
     /// <c>.WithOneOf(o =&gt; o.CustomerId, customers, c =&gt; c.Id)</c>.
     /// </summary>

@@ -165,6 +165,11 @@ Check(shipment.Weight.ToString(), "big number");
 if (shipment.Buffer.Length == 0 || shipment.Grid.Length == 0 || shipment.Pair.Item1 == 0)
     throw new InvalidOperationException("buffer, grid or tuple not filled");
 
+// Weighted choices: the running totals are made once and a pick allocates nothing.
+var picked = ShipmentFakes.Shipment.Seed(11).WithOneOf(s => s.Weight, (new System.Numerics.BigInteger(5), 9), (new System.Numerics.BigInteger(7), 1)).Generate(400);
+if (picked.Any(s => s.Weight != 5 && s.Weight != 7) || picked.Count(s => s.Weight == 5) < 320)
+    throw new InvalidOperationException("weighted choice off");
+
 // Normally distributed numbers: generic math over a BigInteger and a nullable, in a generated model, without reflection.
 var heavy = ShipmentFakes.Shipment.Seed(9).WithNormal(s => s.Weight, 1000, 50).Generate(200);
 var average = heavy.Average(s => (double)s.Weight);

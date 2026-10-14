@@ -600,6 +600,18 @@ var orders = Fake.For<Order>()
     .Generate(100);
 ```
 
+Give the choices weights when some should be more common than others:
+
+```csharp
+var orders = Fake.For<Order>()
+    .WithOneOf(o => o.Status, (OrderStatus.Paid, 70), (OrderStatus.Shipped, 25), (OrderStatus.Cancelled, 5))   // 70 %, 25 %, 5 %
+    .WithOneOf(o => o.Country, countries, populations)                                                         // a list of values and a list of weights
+    .WithOneOf(o => o.CustomerId, customers, c => c.Id, c => c.OrderCount)                                     // existing customers, busy ones more often
+    .Generate(1000);
+```
+
+Weights are relative (70/25/5 is the same as 14/5/1), a weight of zero is never picked, and a negative or non-finite weight, a missing weight or no weight above zero throws when the rule is added. The running totals are made once, so a pick is one random number and a binary search (`Randomizer.WeightedIndex`), and item *n* is the same however you generate.
+
 ### Validation attributes
 
 Generated objects satisfy their data annotations, so they pass `Validator.TryValidateObject`, EF Core and ASP.NET Core validation:
