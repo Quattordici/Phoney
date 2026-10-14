@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Phoney.Benchmarks/Phoney.Benchmarks.csproj" />
+    <Project Path="benchmarks/Phoney.Benchmarks.Comparison/Phoney.Benchmarks.Comparison.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Phoney.Samples/Phoney.Samples.csproj" />
