@@ -4,14 +4,17 @@ using TUnit.Core.Interfaces;
 
 namespace Phoney.TUnit;
 
-/// <summary>Runs a test body with a seeded <see cref="Fake"/> facade and reports the seed when the body fails.</summary>
-internal sealed class SeededTestExecutor(long? pinned) : ITestExecutor
+/// <summary>
+/// Runs a test body with a seeded <see cref="Fake"/> facade and reports the seed when the body fails. A test has only one executor,
+/// so the one it had before (<paramref name="inner"/>, e.g. from <c>[TestExecutor&lt;T&gt;]</c>) runs inside the seeded scope instead of being replaced.
+/// </summary>
+internal sealed class SeededTestExecutor(long? pinned, ITestExecutor? inner) : ITestExecutor
 {
     /// <inheritdoc />
     public ValueTask ExecuteTest(TestContext context, Func<ValueTask> action)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return SeededRun.Execute(pinned, FakeSeed.FromEnvironment(), context.Output.WriteLine, action);
+        return SeededRun.Execute(pinned, FakeSeed.FromEnvironment(), context.Output.WriteLine, inner is null ? action : () => inner.ExecuteTest(context, action));
     }
 }
 

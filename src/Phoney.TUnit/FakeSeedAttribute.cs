@@ -17,8 +17,8 @@ namespace Phoney.TUnit;
 /// <para>
 /// The seed applies to the facade of the test's own async flow, so parallel tests don't affect each other. Generators created before the test
 /// runs (a <c>static</c> field) are not seeded by it, and neither are generators that call <c>.Seed(...)</c> themselves. On a method it
-/// wins over the class, and on a class over the assembly. The attribute installs the test's executor, so it can't be combined with another executor
-/// such as <c>[STAThreadExecutor]</c>.
+/// wins over the class, and on a class over the assembly. It wraps the executor the test already has
+/// (<c>[TestExecutor&lt;T&gt;]</c>), which runs inside the seeded scope.
 /// </para>
 /// <para><c>[FakeData]</c> values don't need this attribute: they are already reproducible, and follow <c>PHONEY_SEED</c> too.</para>
 /// </remarks>
@@ -50,11 +50,14 @@ public sealed class FakeSeedAttribute : Attribute, ITestRegisteredEventReceiver,
     /// <inheritdoc />
     public Type ScopeType => typeof(FakeSeedAttribute);
 
+    /// <summary>Registers after the other attributes of the test, so it sees (and wraps) an executor they installed.</summary>
+    public int Order => int.MaxValue;
+
     /// <inheritdoc />
     public ValueTask OnTestRegistered(TestRegisteredContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        context.SetTestExecutor(new SeededTestExecutor(Seed));
+        context.SetTestExecutor(new SeededTestExecutor(Seed, context.DiscoveredTest?.TestExecutor));
         return default;
     }
 }
