@@ -898,19 +898,21 @@ How to read the numbers:
 - **Bogus needs every rule written by hand.** The Bogus rows use `Faker<T>` classes with a rule per member, and the nested ones are composed by hand. Phoney gets the same shape from name conventions and the type's members. NBuilder has no object-graph support, so its graph is composed by hand with `.All().Do(...)`.
 - **Faker.Net only offers single values**, one static call each, which is why it has no object rows. Its cost is about 70–170 µs and 78–196 KB per value in this run.
 - **Bogus is faster at `Full name`** (300 ns against 451 ns).
-- **Start-up is where Phoney is slowest.** The first object takes a fresh process this long, from `Main` to the first generated object (median of 15 processes):
+- **Start-up is the other thing to know.** The first object of a fresh process takes this long, from `Main` to the first generated object (median of 15 processes). The left column is a plain `dotnet` run, the right one the same app published with ReadyToRun (`-p:PublishReadyToRun=true`), which precompiles the libraries and removes most of the JIT time:
 
-| Library | Median | Fastest | Slowest |
-|---|---:|---:|---:|
-| Phoney (reflection) | 211 ms | 195 ms | 296 ms |
-| Phoney (source generated) | 171 ms | 156 ms | 281 ms |
-| Bogus | 153 ms | 143 ms | 184 ms |
-| AutoBogus | 133 ms | 115 ms | 168 ms |
-| AutoFixture | 70 ms | 65 ms | 122 ms |
-| NBuilder | 25 ms | 23 ms | 26 ms |
-| Faker.Net | 19 ms | 17 ms | 26 ms |
+| Library | JIT | ReadyToRun |
+|---|---:|---:|
+| Phoney (reflection) | 150 ms | 97 ms |
+| Phoney (source generated) | 105 ms | 59 ms |
+| Bogus | 164 ms | 119 ms |
+| AutoBogus | 133 ms | 90 ms |
+| AutoFixture | 77 ms | 47 ms |
+| NBuilder | 25 ms | 20 ms |
+| Faker.Net | 25 ms | 19 ms |
 
-Phoney loads its locale data (decompression and building the flattened lookup array of the `en` fallback chain) on the first call. It is paid once per process, so it matters for short-lived tools and not for services or test runs.
+With Native AOT, Phoney's first object takes about 5 ms (source-generated model, the reflection model isn't available there). The other libraries were not measured with Native AOT.
+
+Most of Phoney's first call is JIT compilation of its own code, not reading data: a locale file is indexed when it is opened and each entry is decoded the first time its key is read, so a process that uses a few dozen of the ~270 keys of `en` never builds the rest. It is paid once per process, so it matters for short-lived tools and not for services or test runs. `cold-phases` shows the time and the JIT time of each step.
 
 Reproduce the tables with:
 
@@ -918,6 +920,9 @@ Reproduce the tables with:
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- --filter '*' --artifacts out   # the timed matrix
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- summarize out                   # prints it as a markdown table
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold                           # start-up, one process per measurement
+dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-phases                    # where Phoney's first call spends its time (and JIT time)
+dotnet publish benchmarks/Phoney.Benchmarks.ColdAot -c Release -o artifacts/cold-aot                       # start-up with Native AOT:
+dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- cold-aot artifacts/cold-aot/Phoney.Benchmarks.ColdAot
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks.Comparison -- check                          # what each library actually produces
 ```
 
