@@ -902,6 +902,7 @@ Every library is seeded, and each cell is the mean time per operation and the me
 | Sentence | **420 ns / 481 B** | – | 1.23 µs / 847 B | – | – | – | 72.0 µs / 77 KB |
 | Flat objects (×1,000) | **2.81 ms / 2.1 MB** | 3.46 ms / 2.6 MB | 14.3 ms / 8.9 MB | 594 ms / 649 MB | 106 ms / 49 MB | 6.53 ms / 3.9 MB | – |
 | Object graphs (×1,000) | 12.0 ms / 7.4 MB | **11.8 ms / 7.6 MB** | 31.2 ms / 14 MB | 3.57 s / 3.32 GB | 491 ms / 205 MB | 46.1 ms / 19 MB | – |
+| **Data it makes** | realistic, and the parts of an object agree (the email matches the name) | same | realistic, with a rule written by hand for every member | random unrelated words and numbers | the member name and a GUID | the member name and a counter | realistic values, but every call is independent |
 
 "Phoney" is the source-generated model (`[FakeFor<T>]`) and "Phoney (reflection)" the reflection model; the value rows have only one column because they don't involve a model. A flat object has 11 members; a graph is a customer with an address and two purchases of two lines each, plus an enum.
 

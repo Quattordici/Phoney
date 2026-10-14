@@ -36,6 +36,11 @@ if (args is ["cold-phases"])
     return ColdPhases.Run();
 }
 
+if (args is ["sanity"])
+{
+    return Sanity.Run();
+}
+
 if (args is ["check"])
 {
     return Check.Run();
@@ -236,30 +241,97 @@ internal static class ColdPhases
     }
 }
 
-internal static class Check
-{
-    private static readonly System.Text.Json.JsonSerializerOptions Json = new() { WriteIndented = false, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
+/// <summary>Serialises the objects that <c>check</c> prints without reflection, so it works in the Native AOT build too.</summary>
+[System.Text.Json.Serialization.JsonSourceGenerationOptions(UseStringEnumConverter = true)]
+[System.Text.Json.Serialization.JsonSerializable(typeof(FlatCustomer))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(Shopper))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string>))]
+internal sealed partial class CheckJson : System.Text.Json.Serialization.JsonSerializerContext;
 
+/// <summary>Makes 1,000 objects per library and checks they are real: how many differ, and whether the members that should be filled are. Run it in the Native AOT build before trusting a time there.</summary>
+internal static class Sanity
+{
     public static int Run()
     {
-        Show("Flat", "Phoney (reflection)", Libraries.PhoneyFlatReflection().Generate());
-        Show("Flat", "Phoney (source generated)", Libraries.PhoneyFlatGenerated().Generate());
-        Show("Flat", "Bogus", Libraries.BogusFlat().Generate());
-        Show("Flat", "AutoBogus", Libraries.AutoBogusFlat().Generate());
-        Show("Flat", "AutoFixture", Libraries.AutoFixture().Create<FlatCustomer>());
-        Show("Flat", "NBuilder", Libraries.NBuilderFlat(2)[1]);
-        Show("Graph", "Phoney (reflection)", Libraries.PhoneyGraphReflection().Generate());
-        Show("Graph", "Phoney (source generated)", Libraries.PhoneyGraphGenerated().Generate());
-        Show("Graph", "Bogus", Libraries.BogusGraph().Generate());
-        Show("Graph", "AutoBogus", Libraries.AutoBogusGraph().Generate());
-        Show("Graph", "AutoFixture", Libraries.AutoFixture().Create<Shopper>());
-        Show("Graph", "NBuilder (by hand)", Libraries.NBuilderGraph(2)[1]);
+        Flat("Phoney (source generated)", () => Libraries.PhoneyFlatGenerated().Generate(1000));
+        Flat("Bogus", () => Libraries.BogusFlat().Generate(1000));
+        Flat("AutoBogus", () => Libraries.AutoBogusFlat().Generate(1000));
+        Flat("AutoFixture", () => Libraries.AutoFixture().CreateMany<FlatCustomer>(1000).ToList());
+        Flat("NBuilder", () => Libraries.NBuilderFlat(1000));
+        Graph("Phoney (source generated)", () => Libraries.PhoneyGraphGenerated().Generate(1000));
+        Graph("Bogus", () => Libraries.BogusGraph().Generate(1000));
+        Graph("AutoBogus", () => Libraries.AutoBogusGraph().Generate(1000));
+        Graph("AutoFixture", () => Libraries.AutoFixture().CreateMany<Shopper>(1000).ToList());
+        Graph("NBuilder (by hand)", () => Libraries.NBuilderGraph(1000));
         return 0;
+    }
+
+    private static void Flat(string library, Func<IList<FlatCustomer>> make) => Report("Flat ", library, () =>
+    {
+        var items = make();
+        return (items.Count, items.Select(i => i.FirstName).Distinct().Count(), items.Count(i => string.IsNullOrEmpty(i.Email) || string.IsNullOrEmpty(i.City)));
+    });
+
+    private static void Graph(string library, Func<IList<Shopper>> make) => Report("Graph", library, () =>
+    {
+        var items = make();
+        return (items.Count, items.Select(i => i.FirstName).Distinct().Count(), items.Count(i => i.Purchases.Count != 2 || i.Purchases.Any(p => p.Lines.Count != 2)));
+    });
+
+    private static void Report(string shape, string library, Func<(int Count, int Distinct, int Incomplete)> run)
+    {
+        try
+        {
+            run(); // warm up
+            var clock = Stopwatch.StartNew();
+            var (count, distinct, incomplete) = run();
+            clock.Stop();
+            Console.WriteLine($"{shape} {library,-28} {count,5} objects, {distinct,4} distinct first names, {incomplete,4} incomplete, {clock.Elapsed.TotalMilliseconds,9:F2} ms");
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"{shape} {library,-28} FAILED: {exception.GetType().Name}: {exception.Message.Split('\n')[0][..Math.Min(110, exception.Message.Split('\n')[0].Length)]}");
+        }
+    }
+}
+
+internal static class Check
+{
+    public static int Run()
+    {
+        Try("Flat", "Phoney (reflection)", () => Libraries.PhoneyFlatReflection().Generate());
+        Try("Flat", "Phoney (source generated)", () => Libraries.PhoneyFlatGenerated().Generate());
+        Try("Flat", "Bogus", () => Libraries.BogusFlat().Generate());
+        Try("Flat", "AutoBogus", () => Libraries.AutoBogusFlat().Generate());
+        Try("Flat", "AutoFixture", () => Libraries.AutoFixture().Create<FlatCustomer>());
+        Try("Flat", "NBuilder", () => Libraries.NBuilderFlat(2)[1]);
+        Try("Value", "Faker.Net", () => new Dictionary<string, string> { ["Name"] = global::Faker.Name.FullName(), ["Email"] = global::Faker.Internet.Email(), ["Street"] = global::Faker.Address.StreetAddress(), ["Sentence"] = global::Faker.Lorem.Sentence() });
+        Try("Graph", "Phoney (reflection)", () => Libraries.PhoneyGraphReflection().Generate());
+        Try("Graph", "Phoney (source generated)", () => Libraries.PhoneyGraphGenerated().Generate());
+        Try("Graph", "Bogus", () => Libraries.BogusGraph().Generate());
+        Try("Graph", "AutoBogus", () => Libraries.AutoBogusGraph().Generate());
+        Try("Graph", "AutoFixture", () => Libraries.AutoFixture().Create<Shopper>());
+        Try("Graph", "NBuilder (by hand)", () => Libraries.NBuilderGraph(2)[1]);
+        return 0;
+    }
+
+    /// <summary>Shows what a library makes, or why it can't (under Native AOT several of them can't).</summary>
+    private static void Try(string shape, string library, Func<object> make)
+    {
+        try
+        {
+            Show(shape, library, make());
+        }
+        catch (Exception exception)
+        {
+            var message = exception.Message.Split('\n')[0];
+            Console.WriteLine($"{shape,-5} {library,-26}\n      FAILED: {exception.GetType().Name}: {(message.Length > 200 ? message[..200] + "…" : message)}");
+        }
     }
 
     private static void Show(string shape, string library, object value)
     {
-        var text = System.Text.Json.JsonSerializer.Serialize(value, value.GetType(), Json);
+        var text = System.Text.Json.JsonSerializer.Serialize(value, CheckJson.Default.GetTypeInfo(value.GetType())!);
         var shape2 = value is Shopper s ? $"  [purchases={s.Purchases.Count}, lines={string.Join("/", s.Purchases.Select(p => p.Lines.Count))}, home={(s.Home is null ? "null" : "set")}]" : "";
         Console.WriteLine($"{shape,-5} {library,-26}{shape2}\n      {(text.Length > 420 ? text[..420] + "…" : text)}");
     }
