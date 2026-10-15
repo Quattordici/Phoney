@@ -147,6 +147,16 @@ public sealed class SeededRandom
         return items[Index(items.Count)];
     }
 
+    /// <summary>Returns a random element of <paramref name="items"/>, which can be any sequence (a set, dictionary keys, a query).</summary>
+    /// <remarks>Draws like the list overload over the elements in enumeration order, so use a source whose order is stable (not a set that changes between runs) to get the same element for a seed.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="items"/> is empty.</exception>
+    public T Element<T>(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        return items is IReadOnlyList<T> list ? Element(list) : Element<T>(items.ToArray());
+    }
+
     /// <summary>Returns a random element of <paramref name="items"/>.</summary>
     public T Element<T>(ReadOnlySpan<T> items)
     {
@@ -172,6 +182,16 @@ public sealed class SeededRandom
         }
 
         return copy.AsSpan(0, count).ToArray();
+    }
+
+    /// <summary>Returns the elements of <paramref name="items"/> in random order as a new array; the source is left as it is.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    public T[] Shuffled<T>(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var copy = items.ToArray();
+        Shuffle(copy.AsSpan());
+        return copy;
     }
 
     /// <summary>Shuffles <paramref name="items"/> in place.</summary>

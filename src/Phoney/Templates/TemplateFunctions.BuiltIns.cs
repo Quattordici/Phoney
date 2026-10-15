@@ -39,6 +39,8 @@ public static partial class TemplateFunctions
         ["hacker"] = RegisterHacker,
         ["vehicle"] = RegisterVehicle,
         ["airline"] = RegisterAirline,
+        ["science"] = RegisterScience,
+        ["datatype"] = RegisterDatatype,
         ["database"] = RegisterDatabase,
         ["system"] = RegisterSystem,
         ["git"] = RegisterGit,
@@ -165,6 +167,7 @@ public static partial class TemplateFunctions
         Add("location.latitude", x => x.Location.Latitude().ToString(CultureInfo.InvariantCulture));
         Add("location.longitude", x => x.Location.Longitude().ToString(CultureInfo.InvariantCulture));
         Add("location.address", x => x.Location.Address().ToString());
+        Add("location.language", x => x.Location.Language().ToString());
         f["location.zipCodeByState"] = (faker, a) => faker.Location.ZipCodeByState(a.String(0) ?? "");
     }
 
@@ -191,6 +194,7 @@ public static partial class TemplateFunctions
         Add("internet.userAgent", x => x.Internet.UserAgent());
         f["internet.mac"] = (faker, a) => faker.Internet.Mac(a.String(0, "separator") ?? ":");
         f["internet.password"] = (faker, a) => faker.Internet.Password(a.Int(0, "length") ?? 15, a.Bool(0, "memorable") ?? false);
+        f["internet.color"] = (faker, a) => faker.Internet.Color(a.Int(0, "redBase") ?? 0, a.Int(0, "greenBase") ?? 0, a.Int(0, "blueBase") ?? 0);
         Add("internet.emoji", x => x.Internet.Emoji());
         Add("internet.jwtAlgorithm", x => x.Internet.JwtAlgorithm());
         Add("internet.jwt", x => x.Internet.Jwt());
@@ -263,6 +267,7 @@ public static partial class TemplateFunctions
         Add("finance.ethereumAddress", x => x.Finance.EthereumAddress());
         Add("finance.bitcoinAddress", x => x.Finance.BitcoinAddress());
         Add("finance.litecoinAddress", x => x.Finance.LitecoinAddress());
+        Add("finance.currency", x => x.Finance.Currency().ToString());
         Add("finance.iban", x => x.Finance.Iban());
         Add("finance.bic", x => x.Finance.Bic());
         f["finance.amountText"] = f["finance.amount"];
@@ -318,6 +323,14 @@ public static partial class TemplateFunctions
         Add("color.space", x => x.Color.Space());
         Add("color.rgb", x => x.Color.Hex());
         Add("color.hex", x => x.Color.Hex());
+        Add("color.cmyk", x => x.Color.Cmyk().ToCss());
+        Add("color.hsl", x => x.Color.Hsl().ToCss());
+        Add("color.hwb", x => x.Color.Hwb().ToCss());
+        Add("color.lab", x => x.Color.Lab().ToCss());
+        Add("color.lch", x => x.Color.Lch().ToCss());
+        Add("color.cssSupportedFunction", x => x.Color.CssSupportedFunction().ToString().ToLowerInvariant());
+        Add("color.cssSupportedSpace", x => ColorModule.CssSpaceName(x.Color.CssSupportedSpace()));
+        Add("color.colorByCssColorSpace", x => x.Color.ColorByCssColorSpace());
     }
 
     private static void RegisterAnimal(ConcurrentDictionary<string, TemplateFunction> f)
@@ -406,7 +419,21 @@ public static partial class TemplateFunctions
         Add("airline.recordLocator", x => x.Airline.RecordLocator());
         Add("airline.seat", x => x.Airline.Seat());
         Add("airline.flightNumber", x => x.Airline.FlightNumber());
+        Add("airline.airline", x => x.Airline.Airline().ToString());
+        Add("airline.airplane", x => x.Airline.Airplane().ToString());
+        Add("airline.airport", x => x.Airline.Airport().ToString());
+        Add("airline.aircraftType", x => x.Airline.AircraftType().ToString().ToLowerInvariant());
     }
+
+    private static void RegisterScience(ConcurrentDictionary<string, TemplateFunction> f)
+    {
+        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        Add("science.chemicalElement", x => x.Science.ChemicalElement().ToString());
+        Add("science.unit", x => x.Science.Unit().ToString());
+    }
+
+    private static void RegisterDatatype(ConcurrentDictionary<string, TemplateFunction> f) =>
+        f["datatype.boolean"] = (faker, a) => faker.Random.Bool(a.Double(0, "probability") ?? 0.5) ? "true" : "false";
 
     private static void RegisterDatabase(ConcurrentDictionary<string, TemplateFunction> f)
     {
@@ -440,6 +467,8 @@ public static partial class TemplateFunctions
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
         Add("git.branch", x => x.Git.Branch());
         Add("git.commitMessage", x => x.Git.CommitMessage());
+        Add("git.commitDate", x => x.Git.CommitDate());
+        Add("git.commitEntry", x => x.Git.CommitEntry());
         f["git.commitSha"] = (faker, a) => faker.Git.CommitSha(a.Int(0, "length") ?? 40);
     }
 
@@ -448,6 +477,7 @@ public static partial class TemplateFunctions
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
         Add("image.avatar", x => x.Image.Avatar());
         Add("image.personPortrait", x => x.Image.Avatar()); // faker.js name
+        Add("image.avatarGitHub", x => x.Image.AvatarGitHub());
         Add("image.url", x => x.Image.Url());
         Add("image.dataUri", x => x.Image.DataUri());
     }

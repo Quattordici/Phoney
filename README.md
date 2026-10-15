@@ -93,7 +93,7 @@ A `Faker` groups values by topic:
 |---|---|
 | `Person` | `Profile()`, `FirstName(Sex.Female)`, `LastName()`, `FullName()`, `Sex()`, `JobTitle()`, `Bio()`, `Prefix()` |
 | `Location` | `Address()`, `StreetAddress()`, `City()`, `ZipCode()`, `State()`, `Country()`, `CountryCode()`, `Latitude()`, `NearbyGpsCoordinate()` |
-| `Internet` | `Email()`, `Username()`, `Url()`, `DomainName()`, `Ipv4(IPv4Network.PrivateC)`, `Ipv6()`, `Mac()`, `Password()`, `UserAgent()`, `Jwt()`, `Emoji()` |
+| `Internet` | `Email()`, `Username()`, `Url()`, `DomainName()`, `Ipv4(IPv4Network.PrivateC)`, `Ipv6()`, `Mac()`, `Password()`, `UserAgent()`, `Jwt()`, `Emoji()`, `Color()` |
 | `Phone` | `Number(PhoneStyle.International)`, `Imei()` |
 | `Company` / `Commerce` | `Name()`, `CatchPhrase()`, `ProductName()`, `Price()`, `Isbn()`, `Upc()` |
 | `Finance` | `Iban()`, `Bic()`, `CreditCardNumber(CardIssuer.Visa)`, `Currency()`, `Amount()`, `RoutingNumber()`, `BitcoinAddress()` |
@@ -102,15 +102,17 @@ A `Faker` groups values by topic:
 | `Lorem` / `Word` | `Sentence()`, `Paragraphs()`, `Slug()`, `Noun(minLength: 5)` |
 | `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)`, `Normal(175, 8)` ([normal distribution](#normally-distributed-numbers)) |
 | `Color` | `Human()`, `Hex()`, `Rgb()` (typed, with `ToCss()`/`ToHex()`), `Hsl()`, `Lab()` |
-| `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `DataUri()` (self-contained SVG) |
+| `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `AvatarGitHub()`, `DataUri()` (self-contained SVG) |
 | `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `Slugify()`, `LuhnCheck()`, `Multiple(f => …, 5)`, `UniqueValues(…, 10)` |
-| also | `Animal`, `Book`, `Music`, `Food`, `Hacker`, `Vehicle` (with valid VINs), `Airline`, `Science`, `Database`, `System`, `Git` |
+| `Git` | `Branch()`, `CommitMessage()`, `CommitSha()`, `CommitDate()`, `CommitEntry()` (a commit as `git log` prints it) |
+| `Airline` | `Airline()`, `Airport()`, `Airplane()`, `FlightNumber()`, `RecordLocator()`, `Seat()` |
+| also | `Animal`, `Book`, `Music`, `Food`, `Hacker`, `Vehicle` (with valid VINs), `Science`, `Database`, `System` |
 
 Checksums are real: credit cards and IMEIs pass Luhn, IBANs pass MOD 97, ISBN, UPC, VIN and ABA routing numbers have valid check digits.
 
 `Fake.*` is a thread-safe static facade over a per-thread `Faker`.
 
-`faker.Random` is the seeded source of randomness (xoshiro256\*\*) for your own values: `Int`, `Long`, `Double`, `Decimal`, `Bool(0.2)`, `Element(list)`, `Elements(list, 3)`, `Weighted(("gold", 1), ("silver", 3))`, `Enum<T>()`, `Guid()`, `Replace("##??")`.
+`faker.Random` is the seeded source of randomness (xoshiro256\*\*) for your own values: `Int`, `Long`, `Double`, `Decimal`, `Bool(0.2)`, `Element(items)` (any sequence), `Elements(list, 3)`, `Shuffled(items)`, `Weighted(("gold", 1), ("silver", 3))`, `Enum<T>()`, `Guid()`, `ReplaceSymbols("##??")`.
 
 Image URLs come from replaceable templates, so generated data doesn't have to point at public placeholder services:
 
@@ -328,7 +330,7 @@ faker.Parse("Ticket {{Helpers.FromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{String.Nume
 faker.Parse("{{Person.FirstName}} lives at {{Location.Address}}");
 ```
 
-Names are case-insensitive, so faker.js templates (`{{person.firstName}}`, `{{number.int({"min":1,"max":9})}}`) work unchanged, and so do locale data paths and record fields (`{{airline.airport.iataCode}}`). Register your own functions with `TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-#####"))`.
+Names are case-insensitive, so faker.js templates (`{{person.firstName}}`, `{{number.int({"min":1,"max":9})}}`) work unchanged, and so do locale data paths and record fields (`{{airline.airport.iataCode}}`). Typed results (`airline.airport`, `finance.currency`, `science.chemicalElement`, `color.hsl`…) are written in their usual text form, and `datatype.boolean` takes an optional `probability`. `TemplateFunctions.Names` lists every function. Register your own functions with `TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-#####"))`.
 
 ## Objects
 
@@ -361,7 +363,8 @@ Besides arrays, `List<T>`, `HashSet<T>`, `Dictionary<K,V>` and their interfaces,
 | `ImmutableArray<T>`, `ImmutableList<T>`, `IImmutableList<T>` | `ImmutableHashSet<T>`, `IImmutableSet<T>`, `ImmutableSortedSet<T>` | `ImmutableDictionary<K,V>`, `IImmutableDictionary<K,V>`, `ImmutableSortedDictionary<K,V>` |
 | `ReadOnlyCollection<T>`, `Collection<T>`, `ObservableCollection<T>` | `SortedSet<T>` | `SortedDictionary<K,V>`, `SortedList<K,V>` |
 | `Queue<T>`, `Stack<T>`, `LinkedList<T>` | `FrozenSet<T>` | `FrozenDictionary<K,V>` |
-| `ConcurrentBag<T>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>` | | `ConcurrentDictionary<K,V>` |
+| `ConcurrentBag<T>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>` | | `ConcurrentDictionary<K,V>`, `ReadOnlyDictionary<K,V>` |
+| `ImmutableQueue<T>`, `IImmutableQueue<T>`, `ImmutableStack<T>`, `IImmutableStack<T>` | | |
 
 Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` counterpart (so a seed gives the same elements whichever type holds them) and converted. Sizes, `[MinLength]`/`[MaxLength]`, `CollectionSize`, `Invalid`/`Boundary`, `Populate` (a default `ImmutableArray<T>` counts as unset), `Each()` paths and the source generator all work the same.
 

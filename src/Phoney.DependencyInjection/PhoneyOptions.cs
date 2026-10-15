@@ -20,4 +20,45 @@ public sealed class PhoneyOptions
     /// container is used, unless it is <see cref="TimeProvider.System"/> (which would make seeded dates move with the clock).
     /// </summary>
     public TimeProvider? TimeProvider { get; set; }
+
+    /// <summary>Probability (0–1) that nullable members of generated objects are left <see langword="null"/>; the generator default (0) when <see langword="null"/>.</summary>
+    public double? NullProbability { get; set; }
+
+    /// <summary>
+    /// Fewest elements a generated collection gets; the generator default (1) when <see langword="null"/>. When only this is set, the
+    /// most is the larger of this and the default (3).
+    /// </summary>
+    public int? MinCollectionSize { get; set; }
+
+    /// <summary>
+    /// Most elements a generated collection gets; the generator default (3) when <see langword="null"/>. When only this is set, the
+    /// fewest is the smaller of this and the default (1).
+    /// </summary>
+    public int? MaxCollectionSize { get; set; }
+
+    /// <summary>How deep nested objects are generated; the generator default (4) when <see langword="null"/>.</summary>
+    public int? MaxDepth { get; set; }
+
+    /// <summary>Makes registered generators strict (a scalar member without a rule, convention or annotation throws), see <c>ObjectGenerator&lt;T&gt;.Strict</c>. Off by default.</summary>
+    public bool Strict { get; set; }
+
+    /// <summary>Checks the generation options; used by <c>AddPhoney</c> so a mistake shows at registration rather than at the first resolve.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">An option is outside its range.</exception>
+    internal void Validate()
+    {
+        if (NullProbability is { } probability)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(probability, nameof(NullProbability));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(probability, 1, nameof(NullProbability));
+        }
+
+        if (MinCollectionSize is { } min)
+            ArgumentOutOfRangeException.ThrowIfNegative(min, nameof(MinCollectionSize));
+        if (MaxCollectionSize is { } max)
+            ArgumentOutOfRangeException.ThrowIfNegative(max, nameof(MaxCollectionSize));
+        if (MinCollectionSize is { } low && MaxCollectionSize is { } high && high < low)
+            throw new ArgumentOutOfRangeException(nameof(MaxCollectionSize), high, $"MaxCollectionSize must not be less than MinCollectionSize ({low}).");
+        if (MaxDepth is { } depth)
+            ArgumentOutOfRangeException.ThrowIfNegative(depth, nameof(MaxDepth));
+    }
 }

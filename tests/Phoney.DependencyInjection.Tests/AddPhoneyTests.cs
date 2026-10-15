@@ -16,6 +16,18 @@ public sealed class Customer
 [FakeFor<Customer>]
 public static partial class TestData;
 
+public sealed class Basket
+{
+    public string? Note { get; set; }
+    public List<string> Tags { get; set; } = [];
+    public Basket? Inner { get; set; }
+}
+
+public sealed class Unconventional
+{
+    public string Foo { get; set; } = "";
+}
+
 public sealed class AddPhoneyTests
 {
     private static readonly DateTimeOffset Now = new(2033, 5, 1, 0, 0, 0, TimeSpan.Zero);
@@ -136,5 +148,73 @@ public sealed class AddPhoneyTests
         var faker = provider.CreateScope().ServiceProvider.GetRequiredService<IFaker>();
         faker.Locale.ShouldBe("de");
         faker.Person.FirstName().ShouldBe(new Faker("de", 9).Person.FirstName());
+    }
+
+    private static ServiceProvider Provider(Action<PhoneyOptions> configure, Func<ObjectGenerator<Basket>, ObjectGenerator<Basket>>? generator = null) =>
+        new ServiceCollection().AddPhoney(configure).AddGenerator<Basket>(generator).Services.BuildServiceProvider();
+
+    [Test]
+    public void Generation_defaults_in_the_options_apply_to_registered_generators()
+    {
+        using var provider = Provider(o =>
+        {
+            o.Seed = 4;
+            o.NullProbability = 1;
+            o.MinCollectionSize = 4;
+            o.MaxCollectionSize = 4;
+            o.MaxDepth = 0;
+        });
+
+        var baskets = provider.GetRequiredService<ObjectGenerator<Basket>>().Generate(5);
+
+        baskets.ShouldAllBe(b => b.Note == null && b.Tags.Count == 4 && b.Inner == null);
+    }
+
+    [Test]
+    public void A_single_collection_size_bound_keeps_the_other_default_workable()
+    {
+        using var minOnly = Provider(o => o.MinCollectionSize = 6);
+        using var maxOnly = Provider(o => o.MaxCollectionSize = 0);
+
+        minOnly.GetRequiredService<ObjectGenerator<Basket>>().Generate(5).ShouldAllBe(b => b.Tags.Count >= 6);
+        maxOnly.GetRequiredService<ObjectGenerator<Basket>>().Generate(5).ShouldAllBe(b => b.Tags.Count == 0);
+    }
+
+    [Test]
+    public void Without_generation_options_the_generators_keep_their_defaults()
+    {
+        using var provider = Provider(o => o.Seed = 4);
+        var configured = provider.GetRequiredService<ObjectGenerator<Basket>>().Generate(10);
+        var plain = new ObjectGenerator<Basket>(ModelRegistry.For<Basket>()).Seed(4).Generate(10);
+
+        configured.Select(b => (b.Note, b.Tags.Count)).ShouldBe(plain.Select(b => (b.Note, b.Tags.Count)));
+    }
+
+    [Test]
+    public void The_configure_delegate_of_a_generator_overrides_the_options()
+    {
+        using var provider = Provider(o => { o.NullProbability = 1; o.MinCollectionSize = 4; o.MaxCollectionSize = 4; },
+            g => g.NullProbability(0).CollectionSize(2, 2));
+
+        provider.GetRequiredService<ObjectGenerator<Basket>>().Generate(5).ShouldAllBe(b => b.Note != null && b.Tags.Count == 2);
+    }
+
+    [Test]
+    public void Strict_in_the_options_makes_registered_generators_strict()
+    {
+        using var strict = new ServiceCollection().AddPhoney(o => o.Strict = true).AddGenerator<Unconventional>().Services.BuildServiceProvider();
+        using var lenient = new ServiceCollection().AddPhoney().AddGenerator<Unconventional>().Services.BuildServiceProvider();
+
+        Should.Throw<InvalidOperationException>(() => strict.GetRequiredService<ObjectGenerator<Unconventional>>().Generate());
+        lenient.GetRequiredService<ObjectGenerator<Unconventional>>().Generate().Foo.ShouldNotBeNull();
+    }
+
+    [Test]
+    public void Invalid_generation_options_fail_in_AddPhoney()
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => o.NullProbability = 1.5)).ParamName.ShouldBe("NullProbability");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => o.MaxDepth = -1)).ParamName.ShouldBe("MaxDepth");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => o.MinCollectionSize = -1)).ParamName.ShouldBe("MinCollectionSize");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => { o.MinCollectionSize = 5; o.MaxCollectionSize = 2; })).ParamName.ShouldBe("MaxCollectionSize");
     }
 }

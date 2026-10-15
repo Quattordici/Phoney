@@ -18,6 +18,7 @@ public static class PhoneyServiceCollectionExtensions
     /// </code>
     /// </example>
     /// <exception cref="ArgumentException">The configured locale does not exist.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A generation option (<see cref="PhoneyOptions.NullProbability"/>, the collection sizes, <see cref="PhoneyOptions.MaxDepth"/>) is outside its range.</exception>
     public static PhoneyBuilder AddPhoney(this IServiceCollection services, Action<PhoneyOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -29,6 +30,7 @@ public static class PhoneyServiceCollectionExtensions
         }
 
         configure?.Invoke(options);
+        options.Validate();
         if (options.Locale is { } locale)
             options.Locale = Locales.Get(locale).Code; // validates now rather than at the first resolve
 

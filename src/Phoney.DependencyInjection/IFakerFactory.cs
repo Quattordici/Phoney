@@ -12,6 +12,9 @@ public interface IFakerFactory
 /// <summary>Applies <see cref="PhoneyOptions"/> to fakers and generators.</summary>
 internal sealed class FakerFactory(PhoneyOptions options, TimeProvider? containerTime) : IFakerFactory
 {
+    private const int DefaultMinCollectionSize = 1;
+    private const int DefaultMaxCollectionSize = 3;
+
     /// <summary>The clock to use: the configured one, else a non-system one from the container.</summary>
     private TimeProvider? Clock => options.TimeProvider ?? (ReferenceEquals(containerTime, TimeProvider.System) ? null : containerTime);
 
@@ -37,6 +40,19 @@ internal sealed class FakerFactory(PhoneyOptions options, TimeProvider? containe
             generator = generator.ReferenceDate(date);
         else if (Clock is { } clock)
             generator = generator.TimeProvider(clock);
+        if (options.NullProbability is { } nullProbability)
+            generator = generator.NullProbability(nullProbability);
+        if (options.MinCollectionSize is not null || options.MaxCollectionSize is not null)
+        {
+            var min = options.MinCollectionSize;
+            var max = options.MaxCollectionSize;
+            generator = generator.CollectionSize(min ?? Math.Min(DefaultMinCollectionSize, max!.Value), max ?? Math.Max(DefaultMaxCollectionSize, min!.Value));
+        }
+
+        if (options.MaxDepth is { } depth)
+            generator = generator.MaxDepth(depth);
+        if (options.Strict)
+            generator = generator.Strict();
         return generator;
     }
 }

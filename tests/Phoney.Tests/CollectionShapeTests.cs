@@ -36,6 +36,11 @@ public sealed class Catalog
     public ReadOnlyCollection<string> ReadOnly { get; set; } = null!;
     public Collection<string> Editable { get; set; } = null!;
     public System.Collections.ObjectModel.ObservableCollection<string> Observable { get; set; } = null!;
+    public System.Collections.ObjectModel.ReadOnlyDictionary<string, int> Lookup { get; set; } = null!;
+    public ImmutableQueue<string> Waiting { get; set; } = null!;
+    public IImmutableQueue<int> Upcoming { get; set; } = null!;
+    public ImmutableStack<int> Undo { get; set; } = null!;
+    public IImmutableStack<string> Redo { get; set; } = null!;
     [MinLength(4)] public ImmutableArray<int> AtLeastFour { get; set; }
 }
 
@@ -89,6 +94,11 @@ public sealed class CollectionShapeTests
         catalog.Chain.Count.ShouldBe(2);
         catalog.ReadOnly.Count.ShouldBe(2);
         catalog.Observable.Count.ShouldBe(2);
+        catalog.Lookup.Count.ShouldBe(2);
+        catalog.Waiting.Count().ShouldBe(2);
+        catalog.Upcoming.Count().ShouldBe(2);
+        catalog.Undo.Count().ShouldBe(2);
+        catalog.Redo.Count().ShouldBe(2);
     }
 
     [Test]

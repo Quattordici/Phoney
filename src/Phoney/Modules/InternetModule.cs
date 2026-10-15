@@ -244,6 +244,25 @@ public sealed partial class InternetModule : FakerModule
         static bool IsConsonant(char c) => char.IsAsciiLetter(c) && !IsVowel(c);
     }
 
+    /// <summary>Returns a hex color such as <c>#a1b2c3</c>; each channel is the average of a random value and the base (faker.js <c>internet.color</c>), so a base of 255 gives pastel colors.</summary>
+    /// <param name="redBase">Red base, 0–255.</param>
+    /// <param name="greenBase">Green base, 0–255.</param>
+    /// <param name="blueBase">Blue base, 0–255.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A base is outside 0–255.</exception>
+    public string Color(int redBase = 0, int greenBase = 0, int blueBase = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(redBase);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(redBase, 255);
+        ArgumentOutOfRangeException.ThrowIfNegative(greenBase);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(greenBase, 255);
+        ArgumentOutOfRangeException.ThrowIfNegative(blueBase);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(blueBase, 255);
+        var red = (Random.Int(0, 255) + redBase) / 2;
+        var green = (Random.Int(0, 255) + greenBase) / 2;
+        var blue = (Random.Int(0, 255) + blueBase) / 2;
+        return string.Create(CultureInfo.InvariantCulture, $"#{red:x2}{green:x2}{blue:x2}");
+    }
+
     /// <summary>Returns an emoji, optionally from specific categories.</summary>
     public string Emoji(params EmojiType[] types)
     {

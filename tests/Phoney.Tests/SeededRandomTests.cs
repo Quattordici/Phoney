@@ -21,6 +21,38 @@ public sealed class SeededRandomTests
     }
 
     [Test]
+    public void Element_picks_from_any_sequence_with_the_draw_of_a_list()
+    {
+        var set = new HashSet<int> { 10, 20, 30, 40 };
+        var list = set.ToList();
+
+        new SeededRandom(5).Element(set).ShouldBe(new SeededRandom(5).Element(list));
+        new SeededRandom(5).Element(new Dictionary<string, int> { ["a"] = 1 }.Keys).ShouldBe("a");
+        new SeededRandom(5).Element(list.Select(x => x + 1)).ShouldBe(new SeededRandom(5).Element(list) + 1);
+    }
+
+    [Test]
+    public void Element_of_an_empty_or_missing_sequence_fails_clearly()
+    {
+        Should.Throw<ArgumentException>(() => new SeededRandom(1).Element(new HashSet<int>())).ParamName.ShouldBe("items");
+        Should.Throw<ArgumentNullException>(() => new SeededRandom(1).Element((IEnumerable<int>)null!));
+    }
+
+    [Test]
+    public void Shuffled_returns_a_new_array_with_the_same_items_and_leaves_the_source_alone()
+    {
+        var source = Enumerable.Range(1, 20).ToList();
+
+        var shuffled = new SeededRandom(9).Shuffled(source.Where(_ => true));
+
+        shuffled.Order().ShouldBe(source);
+        shuffled.SequenceEqual(source).ShouldBeFalse();
+        shuffled.ShouldBe(new SeededRandom(9).Shuffled(source));
+        source.ShouldBe(Enumerable.Range(1, 20));
+        Should.Throw<ArgumentNullException>(() => new SeededRandom(1).Shuffled<int>(null!));
+    }
+
+    [Test]
     public void Enum_picks_a_value_without_allocating()
     {
         var random = new SeededRandom(1);
