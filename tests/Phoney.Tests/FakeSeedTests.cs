@@ -81,4 +81,127 @@ public sealed class FakeSeedTests
 
         Describe().ShouldBe(Describe());
     }
+
+    private static string FirstNameFor(long seed)
+    {
+        using var _ = Fake.Seeded(seed);
+        return Fake.Person.FirstName();
+    }
+
+    [Test]
+    public void Run_executes_the_body_on_the_given_seed_and_reports_nothing_when_it_passes()
+    {
+        var report = new List<string>();
+        string? seen = null;
+
+        FakeSeed.Run(() => seen = Fake.Person.FirstName(), report.Add, seed: 31);
+
+        seen.ShouldBe(FirstNameFor(31));
+        report.ShouldBeEmpty();
+        Fake.IsSeeded.ShouldBeFalse();
+    }
+
+    [Test]
+    public void Run_reports_the_seed_of_a_failure_and_rethrows_the_same_exception()
+    {
+        var report = new List<string>();
+        var failure = new InvalidOperationException("boom");
+
+        var thrown = Should.Throw<InvalidOperationException>(() => FakeSeed.Run(() => throw failure, report.Add, seed: 31));
+
+        thrown.ShouldBeSameAs(failure);
+        report.Count.ShouldBe(1);
+        report[0].ShouldContain("31");
+        report[0].ShouldContain("pinned");
+        Fake.IsSeeded.ShouldBeFalse();
+    }
+
+    [Test]
+    public void Run_without_a_seed_uses_PHONEY_SEED_and_says_how_to_replay_it() =>
+        WithEnvironment("77", () =>
+        {
+            var report = new List<string>();
+            string? seen = null;
+
+            Should.Throw<Exception>(() => FakeSeed.Run(() =>
+            {
+                seen = Fake.Person.FirstName();
+                throw new Exception("x");
+            }, report.Add));
+
+            seen.ShouldBe(FirstNameFor(77));
+            report.ShouldHaveSingleItem().ShouldContain("PHONEY_SEED=77");
+        });
+
+    [Test]
+    public void Run_without_a_seed_or_environment_picks_a_random_seed_that_the_report_gives_back() =>
+        WithEnvironment(null, () =>
+        {
+            var report = new List<string>();
+            string? seen = null;
+
+            Should.Throw<Exception>(() => FakeSeed.Run(() =>
+            {
+                seen = Fake.Person.FirstName();
+                throw new Exception("x");
+            }, report.Add));
+
+            var line = report.ShouldHaveSingleItem();
+            line.ShouldContain("random seed");
+            var seed = long.Parse(System.Text.RegularExpressions.Regex.Match(line, @"random seed (\d+)", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5)).Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            seen.ShouldBe(FirstNameFor(seed));
+            line.ShouldContain($"PHONEY_SEED={seed}");
+        });
+
+    [Test]
+    public async Task RunAsync_keeps_the_seed_across_awaits_and_ends_the_scope()
+    {
+        var report = new List<string>();
+        var names = new List<string>();
+
+        await FakeSeed.RunAsync(async () =>
+        {
+            names.Add(Fake.Person.FirstName());
+            await Task.Delay(5);
+            names.Add(Fake.Person.FirstName());
+        }, report.Add, seed: 8);
+
+        using (Fake.Seeded(8))
+            names.ShouldBe([Fake.Person.FirstName(), Fake.Person.FirstName()]);
+        report.ShouldBeEmpty();
+        Fake.IsSeeded.ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task RunAsync_reports_a_failure_and_rethrows_it()
+    {
+        var report = new List<string>();
+
+        var thrown = await Should.ThrowAsync<InvalidOperationException>(() => FakeSeed.RunAsync(async () =>
+        {
+            await Task.Yield();
+            throw new InvalidOperationException("late");
+        }, report.Add, seed: 12));
+
+        thrown.Message.ShouldBe("late");
+        report.ShouldHaveSingleItem().ShouldContain("12");
+    }
+
+    [Test]
+    public void Run_validates_its_arguments()
+    {
+        Should.Throw<ArgumentNullException>(() => FakeSeed.Run(null!, _ => { })).ParamName.ShouldBe("body");
+        Should.Throw<ArgumentNullException>(() => FakeSeed.Run(() => { }, null!)).ParamName.ShouldBe("report");
+        Should.Throw<ArgumentNullException>(() => FakeSeed.RunAsync(null!, _ => { })).ParamName.ShouldBe("body");
+        Should.Throw<ArgumentNullException>(() => FakeSeed.RunAsync(() => Task.CompletedTask, null!)).ParamName.ShouldBe("report");
+    }
+
+    [Test]
+    public void Run_with_a_malformed_environment_fails_before_running_the_body() =>
+        WithEnvironment("nope", () =>
+        {
+            var ran = false;
+            Should.Throw<FormatException>(() => FakeSeed.Run(() => ran = true, _ => { }));
+            ran.ShouldBeFalse();
+        });
 }

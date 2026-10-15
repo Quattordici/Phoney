@@ -53,6 +53,68 @@ public readonly struct NodaTimeModule
         return global::NodaTime.Duration.FromTicks(_faker.Random.Long(min.BclCompatibleTicks, max.BclCompatibleTicks));
     }
 
+    /// <summary>A UTC offset of a real-world kind: between -12:00 and +14:00, in steps of 15 minutes.</summary>
+    public Offset Offset() => global::NodaTime.Offset.FromSeconds(_faker.Random.Int(-48, 56) * 900);
+
+    /// <summary>An interval inside the last <paramref name="years"/> years before the reference date.</summary>
+    public Interval Interval(int years = 1) => Ordered(_faker.Date.Past(years), _faker.Date.Past(years));
+
+    /// <summary>An interval inside <paramref name="from"/> and <paramref name="to"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="to"/> is before <paramref name="from"/>.</exception>
+    public Interval Interval(Instant from, Instant to)
+    {
+        var (start, end) = (from.ToDateTimeOffset(), to.ToDateTimeOffset());
+        return Ordered(_faker.Date.Between(start, end), _faker.Date.Between(start, end));
+    }
+
+    /// <summary>A date interval inside the last <paramref name="years"/> years before the reference date.</summary>
+    public DateInterval DateInterval(int years = 1) => OrderedDates(Day(_faker.Date.Past(years)), Day(_faker.Date.Past(years)));
+
+    /// <summary>A date interval inside <paramref name="from"/> and <paramref name="to"/> (both included).</summary>
+    /// <exception cref="ArgumentException"><paramref name="to"/> is before <paramref name="from"/>.</exception>
+    public DateInterval DateInterval(LocalDate from, LocalDate to)
+    {
+        var (start, end) = (from.ToDateOnly(), to.ToDateOnly());
+        return OrderedDates(global::NodaTime.LocalDate.FromDateOnly(_faker.Date.Between(start, end)), global::NodaTime.LocalDate.FromDateOnly(_faker.Date.Between(start, end)));
+    }
+
+    /// <summary>A month inside the last <paramref name="years"/> years before the reference date.</summary>
+    public YearMonth YearMonth(int years = 1)
+    {
+        var date = _faker.Date.Past(years).UtcDateTime;
+        return new YearMonth(date.Year, date.Month);
+    }
+
+    /// <summary>A month from <paramref name="from"/> to <paramref name="to"/> (both included).</summary>
+    /// <exception cref="ArgumentException"><paramref name="to"/> is before <paramref name="from"/>.</exception>
+    public YearMonth YearMonth(YearMonth from, YearMonth to)
+    {
+        var date = _faker.Date.Between(from.ToDateInterval().Start.ToDateOnly(), to.ToDateInterval().End.ToDateOnly());
+        return new YearMonth(date.Year, date.Month);
+    }
+
+    /// <summary>A day of a year that has no year, such as a birthday or a holiday; <c>February 29</c> is possible.</summary>
+    public AnnualDate AnnualDate()
+    {
+        var month = _faker.Random.Int(1, 12);
+        return new AnnualDate(month, _faker.Random.Int(1, DaysIn(month)));
+    }
+
+    private static int DaysIn(int month) => month switch
+    {
+        2 => 29,
+        4 or 6 or 9 or 11 => 30,
+        _ => 31,
+    };
+
+    private static LocalDate Day(DateTimeOffset value) => global::NodaTime.LocalDate.FromDateTime(value.UtcDateTime);
+
+    private static Interval Ordered(DateTimeOffset a, DateTimeOffset b) =>
+        a <= b ? new Interval(global::NodaTime.Instant.FromDateTimeOffset(a), global::NodaTime.Instant.FromDateTimeOffset(b))
+               : new Interval(global::NodaTime.Instant.FromDateTimeOffset(b), global::NodaTime.Instant.FromDateTimeOffset(a));
+
+    private static DateInterval OrderedDates(LocalDate a, LocalDate b) => a <= b ? new DateInterval(a, b) : new DateInterval(b, a);
+
     /// <summary>A period of <paramref name="minDays"/> to <paramref name="maxDays"/> days.</summary>
     /// <exception cref="ArgumentException">The range is invalid.</exception>
     public Period Period(int minDays = 0, int maxDays = 30)

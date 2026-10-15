@@ -20,7 +20,7 @@
 - **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode (also checked at compile time), custom conventions, custom locales, faker.js-style templates.
 - **Interfaces and polymorphism**: `.Subtype<IShape, Circle, Square>()`, app-wide `Fake.Subtypes`, and `[JsonDerivedType]` honoured out of the box.
 - **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
-- **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
+- **Replayable random tests**: `[FakeSeed]` for TUnit and `FakeSeed.Run(...)` for any framework run a test on random data and report the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
 - **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
 - **Data from files**: `.WithFeed(DataFeed.FromCsvFile("people.csv"))` fills members from the rows of a CSV or JSON file, one row per object.
 - **Numbering**: `.Sequence(x => x.Code, i => $"T{i + 1:D4}")` and `.Cycle(x => x.Queue, ["a", "b"])` give members values by the object's position, the same however you generate.
@@ -820,7 +820,7 @@ public async Task Totals_add_up()
 - On a method it wins over the class, and on a class over the assembly (`[assembly: FakeSeed]` makes every test random and replayable). Parallel tests don't affect each other.
 - The seed covers the `Fake` facade of the test, not generators created earlier (a `static` field) or ones that set their own `.Seed(...)`. Skipped tests print nothing.
 - It works with other test executors (`[TestExecutor<T>]`): the executor the test already has runs inside the seeded scope.
-- Other frameworks can do the same with `FakeSeed.Pick()` (`PHONEY_SEED`, else a new seed), `Fake.Seeded(seed)` and printing the seed when the test fails.
+- Other frameworks use `FakeSeed.Run` / `FakeSeed.RunAsync`, see [below](#replayable-random-data-in-xunit-nunit-and-mstest).
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 
@@ -848,9 +848,30 @@ public void Places_order(Customer customer, string email, [Range(1, 10)] int qua
 
 - Parameters are filled by name and type, objects and collections recursively, data annotations are honoured, and the parameters of one test case agree like the members of one object.
 - **Reproducible by default** (the seed is derived from the test), with `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`; `PHONEY_SEED=123 dotnet test` moves every test at once. The shared rules live in `FakeDataOptions` in the main package.
-- These attributes fill **method parameters**. Constructor and property injection (TUnit) and `[FakeSeed]` have no counterpart in the other frameworks.
+- These attributes fill **method parameters**. Constructor and property injection (TUnit) and the `[FakeSeed]` attribute have no counterpart in the other frameworks; use `FakeSeed.Run` for replayable random data (next section).
 - Test data is created while the framework discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes before that, for example in a module initializer.
 - Packages target .NET 8 and .NET 10. They work with **xUnit.net v3 3.0 and later** (`xunit.v3` 3.x and 4.x), **NUnit 4.0 and later** (4.x and 5.x) and **MSTest 4.0 and later**; MSTest 3.x is not supported because 4.0 changed the data source interface, so a build for 3.x would fail in 4.x apps. `Phoney.TUnit` needs TUnit 1.10 or later and `Phoney.NodaTime` NodaTime 3.1 or later.
+
+### Replayable random data in xUnit, NUnit and MSTest
+
+`FakeSeed.Run` (and `FakeSeed.RunAsync`) runs the body of a test on a seeded `Fake` facade and, **when it throws, gives your sink a line with the seed** before rethrowing the same exception. The seed is `PHONEY_SEED` if set, otherwise a new random one; pass `seed:` to pin it while you fix a failure:
+
+```csharp
+// xUnit.net v3
+[Fact]
+public void Totals_add_up() => FakeSeed.Run(() =>
+{
+    var orders = Fake.Many<Order>(100);                       // different on every run
+    Totals.Of(orders).ShouldBe(orders.Sum(o => o.Total));
+}, TestContext.Current.SendDiagnosticMessage);
+
+// NUnit:  FakeSeed.Run(() => { ... }, TestContext.Out.WriteLine);
+// MSTest: FakeSeed.Run(() => { ... }, TestContext.WriteLine);       // the TestContext property of the class
+// async:  await FakeSeed.RunAsync(async () => { ... }, sink);
+// Phoney: the failing run used random seed 481516234. Replay it with PHONEY_SEED=481516234 or FakeSeed.Run(..., seed: 481516234).
+```
+
+As with `[FakeSeed]`, only the `Fake` facade of the body is seeded (not generators created earlier or with their own `.Seed(...)`), and parallel tests don't affect each other. Every exception is reported, so a test that skips by throwing is reported too.
 
 ## Dependency injection and ASP.NET Core
 
@@ -906,6 +927,7 @@ dotnet add package Phoney.NodaTime
 ```csharp
 Instant created = faker.Noda().Instant.Past();
 LocalDate birthday = faker.Noda().LocalDate.Birthdate();
+Interval stay = faker.Noda().Interval();       // also DateInterval, YearMonth, AnnualDate, Offset
 var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate BirthDate… follow the conventions
 ```
 
