@@ -109,4 +109,27 @@ public sealed class TemplateArgumentTests
     {
         Should.Throw<FormatException>(() => Parse("{{string.alpha({\"casing\":\"shouty\"})}}")).Message.ShouldContain("shouty");
     }
+
+    [Test]
+    public void A_password_pattern_that_no_character_matches_fails_instead_of_looping_forever()
+    {
+        var faker = Faker();
+        var none = new Regex("[é]", RegexOptions.None, TimeSpan.FromSeconds(5));
+
+        var thrown = Should.Throw<ArgumentException>(() => faker.Internet.Password(10, pattern: none));
+        thrown.ParamName.ShouldBe("pattern");
+        thrown.Message.ShouldContain("matches no");
+        Should.Throw<ArgumentException>(() => Parse("{{internet.password({\"pattern\":\"[é]\"})}}"));
+    }
+
+    [Test]
+    public void A_rare_password_pattern_still_works_and_gives_the_same_characters_as_before()
+    {
+        // One printable character in 94 matches: far below the cap of consecutive misses.
+        var rare = new Regex("[#]", RegexOptions.None, TimeSpan.FromSeconds(5));
+
+        Faker().Internet.Password(6, pattern: rare).ShouldBe("######");
+        Faker().Internet.Password(12, pattern: new Regex("[a-z]", RegexOptions.None, TimeSpan.FromSeconds(5)), prefix: "x")
+            .ShouldBe(Faker().Internet.Password(12, pattern: new Regex("[a-z]", RegexOptions.None, TimeSpan.FromSeconds(5)), prefix: "x"));
+    }
 }

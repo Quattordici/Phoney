@@ -205,17 +205,25 @@ public sealed partial class InternetModule : FakerModule
         return sb.ToString();
     }
 
+    /// <summary>The number of characters in a row that may miss the pattern of a password before it is given up.</summary>
+    private const int MaxPasswordMisses = 10_000;
+
     /// <summary>Returns a password.</summary>
     /// <param name="length">Total length including <paramref name="prefix"/>.</param>
     /// <param name="memorable">Alternate consonants and vowels in lower case so the password is pronounceable.</param>
     /// <param name="pattern">Regular expression each generated character must match; defaults to word characters (<c>\w</c>).</param>
     /// <param name="prefix">Text the password starts with.</param>
+    /// <exception cref="ArgumentException"><paramref name="pattern"/> matches no printable ASCII character, so no password could be made.</exception>
     public string Password(int length = 15, bool memorable = false, Regex? pattern = null, string prefix = "")
     {
         var sb = new StringBuilder(prefix, Math.Max(length, prefix.Length));
         Span<char> one = stackalloc char[1];
+        var misses = 0;
         while (sb.Length < length)
         {
+            // A pattern that one printable character in 94 matches has less than a 1 in 10^40 chance of 10 000 misses in a row; one that none matches would never end.
+            if (misses >= MaxPasswordMisses)
+                throw new ArgumentException("The pattern matches no printable ASCII character (33–126), so a password can't be made from it.", nameof(pattern));
             var c = (char)Random.Int(33, 126);
             bool accept;
             if (memorable)
@@ -235,7 +243,14 @@ public sealed partial class InternetModule : FakerModule
             }
 
             if (accept)
+            {
                 sb.Append(c);
+                misses = 0;
+            }
+            else
+            {
+                misses++;
+            }
         }
 
         return sb.ToString();
