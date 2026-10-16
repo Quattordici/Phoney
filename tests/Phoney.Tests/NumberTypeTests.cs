@@ -111,6 +111,20 @@ public sealed class NumberTypeTests
     }
 
     [Test]
+    public void A_seed_gives_these_exact_values()
+    {
+        var f = new Faker("en", seed: 4);
+
+        var values = new object[]
+        {
+            f.Number.Byte(), f.Number.SByte(), f.Number.Short(), f.Number.UShort(), f.Number.UInt(), f.Number.ULong(),
+            f.Number.Int128(), f.Number.UInt128(), f.Number.Single(), f.Number.Half(),
+        }.Select(v => FormattableString.Invariant($"{v}"));
+
+        string.Join("|", values).ShouldBe("67|116|14528|64064|969892348|11287101349610789378|76263037098449223017705443219762431955|9659305835267555629183147641470116673|0.61734|0.744");
+    }
+
+    [Test]
     public void SeededRandom_ULong_validates_and_covers_the_range()
     {
         var random = new SeededRandom(3);
@@ -119,5 +133,25 @@ public sealed class NumberTypeTests
         Enumerable.Range(0, 200).Select(_ => random.ULong(0, ulong.MaxValue)).ShouldContain(v => v > long.MaxValue);
         random.ULong(ulong.MaxValue, ulong.MaxValue).ShouldBe(ulong.MaxValue);
         Enumerable.Range(0, 100).Select(_ => random.ULong(10, 12)).Distinct().Order().ShouldBe([10ul, 11ul, 12ul]);
+    }
+
+    [Test]
+    public void Rounded_ranges_too_large_to_count_in_steps_are_drawn_directly()
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            _faker.Number.Single(1e18f, 2e18f, fractionDigits: 2).ShouldBeInRange(1e18f, 2e18f);
+            _faker.Number.Double(-5e18, 5e18, fractionDigits: 3).ShouldBeInRange(-5e18, 5e18);
+        }
+
+        Enumerable.Range(0, 200).Select(_ => _faker.Number.Double(1e18, 2e18, fractionDigits: 2)).Distinct().Count().ShouldBeGreaterThan(100);
+    }
+
+    [Test]
+    public void More_than_fifteen_fraction_digits_are_refused_with_the_name_of_the_argument()
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => _faker.Number.Double(0, 1, fractionDigits: 16)).ParamName.ShouldBe("fractionDigits");
+        Should.Throw<ArgumentOutOfRangeException>(() => _faker.Number.Single(0, 1, fractionDigits: 16)).ParamName.ShouldBe("fractionDigits");
+        _faker.Number.Double(0, 1, fractionDigits: 15).ShouldBeInRange(0, 1);
     }
 }

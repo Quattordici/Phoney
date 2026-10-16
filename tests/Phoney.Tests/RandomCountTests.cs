@@ -27,6 +27,8 @@ public sealed class RandomCountTests
 
         Run(8).ShouldBe(Run(8));
         Run(8).ShouldNotBe(Run(9));
+        // The exact counts and codes of seed 8: twenty calls of Generate(0, 6), separated by |.
+        Run(8).ShouldBe("|denuncio,acquiro,collum,causa,vinculum|sursum,fugit,tyrannus|trucido,cupio,vesper,speculum||vulgivagus,clarus,deprimo,conculco,coniecto||virtus,calculus,cum|adimpleo,doloremque,porro,aeternus,vitiosus|ubi,thesis,desolo,ultio,valeo|odit|sursum,sumo,aegrus,ratione,summisse,textus||sursum|sopor,vicinus|curvo,clibanus,tener,aspicio,coadunatio|subiungo,contabesco|amita|acer|");
     }
 
     [Test]
@@ -80,6 +82,7 @@ public sealed class RandomCountTests
         }
 
         Run().ShouldBe(Run());
+        Run().ShouldBe("delectatio|stipes|adeo|concido|vinitor|ceno|ultio");
         using var scope = Fake.Seeded(77);
         Fake.Many<Ticket>(1, 8).Count.ShouldBeInRange(1, 8);
     }
@@ -92,5 +95,19 @@ public sealed class RandomCountTests
         var counts = Enumerable.Range(0, 200).AsParallel().Select(_ => generator.Generate(1, 4).Count).ToList();
 
         counts.ShouldAllBe(c => c >= 1 && c <= 4);
+    }
+
+    [Test]
+    public void A_call_that_selects_zero_does_not_make_every_later_call_select_zero()
+    {
+        for (long seed = 1; seed <= 20; seed++)
+        {
+            var generator = Tickets(seed);
+
+            var counts = Enumerable.Range(0, 40).Select(_ => generator.Generate(0, 1).Count).ToList();
+
+            counts.ShouldContain(0, $"seed {seed}");
+            counts.ShouldContain(1, $"seed {seed}");
+        }
     }
 }

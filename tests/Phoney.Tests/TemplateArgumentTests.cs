@@ -178,4 +178,26 @@ public sealed class TemplateArgumentTests
         Parse("{{internet.password}}").Length.ShouldBe(15);
         Parse("{{finance.pin}}").Length.ShouldBe(4);
     }
+
+    [Test]
+    public void A_plain_length_is_only_the_length_and_never_a_casing_or_a_prefix()
+    {
+        Parse("{{string.alpha(5)}}").ShouldMatch("^[A-Za-z]{5}$");
+        Parse("{{string.alphanumeric(6)}}").ShouldMatch("^[A-Za-z0-9]{6}$");
+        Parse("{{string.numeric(4)}}").ShouldMatch(@"^\d{4}$");
+        Parse("{{string.hexadecimal(4)}}").ShouldMatch("^0x[0-9a-fA-F]{4}$");
+        Parse("{{string.binary(4)}}").ShouldMatch("^0b[01]{4}$");
+        Parse("{{string.octal(4)}}").ShouldMatch("^0o[0-7]{4}$");
+        Parse("{{internet.password(20)}}").ShouldBe(Faker().Internet.Password(20));
+    }
+
+    [Test]
+    public void A_plain_text_is_not_taken_for_every_option_of_a_function()
+    {
+        Parse("{{internet.email(x)}}").ShouldBe(Faker().Internet.Email());
+        Parse("{{internet.username(x)}}").ShouldBe(Faker().Internet.Username());
+        Parse("{{person.fullName(x)}}").ShouldBe(Faker().Person.FullName());
+        Parse("{{internet.url(x)}}").ShouldStartWith("https://");
+        Parse("{{commerce.price(x)}}").ShouldMatch(@"^\d+\.\d{2}$");
+    }
 }

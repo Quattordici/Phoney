@@ -104,15 +104,25 @@ public sealed class NodaTimeRangeValueTests
         dates.Any(d => d.Month == 2 && d.Day > 29).ShouldBeFalse();
     }
 
-    [Test]
-    public void The_same_seed_gives_the_same_values()
+    private static string Take(long seed)
     {
-        string Take(long seed)
-        {
-            var noda = Faker(seed).Noda();
-            return string.Join("|", noda.Offset(), noda.Interval(), noda.DateInterval(), noda.YearMonth(), noda.AnnualDate());
-        }
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var noda = Faker(seed).Noda();
+        var offset = noda.Offset();
+        var interval = noda.Interval();
+        var dates = noda.DateInterval();
+        var month = noda.YearMonth();
+        var annual = noda.AnnualDate();
+        return string.Join("|", offset.Seconds.ToString(inv), $"{interval.Start.ToUnixTimeMilliseconds()}-{interval.End.ToUnixTimeMilliseconds()}",
+            $"{dates.Start.ToString("yyyy-MM-dd", inv)}..{dates.End.ToString("yyyy-MM-dd", inv)}", $"{month.Year}-{month.Month:D2}", $"{annual.Month:D2}-{annual.Day:D2}");
+    }
 
+    [Test]
+    public void A_seed_gives_these_exact_values() => Take(9).ShouldBe("-43200|1721377329387-1725130968597|2025-02-23..2025-05-03|2025-02|09-16");
+
+    [Test]
+    public void The_same_seed_gives_the_same_values_and_another_seed_other_ones()
+    {
         Take(9).ShouldBe(Take(9));
         Take(9).ShouldNotBe(Take(10));
     }

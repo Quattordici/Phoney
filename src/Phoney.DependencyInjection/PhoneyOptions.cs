@@ -48,6 +48,8 @@ public sealed class PhoneyOptions
     {
         if (NullProbability is { } probability)
         {
+            if (double.IsNaN(probability))
+                throw new ArgumentOutOfRangeException(nameof(NullProbability), probability, "NullProbability must be a number between 0 and 1.");
             ArgumentOutOfRangeException.ThrowIfNegative(probability, nameof(NullProbability));
             ArgumentOutOfRangeException.ThrowIfGreaterThan(probability, 1, nameof(NullProbability));
         }

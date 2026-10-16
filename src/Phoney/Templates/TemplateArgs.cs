@@ -87,6 +87,14 @@ public sealed class TemplateArgs
         };
     }
 
+    /// <summary>The <paramref name="option"/> of an options object as text; <paramref name="fallback"/> for a plain argument, which belongs to the function's main parameter, and when the option is absent.</summary>
+    internal string? OptionString(int index, string option, string? fallback) =>
+        index < _json.Length && _json[index].ValueKind == JsonValueKind.Object ? String(index, option, fallback) : fallback;
+
+    /// <summary>Like <see cref="Characters"/> for an option that only an options object can give.</summary>
+    internal string? OptionCharacters(int index, string option) =>
+        index < _json.Length && _json[index].ValueKind == JsonValueKind.Object ? Characters(index, option) : null;
+
     /// <summary>
     /// Argument <paramref name="index"/> as an integer; when the argument is an options object, reads
     /// <paramref name="option"/> from it instead (<c>{"length": 4}</c>).

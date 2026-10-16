@@ -711,7 +711,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// same counts on every run.
     /// </summary>
     /// <remarks>
-    /// The count is drawn from a stream of its own (from the base seed and the position in the sequence), never from the objects' randomness, so the objects are exactly
+    /// The count is drawn from a stream of its own (from the base seed and the number of ranged calls so far, so an empty result doesn't repeat itself), never from the objects' randomness, so the objects are exactly
     /// the ones <see cref="Generate(int)"/> makes: changing the range changes how many there are, not what object <em>n</em> looks like.
     /// </remarks>
     /// <example><code>List&lt;Order&gt; orders = Fake.For&lt;Order&gt;().Seed(1).Generate(3, 10);</code></example>
@@ -720,7 +720,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentOutOfRangeException.ThrowIfNegative(min);
         ArgumentOutOfRangeException.ThrowIfLessThan(max, min);
-        return Generate(min == max ? min : new SeededRandom(SeededRandom.DeriveSeed(unchecked(BaseSeed ^ CountStreamSalt), _state.NextIndex(0))).Int(min, max));
+        return Generate(min == max ? min : new SeededRandom(SeededRandom.DeriveSeed(unchecked(BaseSeed ^ CountStreamSalt), _state.NextRangedCall())).Int(min, max));
     }
 
     /// <summary>Separates the stream the object count is drawn from from the streams of the objects themselves.</summary>
@@ -1280,6 +1280,11 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
         /// <summary>Reserves <paramref name="count"/> consecutive item indices.</summary>
         public long NextIndex(int count) => Interlocked.Add(ref _next, count) - count;
+
+        private long _rangedCalls;
+
+        /// <summary>The number of this call among the ranged <c>Generate(min, max)</c> calls (0 for the first); it advances even when the call produces no objects.</summary>
+        public long NextRangedCall() => Interlocked.Increment(ref _rangedCalls) - 1;
     }
 
     /// <summary>Immutable configuration; every builder method returns a copy.</summary>

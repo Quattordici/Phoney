@@ -20,6 +20,9 @@ public sealed class NumberModule : FakerModule
     /// <summary>The number of draws <see cref="Normal(double, double, double?, double?)"/> makes to land inside limits before it settles for the nearest limit.</summary>
     private const int MaxNormalAttempts = 100;
 
+    /// <summary>The size of a scaled bound from which steps of a rounded double no longer fit a <see cref="long"/> (a little below <see cref="long.MaxValue"/>, 2^63).</summary>
+    private const double LongStepLimit = 9.0e18;
+
     /// <summary>Powers of ten, exactly, for rounding (<see cref="Math.Pow(double, double)"/> is the system's, which rounds differently on some platforms).</summary>
     private static readonly double[] PowersOfTen = [1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15];
 
@@ -133,9 +136,16 @@ public sealed class NumberModule : FakerModule
         if (fractionDigits is not { } digits)
             return Random.Double(min, max);
         ArgumentOutOfRangeException.ThrowIfNegative(digits, nameof(fractionDigits));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(digits, 15, nameof(fractionDigits));
 
         // Choose an integer number of steps of 10^-digits, so every representable value is equally likely.
-        var factor = Math.Pow(10, digits);
+        var factor = PowersOfTen[digits];
+        if (Math.Abs(min * factor) >= LongStepLimit || Math.Abs(max * factor) >= LongStepLimit)
+        {
+            // Too many steps to count in a long: at this size a double has no fractional digits left to round, so draw it directly.
+            return Math.Clamp(Math.Round(Random.Double(min, max), digits), min, max);
+        }
+
         var steps = Long((long)Math.Ceiling(min * factor), (long)Math.Floor(max * factor));
         return Math.Round(steps / factor, digits);
     }

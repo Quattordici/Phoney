@@ -18,5 +18,6 @@ public sealed class FakeSeedRunTests
     {
         await Task.Yield();
         Fake.IsSeeded.ShouldBeTrue();
+        Fake.Person.FirstName().ShouldBe("Eden"); // the first name of seed 5, after the await too
     }, TestContext.WriteLine, seed: 5);
 }

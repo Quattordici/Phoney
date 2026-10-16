@@ -188,6 +188,14 @@ public sealed class AddPhoneyTests
         var plain = new ObjectGenerator<Basket>(ModelRegistry.For<Basket>()).Seed(4).Generate(10);
 
         configured.Select(b => (b.Note, b.Tags.Count)).ShouldBe(plain.Select(b => (b.Note, b.Tags.Count)));
+
+        // The exact values of seed 4, so two generators that agree on a wrong value fail too.
+        configured.Select(b => b.Tags.Count).ShouldBe([3, 2, 3, 3, 1, 1, 2, 2, 3, 3]);
+        configured.Select(b => b.Note![..22]).ShouldBe(
+        [
+            "Nesciunt aestivus adsu", "Audio absorbeo asper d", "Placeat demitto mollit", "Dolorem eum cilicium s", "Adstringo verto sint a",
+            "Argumentum sublime bla", "Armarium cognatus turb", "Laborum tero distincti", "Totidem delectus solut", "Calculus debilito calc",
+        ]);
     }
 
     [Test]
@@ -213,6 +221,7 @@ public sealed class AddPhoneyTests
     public void Invalid_generation_options_fail_in_AddPhoney()
     {
         Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => o.NullProbability = 1.5)).ParamName.ShouldBe("NullProbability");
+        Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => o.NullProbability = double.NaN)).ParamName.ShouldBe("NullProbability");
         Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => o.MaxDepth = -1)).ParamName.ShouldBe("MaxDepth");
         Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => o.MinCollectionSize = -1)).ParamName.ShouldBe("MinCollectionSize");
         Should.Throw<ArgumentOutOfRangeException>(() => new ServiceCollection().AddPhoney(o => { o.MinCollectionSize = 5; o.MaxCollectionSize = 2; })).ParamName.ShouldBe("MaxCollectionSize");

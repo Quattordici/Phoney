@@ -411,7 +411,7 @@ string csv = Fake.For<Customer>().ToCsv(100, delimiter: ';', columns: ["Id", "Em
 ```
 
 - **One row per object**, one column per scalar member (strings, numbers, booleans, enums, dates and times, `Guid`, `Uri`…) that can be read from the object; nested objects and collections are not written, and `columns` chooses and orders the members. A column that is unknown, not scalar, not readable or listed twice is refused with the names that work.
-- **Reads back**: values use the invariant culture and round-trip formats, so `DataFeed.FromCsvFile(path)` with `.WithFeed(feed)` gives the objects again. JSON has real numbers, booleans and `null`s; CSV quotes fields that hold the delimiter, quotes or line breaks.
+- **Reads back**: values use the invariant culture and round-trip formats, so `DataFeed.FromCsvFile(path)` with `.WithFeed(feed)` restores the scalar values that were written. Nested objects and collections are not written, and members without a column are generated again, so they differ from the original objects. JSON has real numbers, booleans and `null`s; CSV quotes fields that hold the delimiter, quotes or line breaks.
 - **Reproducible**: the objects are those of `Generate(count)`, so a seeded generator writes the same file on every run, with reflection or a source-generated model alike (no reflection of its own, AOT safe). Files are UTF-8 without a byte order mark and a `TextWriter` or `Stream` you pass in is not closed.
 
 ### Back-references
