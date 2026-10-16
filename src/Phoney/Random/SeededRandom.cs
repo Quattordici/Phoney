@@ -91,6 +91,7 @@ public sealed class SeededRandom
     }
 
     /// <summary>Returns an unsigned long between <paramref name="min"/> and <paramref name="max"/>, both inclusive.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public ulong ULong(ulong min = 0, ulong max = ulong.MaxValue)
     {
         if (max < min)

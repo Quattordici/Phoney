@@ -30,13 +30,14 @@ namespace Phoney;
 public static class DataExport
 {
     /// <summary>Generates <paramref name="count"/> objects and returns them as CSV text: a header, then one line per object, with <c>\n</c> as the line ending.</summary>
+    /// <remarks>A zero count returns only the header. Null values and empty strings both produce empty fields. Generation and member-access exceptions propagate to the caller.</remarks>
     /// <param name="generator">The generator.</param>
     /// <param name="count">How many objects to write.</param>
     /// <param name="delimiter">The field separator; not a quote or a line break.</param>
     /// <param name="columns">The members to write, in order (case-insensitive); all readable scalar members when <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="generator"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-    /// <exception cref="ArgumentException">The delimiter is a quote or a line break, or a column is unknown, not a scalar member, not readable or listed twice, or the list is empty.</exception>
+    /// <exception cref="ArgumentException">The delimiter is a quote or a line break, or a column is null, unknown, not a scalar member, not readable or listed twice, or the list is empty.</exception>
     /// <exception cref="InvalidOperationException">The type has no scalar member that can be written.</exception>
     public static string ToCsv<T>(this ObjectGenerator<T> generator, int count, char delimiter = ',', IEnumerable<string>? columns = null)
     {
@@ -46,6 +47,7 @@ public static class DataExport
     }
 
     /// <summary>Generates <paramref name="count"/> objects and writes them to <paramref name="writer"/> as CSV (see <see cref="ToCsv{T}"/>); the writer is not closed.</summary>
+    /// <remarks>Objects are generated before output begins. Generation, member-access and writer exceptions propagate; a failure during output can leave partial CSV.</remarks>
     /// <param name="generator">The generator.</param>
     /// <param name="writer">Where the text goes.</param>
     /// <param name="count">How many objects to write.</param>
@@ -89,12 +91,18 @@ public static class DataExport
     }
 
     /// <summary>Generates <paramref name="count"/> objects and writes them to the file at <paramref name="path"/> as CSV (UTF-8 without a byte order mark); an existing file is replaced.</summary>
+    /// <remarks>The file is created or truncated before count, delimiter and column validation. File-access and <see cref="WriteCsv{T}"/> exceptions propagate; a failure can leave an empty or partial file.</remarks>
     /// <param name="generator">The generator.</param>
     /// <param name="path">The file to create.</param>
     /// <param name="count">How many objects to write.</param>
     /// <param name="delimiter">The field separator; not a quote or a line break.</param>
     /// <param name="columns">The members to write, in order (case-insensitive); all readable scalar members when <see langword="null"/>.</param>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is empty, or see <see cref="ToCsv{T}"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="generator"/> or <paramref name="path"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace, or see <see cref="ToCsv{T}"/>.</exception>
+    /// <exception cref="InvalidOperationException">The type has no scalar member that can be written.</exception>
+    /// <exception cref="IOException">The file cannot be created or written.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to <paramref name="path"/> is denied, or it names a directory.</exception>
     public static void WriteCsvFile<T>(this ObjectGenerator<T> generator, string path, int count, char delimiter = ',', IEnumerable<string>? columns = null)
     {
         ArgumentNullException.ThrowIfNull(generator);
@@ -105,15 +113,16 @@ public static class DataExport
 
     /// <summary>
     /// Generates <paramref name="count"/> objects and returns them as a JSON array of flat objects. Numbers and booleans are JSON numbers and booleans, everything else a string,
-    /// and a <see langword="null"/> is <c>null</c>.
+    /// and a <see langword="null"/> is <c>null</c>. Nonfinite floating-point values are strings (<c>"NaN"</c>, <c>"Infinity"</c> or <c>"-Infinity"</c>).
     /// </summary>
+    /// <remarks>A zero count returns an empty array. Generation and member-access exceptions propagate to the caller.</remarks>
     /// <param name="generator">The generator.</param>
     /// <param name="count">How many objects to write.</param>
     /// <param name="indented">Whether to indent the output (on by default).</param>
     /// <param name="columns">The members to write, in order (case-insensitive); all readable scalar members when <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="generator"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-    /// <exception cref="ArgumentException">A column is unknown, not a scalar member, not readable or listed twice, or the list is empty.</exception>
+    /// <exception cref="ArgumentException">A column is null, unknown, not a scalar member, not readable or listed twice, or the list is empty.</exception>
     /// <exception cref="InvalidOperationException">The type has no scalar member that can be written.</exception>
     public static string ToJson<T>(this ObjectGenerator<T> generator, int count, bool indented = true, IEnumerable<string>? columns = null)
     {
@@ -123,6 +132,7 @@ public static class DataExport
     }
 
     /// <summary>Generates <paramref name="count"/> objects and writes them to <paramref name="utf8Stream"/> as a JSON array (see <see cref="ToJson{T}"/>); the stream is not closed.</summary>
+    /// <remarks>Objects are generated before output begins. Generation, member-access and stream exceptions propagate; a failure during output can leave partial JSON.</remarks>
     /// <param name="generator">The generator.</param>
     /// <param name="utf8Stream">Where the UTF-8 text goes.</param>
     /// <param name="count">How many objects to write.</param>
@@ -169,12 +179,18 @@ public static class DataExport
     }
 
     /// <summary>Generates <paramref name="count"/> objects and writes them to the file at <paramref name="path"/> as a JSON array (UTF-8 without a byte order mark); an existing file is replaced.</summary>
+    /// <remarks>The file is created or truncated before count and column validation. File-access and <see cref="WriteJson{T}"/> exceptions propagate; a failure can leave an empty or partial file.</remarks>
     /// <param name="generator">The generator.</param>
     /// <param name="path">The file to create.</param>
     /// <param name="count">How many objects to write.</param>
     /// <param name="indented">Whether to indent the output (on by default).</param>
     /// <param name="columns">The members to write, in order (case-insensitive); all readable scalar members when <see langword="null"/>.</param>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is empty, or see <see cref="ToJson{T}"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="generator"/> or <paramref name="path"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace, or see <see cref="ToJson{T}"/>.</exception>
+    /// <exception cref="InvalidOperationException">The type has no scalar member that can be written.</exception>
+    /// <exception cref="IOException">The file cannot be created or written.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to <paramref name="path"/> is denied, or it names a directory.</exception>
     public static void WriteJsonFile<T>(this ObjectGenerator<T> generator, string path, int count, bool indented = true, IEnumerable<string>? columns = null)
     {
         ArgumentNullException.ThrowIfNull(generator);
@@ -220,6 +236,7 @@ public static class DataExport
         return chosen.Count > 0 ? [.. chosen] : throw new ArgumentException("Name at least one column, or pass null for all of them.", nameof(columns));
     }
 
+    /// <summary>Returns the index of the first member whose name matches ignoring case, or -1 when none matches.</summary>
     private static int IndexOf(IReadOnlyList<FakeMember> members, string name)
     {
         for (var i = 0; i < members.Count; i++)
@@ -231,6 +248,7 @@ public static class DataExport
         return -1;
     }
 
+    /// <summary>Yields readable scalar member names in model order for column-validation errors.</summary>
     private static IEnumerable<string> WritableNames(IReadOnlyList<FakeMember> members) =>
         members.Where(m => m is { IsScalar: true, IsSettable: true, FillsExisting: false }).Select(m => m.Name);
 
@@ -251,6 +269,7 @@ public static class DataExport
         _ => value.ToString(),
     };
 
+    /// <summary>Writes a scalar using its JSON type; nonfinite numbers and other scalar values use the text returned by <see cref="Format"/>.</summary>
     private static void WriteJsonValue(Utf8JsonWriter json, FakeMember member, object? value)
     {
         if (value is null)
@@ -278,6 +297,7 @@ public static class DataExport
         }
     }
 
+    /// <summary>Tests floating-point values for finiteness; other values return <see langword="true"/>.</summary>
     private static bool IsFinite(object value) => value switch
     {
         double d => double.IsFinite(d),

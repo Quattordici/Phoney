@@ -29,7 +29,8 @@ internal sealed class FakerFactory(PhoneyOptions options, TimeProvider? containe
         return faker;
     }
 
-    /// <summary>Applies the locale, seed and clock of the options to <paramref name="generator"/>.</summary>
+    /// <summary>Returns a generator with the configured locale, seed, clock and generation settings applied.</summary>
+    /// <remarks>Unset generation options preserve the generator's settings. A single collection-size bound uses the other default (1 or 3), adjusted to keep the range valid.</remarks>
     public ObjectGenerator<T> Apply<T>(ObjectGenerator<T> generator)
     {
         if (options.Locale is { } locale)

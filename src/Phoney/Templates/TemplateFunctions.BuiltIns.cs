@@ -86,12 +86,17 @@ public static partial class TemplateFunctions
     private static int SizeOf(TemplateArgs a, int fallback, string name = "length") => Limited(a.Int(0, name) ?? fallback, name);
 
     /// <summary>Like <see cref="SizeOf"/> for an argument that has no default (the module chooses one).</summary>
+    /// <exception cref="FormatException">The value is larger than <see cref="MaxTemplateSize"/>.</exception>
     private static int? OptionalSizeOf(TemplateArgs a, string name = "length") => a.Int(0, name) is { } size ? Limited(size, name) : null;
 
+    /// <summary>Returns the requested size unchanged when at most <see cref="MaxTemplateSize"/>; negative values are left for the called module to handle.</summary>
+    /// <exception cref="FormatException">The size exceeds <see cref="MaxTemplateSize"/>; <paramref name="name"/> identifies the argument in the error.</exception>
     private static int Limited(int size, string name) =>
         size <= MaxTemplateSize ? size : throw new FormatException($"The {name} {size} is too large for a template: at most {MaxTemplateSize} (use the API for more).");
 
     /// <summary>The <c>sex</c> option (<c>"female"</c>/<c>"male"</c>, also as the plain argument), or <see langword="null"/> when it is absent.</summary>
+    /// <remarks>Values are case-insensitive, <c>f</c>/<c>m</c> are accepted, and an empty value returns <see langword="null"/>.</remarks>
+    /// <exception cref="FormatException">The value is not empty or one of the accepted labels.</exception>
     private static Sex? SexOf(TemplateArgs a) => a.String(0, "sex", null)?.ToUpperInvariant() switch
     {
         null or "" => null,
@@ -101,6 +106,8 @@ public static partial class TemplateFunctions
     };
 
     /// <summary>The <c>casing</c> option (<c>"upper"</c>, <c>"lower"</c> or <c>"mixed"</c>).</summary>
+    /// <remarks>Also accepts a plain argument. Values are case-insensitive; a missing or empty value returns <paramref name="fallback"/>.</remarks>
+    /// <exception cref="FormatException">The value is not empty or one of the accepted labels.</exception>
     private static Casing CasingOf(TemplateArgs a, Casing fallback = Casing.Mixed) => a.String(0, "casing", null)?.ToUpperInvariant() switch
     {
         null or "" => fallback,
@@ -140,6 +147,7 @@ public static partial class TemplateFunctions
         f["number.decimal"] = (faker, a) => faker.Number.Decimal((decimal)(a.Double(0) ?? 0), (decimal)(a.Double(1) ?? 1), a.Int(2) ?? 2).ToString(inv);
     }
 
+    /// <summary>Registers string template functions, reading length, casing, exclusion and prefix options where supported.</summary>
     private static void RegisterString(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -157,6 +165,7 @@ public static partial class TemplateFunctions
         Add("string.uuidV7", x => x.String.UuidV7());
     }
 
+    /// <summary>Registers person template functions, including sex selection and supplied first and last names for full names.</summary>
     private static void RegisterPerson(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -177,6 +186,7 @@ public static partial class TemplateFunctions
         Add("person.zodiacSign", x => x.Person.ZodiacSign());
     }
 
+    /// <summary>Registers location template functions, including postal-code formatting and language values as text.</summary>
     private static void RegisterLocation(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -204,11 +214,14 @@ public static partial class TemplateFunctions
     }
 
     /// <summary>The <c>pattern</c> option of <c>internet.password</c> as a regular expression, or <see langword="null"/>; a regular expression is only built when one is given.</summary>
+    /// <remarks>A missing or empty pattern returns <see langword="null"/>; matching has a five-second timeout.</remarks>
+    /// <exception cref="ArgumentException">The pattern is not a valid regular expression.</exception>
     private static System.Text.RegularExpressions.Regex? PasswordPattern(TemplateArgs a) =>
         a.String(0, "pattern", null) is { Length: > 0 } pattern
             ? new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5))
             : null;
 
+    /// <summary>Registers internet template functions and their email, username, URL, MAC, password and color options.</summary>
     private static void RegisterInternet(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -266,6 +279,7 @@ public static partial class TemplateFunctions
         Add("company.buzzNoun", x => x.Company.BuzzNoun());
     }
 
+    /// <summary>Registers commerce template functions; price and priceText share the symbol, range and decimal-place options.</summary>
     private static void RegisterCommerce(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -282,6 +296,7 @@ public static partial class TemplateFunctions
         f["commerce.priceText"] = f["commerce.price"];
     }
 
+    /// <summary>Registers finance template functions, including formatted amounts, optional card issuers or masks, and currency values as text.</summary>
     private static void RegisterFinance(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -311,6 +326,7 @@ public static partial class TemplateFunctions
         f["finance.amountText"] = f["finance.amount"];
     }
 
+    /// <summary>Registers relative dates, month and weekday names, time zones, times of day and birthdates with age or year bounds.</summary>
     private static void RegisterDate(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -332,6 +348,7 @@ public static partial class TemplateFunctions
         Add("date.timeOfDay", x => x.Date.TimeOfDay().ToString("HH:mm:ss", inv));
     }
 
+    /// <summary>Registers lorem template functions with bounded counts; omitted optional counts use the module's defaults.</summary>
     private static void RegisterLorem(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -346,6 +363,7 @@ public static partial class TemplateFunctions
         Add("lorem.text", x => x.Lorem.Text());
     }
 
+    /// <summary>Registers word template functions, including length filters and an optional bounded word count.</summary>
     private static void RegisterWord(ConcurrentDictionary<string, TemplateFunction> f)
     {
         f["word.adjective"] = (faker, a) => faker.Word.Adjective(a.Int(0, "length"), a.Int(0, "length"));
@@ -359,6 +377,7 @@ public static partial class TemplateFunctions
         f["word.words"] = (faker, a) => faker.Word.Words(OptionalSizeOf(a, "count"));
     }
 
+    /// <summary>Registers color template functions, including hex options and CSS representations of color values.</summary>
     private static void RegisterColor(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -456,6 +475,7 @@ public static partial class TemplateFunctions
         Add("vehicle.bicycle", x => x.Vehicle.Bicycle());
     }
 
+    /// <summary>Registers airline template functions, formatting typed values as text and aircraft types in lower case.</summary>
     private static void RegisterAirline(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -468,6 +488,7 @@ public static partial class TemplateFunctions
         Add("airline.aircraftType", x => x.Airline.AircraftType().ToString().ToLowerInvariant());
     }
 
+    /// <summary>Registers chemical-element and scientific-unit template functions using the values' text representations.</summary>
     private static void RegisterScience(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -475,6 +496,7 @@ public static partial class TemplateFunctions
         Add("science.unit", x => x.Science.Unit().ToString());
     }
 
+    /// <summary>Registers datatype.boolean as lower-case JSON boolean text, with a probability option or plain probability (default 0.5).</summary>
     private static void RegisterDatatype(ConcurrentDictionary<string, TemplateFunction> f) =>
         f["datatype.boolean"] = (faker, a) => faker.Random.Bool(a.Double(0, "probability") ?? 0.5) ? "true" : "false";
 
@@ -505,6 +527,7 @@ public static partial class TemplateFunctions
         Add("system.cron", x => x.System.Cron());
     }
 
+    /// <summary>Registers Git template functions, including commit dates, log entries and a bounded SHA length.</summary>
     private static void RegisterGit(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
@@ -515,6 +538,7 @@ public static partial class TemplateFunctions
         f["git.commitSha"] = (faker, a) => faker.Git.CommitSha(SizeOf(a, 40));
     }
 
+    /// <summary>Registers image template functions for avatar URLs, photo URLs and placeholder data URIs.</summary>
     private static void RegisterImage(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);

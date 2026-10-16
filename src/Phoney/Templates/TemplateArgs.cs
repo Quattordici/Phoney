@@ -45,8 +45,10 @@ public sealed class TemplateArgs
 
     /// <summary>
     /// Argument <paramref name="index"/> as text: the value itself when it is a plain value (<c>{{internet.mac("-")}}</c>), or the <paramref name="option"/> of an options object
-    /// (<c>{{internet.mac({"separator":"-"})}}</c>). <paramref name="fallback"/> when the argument or the option is absent.
+    /// (<c>{{internet.mac({"separator":"-"})}}</c>). Numbers and booleans use their JSON text; absent, null, array and object values return <paramref name="fallback"/>.
     /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="option"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is negative.</exception>
     public string? String(int index, string option, string? fallback)
     {
         ArgumentNullException.ThrowIfNull(option);
@@ -65,8 +67,10 @@ public sealed class TemplateArgs
 
     /// <summary>
     /// Argument <paramref name="index"/>, or its <paramref name="option"/> when it is an options object, as a set of characters: a string (<c>"ab"</c>) or an array of strings (<c>["a","b"]</c>),
-    /// joined. <see langword="null"/> when absent.
+    /// joined without separators. Non-string array elements use their JSON text. Missing values and values other than strings or arrays return <see langword="null"/>.
     /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="option"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is negative.</exception>
     public string? Characters(int index, string option)
     {
         ArgumentNullException.ThrowIfNull(option);

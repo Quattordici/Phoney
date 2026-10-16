@@ -27,6 +27,7 @@ public sealed class GitModule : FakerModule
 
     /// <summary>Returns a commit as <c>git log</c> prints it: commit, author, date and an indented message.</summary>
     /// <param name="lineEnding"><c>"\n"</c> (default) or <c>"\r\n"</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="lineEnding"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="lineEnding"/> is neither <c>"\n"</c> nor <c>"\r\n"</c>.</exception>
     public string CommitEntry(string lineEnding = "\n")
     {

@@ -17,6 +17,7 @@ public static class PhoneyServiceCollectionExtensions
     ///     .AddGenerator&lt;Customer&gt;(g =&gt; g.With(c =&gt; c.Country, "SE"));
     /// </code>
     /// </example>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The configured locale does not exist.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A generation option (<see cref="PhoneyOptions.NullProbability"/>, the collection sizes, <see cref="PhoneyOptions.MaxDepth"/>) is outside its range.</exception>
     public static PhoneyBuilder AddPhoney(this IServiceCollection services, Action<PhoneyOptions>? configure = null)

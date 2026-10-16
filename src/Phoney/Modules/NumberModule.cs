@@ -160,35 +160,49 @@ public sealed class NumberModule : FakerModule
     }
 
     /// <summary>Returns a byte between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public byte Byte(byte min = 0, byte max = byte.MaxValue) => (byte)Long(min, max);
 
     /// <summary>Returns an sbyte between <paramref name="min"/> and <paramref name="max"/> (non-negative by default).</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public sbyte SByte(sbyte min = 0, sbyte max = sbyte.MaxValue) => (sbyte)Long(min, max);
 
     /// <summary>Returns a short between <paramref name="min"/> and <paramref name="max"/> (non-negative by default).</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public short Short(short min = 0, short max = short.MaxValue) => (short)Long(min, max);
 
     /// <summary>Returns a ushort between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public ushort UShort(ushort min = 0, ushort max = ushort.MaxValue) => (ushort)Long(min, max);
 
     /// <summary>Returns a uint between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public uint UInt(uint min = 0, uint max = uint.MaxValue) => (uint)Long(min, max);
 
     /// <summary>Returns a ulong between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public ulong ULong(ulong min = 0, ulong max = ulong.MaxValue) => Random.ULong(min, max);
 
     /// <summary>Returns an <see cref="Int128"/> between <paramref name="min"/> (default 0) and <paramref name="max"/> (default <see cref="System.Int128.MaxValue"/>).</summary>
+    /// <exception cref="ArgumentException">The effective maximum is less than the effective minimum.</exception>
     public Int128 Int128(Int128? min = null, Int128? max = null) =>
         (Int128)BigInteger((BigInteger)(min ?? 0), (BigInteger)(max ?? System.Int128.MaxValue));
 
     /// <summary>Returns a <see cref="UInt128"/> between <paramref name="min"/> (default 0) and <paramref name="max"/> (default <see cref="System.UInt128.MaxValue"/>).</summary>
+    /// <exception cref="ArgumentException">The effective maximum is less than the effective minimum.</exception>
     public UInt128 UInt128(UInt128? min = null, UInt128? max = null) =>
         (UInt128)BigInteger((BigInteger)(min ?? 0), (BigInteger)(max ?? System.UInt128.MaxValue));
 
     /// <summary>Returns a float in <c>[min, max)</c>, optionally rounded to <paramref name="fractionDigits"/> decimals (then <paramref name="max"/> is inclusive).</summary>
+    /// <remarks>Equal finite bounds return that value when no rounding is requested.</remarks>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>, or the range contains no value at the requested decimal precision.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fractionDigits"/> is outside 0–15.</exception>
     public float Single(float min = 0, float max = 1, int? fractionDigits = null) => Fractional(min, max, fractionDigits);
 
     /// <summary>Returns a <see cref="Half"/> in <c>[min, max)</c> (0 to 1 by default), optionally rounded to <paramref name="fractionDigits"/> decimals (then <paramref name="max"/> is inclusive).</summary>
+    /// <remarks>Equal finite effective bounds return that value when no rounding is requested.</remarks>
+    /// <exception cref="ArgumentException">The effective maximum is less than the effective minimum, or the range contains no value at the requested decimal precision.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fractionDigits"/> is outside 0–15.</exception>
     public Half Half(Half? min = null, Half? max = null, int? fractionDigits = null) =>
         Fractional(min ?? System.Half.Zero, max ?? System.Half.One, fractionDigits);
 

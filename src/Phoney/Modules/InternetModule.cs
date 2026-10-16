@@ -209,11 +209,12 @@ public sealed partial class InternetModule : FakerModule
     private const int MaxPasswordMisses = 10_000;
 
     /// <summary>Returns a password.</summary>
-    /// <param name="length">Total length including <paramref name="prefix"/>.</param>
+    /// <param name="length">Total length including <paramref name="prefix"/>; a prefix already this long or longer is returned unchanged.</param>
     /// <param name="memorable">Alternate consonants and vowels in lower case so the password is pronounceable.</param>
-    /// <param name="pattern">Regular expression each generated character must match; defaults to word characters (<c>\w</c>).</param>
-    /// <param name="prefix">Text the password starts with.</param>
-    /// <exception cref="ArgumentException"><paramref name="pattern"/> matches no printable ASCII character, so no password could be made.</exception>
+    /// <param name="pattern">Regular expression each generated ASCII character (codes 33–126) must match; defaults to word characters (<c>\w</c>). Ignored when <paramref name="memorable"/> is <see langword="true"/>.</param>
+    /// <param name="prefix">Text the password starts with; it is not checked against <paramref name="pattern"/>.</param>
+    /// <exception cref="ArgumentException">10,000 consecutive candidate characters are rejected before the requested length is reached.</exception>
+    /// <exception cref="RegexMatchTimeoutException">Matching a character against <paramref name="pattern"/> exceeds the expression's timeout.</exception>
     public string Password(int length = 15, bool memorable = false, Regex? pattern = null, string prefix = "")
     {
         var sb = new StringBuilder(prefix, Math.Max(length, prefix.Length));

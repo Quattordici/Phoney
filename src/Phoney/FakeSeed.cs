@@ -59,9 +59,10 @@ public static class FakeSeed
     /// <remarks>
     /// Every exception is reported, so a test that is skipped by throwing (as some frameworks do) is reported too. Only the facade of the
     /// body's own flow is seeded: generators created earlier or with their own <c>.Seed(...)</c> keep theirs.
+    /// The previous facade scope is restored when the call ends. If <paramref name="report"/> throws, its exception replaces the body's exception.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="report"/> is <see langword="null"/>.</exception>
-    /// <exception cref="FormatException"><c>PHONEY_SEED</c> is set but is not a whole number (the body does not run).</exception>
+    /// <exception cref="FormatException"><paramref name="seed"/> is not supplied and <c>PHONEY_SEED</c> is set but is not a valid <see cref="long"/> (the body does not run).</exception>
     public static void Run(Action body, Action<string> report, long? seed = null)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -84,7 +85,7 @@ public static class FakeSeed
     /// <param name="report">Where the line goes: the test output of the framework.</param>
     /// <param name="seed">Pins the seed to replay a failure; it wins over <c>PHONEY_SEED</c>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="report"/> is <see langword="null"/>.</exception>
-    /// <exception cref="FormatException"><c>PHONEY_SEED</c> is set but is not a whole number (the body does not run).</exception>
+    /// <exception cref="FormatException"><paramref name="seed"/> is not supplied and <c>PHONEY_SEED</c> is set but is not a valid <see cref="long"/> (the body does not run).</exception>
     public static async Task RunAsync(Func<Task> body, Action<string> report, long? seed = null)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -104,6 +105,8 @@ public static class FakeSeed
 
     private enum Origin { Random, Environment, Pinned }
 
+    /// <summary>Chooses the pinned seed, then the environment seed, then a new random seed, and returns its origin for the failure report.</summary>
+    /// <exception cref="FormatException">No seed is pinned and the environment seed is invalid.</exception>
     private static (long Seed, Origin Origin) Choose(long? pinned)
     {
         if (pinned is { } seed)
@@ -111,6 +114,7 @@ public static class FakeSeed
         return FromEnvironment() is { } fromEnvironment ? (fromEnvironment, Origin.Environment) : (New(), Origin.Random);
     }
 
+    /// <summary>Returns a failure message identifying the seed's origin and how to replay an unpinned seed.</summary>
     private static string Describe(long seed, Origin origin) => origin switch
     {
         Origin.Pinned => $"Phoney: the failing run used the pinned seed {seed}.",
