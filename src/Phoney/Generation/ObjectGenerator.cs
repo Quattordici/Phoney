@@ -703,6 +703,26 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         return list;
     }
 
+    /// <summary>
+    /// Generates between <paramref name="min"/> and <paramref name="max"/> objects (both included); the count comes from the seed, so a seeded generator gives the
+    /// same counts on every run.
+    /// </summary>
+    /// <remarks>
+    /// The count is drawn from a stream of its own (from the base seed and the position in the sequence), never from the objects' randomness, so the objects are exactly
+    /// the ones <see cref="Generate(int)"/> makes: changing the range changes how many there are, not what object <em>n</em> looks like.
+    /// </remarks>
+    /// <example><code>List&lt;Order&gt; orders = Fake.For&lt;Order&gt;().Seed(1).Generate(3, 10);</code></example>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> is negative or <paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public List<T> Generate(int min, int max)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(min);
+        ArgumentOutOfRangeException.ThrowIfLessThan(max, min);
+        return Generate(min == max ? min : new SeededRandom(SeededRandom.DeriveSeed(unchecked(BaseSeed ^ CountStreamSalt), _state.NextIndex(0))).Int(min, max));
+    }
+
+    /// <summary>Separates the stream the object count is drawn from from the streams of the objects themselves.</summary>
+    private const long CountStreamSalt = 0x0C0DE5EED5L;
+
     /// <summary>Generates objects lazily and endlessly; take what you need: <c>gen.Stream().Take(10)</c>.</summary>
     public IEnumerable<T> Stream()
     {

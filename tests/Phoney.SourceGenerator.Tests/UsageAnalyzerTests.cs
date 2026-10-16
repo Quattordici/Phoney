@@ -576,4 +576,19 @@ public sealed class UsageAnalyzerTests
 
         diagnostics.ShouldBeEmpty();
     }
+
+    [Test]
+    public async Task Constant_ranges_of_a_random_count_are_checked(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY011", """
+            public static object A() => Fake.For<Product>().Generate(-1, 3);
+            public static object B() => Fake.For<Product>().Generate(5, 2);
+            public static object C() => Fake.Many<Product>(4, 1);
+            public static object D(int n) => (Fake.For<Product>().Generate(0, 0), Fake.For<Product>().Generate(2, 9), Fake.For<Product>().Generate(n, 3), Fake.Many<Product>(1, n));
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(3);
+        diagnostics.Select(TextOf).ShouldBe(["-1", "2", "1"], ignoreOrder: true);
+        diagnostics.Single(d => TextOf(d) == "2").GetMessage().ShouldContain("at least 5");
+    }
 }

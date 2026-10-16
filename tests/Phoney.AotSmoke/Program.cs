@@ -30,6 +30,11 @@ var parallel = Fakes.Person.Seed(1).Locale("de").GenerateParallel(1_000);
 if (!parallel.Select(p => p.Email).SequenceEqual(people.Select(p => p.Email)))
     throw new InvalidOperationException("parallel generation differs from sequential generation");
 
+// A random count: the count comes from the seed.
+var ranged = Fakes.Person.Seed(4).Generate(2, 4);
+if (ranged.Count is < 2 or > 4)
+    throw new InvalidOperationException("random count outside its range");
+
 // Populating an existing object keeps what is set, also through the init-only members of a record.
 var partial = Fakes.Person.Seed(2).Locale("sv").Populate(new Person { FirstName = "Anna", Home = new Address("Storgatan 1", "", "", "") });
 if (partial.FirstName != "Anna" || partial.Home.Street != "Storgatan 1")

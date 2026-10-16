@@ -68,6 +68,7 @@ faker.Finance.Iban("SE", formatted: true);      // valid check digits
 // Objects
 Customer customer = Fake.One<Customer>();
 List<Customer> customers = Fake.Many<Customer>(1_000);
+List<Customer> someCustomers = Fake.Many<Customer>(3, 10);   // a count from 3 to 10, chosen from the seed
 ```
 
 ## A whole person

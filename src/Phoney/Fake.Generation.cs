@@ -31,6 +31,13 @@ public static partial class Fake
     [RequiresDynamicCode(ReflectionMessage)]
     public static List<T> Many<T>(int count) => For<T>().Generate(count);
 
+    /// <summary>Generates between <paramref name="min"/> and <paramref name="max"/> populated <typeparamref name="T"/> objects (both included); see <see cref="ObjectGenerator{T}.Generate(int, int)"/>.</summary>
+    /// <example><code>List&lt;Order&gt; orders = Fake.Many&lt;Order&gt;(3, 10);</code></example>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> is negative or <paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static List<T> Many<T>(int min, int max) => For<T>().Generate(min, max);
+
     /// <summary>
     /// Creates one object of a type that is only known at runtime, like <see cref="One{T}"/>: <c>Fake.One(typeof(Customer))</c>. Useful for tools, test helpers
     /// and code that works from <see cref="Type"/> values. Prefer the generic overload when the type is known at compile time.
@@ -41,7 +48,7 @@ public static partial class Fake
     [RequiresDynamicCode(ReflectionMessage)]
     public static object One(Type type) => Invoke(nameof(One), type, null)!;
 
-    /// <summary>Creates <paramref name="count"/> objects of a type that is only known at runtime, like <see cref="Many{T}"/>.</summary>
+    /// <summary>Creates <paramref name="count"/> objects of a type that is only known at runtime, like <see cref="Many{T}(int)"/>.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="type"/> is an open generic type.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
@@ -66,7 +73,7 @@ public static partial class Fake
         if (type.ContainsGenericParameters)
             throw new ArgumentException($"{type.Name} is an open generic type: pass a closed one such as List<string>.", nameof(type));
         var method = typeof(Fake).GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .Single(m => m.Name == name && m.IsGenericMethodDefinition);
+            .Single(m => m.Name == name && m.IsGenericMethodDefinition && m.GetParameters().Length == (arguments?.Length ?? 0));
         return method.MakeGenericMethod(type).Invoke(null, BindingFlags.DoNotWrapExceptions, null, arguments, null);
     }
 
