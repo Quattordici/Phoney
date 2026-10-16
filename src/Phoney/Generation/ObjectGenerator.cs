@@ -29,6 +29,9 @@ namespace Phoney;
 public sealed class ObjectGenerator<T> : INestedGenerator
 {
     private readonly FakeModel<T> _model;
+
+    /// <summary>The model the generator runs against; <see cref="DataExport"/> reads the members of the objects through it.</summary>
+    internal FakeModel<T> Model => _model;
     private readonly Config _config;
     private readonly State _state = new();
 

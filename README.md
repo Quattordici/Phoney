@@ -22,7 +22,7 @@
 - **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
 - **Replayable random tests**: `[FakeSeed]` for TUnit and `FakeSeed.Run(...)` for any framework run a test on random data and report the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
 - **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
-- **Data from files**: `.WithFeed(DataFeed.FromCsvFile("people.csv"))` fills members from the rows of a CSV or JSON file, one row per object.
+- **Data from files and to files**: `.WithFeed(DataFeed.FromCsvFile("people.csv"))` fills members from the rows of a CSV or JSON file, one row per object; `.WriteCsvFile("people.csv", 500)` / `.ToJson(10)` write generated objects in the same formats.
 - **Numbering**: `.Sequence(x => x.Code, i => $"T{i + 1:D4}")` and `.Cycle(x => x.Queue, ["a", "b"])` give members values by the object's position, the same however you generate.
 - **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `WithGeneratorFor` or `WithConvention` never applied to anything.
 - **Type-wide rules**: `.WithGeneratorFor(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
@@ -399,6 +399,20 @@ var sample = Fake.For<Customer>().Seed(7).WithFeed(feed, FeedOrder.Random).Gener
 - **Precedence**: a rule for the member (`With`, `Ignore`…) wins over the feed; the feed wins over name conventions and `WithEveryMemberOfType`. Members without a column are generated independently of the row (a `Email` convention doesn't know the `FirstName` from the file), so add the columns that must agree.
 - CSV follows RFC 4180 (quoted values with delimiters, `""` quotes and line breaks, CRLF, a byte order mark); pass `delimiter: ';'` for other separators. JSON must be an array of flat objects with the same properties.
 - A generator with a feed can't be given to `With`, `WithGeneratorFor` or `Fake.Generators.Add`: every nested object would take the first row. `Populate` fills the members that are unset. Works the same with reflection and with the source generator.
+
+#### Writing CSV and JSON
+
+The generator can also write what it generates, for fixtures, seed files and sample data from the same models and rules as your tests:
+
+```csharp
+Fake.For<Customer>().Seed(1).WriteCsvFile("customers.csv", 500);
+string json = Fake.For<Customer>().ToJson(10);                   // also WriteJsonFile(path, n), WriteJson(stream, n)
+string csv = Fake.For<Customer>().ToCsv(100, delimiter: ';', columns: ["Id", "Email", "Country"]);
+```
+
+- **One row per object**, one column per scalar member (strings, numbers, booleans, enums, dates and times, `Guid`, `Uri`…) that can be read from the object; nested objects and collections are not written, and `columns` chooses and orders the members. A column that is unknown, not scalar, not readable or listed twice is refused with the names that work.
+- **Reads back**: values use the invariant culture and round-trip formats, so `DataFeed.FromCsvFile(path)` with `.WithFeed(feed)` gives the objects again. JSON has real numbers, booleans and `null`s; CSV quotes fields that hold the delimiter, quotes or line breaks.
+- **Reproducible**: the objects are those of `Generate(count)`, so a seeded generator writes the same file on every run, with reflection or a source-generated model alike (no reflection of its own, AOT safe). Files are UTF-8 without a byte order mark and a `TextWriter` or `Stream` you pass in is not closed.
 
 ### Back-references
 
