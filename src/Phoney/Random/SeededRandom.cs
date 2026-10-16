@@ -90,6 +90,15 @@ public sealed class SeededRandom
         return range == 0 ? (long)NextUInt64() : min + (long)Bounded(range);
     }
 
+    /// <summary>Returns an unsigned long between <paramref name="min"/> and <paramref name="max"/>, both inclusive.</summary>
+    public ulong ULong(ulong min = 0, ulong max = ulong.MaxValue)
+    {
+        if (max < min)
+            throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
+        var range = max - min + 1;
+        return range == 0 ? NextUInt64() : min + Bounded(range);
+    }
+
     /// <summary>Returns a double in <c>[0, 1)</c>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public double Double() => (NextUInt64() >> 11) * (1.0 / (1UL << 53));

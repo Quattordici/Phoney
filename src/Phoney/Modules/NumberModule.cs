@@ -159,6 +159,48 @@ public sealed class NumberModule : FakerModule
         return decimal.Round((low + offset) / factor, decimals);
     }
 
+    /// <summary>Returns a byte between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    public byte Byte(byte min = 0, byte max = byte.MaxValue) => (byte)Long(min, max);
+
+    /// <summary>Returns an sbyte between <paramref name="min"/> and <paramref name="max"/> (non-negative by default).</summary>
+    public sbyte SByte(sbyte min = 0, sbyte max = sbyte.MaxValue) => (sbyte)Long(min, max);
+
+    /// <summary>Returns a short between <paramref name="min"/> and <paramref name="max"/> (non-negative by default).</summary>
+    public short Short(short min = 0, short max = short.MaxValue) => (short)Long(min, max);
+
+    /// <summary>Returns a ushort between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    public ushort UShort(ushort min = 0, ushort max = ushort.MaxValue) => (ushort)Long(min, max);
+
+    /// <summary>Returns a uint between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    public uint UInt(uint min = 0, uint max = uint.MaxValue) => (uint)Long(min, max);
+
+    /// <summary>Returns a ulong between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    public ulong ULong(ulong min = 0, ulong max = ulong.MaxValue) => Random.ULong(min, max);
+
+    /// <summary>Returns an <see cref="Int128"/> between <paramref name="min"/> (default 0) and <paramref name="max"/> (default <see cref="System.Int128.MaxValue"/>).</summary>
+    public Int128 Int128(Int128? min = null, Int128? max = null) =>
+        (Int128)BigInteger((BigInteger)(min ?? 0), (BigInteger)(max ?? System.Int128.MaxValue));
+
+    /// <summary>Returns a <see cref="UInt128"/> between <paramref name="min"/> (default 0) and <paramref name="max"/> (default <see cref="System.UInt128.MaxValue"/>).</summary>
+    public UInt128 UInt128(UInt128? min = null, UInt128? max = null) =>
+        (UInt128)BigInteger((BigInteger)(min ?? 0), (BigInteger)(max ?? System.UInt128.MaxValue));
+
+    /// <summary>Returns a float in <c>[min, max)</c>, optionally rounded to <paramref name="fractionDigits"/> decimals (then <paramref name="max"/> is inclusive).</summary>
+    public float Single(float min = 0, float max = 1, int? fractionDigits = null) => Fractional(min, max, fractionDigits);
+
+    /// <summary>Returns a <see cref="Half"/> in <c>[min, max)</c> (0 to 1 by default), optionally rounded to <paramref name="fractionDigits"/> decimals (then <paramref name="max"/> is inclusive).</summary>
+    public Half Half(Half? min = null, Half? max = null, int? fractionDigits = null) =>
+        Fractional(min ?? System.Half.Zero, max ?? System.Half.One, fractionDigits);
+
+    /// <summary>A double narrowed to a smaller floating point type without leaving <c>[min, max)</c> (or <c>[min, max]</c> when rounded).</summary>
+    private T Fractional<T>(T min, T max, int? fractionDigits) where T : IFloatingPointIeee754<T>
+    {
+        var value = T.CreateSaturating(Double(double.CreateSaturating(min), double.CreateSaturating(max), fractionDigits));
+        if (fractionDigits is null && value >= max && max > min)
+            value = T.BitDecrement(max);
+        return T.Clamp(value, min, max);
+    }
+
     /// <summary>Returns a random <see cref="BigInteger"/> between <paramref name="min"/> and <paramref name="max"/>.</summary>
     public BigInteger BigInteger(BigInteger min, BigInteger max)
     {

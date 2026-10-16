@@ -100,7 +100,7 @@ A `Faker` groups values by topic:
 | `NationalId` | `Person()`, `Company()`, `Vat()`, e.g. a Swedish personnummer, a US SSN, a Brazilian CPF, valid check digits |
 | `Date` | `Past()`, `Future()`, `Recent()`, `Soon()`, `Between(...)`, `Birthdate(18, 65)`, `Month()`, `Weekday()` |
 | `Lorem` / `Word` | `Sentence()`, `Paragraphs()`, `Slug()`, `Noun(minLength: 5)` |
-| `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)`, `Normal(175, 8)` ([normal distribution](#normally-distributed-numbers)) |
+| `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)`, `Normal(175, 8)`, and one call per numeric type: `Byte()`, `SByte()`, `Short()`, `UShort()`, `UInt()`, `ULong()`, `Int128()`, `UInt128()`, `Single()`, `Half()`, `BigInteger(min, max)` ([normal distribution](#normally-distributed-numbers)) |
 | `Color` | `Human()`, `Hex()`, `Rgb()` (typed, with `ToCss()`/`ToHex()`), `Hsl()`, `Lab()` |
 | `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `AvatarGitHub()`, `DataUri()` (self-contained SVG) |
 | `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `Slugify()`, `LuhnCheck()`, `Multiple(f => …, 5)`, `UniqueValues(…, 10)` |
