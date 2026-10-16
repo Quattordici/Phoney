@@ -132,4 +132,37 @@ public sealed class TemplateArgumentTests
         Faker().Internet.Password(12, pattern: new Regex("[a-z]", RegexOptions.None, TimeSpan.FromSeconds(5)), prefix: "x")
             .ShouldBe(Faker().Internet.Password(12, pattern: new Regex("[a-z]", RegexOptions.None, TimeSpan.FromSeconds(5)), prefix: "x"));
     }
+
+    [Test]
+    [Arguments("string.alpha({\"length\":100001})")]
+    [Arguments("string.numeric({\"length\":2000000000})")]
+    [Arguments("string.hexadecimal({\"length\":100001})")]
+    [Arguments("string.sample(100001)")]
+    [Arguments("string.nanoid(100001)")]
+    [Arguments("internet.password({\"length\":2000000000})")]
+    [Arguments("finance.accountNumber({\"length\":100001})")]
+    [Arguments("finance.pin({\"length\":100001})")]
+    [Arguments("git.commitSha({\"length\":100001})")]
+    [Arguments("lorem.words(100001)")]
+    [Arguments("lorem.paragraphs(2000000000)")]
+    [Arguments("lorem.slug(100001)")]
+    [Arguments("word.words({\"count\":100001})")]
+    public void A_length_or_count_beyond_the_limit_is_refused_with_the_limit_in_the_message(string call)
+    {
+        var thrown = Should.Throw<FormatException>(() => Parse("{{" + call + "}}"));
+
+        thrown.Message.ShouldContain("100000");
+    }
+
+    [Test]
+    public void Lengths_up_to_the_limit_and_the_defaults_still_work()
+    {
+        Parse("{{string.alpha({\"length\":100000})}}").Length.ShouldBe(100000);
+        Parse("{{internet.password({\"length\":100000})}}").Length.ShouldBe(100000);
+        Parse("{{string.alpha}}").Length.ShouldBe(1);
+        Parse("{{string.nanoid}}").Length.ShouldBe(21);
+        Parse("{{string.sample}}").Length.ShouldBe(10);
+        Parse("{{internet.password}}").Length.ShouldBe(15);
+        Parse("{{finance.pin}}").Length.ShouldBe(4);
+    }
 }
