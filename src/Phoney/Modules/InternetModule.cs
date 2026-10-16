@@ -260,7 +260,7 @@ public sealed partial class InternetModule : FakerModule
         static bool IsConsonant(char c) => char.IsAsciiLetter(c) && !IsVowel(c);
     }
 
-    /// <summary>Returns a hex color such as <c>#a1b2c3</c>; each channel is the average of a random value and the base (faker.js <c>internet.color</c>), so a base of 255 gives pastel colors.</summary>
+    /// <summary>Returns a hex color such as <c>#a1b2c3</c>; each channel is the average of a random value and the base, so a base of 255 gives pastel colors.</summary>
     /// <param name="redBase">Red base, 0–255.</param>
     /// <param name="greenBase">Green base, 0–255.</param>
     /// <param name="blueBase">Blue base, 0–255.</param>

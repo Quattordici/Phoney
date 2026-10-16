@@ -1,7 +1,7 @@
 namespace Phoney.Tests;
 
-/// <summary>Methods faker.js has that Phoney added later: <c>git.commitDate/commitEntry</c>, <c>image.avatarGitHub</c> and <c>internet.color</c>.</summary>
-public sealed class FakerJsGapTests
+/// <summary>Git commit dates and entries, GitHub avatars and mixed hex colors.</summary>
+public sealed class GitImageAndColorTests
 {
     [Test]
     public void Git_commit_date_looks_like_git_log_and_is_reproducible()

@@ -78,21 +78,30 @@ public static partial class TemplateFunctions
         }
     }
 
-    /// <summary>The most characters or items one template function call produces; a template can come from anywhere, so a typo or a hostile value can't ask for gigabytes.</summary>
+    /// <summary>The most characters one template function call produces; a template can come from anywhere, so a typo or a hostile value can't ask for gigabytes.</summary>
     private const int MaxTemplateSize = 100_000;
 
-    /// <summary>A length or count argument (<paramref name="name"/> in an options object, or the plain number), <paramref name="fallback"/> when absent, kept to <see cref="MaxTemplateSize"/>.</summary>
-    /// <exception cref="FormatException">The value is larger than <see cref="MaxTemplateSize"/>.</exception>
-    private static int SizeOf(TemplateArgs a, int fallback, string name = "length") => Limited(a.Int(0, name) ?? fallback, name);
+    /// <summary>The most words a call produces (a word is up to about 13 characters, so this stays near <see cref="MaxTemplateSize"/> times a few).</summary>
+    private const int MaxTemplateWords = 10_000;
+
+    /// <summary>The most sentences a call produces (up to about 130 characters each).</summary>
+    private const int MaxTemplateSentences = 1_000;
+
+    /// <summary>The most paragraphs a call produces (three sentences each, up to about 400 characters).</summary>
+    private const int MaxTemplateParagraphs = 300;
+
+    /// <summary>A length or count argument (<paramref name="name"/> in an options object, or the plain number), <paramref name="fallback"/> when absent, kept to <paramref name="limit"/>.</summary>
+    /// <exception cref="FormatException">The value is larger than <paramref name="limit"/>.</exception>
+    private static int SizeOf(TemplateArgs a, int fallback, string name = "length", int limit = MaxTemplateSize) => Limited(a.Int(0, name) ?? fallback, name, limit);
 
     /// <summary>Like <see cref="SizeOf"/> for an argument that has no default (the module chooses one).</summary>
-    /// <exception cref="FormatException">The value is larger than <see cref="MaxTemplateSize"/>.</exception>
-    private static int? OptionalSizeOf(TemplateArgs a, string name = "length") => a.Int(0, name) is { } size ? Limited(size, name) : null;
+    /// <exception cref="FormatException">The value is larger than <paramref name="limit"/>.</exception>
+    private static int? OptionalSizeOf(TemplateArgs a, string name, int limit) => a.Int(0, name) is { } size ? Limited(size, name, limit) : null;
 
-    /// <summary>Returns the requested size unchanged when at most <see cref="MaxTemplateSize"/>; negative values are left for the called module to handle.</summary>
-    /// <exception cref="FormatException">The size exceeds <see cref="MaxTemplateSize"/>; <paramref name="name"/> identifies the argument in the error.</exception>
-    private static int Limited(int size, string name) =>
-        size <= MaxTemplateSize ? size : throw new FormatException($"The {name} {size} is too large for a template: at most {MaxTemplateSize} (use the API for more).");
+    /// <summary>Returns the requested size unchanged when at most <paramref name="limit"/>; negative values are left for the called module to handle.</summary>
+    /// <exception cref="FormatException">The size exceeds <paramref name="limit"/>; <paramref name="name"/> identifies the argument in the error.</exception>
+    private static int Limited(int size, string name, int limit) =>
+        size <= limit ? size : throw new FormatException($"The {name} {size} is too large for a template: at most {limit} (use the API for more).");
 
     /// <summary>The <c>sex</c> option (<c>"female"</c>/<c>"male"</c>, also as the plain argument), or <see langword="null"/> when it is absent.</summary>
     /// <remarks>Values are case-insensitive, <c>f</c>/<c>m</c> are accepted, and an empty value returns <see langword="null"/>.</remarks>
@@ -353,13 +362,13 @@ public static partial class TemplateFunctions
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
         f["lorem.word"] = (faker, a) => faker.Lorem.Word(a.Int(0, "length"), a.Int(0, "length"));
-        f["lorem.words"] = (faker, a) => faker.Lorem.Words(SizeOf(a, 3, "count"));
-        f["lorem.sentence"] = (faker, a) => faker.Lorem.Sentence(OptionalSizeOf(a, "count"));
-        f["lorem.sentences"] = (faker, a) => faker.Lorem.Sentences(OptionalSizeOf(a, "count"));
-        f["lorem.paragraph"] = (faker, a) => faker.Lorem.Paragraph(SizeOf(a, 3, "count"));
-        f["lorem.paragraphs"] = (faker, a) => faker.Lorem.Paragraphs(SizeOf(a, 3, "count"));
-        f["lorem.lines"] = (faker, a) => faker.Lorem.Lines(OptionalSizeOf(a, "count"));
-        f["lorem.slug"] = (faker, a) => faker.Lorem.Slug(SizeOf(a, 3, "count"));
+        f["lorem.words"] = (faker, a) => faker.Lorem.Words(SizeOf(a, 3, "count", MaxTemplateWords));
+        f["lorem.sentence"] = (faker, a) => faker.Lorem.Sentence(OptionalSizeOf(a, "count", MaxTemplateWords));
+        f["lorem.sentences"] = (faker, a) => faker.Lorem.Sentences(OptionalSizeOf(a, "count", MaxTemplateSentences));
+        f["lorem.paragraph"] = (faker, a) => faker.Lorem.Paragraph(SizeOf(a, 3, "count", MaxTemplateSentences));
+        f["lorem.paragraphs"] = (faker, a) => faker.Lorem.Paragraphs(SizeOf(a, 3, "count", MaxTemplateParagraphs));
+        f["lorem.lines"] = (faker, a) => faker.Lorem.Lines(OptionalSizeOf(a, "count", MaxTemplateSentences));
+        f["lorem.slug"] = (faker, a) => faker.Lorem.Slug(SizeOf(a, 3, "count", MaxTemplateWords));
         Add("lorem.text", x => x.Lorem.Text());
     }
 
@@ -374,7 +383,7 @@ public static partial class TemplateFunctions
         f["word.preposition"] = (faker, a) => faker.Word.Preposition(a.Int(0, "length"), a.Int(0, "length"));
         f["word.verb"] = (faker, a) => faker.Word.Verb(a.Int(0, "length"), a.Int(0, "length"));
         f["word.sample"] = (faker, a) => faker.Word.Sample(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.words"] = (faker, a) => faker.Word.Words(OptionalSizeOf(a, "count"));
+        f["word.words"] = (faker, a) => faker.Word.Words(OptionalSizeOf(a, "count", MaxTemplateWords));
     }
 
     /// <summary>Registers color template functions, including hex options and CSS representations of color values.</summary>

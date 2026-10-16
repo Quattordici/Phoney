@@ -3,7 +3,7 @@ using Phoney.Modules;
 
 namespace Phoney.Tests;
 
-/// <summary>Template functions honour the options faker.js gives them, as an options object (<c>{{string.alpha({"length":8})}}</c>) or the plain value where faker.js takes one.</summary>
+/// <summary>Template functions honour their options, given as an options object (<c>{{string.alpha({"length":8})}}</c>) or as the plain value.</summary>
 public sealed class TemplateArgumentTests
 {
     private static readonly char[] Abc = ['a', 'b', 'c'];
@@ -134,24 +134,37 @@ public sealed class TemplateArgumentTests
     }
 
     [Test]
-    [Arguments("string.alpha({\"length\":100001})")]
-    [Arguments("string.numeric({\"length\":2000000000})")]
-    [Arguments("string.hexadecimal({\"length\":100001})")]
-    [Arguments("string.sample(100001)")]
-    [Arguments("string.nanoid(100001)")]
-    [Arguments("internet.password({\"length\":2000000000})")]
-    [Arguments("finance.accountNumber({\"length\":100001})")]
-    [Arguments("finance.pin({\"length\":100001})")]
-    [Arguments("git.commitSha({\"length\":100001})")]
-    [Arguments("lorem.words(100001)")]
-    [Arguments("lorem.paragraphs(2000000000)")]
-    [Arguments("lorem.slug(100001)")]
-    [Arguments("word.words({\"count\":100001})")]
-    public void A_length_or_count_beyond_the_limit_is_refused_with_the_limit_in_the_message(string call)
+    [Arguments("string.alpha({\"length\":100001})", 100000)]
+    [Arguments("string.numeric({\"length\":2000000000})", 100000)]
+    [Arguments("string.hexadecimal({\"length\":100001})", 100000)]
+    [Arguments("string.sample(100001)", 100000)]
+    [Arguments("string.nanoid(100001)", 100000)]
+    [Arguments("internet.password({\"length\":2000000000})", 100000)]
+    [Arguments("finance.accountNumber({\"length\":100001})", 100000)]
+    [Arguments("finance.pin({\"length\":100001})", 100000)]
+    [Arguments("git.commitSha({\"length\":100001})", 100000)]
+    [Arguments("lorem.words(10001)", 10000)]
+    [Arguments("lorem.sentence(10001)", 10000)]
+    [Arguments("lorem.slug(10001)", 10000)]
+    [Arguments("word.words({\"count\":10001})", 10000)]
+    [Arguments("lorem.sentences(1001)", 1000)]
+    [Arguments("lorem.lines(1001)", 1000)]
+    [Arguments("lorem.paragraph(1001)", 1000)]
+    [Arguments("lorem.paragraphs(301)", 300)]
+    [Arguments("lorem.paragraphs(2000000000)", 300)]
+    public void A_length_or_count_beyond_the_limit_is_refused_with_the_limit_in_the_message(string call, int limit)
     {
         var thrown = Should.Throw<FormatException>(() => Parse("{{" + call + "}}"));
 
-        thrown.Message.ShouldContain("100000");
+        thrown.Message.ShouldContain("at most " + limit);
+    }
+
+    [Test]
+    public void Compound_items_up_to_their_limits_stay_small()
+    {
+        Parse("{{lorem.paragraphs(300)}}").Length.ShouldBeLessThan(150_000);
+        Parse("{{lorem.sentences(1000)}}").Length.ShouldBeLessThan(150_000);
+        Parse("{{lorem.words(10000)}}").Length.ShouldBeLessThan(150_000);
     }
 
     [Test]
