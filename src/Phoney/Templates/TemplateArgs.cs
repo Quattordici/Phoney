@@ -44,6 +44,46 @@ public sealed class TemplateArgs
         index < _json.Length ? (_json[index].ValueKind == JsonValueKind.String ? _json[index].GetString() : _json[index].GetRawText()) : fallback;
 
     /// <summary>
+    /// Argument <paramref name="index"/> as text: the value itself when it is a plain value (<c>{{internet.mac("-")}}</c>), or the <paramref name="option"/> of an options object
+    /// (<c>{{internet.mac({"separator":"-"})}}</c>). <paramref name="fallback"/> when the argument or the option is absent.
+    /// </summary>
+    public string? String(int index, string option, string? fallback)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        if (index >= _json.Length)
+            return fallback;
+        var value = _json[index];
+        if (value.ValueKind == JsonValueKind.Object && !value.TryGetProperty(option, out value))
+            return fallback;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Null or JsonValueKind.Undefined or JsonValueKind.Array or JsonValueKind.Object => fallback,
+            _ => value.GetRawText(),
+        };
+    }
+
+    /// <summary>
+    /// Argument <paramref name="index"/>, or its <paramref name="option"/> when it is an options object, as a set of characters: a string (<c>"ab"</c>) or an array of strings (<c>["a","b"]</c>),
+    /// joined. <see langword="null"/> when absent.
+    /// </summary>
+    public string? Characters(int index, string option)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        if (index >= _json.Length)
+            return null;
+        var value = _json[index];
+        if (value.ValueKind == JsonValueKind.Object && !value.TryGetProperty(option, out value))
+            return null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Array => string.Concat(value.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText())),
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// Argument <paramref name="index"/> as an integer; when the argument is an options object, reads
     /// <paramref name="option"/> from it instead (<c>{"length": 4}</c>).
     /// </summary>

@@ -78,6 +78,25 @@ public static partial class TemplateFunctions
         }
     }
 
+    /// <summary>The <c>sex</c> option (<c>"female"</c>/<c>"male"</c>, also as the plain argument), or <see langword="null"/> when it is absent.</summary>
+    private static Sex? SexOf(TemplateArgs a) => a.String(0, "sex", null)?.ToUpperInvariant() switch
+    {
+        null or "" => null,
+        "FEMALE" or "F" => Sex.Female,
+        "MALE" or "M" => Sex.Male,
+        var other => throw new FormatException($"The sex must be 'female' or 'male', but was '{other}'."),
+    };
+
+    /// <summary>The <c>casing</c> option (<c>"upper"</c>, <c>"lower"</c> or <c>"mixed"</c>).</summary>
+    private static Casing CasingOf(TemplateArgs a, Casing fallback = Casing.Mixed) => a.String(0, "casing", null)?.ToUpperInvariant() switch
+    {
+        null or "" => fallback,
+        "UPPER" => Casing.Upper,
+        "LOWER" => Casing.Lower,
+        "MIXED" => Casing.Mixed,
+        var other => throw new FormatException($"The casing must be 'upper', 'lower' or 'mixed', but was '{other}'."),
+    };
+
     private static void RegisterHelpers(ConcurrentDictionary<string, TemplateFunction> f)
     {
         f["helpers.arrayElement"] = (faker, a) => faker.Random.Element(a.Strings(0));
@@ -111,12 +130,12 @@ public static partial class TemplateFunctions
     private static void RegisterString(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
-        f["string.numeric"] = (faker, a) => faker.String.Numeric(a.Int(0, "length") ?? 1, a.Bool(0, "allowLeadingZeros") ?? a.Bool(1, "allowLeadingZeros") ?? true);
-        f["string.alpha"] = (faker, a) => faker.String.Alpha(a.Int(0, "length") ?? 1);
-        f["string.alphanumeric"] = (faker, a) => faker.String.AlphaNumeric(a.Int(0, "length") ?? 1);
-        f["string.hexadecimal"] = (faker, a) => faker.String.Hexadecimal(a.Int(0, "length") ?? 1);
-        f["string.binary"] = (faker, a) => faker.String.Binary(a.Int(0, "length") ?? 1);
-        f["string.octal"] = (faker, a) => faker.String.Octal(a.Int(0, "length") ?? 1);
+        f["string.numeric"] = (faker, a) => faker.String.Numeric(a.Int(0, "length") ?? 1, a.Bool(0, "allowLeadingZeros") ?? a.Bool(1, "allowLeadingZeros") ?? true, a.Characters(0, "exclude"));
+        f["string.alpha"] = (faker, a) => faker.String.Alpha(a.Int(0, "length") ?? 1, CasingOf(a), a.Characters(0, "exclude"));
+        f["string.alphanumeric"] = (faker, a) => faker.String.AlphaNumeric(a.Int(0, "length") ?? 1, CasingOf(a), a.Characters(0, "exclude"));
+        f["string.hexadecimal"] = (faker, a) => faker.String.Hexadecimal(a.Int(0, "length") ?? 1, CasingOf(a), a.String(0, "prefix", "0x")!);
+        f["string.binary"] = (faker, a) => faker.String.Binary(a.Int(0, "length") ?? 1, a.String(0, "prefix", "0b")!);
+        f["string.octal"] = (faker, a) => faker.String.Octal(a.Int(0, "length") ?? 1, a.String(0, "prefix", "0o")!);
         f["string.sample"] = (faker, a) => faker.String.Sample(a.Int(0) ?? 10);
         f["string.symbol"] = (faker, a) => faker.String.Symbol(a.Int(0) ?? 1);
         f["string.nanoid"] = (faker, a) => faker.String.NanoId(a.Int(0) ?? 21);
@@ -128,15 +147,15 @@ public static partial class TemplateFunctions
     private static void RegisterPerson(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
-        Add("person.firstName", x => x.Person.FirstName());
-        Add("person.lastName", x => x.Person.LastName());
-        Add("person.middleName", x => x.Person.MiddleName());
-        Add("person.fullName", x => x.Person.FullName());
+        f["person.firstName"] = (faker, a) => faker.Person.FirstName(SexOf(a));
+        f["person.lastName"] = (faker, a) => faker.Person.LastName(SexOf(a));
+        f["person.middleName"] = (faker, a) => faker.Person.MiddleName(SexOf(a));
+        f["person.fullName"] = (faker, a) => faker.Person.FullName(a.String(0, "firstName", null), a.String(0, "lastName", null), SexOf(a));
         Add("person.gender", x => x.Person.Gender());
         Add("person.sex", x => x.Person.SexLabel());
         Add("person.sexLabel", x => x.Person.SexLabel());
         Add("person.bio", x => x.Person.Bio());
-        Add("person.prefix", x => x.Person.Prefix());
+        f["person.prefix"] = (faker, a) => faker.Person.Prefix(SexOf(a));
         Add("person.suffix", x => x.Person.Suffix());
         Add("person.jobTitle", x => x.Person.JobTitle());
         Add("person.jobDescriptor", x => x.Person.JobDescriptor());
@@ -148,7 +167,7 @@ public static partial class TemplateFunctions
     private static void RegisterLocation(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
-        Add("location.zipCode", x => x.Location.ZipCode());
+        f["location.zipCode"] = (faker, a) => faker.Location.ZipCode(a.String(0, "format", null));
         Add("location.city", x => x.Location.City());
         Add("location.buildingNumber", x => x.Location.BuildingNumber());
         Add("location.street", x => x.Location.Street());
@@ -171,19 +190,25 @@ public static partial class TemplateFunctions
         f["location.zipCodeByState"] = (faker, a) => faker.Location.ZipCodeByState(a.String(0) ?? "");
     }
 
+    /// <summary>The <c>pattern</c> option of <c>internet.password</c> as a regular expression, or <see langword="null"/>; a regular expression is only built when one is given.</summary>
+    private static System.Text.RegularExpressions.Regex? PasswordPattern(TemplateArgs a) =>
+        a.String(0, "pattern", null) is { Length: > 0 } pattern
+            ? new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5))
+            : null;
+
     private static void RegisterInternet(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
         var inv = CultureInfo.InvariantCulture;
-        Add("internet.email", x => x.Internet.Email());
+        f["internet.email"] = (faker, a) => faker.Internet.Email(a.String(0, "firstName", null), a.String(0, "lastName", null), a.String(0, "provider", null), a.Bool(0, "allowSpecialCharacters") ?? false);
         Add("internet.exampleEmail", x => x.Internet.ExampleEmail());
-        Add("internet.username", x => x.Internet.Username());
-        Add("internet.userName", x => x.Internet.Username());
+        f["internet.username"] = (faker, a) => faker.Internet.Username(a.String(0, "firstName", null), a.String(0, "lastName", null));
+        f["internet.userName"] = f["internet.username"];
         Add("internet.displayName", x => x.Internet.DisplayName());
         Add("internet.protocol", x => x.Internet.Protocol());
         Add("internet.httpMethod", x => x.Internet.HttpMethod());
         Add("internet.httpStatusCode", x => x.Internet.HttpStatusCode().ToString(inv));
-        Add("internet.url", x => x.Internet.Url());
+        f["internet.url"] = (faker, a) => faker.Internet.Url(a.Bool(0, "appendSlash"), a.String(0, "protocol", "https")!);
         Add("internet.domainName", x => x.Internet.DomainName());
         Add("internet.domainSuffix", x => x.Internet.DomainSuffix());
         Add("internet.domainWord", x => x.Internet.DomainWord());
@@ -192,8 +217,8 @@ public static partial class TemplateFunctions
         Add("internet.ipv6", x => x.Internet.Ipv6());
         Add("internet.port", x => x.Internet.Port().ToString(inv));
         Add("internet.userAgent", x => x.Internet.UserAgent());
-        f["internet.mac"] = (faker, a) => faker.Internet.Mac(a.String(0, "separator") ?? ":");
-        f["internet.password"] = (faker, a) => faker.Internet.Password(a.Int(0, "length") ?? 15, a.Bool(0, "memorable") ?? false);
+        f["internet.mac"] = (faker, a) => faker.Internet.Mac(a.String(0, "separator", ":")!);
+        f["internet.password"] = (faker, a) => faker.Internet.Password(a.Int(0, "length") ?? 15, a.Bool(0, "memorable") ?? false, PasswordPattern(a), a.String(0, "prefix", "")!);
         f["internet.color"] = (faker, a) => faker.Internet.Color(a.Int(0, "redBase") ?? 0, a.Int(0, "greenBase") ?? 0, a.Int(0, "blueBase") ?? 0);
         Add("internet.emoji", x => x.Internet.Emoji());
         Add("internet.jwtAlgorithm", x => x.Internet.JwtAlgorithm());
@@ -240,7 +265,7 @@ public static partial class TemplateFunctions
         Add("commerce.isbn", x => x.Commerce.Isbn());
         Add("commerce.upc", x => x.Commerce.Upc());
         f["commerce.price"] = (faker, a) => faker.Commerce.PriceText(
-            a.String(0, "symbol") ?? "", (decimal)(a.Double(0, "min") ?? 1), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2);
+            a.String(0, "symbol", "")!, (decimal)(a.Double(0, "min") ?? 1), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2);
         f["commerce.priceText"] = f["commerce.price"];
     }
 
@@ -251,7 +276,7 @@ public static partial class TemplateFunctions
         Add("finance.accountName", x => x.Finance.AccountName());
         Add("finance.routingNumber", x => x.Finance.RoutingNumber());
         f["finance.amount"] = (faker, a) => faker.Finance.AmountText(
-            (decimal)(a.Double(0, "min") ?? 0), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2, a.String(0, "symbol") ?? "");
+            (decimal)(a.Double(0, "min") ?? 0), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2, a.String(0, "symbol", "")!);
         Add("finance.transactionType", x => x.Finance.TransactionType());
         Add("finance.transactionDescription", x => x.Finance.TransactionDescription());
         Add("finance.currencyCode", x => x.Finance.CurrencyCode());
@@ -259,7 +284,7 @@ public static partial class TemplateFunctions
         Add("finance.currencySymbol", x => x.Finance.CurrencySymbol());
         Add("finance.currencyNumericCode", x => x.Finance.CurrencyNumericCode());
         Add("finance.creditCardIssuer", x => x.Finance.CreditCardIssuer().ToString());
-        f["finance.creditCardNumber"] = (faker, a) => a.String(0, "issuer") is { } issuer
+        f["finance.creditCardNumber"] = (faker, a) => a.String(0, "issuer", null) is { Length: > 0 } issuer
             ? issuer.Contains('#') ? faker.Finance.CreditCardNumber(issuer) : faker.Finance.CreditCardNumber(ParseIssuer(issuer))
             : faker.Finance.CreditCardNumber();
         Add("finance.creditCardCVV", x => x.Finance.CreditCardCvv());
@@ -282,7 +307,12 @@ public static partial class TemplateFunctions
         f["date.future"] = (faker, a) => faker.Date.Future(a.Int(0, "years") ?? 1).ToString("O", inv);
         f["date.recent"] = (faker, a) => faker.Date.Recent(a.Int(0, "days") ?? 1).ToString("O", inv);
         f["date.soon"] = (faker, a) => faker.Date.Soon(a.Int(0, "days") ?? 1).ToString("O", inv);
-        Add("date.birthdate", x => x.Date.Birthdate().ToString("O", inv));
+        f["date.birthdate"] = (faker, a) => (a.String(0, "mode", "age")?.ToUpperInvariant() switch
+        {
+            "AGE" => faker.Date.Birthdate(a.Int(0, "min") ?? 18, a.Int(0, "max") ?? 80),
+            "YEAR" => faker.Date.BirthdateInYears(a.Int(0, "min") ?? 1920, a.Int(0, "max") ?? 2000),
+            var other => throw new FormatException($"The mode must be 'age' or 'year', but was '{other}'."),
+        }).ToString("O", inv);
         f["date.month"] = (faker, a) => faker.Date.Month(a.Bool(0, "abbreviated") ?? false, a.Bool(0, "context") ?? false);
         f["date.weekday"] = (faker, a) => faker.Date.Weekday(a.Bool(0, "abbreviated") ?? false, a.Bool(0, "context") ?? false);
         Add("date.timeZone", x => x.Date.TimeZone());
@@ -322,7 +352,7 @@ public static partial class TemplateFunctions
         Add("color.human", x => x.Color.Human());
         Add("color.space", x => x.Color.Space());
         Add("color.rgb", x => x.Color.Hex());
-        Add("color.hex", x => x.Color.Hex());
+        f["color.hex"] = (faker, a) => faker.Color.Hex(a.String(0, "prefix", "#")!, CasingOf(a, Casing.Lower), a.Bool(0, "includeAlpha") ?? false);
         Add("color.cmyk", x => x.Color.Cmyk().ToCss());
         Add("color.hsl", x => x.Color.Hsl().ToCss());
         Add("color.hwb", x => x.Color.Hwb().ToCss());

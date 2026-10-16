@@ -1,0 +1,112 @@
+using System.Text.RegularExpressions;
+using Phoney.Modules;
+
+namespace Phoney.Tests;
+
+/// <summary>Template functions honour the options faker.js gives them, as an options object (<c>{{string.alpha({"length":8})}}</c>) or the plain value where faker.js takes one.</summary>
+public sealed class TemplateArgumentTests
+{
+    private static readonly char[] Abc = ['a', 'b', 'c'];
+    private static readonly char[] Ab01 = ['A', 'B', '0', '1'];
+    private static readonly char[] ZeroOne = ['0', '1'];
+    private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private static Faker Faker(long seed = 5) => new("en", seed) { ReferenceDate = Reference };
+
+    private static string Parse(string template, long seed = 5) => Faker(seed).Parse(template);
+
+    private static IEnumerable<string> Many(string template, int count = 40) =>
+        Enumerable.Range(0, count).Select(i => Parse(template, seed: 100 + i));
+
+    [Test]
+    public void Functions_without_arguments_use_their_defaults()
+    {
+        Parse("{{finance.creditCardNumber}}").ShouldMatch(@"^[\d\- ]+$");
+        Parse("{{internet.mac}}").ShouldMatch("^([0-9a-f]{2}:){5}[0-9a-f]{2}$");
+        Parse("{{commerce.price}}").ShouldMatch(@"^\d+\.\d{2}$");
+        Parse("{{finance.amount}}").ShouldMatch(@"^\d+\.\d{2}$");
+    }
+
+    [Test]
+    public void Text_options_are_read_from_an_options_object_or_the_plain_value()
+    {
+        Parse("{{internet.mac(\"-\")}}").ShouldMatch("^([0-9a-f]{2}-){5}[0-9a-f]{2}$");
+        Parse("{{internet.mac({\"separator\":\"\"})}}").ShouldMatch("^[0-9a-f]{12}$");
+        Parse("{{commerce.price({\"symbol\":\"$\"})}}").ShouldMatch(@"^\$\d+\.\d{2}$");
+        Parse("{{finance.amount({\"symbol\":\"€\",\"dec\":0})}}").ShouldMatch(@"^€\d+$");
+        Parse("{{finance.creditCardNumber({\"issuer\":\"visa\"})}}").ShouldStartWith("4");
+        Parse("{{finance.creditCardNumber(visa)}}").ShouldStartWith("4");
+    }
+
+    [Test]
+    public void String_casing_and_exclusions_are_honoured()
+    {
+        Many("{{string.alpha({\"length\":8,\"casing\":\"upper\"})}}").ShouldAllBe(s => Regex.IsMatch(s, "^[A-Z]{8}$", RegexOptions.None, TimeSpan.FromSeconds(5)));
+        Many("{{string.alpha({\"length\":8,\"casing\":\"lower\"})}}").ShouldAllBe(s => Regex.IsMatch(s, "^[a-z]{8}$", RegexOptions.None, TimeSpan.FromSeconds(5)));
+        Many("{{string.alpha({\"length\":30,\"casing\":\"lower\",\"exclude\":[\"a\",\"b\",\"c\"]})}}").ShouldAllBe(s => s.IndexOfAny(Abc) < 0);
+        Many("{{string.alphanumeric({\"length\":30,\"casing\":\"upper\",\"exclude\":\"AB01\"})}}")
+            .ShouldAllBe(s => s.IndexOfAny(Ab01) < 0 && !s.Any(char.IsLower));
+        Many("{{string.numeric({\"length\":30,\"exclude\":[\"0\",\"1\"]})}}").ShouldAllBe(s => s.IndexOfAny(ZeroOne) < 0);
+    }
+
+    [Test]
+    public void Prefixes_and_casing_of_number_strings_are_honoured()
+    {
+        Many("{{string.hexadecimal({\"length\":6,\"casing\":\"upper\",\"prefix\":\"\"})}}").ShouldAllBe(s => Regex.IsMatch(s, "^[0-9A-F]{6}$", RegexOptions.None, TimeSpan.FromSeconds(5)));
+        Parse("{{string.hexadecimal({\"length\":4})}}").ShouldStartWith("0x");
+        Parse("{{string.binary({\"length\":4,\"prefix\":\"b\"})}}").ShouldMatch("^b[01]{4}$");
+        Parse("{{string.octal({\"length\":4,\"prefix\":\"\"})}}").ShouldMatch("^[0-7]{4}$");
+        Many("{{color.hex({\"prefix\":\"0x\",\"casing\":\"upper\"})}}").ShouldAllBe(s => Regex.IsMatch(s, "^0x[0-9A-F]{6}$", RegexOptions.None, TimeSpan.FromSeconds(5)));
+        Parse("{{color.hex({\"includeAlpha\":true})}}").ShouldMatch("^#[0-9a-f]{8}$");
+    }
+
+    [Test]
+    public void The_sex_option_picks_the_same_names_as_the_api()
+    {
+        Parse("{{person.firstName({\"sex\":\"female\"})}}").ShouldBe(Faker().Person.FirstName(Sex.Female));
+        Parse("{{person.firstName(male)}}").ShouldBe(Faker().Person.FirstName(Sex.Male));
+        Parse("{{person.lastName({\"sex\":\"male\"})}}").ShouldBe(Faker().Person.LastName(Sex.Male));
+        Parse("{{person.middleName({\"sex\":\"female\"})}}").ShouldBe(Faker().Person.MiddleName(Sex.Female));
+        Parse("{{person.prefix({\"sex\":\"female\"})}}").ShouldBe(Faker().Person.Prefix(Sex.Female));
+        Parse("{{person.firstName}}").ShouldBe(Faker().Person.FirstName());
+        Should.Throw<FormatException>(() => Parse("{{person.firstName({\"sex\":\"robot\"})}}")).Message.ShouldContain("robot");
+    }
+
+    [Test]
+    public void Full_name_takes_a_first_name_a_last_name_and_a_sex()
+    {
+        var name = Parse("{{person.fullName({\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"})}}");
+
+        name.ShouldContain("Ada");
+        name.ShouldContain("Lovelace");
+        Parse("{{person.fullName({\"sex\":\"female\"})}}").ShouldBe(Faker().Person.FullName(sex: Sex.Female));
+    }
+
+    [Test]
+    public void Internet_options_reach_the_api()
+    {
+        Parse("{{internet.url({\"appendSlash\":true,\"protocol\":\"http\"})}}").ShouldMatch("^http://.+/$");
+        Parse("{{internet.url}}").ShouldStartWith("https://");
+        Parse("{{internet.email({\"firstName\":\"Ada\",\"lastName\":\"Lovelace\",\"provider\":\"example.org\"})}}").ToLowerInvariant().ShouldMatch("^ada.*@example\\.org$");
+        Parse("{{internet.username({\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"})}}").ToLowerInvariant().ShouldContain("ada");
+        Parse("{{internet.password({\"length\":20})}}").Length.ShouldBe(20);
+        Parse("{{internet.password({\"length\":12,\"pattern\":\"[a-z]\",\"prefix\":\"pw_\"})}}")
+            .ShouldBe(Faker().Internet.Password(12, false, new Regex("[a-z]", RegexOptions.None, TimeSpan.FromSeconds(5)), "pw_"));
+    }
+
+    [Test]
+    public void Zip_codes_and_birthdates_take_their_options()
+    {
+        Parse("{{location.zipCode({\"format\":\"###-##\"})}}").ShouldMatch(@"^\d{3}-\d{2}$");
+        Parse("{{location.zipCode(\"##-##\")}}").ShouldMatch(@"^\d{2}-\d{2}$");
+        Many("{{date.birthdate({\"min\":30,\"max\":30,\"mode\":\"age\"})}}").ShouldAllBe(d => d.StartsWith("1994", StringComparison.Ordinal) || d.StartsWith("1995", StringComparison.Ordinal));
+        Many("{{date.birthdate({\"min\":1990,\"max\":1992,\"mode\":\"year\"})}}").ShouldAllBe(d => d.StartsWith("1990", StringComparison.Ordinal) || d.StartsWith("1991", StringComparison.Ordinal) || d.StartsWith("1992", StringComparison.Ordinal));
+        Many("{{date.birthdate}}").ShouldAllBe(d => string.CompareOrdinal(d, "1944") >= 0 && string.CompareOrdinal(d, "2008") <= 0);
+    }
+
+    [Test]
+    public void Bad_option_values_are_reported_with_what_is_accepted()
+    {
+        Should.Throw<FormatException>(() => Parse("{{string.alpha({\"casing\":\"shouty\"})}}")).Message.ShouldContain("shouty");
+    }
+}
