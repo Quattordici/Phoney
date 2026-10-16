@@ -91,7 +91,7 @@ public static partial class Fake
     }
 
     /// <summary>
-    /// Makes <c>Fake.*</c>, <see cref="One{T}"/>, <see cref="Many{T}"/> and <see cref="For{T}"/> reproducible until the
+    /// Makes <c>Fake.*</c>, <see cref="One{T}"/>, <see cref="Many{T}(int)"/> and <see cref="For{T}"/> reproducible until the
     /// returned scope is disposed. The scope follows the current async flow, so parallel tests don't affect each other.
     /// </summary>
     /// <example>

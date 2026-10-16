@@ -36,6 +36,10 @@ public sealed class ImageModule : FakerModule
             ("index", Random.Int(0, 99).ToString(CultureInfo.InvariantCulture)));
     }
 
+    /// <summary>Returns the URL of a GitHub avatar, e.g. <c>https://avatars.githubusercontent.com/u/12345678</c>.</summary>
+    public string AvatarGitHub() =>
+        string.Create(CultureInfo.InvariantCulture, $"https://avatars.githubusercontent.com/u/{Random.Int(0, 99_999_999)}");
+
     /// <summary>
     /// Returns an SVG placeholder image as a <c>data:</c> URI (a solid color showing its size). Needs no network, so it
     /// suits tests and offline demos.

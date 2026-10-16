@@ -128,6 +128,9 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 break;
             case "Generate" or "GenerateParallel" or "Many":
                 Check(context, call, "count", v => v >= 0, "at least 0");
+                Check(context, call, "min", v => v >= 0, "at least 0");
+                if (Constant(call, "min") is { } low)
+                    Check(context, call, "max", v => v >= low, $"at least {low.ToString(CultureInfo.InvariantCulture)} (the minimum)");
                 break;
             case "Unique" or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");

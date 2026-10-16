@@ -37,6 +37,10 @@ internal static class CollectionTypes
         [typeof(ImmutableList<>)] = CollectionKind.List,
         [typeof(IImmutableList<>)] = CollectionKind.List,
         [typeof(ReadOnlyCollection<>)] = CollectionKind.List,
+        [typeof(ImmutableQueue<>)] = CollectionKind.List,
+        [typeof(IImmutableQueue<>)] = CollectionKind.List,
+        [typeof(ImmutableStack<>)] = CollectionKind.List,
+        [typeof(IImmutableStack<>)] = CollectionKind.List,
         [typeof(Collection<>)] = CollectionKind.List,
         [typeof(ObservableCollection<>)] = CollectionKind.List,
         [typeof(Queue<>)] = CollectionKind.List,
@@ -63,6 +67,7 @@ internal static class CollectionTypes
         [typeof(SortedList<,>)] = CollectionKind.Dictionary,
         [typeof(ConcurrentDictionary<,>)] = CollectionKind.Dictionary,
         [typeof(FrozenDictionary<,>)] = CollectionKind.Dictionary,
+        [typeof(ReadOnlyDictionary<,>)] = CollectionKind.Dictionary,
     };
 
     /// <summary>Element type of arrays and generic collections; <paramref name="key"/> is set for dictionaries.</summary>

@@ -22,7 +22,7 @@ public sealed class TemplateFunctionRegistryTests
     {
         var names = TemplateFunctions.Names;
 
-        foreach (var module in new[] { "helpers", "number", "string", "person", "location", "internet", "nationalId", "phone", "company", "commerce", "finance", "date", "lorem", "word", "color", "animal", "book", "music", "food", "hacker", "vehicle", "airline", "database", "system", "git", "image" })
+        foreach (var module in new[] { "helpers", "number", "string", "person", "location", "internet", "nationalId", "phone", "company", "commerce", "finance", "date", "lorem", "word", "color", "animal", "book", "music", "food", "hacker", "vehicle", "airline", "science", "datatype", "database", "system", "git", "image" })
             names.ShouldContain(n => n.StartsWith(module + ".", StringComparison.OrdinalIgnoreCase), $"module {module}");
     }
 
@@ -48,5 +48,32 @@ public sealed class TemplateFunctionRegistryTests
         var results = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => TemplateFunctions.Contains("vehicle.vin") && TemplateFunctions.Contains("airline.flightNumber"))));
 
         results.ShouldAllBe(found => found);
+    }
+
+    [Test]
+    [Arguments("science.chemicalElement")]
+    [Arguments("science.unit")]
+    [Arguments("airline.airline")]
+    [Arguments("airline.airplane")]
+    [Arguments("airline.airport")]
+    [Arguments("airline.aircraftType")]
+    [Arguments("finance.currency")]
+    [Arguments("location.language")]
+    [Arguments("color.cmyk")]
+    [Arguments("color.hsl")]
+    [Arguments("color.hwb")]
+    [Arguments("color.lab")]
+    [Arguments("color.lch")]
+    [Arguments("color.cssSupportedFunction")]
+    [Arguments("color.cssSupportedSpace")]
+    [Arguments("color.colorByCssColorSpace")]
+    [Arguments("datatype.boolean")]
+    public void Module_values_that_faker_js_exposes_are_template_functions_that_repeat_for_a_seed(string name)
+    {
+        TemplateFunctions.Contains(name).ShouldBeTrue();
+
+        var first = new Faker("en", seed: 7).Parse("{{" + name + "}}");
+        first.ShouldNotBeNullOrWhiteSpace();
+        new Faker("en", seed: 7).Parse("{{" + name + "}}").ShouldBe(first);
     }
 }

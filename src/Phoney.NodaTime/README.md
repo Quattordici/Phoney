@@ -18,7 +18,8 @@ DateTimeZone zone = faker.Noda().TimeZone();
 | `LocalDate` | `Past`, `Future`, `Recent`, `Soon`, `Between`, `Birthdate` |
 | `LocalDateTime` (UTC) | `Past`, `Future`, `Recent`, `Soon`, `Between` |
 | `ZonedDateTime` (UTC or a given zone) | `Past`, `Future`, `Recent`, `Soon` |
-| other | `TimeOfDay()`, `TimeZone()`, `Duration(min, max)`, `Period(minDays, maxDays)` |
+| other | `TimeOfDay()`, `TimeZone()`, `Offset()`, `AnnualDate()`, `Duration(min, max)`, `Period(minDays, maxDays)` |
+| ranges | `Interval(years)` / `Interval(from, to)`, `DateInterval(years)` / `DateInterval(from, to)`, `YearMonth(years)` / `YearMonth(from, to)` |
 
 - Values are relative to `Faker.ReferenceDate` (or its `TimeProvider`) and drawn exactly like their built-in counterparts (`faker.Date.Past()`…), so seeds reproduce them.
 - `Noda()` works on `Faker` and `IFaker` and allocates nothing.

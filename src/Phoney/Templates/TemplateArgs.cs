@@ -44,6 +44,58 @@ public sealed class TemplateArgs
         index < _json.Length ? (_json[index].ValueKind == JsonValueKind.String ? _json[index].GetString() : _json[index].GetRawText()) : fallback;
 
     /// <summary>
+    /// Argument <paramref name="index"/> as text: the value itself when it is a plain value (<c>{{internet.mac("-")}}</c>), or the <paramref name="option"/> of an options object
+    /// (<c>{{internet.mac({"separator":"-"})}}</c>). Numbers and booleans use their JSON text; absent, null, array and object values return <paramref name="fallback"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="option"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is negative.</exception>
+    public string? String(int index, string option, string? fallback)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        if (index >= _json.Length)
+            return fallback;
+        var value = _json[index];
+        if (value.ValueKind == JsonValueKind.Object && !value.TryGetProperty(option, out value))
+            return fallback;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Null or JsonValueKind.Undefined or JsonValueKind.Array or JsonValueKind.Object => fallback,
+            _ => value.GetRawText(),
+        };
+    }
+
+    /// <summary>
+    /// Argument <paramref name="index"/>, or its <paramref name="option"/> when it is an options object, as a set of characters: a string (<c>"ab"</c>) or an array of strings (<c>["a","b"]</c>),
+    /// joined without separators. Non-string array elements use their JSON text. Missing values and values other than strings or arrays return <see langword="null"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="option"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is negative.</exception>
+    public string? Characters(int index, string option)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        if (index >= _json.Length)
+            return null;
+        var value = _json[index];
+        if (value.ValueKind == JsonValueKind.Object && !value.TryGetProperty(option, out value))
+            return null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Array => string.Concat(value.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText())),
+            _ => null,
+        };
+    }
+
+    /// <summary>The <paramref name="option"/> of an options object as text; <paramref name="fallback"/> for a plain argument, which belongs to the function's main parameter, and when the option is absent.</summary>
+    internal string? OptionString(int index, string option, string? fallback) =>
+        index < _json.Length && _json[index].ValueKind == JsonValueKind.Object ? String(index, option, fallback) : fallback;
+
+    /// <summary>Like <see cref="Characters"/> for an option that only an options object can give.</summary>
+    internal string? OptionCharacters(int index, string option) =>
+        index < _json.Length && _json[index].ValueKind == JsonValueKind.Object ? Characters(index, option) : null;
+
+    /// <summary>
     /// Argument <paramref name="index"/> as an integer; when the argument is an options object, reads
     /// <paramref name="option"/> from it instead (<c>{"length": 4}</c>).
     /// </summary>

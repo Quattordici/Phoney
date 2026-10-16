@@ -4,15 +4,19 @@ namespace Phoney;
 
 /// <summary>
 /// Seeds for tests that run on random data but must be replayable: a failing test reports its seed, and the seed brings the
-/// same data back. A test framework integration (such as <c>Phoney.TUnit</c>'s <c>[FakeSeed]</c>) picks a seed with
-/// <see cref="Pick"/>, runs the test in <see cref="Fake.Seeded"/> and prints the seed when the test fails.
+/// same data back. <see cref="Run"/> and <see cref="RunAsync"/> do it for any test framework: they pick a seed with
+/// <see cref="Pick"/>, run the test in <see cref="Fake.Seeded"/> and report the seed when the test fails (<c>Phoney.TUnit</c>'s <c>[FakeSeed]</c>
+/// does the same as an attribute).
 /// </summary>
 /// <example>
 /// <code>
-/// var seed = FakeSeed.Pick();             // PHONEY_SEED if set, else a new random seed
-/// using var _ = Fake.Seeded(seed);
-/// try { /* the test */ }
-/// catch { Console.WriteLine($"Failed with seed {seed}; replay with PHONEY_SEED={seed}"); throw; }
+/// // xUnit.net v3: the seed of a failing run ends up in the test output
+/// [Fact]
+/// public void Totals_add_up() => FakeSeed.Run(() =>
+/// {
+///     var orders = Fake.Many&lt;Order&gt;(100);   // different on every run
+///     Totals.Of(orders).ShouldBe(orders.Sum(o => o.Total));
+/// }, TestContext.Current.SendDiagnosticMessage);
 /// </code>
 /// </example>
 public static class FakeSeed
@@ -44,4 +48,77 @@ public static class FakeSeed
 #pragma warning disable RS0030 // A fresh random seed is the point; what it produces is then reproducible.
         System.Random.Shared.NextInt64(1, 1_000_000_000);
 #pragma warning restore RS0030
+
+    /// <summary>
+    /// Runs <paramref name="body"/> on a seeded <see cref="Fake"/> facade and, when it throws, gives <paramref name="report"/> a line with the seed and how
+    /// to replay it before the exception is rethrown unchanged. The seed is <paramref name="seed"/>, else <c>PHONEY_SEED</c>, else a new random one.
+    /// </summary>
+    /// <param name="body">The test.</param>
+    /// <param name="report">Where the line goes: the test output of the framework (<c>TestContext.WriteLine</c>, <c>ITestOutputHelper.WriteLine</c>…).</param>
+    /// <param name="seed">Pins the seed to replay a failure; it wins over <c>PHONEY_SEED</c>.</param>
+    /// <remarks>
+    /// Every exception is reported, so a test that is skipped by throwing (as some frameworks do) is reported too. Only the facade of the
+    /// body's own flow is seeded: generators created earlier or with their own <c>.Seed(...)</c> keep theirs.
+    /// The previous facade scope is restored when the call ends. If <paramref name="report"/> throws, its exception replaces the body's exception.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="report"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException"><paramref name="seed"/> is not supplied and <c>PHONEY_SEED</c> is set but is not a valid <see cref="long"/> (the body does not run).</exception>
+    public static void Run(Action body, Action<string> report, long? seed = null)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(report);
+        var (value, origin) = Choose(seed);
+        using var scope = Fake.Seeded(value);
+        try
+        {
+            body();
+        }
+        catch
+        {
+            report(Describe(value, origin));
+            throw;
+        }
+    }
+
+    /// <summary>The asynchronous form of <see cref="Run"/>: the seed stays in effect across <see langword="await"/>s of <paramref name="body"/>.</summary>
+    /// <param name="body">The test.</param>
+    /// <param name="report">Where the line goes: the test output of the framework.</param>
+    /// <param name="seed">Pins the seed to replay a failure; it wins over <c>PHONEY_SEED</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="report"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException"><paramref name="seed"/> is not supplied and <c>PHONEY_SEED</c> is set but is not a valid <see cref="long"/> (the body does not run).</exception>
+    public static async Task RunAsync(Func<Task> body, Action<string> report, long? seed = null)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(report);
+        var (value, origin) = Choose(seed);
+        using var scope = Fake.Seeded(value);
+        try
+        {
+            await body().ConfigureAwait(false);
+        }
+        catch
+        {
+            report(Describe(value, origin));
+            throw;
+        }
+    }
+
+    private enum Origin { Random, Environment, Pinned }
+
+    /// <summary>Chooses the pinned seed, then the environment seed, then a new random seed, and returns its origin for the failure report.</summary>
+    /// <exception cref="FormatException">No seed is pinned and the environment seed is invalid.</exception>
+    private static (long Seed, Origin Origin) Choose(long? pinned)
+    {
+        if (pinned is { } seed)
+            return (seed, Origin.Pinned);
+        return FromEnvironment() is { } fromEnvironment ? (fromEnvironment, Origin.Environment) : (New(), Origin.Random);
+    }
+
+    /// <summary>Returns a failure message identifying the seed's origin and how to replay an unpinned seed.</summary>
+    private static string Describe(long seed, Origin origin) => origin switch
+    {
+        Origin.Pinned => $"Phoney: the failing run used the pinned seed {seed}.",
+        Origin.Environment => $"Phoney: the failing run used seed {seed} from {EnvironmentVariable}. Replay it with {EnvironmentVariable}={seed}.",
+        _ => $"Phoney: the failing run used random seed {seed}. Replay it with {EnvironmentVariable}={seed} or FakeSeed.Run(..., seed: {seed}).",
+    };
 }

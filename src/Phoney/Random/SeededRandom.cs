@@ -90,6 +90,16 @@ public sealed class SeededRandom
         return range == 0 ? (long)NextUInt64() : min + (long)Bounded(range);
     }
 
+    /// <summary>Returns an unsigned long between <paramref name="min"/> and <paramref name="max"/>, both inclusive.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public ulong ULong(ulong min = 0, ulong max = ulong.MaxValue)
+    {
+        if (max < min)
+            throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
+        var range = max - min + 1;
+        return range == 0 ? NextUInt64() : min + Bounded(range);
+    }
+
     /// <summary>Returns a double in <c>[0, 1)</c>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public double Double() => (NextUInt64() >> 11) * (1.0 / (1UL << 53));
@@ -147,6 +157,31 @@ public sealed class SeededRandom
         return items[Index(items.Count)];
     }
 
+    /// <summary>Returns a random element of <paramref name="items"/>, which can be any sequence (a set, dictionary keys, a query).</summary>
+    /// <remarks>Draws like the list overload over the elements in enumeration order, so use a source whose order is stable to get the same element for a seed: lists, arrays, <c>HashSet&lt;T&gt;</c> and <c>Dictionary&lt;K,V&gt;</c> (insertion order) are, hash-ordered sets such as <c>ImmutableHashSet&lt;string&gt;</c> and <c>FrozenSet&lt;string&gt;</c> are not (pass a comparer to the overload that orders them first).</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="items"/> is empty.</exception>
+    public T Element<T>(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        return items is IReadOnlyList<T> list ? Element(list) : Element<T>(items.ToArray());
+    }
+
+    /// <summary>
+    /// Returns a random element of <paramref name="items"/> after ordering them with <paramref name="comparer"/>, so the result for a seed doesn't depend on the order the source
+    /// happens to enumerate in (hash-ordered sets such as <c>ImmutableHashSet&lt;string&gt;</c> and <c>FrozenSet&lt;string&gt;</c> change order from one process to the next).
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> or <paramref name="comparer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="items"/> is empty.</exception>
+    public T Element<T>(IEnumerable<T> items, IComparer<T> comparer)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(comparer);
+        var ordered = items.ToArray();
+        Array.Sort(ordered, comparer);
+        return Element<T>(ordered);
+    }
+
     /// <summary>Returns a random element of <paramref name="items"/>.</summary>
     public T Element<T>(ReadOnlySpan<T> items)
     {
@@ -172,6 +207,31 @@ public sealed class SeededRandom
         }
 
         return copy.AsSpan(0, count).ToArray();
+    }
+
+    /// <summary>Returns the elements of <paramref name="items"/> in random order as a new array; the source is left as it is.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    public T[] Shuffled<T>(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var copy = items.ToArray();
+        Shuffle(copy.AsSpan());
+        return copy;
+    }
+
+    /// <summary>
+    /// Returns the elements of <paramref name="items"/> in random order as a new array, after ordering them with <paramref name="comparer"/> so that the result for a seed doesn't depend on
+    /// the order the source enumerates in.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> or <paramref name="comparer"/> is <see langword="null"/>.</exception>
+    public T[] Shuffled<T>(IEnumerable<T> items, IComparer<T> comparer)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(comparer);
+        var copy = items.ToArray();
+        Array.Sort(copy, comparer);
+        Shuffle(copy.AsSpan());
+        return copy;
     }
 
     /// <summary>Shuffles <paramref name="items"/> in place.</summary>

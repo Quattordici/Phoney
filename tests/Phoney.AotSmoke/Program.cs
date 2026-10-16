@@ -30,6 +30,16 @@ var parallel = Fakes.Person.Seed(1).Locale("de").GenerateParallel(1_000);
 if (!parallel.Select(p => p.Email).SequenceEqual(people.Select(p => p.Email)))
     throw new InvalidOperationException("parallel generation differs from sequential generation");
 
+// A random count, and files written from the generated model: no reflection.
+var ranged = Fakes.Person.Seed(4).Generate(2, 4);
+if (ranged.Count is < 2 or > 4)
+    throw new InvalidOperationException("random count outside its range");
+var csv = Fakes.Person.Seed(4).ToCsv(5);
+if (DataFeed.FromCsv(csv).Count != 5)
+    throw new InvalidOperationException("CSV export did not read back");
+if (!Fakes.Person.Seed(4).ToJson(3, indented: false).StartsWith("[{", StringComparison.Ordinal))
+    throw new InvalidOperationException("JSON export is not an array of objects");
+
 // Populating an existing object keeps what is set, also through the init-only members of a record.
 var partial = Fakes.Person.Seed(2).Locale("sv").Populate(new Person { FirstName = "Anna", Home = new Address("Storgatan 1", "", "", "") });
 if (partial.FirstName != "Anna" || partial.Home.Street != "Storgatan 1")

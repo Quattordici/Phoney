@@ -20,6 +20,9 @@ public sealed class NumberModule : FakerModule
     /// <summary>The number of draws <see cref="Normal(double, double, double?, double?)"/> makes to land inside limits before it settles for the nearest limit.</summary>
     private const int MaxNormalAttempts = 100;
 
+    /// <summary>The size of a scaled bound from which steps of a rounded double no longer fit a <see cref="long"/> (a little below <see cref="long.MaxValue"/>, 2^63).</summary>
+    private const double LongStepLimit = 9.0e18;
+
     /// <summary>Powers of ten, exactly, for rounding (<see cref="Math.Pow(double, double)"/> is the system's, which rounds differently on some platforms).</summary>
     private static readonly double[] PowersOfTen = [1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15];
 
@@ -133,9 +136,16 @@ public sealed class NumberModule : FakerModule
         if (fractionDigits is not { } digits)
             return Random.Double(min, max);
         ArgumentOutOfRangeException.ThrowIfNegative(digits, nameof(fractionDigits));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(digits, 15, nameof(fractionDigits));
 
         // Choose an integer number of steps of 10^-digits, so every representable value is equally likely.
-        var factor = Math.Pow(10, digits);
+        var factor = PowersOfTen[digits];
+        if (Math.Abs(min * factor) >= LongStepLimit || Math.Abs(max * factor) >= LongStepLimit)
+        {
+            // Too many steps to count in a long: at this size a double has no fractional digits left to round, so draw it directly.
+            return Math.Clamp(Math.Round(Random.Double(min, max), digits), min, max);
+        }
+
         var steps = Long((long)Math.Ceiling(min * factor), (long)Math.Floor(max * factor));
         return Math.Round(steps / factor, digits);
     }
@@ -157,6 +167,62 @@ public sealed class NumberModule : FakerModule
             ? Random.Long(0, (long)range)
             : decimal.Floor((decimal)Random.Double() * (range + 1));
         return decimal.Round((low + offset) / factor, decimals);
+    }
+
+    /// <summary>Returns a byte between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public byte Byte(byte min = 0, byte max = byte.MaxValue) => (byte)Long(min, max);
+
+    /// <summary>Returns an sbyte between <paramref name="min"/> and <paramref name="max"/> (non-negative by default).</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public sbyte SByte(sbyte min = 0, sbyte max = sbyte.MaxValue) => (sbyte)Long(min, max);
+
+    /// <summary>Returns a short between <paramref name="min"/> and <paramref name="max"/> (non-negative by default).</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public short Short(short min = 0, short max = short.MaxValue) => (short)Long(min, max);
+
+    /// <summary>Returns a ushort between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public ushort UShort(ushort min = 0, ushort max = ushort.MaxValue) => (ushort)Long(min, max);
+
+    /// <summary>Returns a uint between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public uint UInt(uint min = 0, uint max = uint.MaxValue) => (uint)Long(min, max);
+
+    /// <summary>Returns a ulong between <paramref name="min"/> and <paramref name="max"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public ulong ULong(ulong min = 0, ulong max = ulong.MaxValue) => Random.ULong(min, max);
+
+    /// <summary>Returns an <see cref="Int128"/> between <paramref name="min"/> (default 0) and <paramref name="max"/> (default <see cref="System.Int128.MaxValue"/>).</summary>
+    /// <exception cref="ArgumentException">The effective maximum is less than the effective minimum.</exception>
+    public Int128 Int128(Int128? min = null, Int128? max = null) =>
+        (Int128)BigInteger((BigInteger)(min ?? 0), (BigInteger)(max ?? System.Int128.MaxValue));
+
+    /// <summary>Returns a <see cref="UInt128"/> between <paramref name="min"/> (default 0) and <paramref name="max"/> (default <see cref="System.UInt128.MaxValue"/>).</summary>
+    /// <exception cref="ArgumentException">The effective maximum is less than the effective minimum.</exception>
+    public UInt128 UInt128(UInt128? min = null, UInt128? max = null) =>
+        (UInt128)BigInteger((BigInteger)(min ?? 0), (BigInteger)(max ?? System.UInt128.MaxValue));
+
+    /// <summary>Returns a float in <c>[min, max)</c>, optionally rounded to <paramref name="fractionDigits"/> decimals (then <paramref name="max"/> is inclusive).</summary>
+    /// <remarks>Equal finite bounds return that value when no rounding is requested.</remarks>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>, or the range contains no value at the requested decimal precision.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fractionDigits"/> is outside 0–15.</exception>
+    public float Single(float min = 0, float max = 1, int? fractionDigits = null) => Fractional(min, max, fractionDigits);
+
+    /// <summary>Returns a <see cref="Half"/> in <c>[min, max)</c> (0 to 1 by default), optionally rounded to <paramref name="fractionDigits"/> decimals (then <paramref name="max"/> is inclusive).</summary>
+    /// <remarks>Equal finite effective bounds return that value when no rounding is requested.</remarks>
+    /// <exception cref="ArgumentException">The effective maximum is less than the effective minimum, or the range contains no value at the requested decimal precision.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fractionDigits"/> is outside 0–15.</exception>
+    public Half Half(Half? min = null, Half? max = null, int? fractionDigits = null) =>
+        Fractional(min ?? System.Half.Zero, max ?? System.Half.One, fractionDigits);
+
+    /// <summary>A double narrowed to a smaller floating point type without leaving <c>[min, max)</c> (or <c>[min, max]</c> when rounded).</summary>
+    private T Fractional<T>(T min, T max, int? fractionDigits) where T : IFloatingPointIeee754<T>
+    {
+        var value = T.CreateSaturating(Double(double.CreateSaturating(min), double.CreateSaturating(max), fractionDigits));
+        if (fractionDigits is null && value >= max && max > min)
+            value = T.BitDecrement(max);
+        return T.Clamp(value, min, max);
     }
 
     /// <summary>Returns a random <see cref="BigInteger"/> between <paramref name="min"/> and <paramref name="max"/>.</summary>

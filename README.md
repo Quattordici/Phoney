@@ -20,9 +20,9 @@
 - **Flexible**: fluent, immutable generators, rules that depend on other members, uniqueness, strict mode (also checked at compile time), custom conventions, custom locales, faker.js-style templates.
 - **Interfaces and polymorphism**: `.Subtype<IShape, Circle, Square>()`, app-wide `Fake.Subtypes`, and `[JsonDerivedType]` honoured out of the box.
 - **Invalid and boundary data**: `.Invalid(x => x.Quantity)`, `.InvalidCases()` and `.BoundaryCases()` break or hit the limits of your data annotations, to test that validation rejects what it should.
-- **Replayable random tests**: `[FakeSeed]` for TUnit runs a test on random data and prints the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
+- **Replayable random tests**: `[FakeSeed]` for TUnit and `FakeSeed.Run(...)` for any framework run a test on random data and report the seed when it fails; `PHONEY_SEED=… dotnet test` replays it.
 - **Rules for nested members**: `.With(x => x.Billing.City, "Oslo")` and `.With(x => x.Lines.Each().Sku, f => …)` reach into the object graph, per position.
-- **Data from files**: `.WithFeed(DataFeed.FromCsvFile("people.csv"))` fills members from the rows of a CSV or JSON file, one row per object.
+- **Data from files and to files**: `.WithFeed(DataFeed.FromCsvFile("people.csv"))` fills members from the rows of a CSV or JSON file, one row per object; `.WriteCsvFile("people.csv", 500)` / `.ToJson(10)` write generated objects in the same formats.
 - **Numbering**: `.Sequence(x => x.Code, i => $"T{i + 1:D4}")` and `.Cycle(x => x.Queue, ["a", "b"])` give members values by the object's position, the same however you generate.
 - **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `WithGeneratorFor` or `WithConvention` never applied to anything.
 - **Type-wide rules**: `.WithGeneratorFor(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
@@ -68,6 +68,7 @@ faker.Finance.Iban("SE", formatted: true);      // valid check digits
 // Objects
 Customer customer = Fake.One<Customer>();
 List<Customer> customers = Fake.Many<Customer>(1_000);
+List<Customer> someCustomers = Fake.Many<Customer>(3, 10);   // a count from 3 to 10, chosen from the seed
 ```
 
 ## A whole person
@@ -93,24 +94,26 @@ A `Faker` groups values by topic:
 |---|---|
 | `Person` | `Profile()`, `FirstName(Sex.Female)`, `LastName()`, `FullName()`, `Sex()`, `JobTitle()`, `Bio()`, `Prefix()` |
 | `Location` | `Address()`, `StreetAddress()`, `City()`, `ZipCode()`, `State()`, `Country()`, `CountryCode()`, `Latitude()`, `NearbyGpsCoordinate()` |
-| `Internet` | `Email()`, `Username()`, `Url()`, `DomainName()`, `Ipv4(IPv4Network.PrivateC)`, `Ipv6()`, `Mac()`, `Password()`, `UserAgent()`, `Jwt()`, `Emoji()` |
+| `Internet` | `Email()`, `Username()`, `Url()`, `DomainName()`, `Ipv4(IPv4Network.PrivateC)`, `Ipv6()`, `Mac()`, `Password()`, `UserAgent()`, `Jwt()`, `Emoji()`, `Color()` |
 | `Phone` | `Number(PhoneStyle.International)`, `Imei()` |
 | `Company` / `Commerce` | `Name()`, `CatchPhrase()`, `ProductName()`, `Price()`, `Isbn()`, `Upc()` |
 | `Finance` | `Iban()`, `Bic()`, `CreditCardNumber(CardIssuer.Visa)`, `Currency()`, `Amount()`, `RoutingNumber()`, `BitcoinAddress()` |
 | `NationalId` | `Person()`, `Company()`, `Vat()`, e.g. a Swedish personnummer, a US SSN, a Brazilian CPF, valid check digits |
 | `Date` | `Past()`, `Future()`, `Recent()`, `Soon()`, `Between(...)`, `Birthdate(18, 65)`, `Month()`, `Weekday()` |
 | `Lorem` / `Word` | `Sentence()`, `Paragraphs()`, `Slug()`, `Noun(minLength: 5)` |
-| `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)`, `Normal(175, 8)` ([normal distribution](#normally-distributed-numbers)) |
+| `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)`, `Normal(175, 8)`, and one call per numeric type: `Byte()`, `SByte()`, `Short()`, `UShort()`, `UInt()`, `ULong()`, `Int128()`, `UInt128()`, `Single()`, `Half()`, `BigInteger(min, max)` ([normal distribution](#normally-distributed-numbers)) |
 | `Color` | `Human()`, `Hex()`, `Rgb()` (typed, with `ToCss()`/`ToHex()`), `Hsl()`, `Lab()` |
-| `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `DataUri()` (self-contained SVG) |
+| `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `AvatarGitHub()`, `DataUri()` (self-contained SVG) |
 | `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `Slugify()`, `LuhnCheck()`, `Multiple(f => …, 5)`, `UniqueValues(…, 10)` |
-| also | `Animal`, `Book`, `Music`, `Food`, `Hacker`, `Vehicle` (with valid VINs), `Airline`, `Science`, `Database`, `System`, `Git` |
+| `Git` | `Branch()`, `CommitMessage()`, `CommitSha()`, `CommitDate()`, `CommitEntry()` (a commit as `git log` prints it) |
+| `Airline` | `Airline()`, `Airport()`, `Airplane()`, `FlightNumber()`, `RecordLocator()`, `Seat()` |
+| also | `Animal`, `Book`, `Music`, `Food`, `Hacker`, `Vehicle` (with valid VINs), `Science`, `Database`, `System` |
 
 Checksums are real: credit cards and IMEIs pass Luhn, IBANs pass MOD 97, ISBN, UPC, VIN and ABA routing numbers have valid check digits.
 
 `Fake.*` is a thread-safe static facade over a per-thread `Faker`.
 
-`faker.Random` is the seeded source of randomness (xoshiro256\*\*) for your own values: `Int`, `Long`, `Double`, `Decimal`, `Bool(0.2)`, `Element(list)`, `Elements(list, 3)`, `Weighted(("gold", 1), ("silver", 3))`, `Enum<T>()`, `Guid()`, `Replace("##??")`.
+`faker.Random` is the seeded source of randomness (xoshiro256\*\*) for your own values: `Int`, `Long`, `Double`, `Decimal`, `Bool(0.2)`, `Element(items)` (any sequence), `Elements(list, 3)`, `Shuffled(items)`, `Weighted(("gold", 1), ("silver", 3))`, `Enum<T>()`, `Guid()`, `ReplaceSymbols("##??")`.
 
 Image URLs come from replaceable templates, so generated data doesn't have to point at public placeholder services:
 
@@ -328,7 +331,7 @@ faker.Parse("Ticket {{Helpers.FromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{String.Nume
 faker.Parse("{{Person.FirstName}} lives at {{Location.Address}}");
 ```
 
-Names are case-insensitive, so faker.js templates (`{{person.firstName}}`, `{{number.int({"min":1,"max":9})}}`) work unchanged, and so do locale data paths and record fields (`{{airline.airport.iataCode}}`). Register your own functions with `TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-#####"))`.
+Names are case-insensitive, so faker.js templates (`{{person.firstName}}`, `{{number.int({"min":1,"max":9})}}`) work unchanged, and so do locale data paths and record fields (`{{airline.airport.iataCode}}`). Options are given as an options object or as the plain value: `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.url({"protocol":"http","appendSlash":true})}}`, `{{internet.email({"provider":"example.org"})}}`, `{{internet.password({"length":12,"prefix":"pw_"})}}`, `{{location.zipCode({"format":"###-##"})}}`, `{{date.birthdate({"min":30,"max":40})}}`, `{{color.hex({"casing":"upper"})}}` and `{{internet.mac("-")}}`; a wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters or a count above its limit (10,000 words, 1,000 sentences, 300 paragraphs); use the API for more. Typed results (`airline.airport`, `finance.currency`, `science.chemicalElement`, `color.hsl`…) are written in their usual text form, and `datatype.boolean` takes an optional `probability`. `TemplateFunctions.Names` lists every function. Register your own functions with `TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-#####"))`.
 
 ## Objects
 
@@ -361,7 +364,8 @@ Besides arrays, `List<T>`, `HashSet<T>`, `Dictionary<K,V>` and their interfaces,
 | `ImmutableArray<T>`, `ImmutableList<T>`, `IImmutableList<T>` | `ImmutableHashSet<T>`, `IImmutableSet<T>`, `ImmutableSortedSet<T>` | `ImmutableDictionary<K,V>`, `IImmutableDictionary<K,V>`, `ImmutableSortedDictionary<K,V>` |
 | `ReadOnlyCollection<T>`, `Collection<T>`, `ObservableCollection<T>` | `SortedSet<T>` | `SortedDictionary<K,V>`, `SortedList<K,V>` |
 | `Queue<T>`, `Stack<T>`, `LinkedList<T>` | `FrozenSet<T>` | `FrozenDictionary<K,V>` |
-| `ConcurrentBag<T>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>` | | `ConcurrentDictionary<K,V>` |
+| `ConcurrentBag<T>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>` | | `ConcurrentDictionary<K,V>`, `ReadOnlyDictionary<K,V>` |
+| `ImmutableQueue<T>`, `IImmutableQueue<T>`, `ImmutableStack<T>`, `IImmutableStack<T>` | | |
 
 Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` counterpart (so a seed gives the same elements whichever type holds them) and converted. Sizes, `[MinLength]`/`[MaxLength]`, `CollectionSize`, `Invalid`/`Boundary`, `Populate` (a default `ImmutableArray<T>` counts as unset), `Each()` paths and the source generator all work the same.
 
@@ -395,6 +399,20 @@ var sample = Fake.For<Customer>().Seed(7).WithFeed(feed, FeedOrder.Random).Gener
 - **Precedence**: a rule for the member (`With`, `Ignore`…) wins over the feed; the feed wins over name conventions and `WithEveryMemberOfType`. Members without a column are generated independently of the row (a `Email` convention doesn't know the `FirstName` from the file), so add the columns that must agree.
 - CSV follows RFC 4180 (quoted values with delimiters, `""` quotes and line breaks, CRLF, a byte order mark); pass `delimiter: ';'` for other separators. JSON must be an array of flat objects with the same properties.
 - A generator with a feed can't be given to `With`, `WithGeneratorFor` or `Fake.Generators.Add`: every nested object would take the first row. `Populate` fills the members that are unset. Works the same with reflection and with the source generator.
+
+#### Writing CSV and JSON
+
+The generator can also write what it generates, for fixtures, seed files and sample data from the same models and rules as your tests:
+
+```csharp
+Fake.For<Customer>().Seed(1).WriteCsvFile("customers.csv", 500);
+string json = Fake.For<Customer>().ToJson(10);                   // also WriteJsonFile(path, n), WriteJson(stream, n)
+string csv = Fake.For<Customer>().ToCsv(100, delimiter: ';', columns: ["Id", "Email", "Country"]);
+```
+
+- **One row per object**, one column per scalar member (strings, numbers, booleans, enums, dates and times, `Guid`, `Uri`…) that can be read from the object; nested objects and collections are not written, and `columns` chooses and orders the members. A column that is unknown, not scalar, not readable or listed twice is refused with the names that work.
+- **Reads back**: values use the invariant culture and round-trip formats, so `DataFeed.FromCsvFile(path)` with `.WithFeed(feed)` restores the scalar values that were written. Nested objects and collections are not written, and members without a column are generated again, so they differ from the original objects. JSON has real numbers, booleans and `null`s; CSV quotes fields that hold the delimiter, quotes or line breaks.
+- **Reproducible**: the objects are those of `Generate(count)`, so a seeded generator writes the same file on every run, with reflection or a source-generated model alike (no reflection of its own, AOT safe). Files are UTF-8 without a byte order mark and a `TextWriter` or `Stream` you pass in is not closed.
 
 ### Back-references
 
@@ -817,7 +835,7 @@ public async Task Totals_add_up()
 - On a method it wins over the class, and on a class over the assembly (`[assembly: FakeSeed]` makes every test random and replayable). Parallel tests don't affect each other.
 - The seed covers the `Fake` facade of the test, not generators created earlier (a `static` field) or ones that set their own `.Seed(...)`. Skipped tests print nothing.
 - It works with other test executors (`[TestExecutor<T>]`): the executor the test already has runs inside the seeded scope.
-- Other frameworks can do the same with `FakeSeed.Pick()` (`PHONEY_SEED`, else a new seed), `Fake.Seeded(seed)` and printing the seed when the test fails.
+- Other frameworks use `FakeSeed.Run` / `FakeSeed.RunAsync`, see [below](#replayable-random-data-in-xunit-nunit-and-mstest).
 
 The same machinery is available to other frameworks through `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 
@@ -845,9 +863,30 @@ public void Places_order(Customer customer, string email, [Range(1, 10)] int qua
 
 - Parameters are filled by name and type, objects and collections recursively, data annotations are honoured, and the parameters of one test case agree like the members of one object.
 - **Reproducible by default** (the seed is derived from the test), with `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`; `PHONEY_SEED=123 dotnet test` moves every test at once. The shared rules live in `FakeDataOptions` in the main package.
-- These attributes fill **method parameters**. Constructor and property injection (TUnit) and `[FakeSeed]` have no counterpart in the other frameworks.
+- These attributes fill **method parameters**. Constructor and property injection (TUnit) and the `[FakeSeed]` attribute have no counterpart in the other frameworks; use `FakeSeed.Run` for replayable random data (next section).
 - Test data is created while the framework discovers tests, so register custom conventions (`Fake.Conventions.Add`) and subtypes before that, for example in a module initializer.
 - Packages target .NET 8 and .NET 10. They work with **xUnit.net v3 3.0 and later** (`xunit.v3` 3.x and 4.x), **NUnit 4.0 and later** (4.x and 5.x) and **MSTest 4.0 and later**; MSTest 3.x is not supported because 4.0 changed the data source interface, so a build for 3.x would fail in 4.x apps. `Phoney.TUnit` needs TUnit 1.10 or later and `Phoney.NodaTime` NodaTime 3.1 or later.
+
+### Replayable random data in xUnit, NUnit and MSTest
+
+`FakeSeed.Run` (and `FakeSeed.RunAsync`) runs the body of a test on a seeded `Fake` facade and, **when it throws, gives your sink a line with the seed** before rethrowing the same exception. The seed is `PHONEY_SEED` if set, otherwise a new random one; pass `seed:` to pin it while you fix a failure:
+
+```csharp
+// xUnit.net v3
+[Fact]
+public void Totals_add_up() => FakeSeed.Run(() =>
+{
+    var orders = Fake.Many<Order>(100);                       // different on every run
+    Totals.Of(orders).ShouldBe(orders.Sum(o => o.Total));
+}, TestContext.Current.SendDiagnosticMessage);
+
+// NUnit:  FakeSeed.Run(() => { ... }, TestContext.Out.WriteLine);
+// MSTest: FakeSeed.Run(() => { ... }, TestContext.WriteLine);       // the TestContext property of the class
+// async:  await FakeSeed.RunAsync(async () => { ... }, sink);
+// Phoney: the failing run used random seed 481516234. Replay it with PHONEY_SEED=481516234 or FakeSeed.Run(..., seed: 481516234).
+```
+
+As with `[FakeSeed]`, only the `Fake` facade of the body is seeded (not generators created earlier or with their own `.Seed(...)`), and parallel tests don't affect each other. Every exception is reported, so a test that skips by throwing is reported too.
 
 ## Dependency injection and ASP.NET Core
 
@@ -903,6 +942,7 @@ dotnet add package Phoney.NodaTime
 ```csharp
 Instant created = faker.Noda().Instant.Past();
 LocalDate birthday = faker.Noda().LocalDate.Birthdate();
+Interval stay = faker.Noda().Interval();       // also DateInterval, YearMonth, AnnualDate, Offset
 var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate BirthDate… follow the conventions
 ```
 

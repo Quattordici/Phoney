@@ -21,6 +21,40 @@ public sealed class SeededRandomTests
     }
 
     [Test]
+    public void Element_picks_from_any_sequence_with_the_draw_of_a_list()
+    {
+        var set = new HashSet<int> { 10, 20, 30, 40 };
+        var list = set.ToList();
+
+        new SeededRandom(5).Element(set).ShouldBe(new SeededRandom(5).Element(list));
+        new SeededRandom(5).Element(set).ShouldBe(20);
+        new SeededRandom(5).Element(new Dictionary<string, int> { ["a"] = 1 }.Keys).ShouldBe("a");
+        new SeededRandom(5).Element(list.Select(x => x + 1)).ShouldBe(new SeededRandom(5).Element(list) + 1);
+    }
+
+    [Test]
+    public void Element_of_an_empty_or_missing_sequence_fails_clearly()
+    {
+        Should.Throw<ArgumentException>(() => new SeededRandom(1).Element(new HashSet<int>())).ParamName.ShouldBe("items");
+        Should.Throw<ArgumentNullException>(() => new SeededRandom(1).Element((IEnumerable<int>)null!));
+    }
+
+    [Test]
+    public void Shuffled_returns_a_new_array_with_the_same_items_and_leaves_the_source_alone()
+    {
+        var source = Enumerable.Range(1, 20).ToList();
+
+        var shuffled = new SeededRandom(9).Shuffled(source.Where(_ => true));
+
+        shuffled.Order().ShouldBe(source);
+        shuffled.SequenceEqual(source).ShouldBeFalse();
+        shuffled.ShouldBe(new SeededRandom(9).Shuffled(source));
+        shuffled.ShouldBe([4, 18, 14, 20, 11, 17, 6, 16, 9, 8, 19, 2, 7, 10, 12, 15, 13, 3, 5, 1]);
+        source.ShouldBe(Enumerable.Range(1, 20));
+        Should.Throw<ArgumentNullException>(() => new SeededRandom(1).Shuffled<int>(null!));
+    }
+
+    [Test]
     public void Enum_picks_a_value_without_allocating()
     {
         var random = new SeededRandom(1);
@@ -143,5 +177,24 @@ public sealed class SeededRandomTests
         }
 
         return result;
+    }
+
+    [Test]
+    public void With_a_comparer_the_source_order_does_not_matter()
+    {
+        string[] one = ["delta", "alpha", "charlie", "bravo", "echo"];
+        string[] other = ["echo", "bravo", "alpha", "delta", "charlie"];
+
+        for (var seed = 1; seed <= 20; seed++)
+        {
+            new SeededRandom(seed).Element(one, StringComparer.Ordinal).ShouldBe(new SeededRandom(seed).Element(other, StringComparer.Ordinal));
+            new SeededRandom(seed).Shuffled(one, StringComparer.Ordinal).ShouldBe(new SeededRandom(seed).Shuffled(other, StringComparer.Ordinal));
+        }
+
+        new SeededRandom(1).Shuffled(one, StringComparer.Ordinal).Order(StringComparer.Ordinal).ShouldBe(["alpha", "bravo", "charlie", "delta", "echo"]);
+        one.ShouldBe(["delta", "alpha", "charlie", "bravo", "echo"]); // the source is left as it is
+        Should.Throw<ArgumentNullException>(() => new SeededRandom(1).Element(one, null!));
+        Should.Throw<ArgumentNullException>(() => new SeededRandom(1).Shuffled(one, null!));
+        Should.Throw<ArgumentException>(() => new SeededRandom(1).Element(Array.Empty<string>(), StringComparer.Ordinal));
     }
 }

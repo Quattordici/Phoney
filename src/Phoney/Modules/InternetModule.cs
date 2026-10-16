@@ -205,17 +205,26 @@ public sealed partial class InternetModule : FakerModule
         return sb.ToString();
     }
 
+    /// <summary>The number of characters in a row that may miss the pattern of a password before it is given up.</summary>
+    private const int MaxPasswordMisses = 10_000;
+
     /// <summary>Returns a password.</summary>
-    /// <param name="length">Total length including <paramref name="prefix"/>.</param>
+    /// <param name="length">Total length including <paramref name="prefix"/>; a prefix already this long or longer is returned unchanged.</param>
     /// <param name="memorable">Alternate consonants and vowels in lower case so the password is pronounceable.</param>
-    /// <param name="pattern">Regular expression each generated character must match; defaults to word characters (<c>\w</c>).</param>
-    /// <param name="prefix">Text the password starts with.</param>
+    /// <param name="pattern">Regular expression each generated ASCII character (codes 33–126) must match; defaults to word characters (<c>\w</c>). Ignored when <paramref name="memorable"/> is <see langword="true"/>.</param>
+    /// <param name="prefix">Text the password starts with; it is not checked against <paramref name="pattern"/>.</param>
+    /// <exception cref="ArgumentException">10,000 consecutive candidate characters are rejected before the requested length is reached.</exception>
+    /// <exception cref="RegexMatchTimeoutException">Matching a character against <paramref name="pattern"/> exceeds the expression's timeout.</exception>
     public string Password(int length = 15, bool memorable = false, Regex? pattern = null, string prefix = "")
     {
         var sb = new StringBuilder(prefix, Math.Max(length, prefix.Length));
         Span<char> one = stackalloc char[1];
+        var misses = 0;
         while (sb.Length < length)
         {
+            // A pattern that one printable character in 94 matches has less than a 1 in 10^40 chance of 10 000 misses in a row; one that none matches would never end.
+            if (misses >= MaxPasswordMisses)
+                throw new ArgumentException("The pattern matches no printable ASCII character (33–126), so a password can't be made from it.", nameof(pattern));
             var c = (char)Random.Int(33, 126);
             bool accept;
             if (memorable)
@@ -235,13 +244,39 @@ public sealed partial class InternetModule : FakerModule
             }
 
             if (accept)
+            {
                 sb.Append(c);
+                misses = 0;
+            }
+            else
+            {
+                misses++;
+            }
         }
 
         return sb.ToString();
 
         static bool IsVowel(char c) => "aeiouAEIOU".Contains(c);
         static bool IsConsonant(char c) => char.IsAsciiLetter(c) && !IsVowel(c);
+    }
+
+    /// <summary>Returns a hex color such as <c>#a1b2c3</c>; each channel is the average of a random value and the base, so a base of 255 gives pastel colors.</summary>
+    /// <param name="redBase">Red base, 0–255.</param>
+    /// <param name="greenBase">Green base, 0–255.</param>
+    /// <param name="blueBase">Blue base, 0–255.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A base is outside 0–255.</exception>
+    public string Color(int redBase = 0, int greenBase = 0, int blueBase = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(redBase);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(redBase, 255);
+        ArgumentOutOfRangeException.ThrowIfNegative(greenBase);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(greenBase, 255);
+        ArgumentOutOfRangeException.ThrowIfNegative(blueBase);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(blueBase, 255);
+        var red = (Random.Int(0, 255) + redBase) / 2;
+        var green = (Random.Int(0, 255) + greenBase) / 2;
+        var blue = (Random.Int(0, 255) + blueBase) / 2;
+        return string.Create(CultureInfo.InvariantCulture, $"#{red:x2}{green:x2}{blue:x2}");
     }
 
     /// <summary>Returns an emoji, optionally from specific categories.</summary>
