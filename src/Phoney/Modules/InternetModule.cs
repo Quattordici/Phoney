@@ -217,6 +217,7 @@ public sealed partial class InternetModule : FakerModule
     /// <exception cref="RegexMatchTimeoutException">Matching a character against <paramref name="pattern"/> exceeds the expression's timeout.</exception>
     public string Password(int length = 15, bool memorable = false, Regex? pattern = null, string prefix = "")
     {
+        ArgumentNullException.ThrowIfNull(prefix);
         var sb = new StringBuilder(prefix, Math.Max(length, prefix.Length));
         Span<char> one = stackalloc char[1];
         var misses = 0;

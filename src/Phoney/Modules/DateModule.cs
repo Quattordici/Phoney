@@ -102,8 +102,12 @@ public sealed class DateModule : FakerModule
     }
 
     /// <summary>Returns a birthdate in a year between <paramref name="minYear"/> and <paramref name="maxYear"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="minYear"/> is less than 1 or <paramref name="maxYear"/> more than 9999.</exception>
+    /// <exception cref="ArgumentException"><paramref name="maxYear"/> is less than <paramref name="minYear"/>.</exception>
     public DateOnly BirthdateInYears(int minYear, int maxYear)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(minYear, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxYear, 9999);
         if (maxYear < minYear)
             throw new ArgumentException($"Max year {maxYear} must be greater than or equal to min year {minYear}.", nameof(maxYear));
         return Between(new DateOnly(minYear, 1, 2), new DateOnly(maxYear, 12, 30));

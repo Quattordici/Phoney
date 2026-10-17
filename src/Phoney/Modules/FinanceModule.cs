@@ -101,6 +101,8 @@ public sealed class FinanceModule : FakerModule
     /// <summary>Returns a credit card number with a valid Luhn check digit, from a random issuer unless one is given.</summary>
     public string CreditCardNumber(CardIssuer? issuer = null)
     {
+        if (issuer is { } requested && !Enum.IsDefined(requested))
+            throw new ArgumentOutOfRangeException(nameof(issuer), requested, $"{requested} is not a {nameof(CardIssuer)}.");
         var chosen = issuer ?? CreditCardIssuer();
         var (_, key, fallback) = CardIssuers.First(c => c.Issuer == chosen);
         return FromCardFormat(Faker.TryPick(key) ?? fallback);

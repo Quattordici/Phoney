@@ -150,23 +150,90 @@ public sealed class NumberModule : FakerModule
         return Math.Round(steps / factor, digits);
     }
 
-    /// <summary>Returns a decimal between <paramref name="min"/> and <paramref name="max"/> with <paramref name="decimals"/> decimal places.</summary>
+    /// <summary>
+    /// Returns a decimal between <paramref name="min"/> and <paramref name="max"/> with <paramref name="decimals"/> decimal places (fewer for values
+    /// so large that a <see cref="decimal"/> can't hold that many places). Any range works, up to <see cref="decimal.MinValue"/> to <see cref="decimal.MaxValue"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>, or no value with <paramref name="decimals"/> places lies between them.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="decimals"/> is negative or more than 28.</exception>
     public decimal Decimal(decimal min = 0, decimal max = 1, int decimals = 2)
     {
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
         ArgumentOutOfRangeException.ThrowIfNegative(decimals);
-        var factor = Pow10(decimals);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, MaxDecimalPlaces);
+
+        var largest = Math.Max(Math.Abs(min), Math.Abs(max));
+        if (decimals <= MaxLongPlaces && largest <= DecimalPowers[MaxLongPlaces - decimals])
+        {
+            // The common case: every step fits in a long, so the value is built from its digits instead of divided out (same draw, same result).
+            var scale = DecimalPowers[decimals];
+            var first = decimal.Ceiling(min * scale);
+            var last = decimal.Floor(max * scale);
+            if (last < first)
+                throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
+            var start = (long)first;
+            var drawn = Random.Long(0, (long)last - start);
+            var steps = start + drawn;
+            // A zero keeps the sign decimal arithmetic gives it (-0 from a negative minimum), so it is divided out like before.
+            return steps != 0 ? FromSteps(steps, decimals) : decimal.Round((first + drawn) / scale, decimals);
+        }
+
+        // A value too large to scale by 10^decimals can't hold that many places either: keep as many as fit.
+        var places = decimals;
+        while (places > 0 && largest > decimal.MaxValue / Pow10(places))
+            places--;
+
+        var factor = Pow10(places);
         var low = decimal.Ceiling(min * factor);
         var high = decimal.Floor(max * factor);
         if (high < low)
             throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
+        if (low < 0 && high > decimal.MaxValue + low)
+        {
+            // The width doesn't fit in a decimal (e.g. MinValue to MaxValue): interpolate between the ends instead.
+            var share = (decimal)Random.Double();
+            var value = decimal.Floor((low * (1 - share)) + (high * share));
+            return decimal.Round(Math.Clamp(value, low, high) / factor, places);
+        }
+
         var range = high - low;
         // decimal has more precision than one double draw; combine two draws for wide ranges.
         var offset = range <= long.MaxValue
             ? Random.Long(0, (long)range)
-            : decimal.Floor((decimal)Random.Double() * (range + 1));
-        return decimal.Round((low + offset) / factor, decimals);
+            : decimal.Floor((decimal)Random.Double() * (range < decimal.MaxValue ? range + 1 : range));
+        return decimal.Round((low + offset) / factor, places);
+    }
+
+    /// <summary>The most decimal places a <see cref="decimal"/> has.</summary>
+    internal const int MaxDecimalPlaces = 28;
+
+    /// <summary>Scaled values below 10^18 fit in a long.</summary>
+    private const int MaxLongPlaces = 18;
+
+    /// <summary>Exact powers of ten, 10^0 to 10^18.</summary>
+    private static readonly decimal[] DecimalPowers =
+    [
+        1m, 10m, 100m, 1_000m, 10_000m, 100_000m, 1_000_000m, 10_000_000m, 100_000_000m, 1_000_000_000m, 10_000_000_000m, 100_000_000_000m,
+        1_000_000_000_000m, 10_000_000_000_000m, 100_000_000_000_000m, 1_000_000_000_000_000m, 10_000_000_000_000_000m, 100_000_000_000_000_000m,
+        1_000_000_000_000_000_000m,
+    ];
+
+    /// <summary>
+    /// <paramref name="steps"/> (not zero) × 10^-<paramref name="places"/> with trailing zeros dropped, exactly what <c>decimal.Round(steps / 10^places, places)</c> returns
+    /// (division keeps the smallest scale), without dividing.
+    /// </summary>
+    private static decimal FromSteps(long steps, int places)
+    {
+        var negative = steps < 0;
+        var magnitude = negative ? 0UL - (ulong)steps : (ulong)steps;
+        while (places > 0 && magnitude % 10 == 0)
+        {
+            magnitude /= 10;
+            places--;
+        }
+
+        return new decimal((int)(uint)magnitude, (int)(uint)(magnitude >> 32), 0, negative, (byte)places);
     }
 
     /// <summary>Returns a byte between <paramref name="min"/> and <paramref name="max"/>.</summary>
@@ -272,8 +339,10 @@ public sealed class NumberModule : FakerModule
     private static long FloorDiv(long a, long b) => (a / b) - (a % b < 0 ? 1 : 0);
 
     /// <summary>10 to the power of <paramref name="exponent"/>, exactly.</summary>
-    private static decimal Pow10(int exponent)
+    internal static decimal Pow10(int exponent)
     {
+        if (exponent <= MaxLongPlaces)
+            return DecimalPowers[exponent];
         var result = 1m;
         for (var i = 0; i < exponent; i++)
             result *= 10;

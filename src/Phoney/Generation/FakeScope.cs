@@ -149,6 +149,22 @@ public sealed class FakeScope
     /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
     internal void ForceNextCollectionCount(int? count) => _forcedCount = count;
 
+    // Set when NestedObject returns null because the object can't exist here (depth limit, cycle, no subtype or model), so collections leave that element out.
+    private bool _cutOff;
+
+    /// <summary>
+    /// Produces one collection element; <see langword="false"/> when it was cut off (see <see cref="NestedObject"/>) and must be left out. Only a
+    /// <see langword="null"/> element counts: one whose own parts were cut off (a dictionary without keys, a tuple without an object) is still a value.
+    /// </summary>
+    private bool TryElement<TElement>(Func<FakeScope, TElement> element, out TElement value)
+    {
+        _cutOff = false;
+        value = element(this);
+        var cutOff = _cutOff && value is null;
+        _cutOff = false;
+        return !cutOff;
+    }
+
     /// <summary>
     /// Whether <paramref name="value"/> still holds its default: <see langword="null"/>, <c>default(T)</c> (0, <see langword="false"/>,
     /// <see cref="Guid.Empty"/>…), an empty string or an empty collection. <see cref="PopulateMode.MissingOnly"/> fills such members.
@@ -307,7 +323,11 @@ public sealed class FakeScope
         var count = CollectionCount(constraints);
         var list = new List<TElement>(count);
         for (var i = 0; i < count; i++)
-            list.Add(element(this));
+        {
+            if (TryElement(element, out var value))
+                list.Add(value);
+        }
+
         return list;
     }
 
@@ -351,9 +371,14 @@ public sealed class FakeScope
     public TElement[] Array<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)
     {
         var array = new TElement[CollectionCount(constraints)];
+        var length = 0;
         for (var i = 0; i < array.Length; i++)
-            array[i] = element(this);
-        return array;
+        {
+            if (TryElement(element, out var value))
+                array[length++] = value;
+        }
+
+        return length == array.Length ? array : array[..length];
     }
 
     /// <summary>Creates a two-dimensional array of <see cref="CollectionCount"/> rows and as many columns, filled row by row.</summary>
@@ -376,8 +401,16 @@ public sealed class FakeScope
     {
         var count = CollectionCount(constraints);
         var set = new HashSet<TElement>();
-        for (var i = 0; i < count * 10 && set.Count < count; i++)
-            set.Add(element(this));
+        // A cut-off element still counts once, as the null it used to be, so the loop draws exactly what it always did.
+        var cutOff = 0;
+        for (var i = 0; i < count * 10 && set.Count + cutOff < count; i++)
+        {
+            if (TryElement(element, out var value))
+                set.Add(value);
+            else
+                cutOff = 1;
+        }
+
         return set;
     }
 
@@ -387,12 +420,17 @@ public sealed class FakeScope
     {
         var count = CollectionCount(constraints);
         var dictionary = new Dictionary<TKey, TValue>(count);
-        for (var i = 0; i < count * 10 && dictionary.Count < count; i++)
+        HashSet<TKey>? cutOff = null; // keys whose value was cut off: they still count, so the loop draws exactly what it always did
+        for (var i = 0; i < count * 10 && dictionary.Count + (cutOff?.Count ?? 0) < count; i++)
         {
             // The value is only produced for a new key, like the reflection model, so both consume randomness alike.
             var k = key(this);
-            if (k is not null && !dictionary.ContainsKey(k))
-                dictionary.Add(k, value(this));
+            if (k is null || dictionary.ContainsKey(k) || cutOff?.Contains(k) == true)
+                continue;
+            if (TryElement(value, out var v))
+                dictionary.Add(k, v);
+            else
+                (cutOff ??= new HashSet<TKey>(dictionary.Comparer)).Add(k);
         }
         return dictionary;
     }
@@ -442,7 +480,7 @@ public sealed class FakeScope
     internal object? NestedObject(Type type)
     {
         if (Depth + 1 > Settings.MaxDepth)
-            return null;
+            return CutOff();
 
         // A generator registered for the declared type decides everything, subtype included.
         if (FindGenerator(type) is { } declared)
@@ -455,18 +493,18 @@ public sealed class FakeScope
         if (registered || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
             type = subtypes.Length == 1 ? subtypes[0] : subtypes[Faker.Random.Index(subtypes.Length)];
         else if (type.IsInterface || type.IsAbstract)
-            return null;
+            return CutOff();
 
         // The subtype that was picked may have a generator of its own.
         if (type != declaredType && FindGenerator(type) is { } picked)
             return CreateWith(picked, type);
 
         if (IsBeingCreated(type))
-            return null; // cycle: Customer → Order → Customer
+            return CutOff(); // cycle: Customer → Order → Customer
 
         var model = ModelRegistry.Get(type);
         if (model is null)
-            return null;
+            return CutOff();
         // Custom conventions and path rules reach nested members through slots, so both kinds of model apply them in FakeScope.Get.
         var slots = Settings.Conventions?.SlotsFor(type, model);
         PathNode?[]? children = null;
@@ -477,6 +515,13 @@ public sealed class FakeScope
         }
 
         return model.CreateObject(new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children));
+    }
+
+    /// <summary>Returns <see langword="null"/> for an object that can't be created here, and marks it so a collection leaves the element out.</summary>
+    private object? CutOff()
+    {
+        _cutOff = true;
+        return null;
     }
 
     /// <summary>The generator registered for <paramref name="type"/> by this scope's generator or, failing that, by the nearest enclosing one.</summary>
@@ -496,7 +541,7 @@ public sealed class FakeScope
 
     /// <summary>Creates <paramref name="requested"/> with <paramref name="generator"/>, unless that would repeat a type already being created.</summary>
     private object? CreateWith(INestedGenerator generator, Type requested) =>
-        IsBeingCreated(requested) || IsBeingCreated(generator.GeneratedType) ? null : generator.CreateNested(this);
+        IsBeingCreated(requested) || IsBeingCreated(generator.GeneratedType) ? CutOff() : generator.CreateNested(this);
 
     /// <summary>Whether an object of <paramref name="type"/> is being created further up the graph.</summary>
     private bool IsBeingCreated(Type type)

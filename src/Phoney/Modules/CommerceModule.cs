@@ -58,6 +58,8 @@ public sealed class CommerceModule : FakerModule
     /// </summary>
     public decimal Price(decimal min = 1, decimal max = 1000, int decimals = 2)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(decimals);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, NumberModule.MaxDecimalPlaces);
         if (min < 0 || max < 0)
             return 0;
         if (min == max)
@@ -67,10 +69,12 @@ public sealed class CommerceModule : FakerModule
         if (decimals == 0)
             return generated;
 
-        var unit = 1m;
-        for (var i = 0; i < decimals; i++)
-            unit /= 10;
-        var lastDigit = decimal.Truncate(generated / unit) % 10;
+        // A price this large keeps fewer places (see Number.Decimal): change the last one it has. Below 10^(28 - places) there is always room, so the multiplication is skipped.
+        var places = decimals;
+        while (places > 0 && generated >= NumberModule.Pow10(Math.Min(18, NumberModule.MaxDecimalPlaces - places)) && generated > decimal.MaxValue * new decimal(1, 0, 0, false, (byte)places))
+            places--;
+        var unit = new decimal(1, 0, 0, false, (byte)places); // 10^-places
+        var lastDigit = decimal.Truncate(generated * NumberModule.Pow10(places)) % 10; // = generated / unit, without dividing
         var newLastDigit = Random.Index(10) switch
         {
             < 5 => 9,  // weight 5
@@ -78,9 +82,14 @@ public sealed class CommerceModule : FakerModule
             8 => 0,    // weight 1
             _ => Random.Index(10), // weight 1: any digit
         };
+        if (newLastDigit > lastDigit && generated > NearMaxValue)
+            return generated; // the new digit wouldn't fit next to decimal.MaxValue
         var combined = generated - (lastDigit * unit) + (newLastDigit * unit);
         return combined >= min && combined <= max ? combined : generated;
     }
+
+    /// <summary><see cref="decimal.MaxValue"/> − 9: above it, a larger last digit may not fit.</summary>
+    private const decimal NearMaxValue = 79_228_162_514_264_337_593_543_950_326m;
 
     /// <summary>Returns a price formatted with <paramref name="symbol"/>, e.g. <c>$39.99</c>.</summary>
     public string PriceText(string symbol = "", decimal min = 1, decimal max = 1000, int decimals = 2) =>
