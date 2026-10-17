@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using Phoney.Data;
 
 namespace Phoney.Templates;
@@ -22,18 +21,18 @@ internal sealed class Template
 
     private static readonly ConcurrentDictionary<string, Template> Cache = new(StringComparer.Ordinal);
 
+    /// <summary>The number of templates in <see cref="Cache"/>.</summary>
+    private static int s_cached;
+
     [ThreadStatic]
     private static int t_depth;
 
     private readonly Segment[] _segments;
-    private readonly int _literalLength;
 
     private Template(string text, Segment[] segments)
     {
         Text = text;
         _segments = segments;
-        foreach (var segment in segments)
-            _literalLength += segment.Literal?.Length ?? 0;
     }
 
     /// <summary>The template source text.</summary>
@@ -63,8 +62,9 @@ internal sealed class Template
         if (Cache.TryGetValue(text, out var template))
             return template;
         template = Parse(text);
-        if (Cache.Count < MaxCachedTemplates)
-            Cache.TryAdd(text, template);
+        // Its own counter: ConcurrentDictionary.Count takes every lock of the dictionary, on each miss.
+        if (Volatile.Read(ref s_cached) < MaxCachedTemplates && Cache.TryAdd(text, template))
+            Interlocked.Increment(ref s_cached);
         return template;
     }
 
