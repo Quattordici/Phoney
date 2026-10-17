@@ -23,6 +23,7 @@ public sealed class SystemModule : FakerModule
     /// <summary>Returns a file name with <paramref name="extensionCount"/> extensions, e.g. <c>self_assured_cake.pdf</c>.</summary>
     public string FileName(int extensionCount = 1)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(extensionCount);
         var sb = new StringBuilder(BaseName());
         for (var i = 0; i < extensionCount; i++)
             sb.Append('.').Append(FileExt());

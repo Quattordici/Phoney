@@ -21,6 +21,7 @@ public sealed class LoremModule : FakerModule
     /// <summary>Returns <paramref name="count"/> space-separated words.</summary>
     public string Words(int count = 3)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
         var sb = new StringBuilder();
         AppendWords(sb, count);
         return sb.ToString();
@@ -29,6 +30,8 @@ public sealed class LoremModule : FakerModule
     /// <summary>Returns a sentence of <paramref name="wordCount"/> words (3–10 when not given), capitalized and ending with a period.</summary>
     public string Sentence(int? wordCount = null)
     {
+        if (wordCount is { } words)
+            ArgumentOutOfRangeException.ThrowIfNegative(words, nameof(wordCount));
         var sb = new StringBuilder();
         AppendSentence(sb, wordCount ?? Random.Int(3, 10));
         return sb.ToString();
@@ -37,6 +40,8 @@ public sealed class LoremModule : FakerModule
     /// <summary>Returns <paramref name="sentenceCount"/> sentences (2–6 when not given) joined by <paramref name="separator"/>.</summary>
     public string Sentences(int? sentenceCount = null, string separator = " ")
     {
+        if (sentenceCount is { } sentences)
+            ArgumentOutOfRangeException.ThrowIfNegative(sentences, nameof(sentenceCount));
         var count = sentenceCount ?? Random.Int(2, 6);
         var sb = new StringBuilder();
         for (var i = 0; i < count; i++)
@@ -50,22 +55,36 @@ public sealed class LoremModule : FakerModule
     }
 
     /// <summary>Returns a paragraph of <paramref name="sentenceCount"/> sentences.</summary>
-    public string Paragraph(int sentenceCount = 3) => Sentences(sentenceCount);
+    public string Paragraph(int sentenceCount = 3)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(sentenceCount);
+        return Sentences(sentenceCount);
+    }
 
     /// <summary>Returns <paramref name="paragraphCount"/> paragraphs joined by <paramref name="separator"/>.</summary>
     public string Paragraphs(int paragraphCount = 3, string separator = "\n")
     {
-        var paragraphs = new string[Math.Max(0, paragraphCount)];
+        ArgumentOutOfRangeException.ThrowIfNegative(paragraphCount);
+        var paragraphs = new string[paragraphCount];
         for (var i = 0; i < paragraphs.Length; i++)
             paragraphs[i] = Paragraph();
         return string.Join(separator, paragraphs);
     }
 
     /// <summary>Returns <paramref name="lineCount"/> sentences (1–5 when not given), one per line.</summary>
-    public string Lines(int? lineCount = null) => Sentences(lineCount ?? Random.Int(1, 5), "\n");
+    public string Lines(int? lineCount = null)
+    {
+        if (lineCount is { } lines)
+            ArgumentOutOfRangeException.ThrowIfNegative(lines, nameof(lineCount));
+        return Sentences(lineCount ?? Random.Int(1, 5), "\n");
+    }
 
     /// <summary>Returns a URL slug of <paramref name="wordCount"/> words, e.g. <c>dolores-illo-est</c>.</summary>
-    public string Slug(int wordCount = 3) => HelpersModule.Slugify(Words(wordCount));
+    public string Slug(int wordCount = 3)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(wordCount);
+        return HelpersModule.Slugify(Words(wordCount));
+    }
 
     /// <summary>Returns text of random shape: a sentence, sentences, paragraph(s) or lines.</summary>
     public string Text() => Random.Index(5) switch

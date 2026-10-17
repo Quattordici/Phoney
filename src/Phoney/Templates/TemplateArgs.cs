@@ -112,7 +112,7 @@ public sealed class TemplateArgs
 
         return value.ValueKind switch
         {
-            JsonValueKind.Number => value.TryGetInt32(out var i) ? i : (int)value.GetDouble(),
+            JsonValueKind.Number => value.TryGetInt32(out var i) ? i : (int)Math.Clamp(value.GetDouble(), int.MinValue, int.MaxValue), // a cast alone is platform dependent out of range
             JsonValueKind.String when int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) => s,
             _ => null,
         };

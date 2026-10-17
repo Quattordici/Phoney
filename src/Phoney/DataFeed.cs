@@ -91,19 +91,28 @@ public sealed class DataFeed
         if (document.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException("The JSON must be an array of objects, such as [{\"name\":\"Ada\"}].");
 
-        string[]? columns = null;
+        string[]? names = null; // as written in the JSON, for lookups
+        string[]? columns = null; // trimmed
         var rows = new List<string?[]>();
         foreach (var element in document.RootElement.EnumerateArray())
         {
             if (element.ValueKind != JsonValueKind.Object)
                 throw new InvalidOperationException($"Item {rows.Count + 1} of the JSON array is not an object.");
 
-            var names = element.EnumerateObject().Select(p => p.Name).ToArray();
-            columns ??= CheckColumns(names);
-            if (names.Length != columns.Length || names.Except(columns, StringComparer.Ordinal).Any())
-                throw new InvalidOperationException($"Item {rows.Count + 1} of the JSON array does not have the same properties as the first one ({string.Join(", ", columns)}).");
+            var properties = element.EnumerateObject().Select(p => p.Name).ToArray();
+            if (names is null)
+            {
+                columns = CheckColumns(properties);
+                names = properties;
+            }
 
-            rows.Add([.. columns.Select(c => JsonValue(element.GetProperty(c), c, rows.Count + 1))]);
+            if (properties.Length != names.Length || !properties.Order(StringComparer.Ordinal).SequenceEqual(names.Order(StringComparer.Ordinal), StringComparer.Ordinal))
+                throw new InvalidOperationException($"Item {rows.Count + 1} of the JSON array does not have the same properties as the first one ({string.Join(", ", columns!)}).");
+
+            var row = new string?[names.Length];
+            for (var c = 0; c < names.Length; c++)
+                row[c] = JsonValue(element.GetProperty(names[c]), columns![c], rows.Count + 1);
+            rows.Add(row);
         }
 
         return Create(columns ?? [], [.. rows], "JSON");

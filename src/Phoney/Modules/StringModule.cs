@@ -19,7 +19,8 @@ public sealed class StringModule : FakerModule
     public string FromCharacters(string characters, int length = 1)
     {
         ArgumentNullException.ThrowIfNull(characters);
-        if (length <= 0)
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        if (length == 0)
             return "";
         if (characters.Length == 0)
             throw new ArgumentException("No characters to select from.", nameof(characters));
@@ -50,7 +51,8 @@ public sealed class StringModule : FakerModule
     /// <param name="exclude">Digits that must not appear.</param>
     public string Numeric(int length = 1, bool allowLeadingZeros = true, string? exclude = null)
     {
-        if (length <= 0)
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        if (length == 0)
             return "";
         var allowed = Exclude(Digits, exclude);
         if (allowed.Length == 0 || (allowed == "0" && !allowLeadingZeros))
@@ -79,11 +81,15 @@ public sealed class StringModule : FakerModule
     }
 
     /// <summary>Returns printable ASCII characters (codes 33–125).</summary>
-    public string Sample(int length = 10) => string.Create(Math.Max(0, length), Random, static (span, random) =>
+    public string Sample(int length = 10)
     {
-        for (var i = 0; i < span.Length; i++)
-            span[i] = (char)random.Int(33, 125);
-    });
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        return string.Create(length, Random, static (span, random) =>
+        {
+            for (var i = 0; i < span.Length; i++)
+                span[i] = (char)random.Int(33, 125);
+        });
+    }
 
     /// <summary>Returns ASCII punctuation symbols.</summary>
     public string Symbol(int length = 1) => FromCharacters(Symbols, length);

@@ -16,11 +16,16 @@ public sealed class ImageModule : FakerModule
     /// <summary>Returns the URL of a photo, built from <see cref="ImageSources.Photo"/>.</summary>
     /// <param name="width">Width in pixels; 100–2000 when not given.</param>
     /// <param name="height">Height in pixels; 100–2000 when not given.</param>
-    public string Url(int? width = null, int? height = null) => ImageSources.Format(
-        ImageSources.Photo,
-        ("seed", Faker.String.AlphaNumeric(Random.Int(5, 10))),
-        ("width", (width ?? Random.Int(100, 2000)).ToString(CultureInfo.InvariantCulture)),
-        ("height", (height ?? Random.Int(100, 2000)).ToString(CultureInfo.InvariantCulture)));
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is not positive.</exception>
+    public string Url(int? width = null, int? height = null)
+    {
+        RequirePositive(width, height);
+        return ImageSources.Format(
+            ImageSources.Photo,
+            ("seed", Faker.String.AlphaNumeric(Random.Int(5, 10))),
+            ("width", (width ?? Random.Int(100, 2000)).ToString(CultureInfo.InvariantCulture)),
+            ("height", (height ?? Random.Int(100, 2000)).ToString(CultureInfo.InvariantCulture)));
+    }
 
     /// <summary>Returns the URL of a portrait, built from <see cref="ImageSources.Avatar"/>.</summary>
     /// <param name="sex">Sex of the person shown; random when not given (pass it to match a generated person).</param>
@@ -48,8 +53,10 @@ public sealed class ImageModule : FakerModule
     /// <param name="height">Height in pixels; 100–2000 when not given.</param>
     /// <param name="color">Fill color; random when not given.</param>
     /// <param name="base64">Base64-encode the SVG instead of URL-encoding it.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is not positive.</exception>
     public string DataUri(int? width = null, int? height = null, string? color = null, bool base64 = false)
     {
+        RequirePositive(width, height);
         var w = width ?? Random.Int(100, 2000);
         var h = height ?? Random.Int(100, 2000);
         color ??= Faker.Color.Hex();
@@ -58,6 +65,14 @@ public sealed class ImageModule : FakerModule
         return base64
             ? "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))
             : "data:image/svg+xml;charset=UTF-8," + Uri.EscapeDataString(svg);
+    }
+
+    private static void RequirePositive(int? width, int? height)
+    {
+        if (width is { } w)
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(w, nameof(width));
+        if (height is { } h)
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(h, nameof(height));
     }
 }
 

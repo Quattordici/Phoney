@@ -424,6 +424,7 @@ public static class ConventionValues
 
         if (typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half))
         {
+            (min, max) = (Math.Max(min, double.MinValue), Math.Min(max, double.MaxValue)); // [Range] may say ±∞ for no limit
             var value = Math.Clamp(Math.Round(scope.Faker.Random.Double(min, max), 2), min, max);
             return T.CreateSaturating(value);
         }

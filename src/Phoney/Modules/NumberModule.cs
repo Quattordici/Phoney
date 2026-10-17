@@ -127,10 +127,16 @@ public sealed class NumberModule : FakerModule
 
     /// <summary>
     /// Returns a double in <c>[min, max)</c>, optionally rounded to <paramref name="fractionDigits"/> decimals
-    /// (then <paramref name="max"/> is inclusive).
+    /// (then <paramref name="max"/> is inclusive). Any finite range works, up to <see cref="double.MinValue"/> to <see cref="double.MaxValue"/>.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> or <paramref name="max"/> is not a finite number, or <paramref name="fractionDigits"/> is outside 0–15.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public double Double(double min = 0, double max = 1, int? fractionDigits = null)
     {
+        if (!double.IsFinite(min))
+            throw new ArgumentOutOfRangeException(nameof(min), min, "The minimum must be a finite number.");
+        if (!double.IsFinite(max))
+            throw new ArgumentOutOfRangeException(nameof(max), max, "The maximum must be a finite number.");
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
         if (fractionDigits is not { } digits)

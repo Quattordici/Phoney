@@ -124,29 +124,50 @@ public sealed class SeededRandom
         return mean + (standardDeviation * radius * PureMath.CosTurns(turns));
     }
 
-    /// <summary>Returns a double in <c>[min, max)</c>.</summary>
+    /// <summary>Returns a double in <c>[min, max)</c> (<paramref name="min"/> when both are equal). Any finite range works, up to <see cref="double.MinValue"/> to <see cref="double.MaxValue"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> or <paramref name="max"/> is not a finite number.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public double Double(double min, double max)
     {
+        RequireFinite(min, nameof(min));
+        RequireFinite(max, nameof(max));
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
-        return min + (Double() * (max - min));
+        var fraction = Double();
+        var range = max - min;
+        var value = double.IsFinite(range)
+            ? min + (fraction * range)
+            : (min * (1 - fraction)) + (max * fraction); // the width overflows a double; this form stays between the bounds
+        return value < max || max == min ? value : Math.BitDecrement(max); // rounding can land on max, which the range excludes
     }
 
-    /// <summary>Returns a decimal in <c>[min, max)</c>.</summary>
+    /// <summary>Returns a decimal in <c>[min, max)</c>. Any range works, up to <see cref="decimal.MinValue"/> to <see cref="decimal.MaxValue"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public decimal Decimal(decimal min = 0m, decimal max = 1m)
     {
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
-        return min + ((decimal)Double() * (max - min));
+        var fraction = (decimal)Double();
+        return min >= 0 || max <= decimal.MaxValue + min
+            ? min + (fraction * (max - min))
+            : min + (fraction * max) - (fraction * min); // the width overflows a decimal; the parts don't
     }
 
-    /// <summary>Returns <see langword="true"/> with the given <paramref name="probability"/> (0..1).</summary>
+    /// <summary>Returns <see langword="true"/> with the given <paramref name="probability"/> (0..1; at most 0 is never, at least 1 always).</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is not a number.</exception>
     public bool Bool(double probability = 0.5) => probability switch
     {
+        double.NaN => throw new ArgumentOutOfRangeException(nameof(probability), probability, "The probability must be a number between 0 and 1."),
         <= 0 => false,
         >= 1 => true,
         _ => Double() < probability,
     };
+
+    private static void RequireFinite(double value, string name)
+    {
+        if (!double.IsFinite(value))
+            throw new ArgumentOutOfRangeException(name, value, $"The {(name == "min" ? "minimum" : "maximum")} must be a finite number.");
+    }
 
     /// <summary>Returns a random element of <paramref name="items"/>.</summary>
     public T Element<T>(IReadOnlyList<T> items)
@@ -245,7 +266,7 @@ public sealed class SeededRandom
     }
 
     /// <summary>Picks a value with probability proportional to its weight, e.g. <c>Weighted(("gold", 1), ("silver", 3))</c>.</summary>
-    /// <exception cref="ArgumentException">There are no items or a weight is not positive.</exception>
+    /// <exception cref="ArgumentException">There are no items, a weight is not positive or not finite, or the weights add up to more than a double holds.</exception>
     public T Weighted<T>(params (T Value, double Weight)[] items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -254,11 +275,13 @@ public sealed class SeededRandom
         var total = 0.0;
         foreach (var (_, weight) in items)
         {
-            if (weight <= 0 || double.IsNaN(weight))
-                throw new ArgumentException("Weights must be positive.", nameof(items));
+            if (weight <= 0 || !double.IsFinite(weight))
+                throw new ArgumentException($"Weights must be positive finite numbers, but one is {weight}.", nameof(items));
             total += weight;
         }
 
+        if (double.IsInfinity(total))
+            throw new ArgumentException("The weights add up to more than a double can hold; scale them down.", nameof(items));
         var target = Double() * total;
         foreach (var (value, weight) in items)
         {

@@ -75,8 +75,10 @@ public sealed class WordModule : FakerModule
     /// <summary>Returns <paramref name="count"/> space-separated words (1–3 when not given).</summary>
     public string Words(int? count = null)
     {
+        if (count is { } requested)
+            ArgumentOutOfRangeException.ThrowIfNegative(requested, nameof(count));
         var n = count ?? Random.Int(1, 3);
-        var words = new string[Math.Max(0, n)];
+        var words = new string[n];
         for (var i = 0; i < words.Length; i++)
             words[i] = Sample();
         return string.Join(' ', words);
