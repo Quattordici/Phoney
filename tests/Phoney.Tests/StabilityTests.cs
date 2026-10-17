@@ -241,10 +241,11 @@ public sealed class StabilityTests
     [Test]
     public void Json_property_names_with_spaces_around_them_are_read()
     {
-        var feed = DataFeed.FromJson("""[{" Name ":"Ada","Age":36},{" Name ":"Grace","Age":85}]""");
+        var feed = DataFeed.FromJson("""[{" Name ":"Ada","Age":36},{"Age":85," Name ":"Grace"}]""");
 
         feed.Columns.ShouldBe(["Name", "Age"]);
         feed.Value(1, 0).ShouldBe("Grace");
+        feed.Value(1, 1).ShouldBe("85");
     }
 
     [Test]
