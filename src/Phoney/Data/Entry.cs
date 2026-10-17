@@ -85,6 +85,32 @@ public class StringsEntry : Entry
         var template = _templates[index] ??= Template.Parse(this[index]); // benign race: parsing is idempotent
         return template.Evaluate(faker);
     }
+
+    /// <summary>
+    /// The value at <paramref name="index"/> parsed by <paramref name="parse"/>, parsed on first use and kept with the entry (a module's own reading of
+    /// its patterns, like <see cref="Template"/> for templates). One parser per entry: the entry belongs to one data key.
+    /// </summary>
+    internal T Parsed<T>(int index, Func<string, T> parse)
+        where T : class
+    {
+        var parsed = _parsed ??= new object?[Count]; // benign races: parsing is idempotent
+        return parsed[index] as T ?? (T)(parsed[index] = parse(this[index]));
+    }
+
+    private object?[]? _parsed;
+
+    /// <summary>Writes the value at <paramref name="index"/> into <paramref name="text"/>, evaluating templates in place (the same draws as <see cref="Resolve"/>).</summary>
+    internal void AppendTo(int index, Faker faker, ref TextBuilder text)
+    {
+        if (_templates is null)
+        {
+            text.Append(this[index]);
+            return;
+        }
+
+        var template = _templates[index] ??= Template.Parse(this[index]);
+        template.AppendTo(ref text, faker);
+    }
 }
 
 /// <summary>Strings picked according to relative weights.</summary>

@@ -62,3 +62,30 @@ public static partial class TemplateFunctions
         return faker.Number.Long(min, max, a.Int(0, "multipleOf") ?? 1);
     }
 }
+
+/// <summary>A built-in template function that writes its text into the buffer of the template being evaluated.</summary>
+internal delegate void TemplateWriter(Faker faker, TemplateArgs args, ref TextBuilder text);
+
+/// <summary>
+/// Pairs a <see cref="TemplateWriter"/> with the <see cref="TemplateFunction"/> registered for it, so a template can find the writer behind the
+/// function (and a function someone registers in its place has none).
+/// </summary>
+internal sealed class WritingFunction
+{
+    private readonly TemplateWriter _write;
+
+    private WritingFunction(TemplateWriter write) => _write = write;
+
+    /// <summary>A template function that returns what <paramref name="write"/> writes.</summary>
+    public static TemplateFunction Of(TemplateWriter write) => new WritingFunction(write).Evaluate;
+
+    /// <summary>The writer behind <paramref name="function"/>, or <see langword="null"/> when it is an ordinary function.</summary>
+    public static TemplateWriter? WriterOf(TemplateFunction function) => function.Target is WritingFunction writing ? writing._write : null;
+
+    private string Evaluate(Faker faker, TemplateArgs args)
+    {
+        var text = new TextBuilder(stackalloc char[128]);
+        _write(faker, args, ref text);
+        return text.ToStringAndDispose();
+    }
+}

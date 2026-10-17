@@ -131,6 +131,7 @@ internal sealed class SubsetPicker<TValue>
         var weights = _weights!;
         var n = weights.Length;
         Span<bool> taken = n <= StackLimit * 2 ? stackalloc bool[n] : new bool[n];
+        taken.Clear(); // the module skips zeroing stack buffers
         for (var count = 0; count < positions.Length; count++)
         {
             var remaining = 0.0;

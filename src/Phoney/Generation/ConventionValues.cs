@@ -19,9 +19,12 @@ public static class ConventionValues
     /// </summary>
     public static string String(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null)
     {
-        if (constraints is null)
-            return StringCore(scope, kind);
+        // The lambdas live in their own method: a lambda here would allocate its closure on every call, constrained or not.
+        return constraints is null ? StringCore(scope, kind) : ConstrainedString(scope, kind, constraints);
+    }
 
+    private static string ConstrainedString(FakeScope scope, ConventionKind kind, MemberConstraints constraints)
+    {
         return Avoiding(scope, constraints, () =>
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
@@ -134,9 +137,12 @@ public static class ConventionValues
     public static T Number<T>(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null)
         where T : INumber<T>
     {
-        if (constraints is null)
-            return NumberCore<T>(scope, kind);
+        return constraints is null ? NumberCore<T>(scope, kind) : ConstrainedNumber<T>(scope, kind, constraints);
+    }
 
+    private static T ConstrainedNumber<T>(FakeScope scope, ConventionKind kind, MemberConstraints constraints)
+        where T : INumber<T>
+    {
         return Avoiding(scope, constraints, () =>
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
@@ -261,7 +267,7 @@ public static class ConventionValues
         where TEnum : struct, Enum
     {
         if (constraints is { AllowedValues.Length: > 0 })
-            return Avoiding(scope, constraints, () => (TEnum)global::System.Enum.ToObject(typeof(TEnum), scope.Faker.Random.Element(constraints.AllowedValues)!));
+            return AllowedEnum<TEnum>(scope, constraints);
         var values = EnumCache<TEnum>.Values;
         if (values.Length == 0)
             return default;
@@ -270,6 +276,11 @@ public static class ConventionValues
             return scope.Identity.Sex == Modules.Sex.Female ? female : male;
         return values[scope.Faker.Random.Index(values.Length)];
     }
+
+    /// <summary>One of the <c>[AllowedValues]</c> of an enum member, avoiding <c>[DeniedValues]</c>.</summary>
+    private static TEnum AllowedEnum<TEnum>(FakeScope scope, MemberConstraints constraints)
+        where TEnum : struct, Enum =>
+        Avoiding(scope, constraints, () => (TEnum)global::System.Enum.ToObject(typeof(TEnum), scope.Faker.Random.Element(constraints.AllowedValues!)!));
 
     /// <summary>Dispatches to the typed entry points for the reflection model.</summary>
     [RequiresDynamicCode("Generates enum values for types only known at runtime.")]
@@ -305,11 +316,14 @@ public static class ConventionValues
         TypeCategory.Rune => Rune(scope, kind, c),
         TypeCategory.IPAddress => IPAddress(scope, kind, c),
         TypeCategory.Version => Version(scope, kind, c),
-        TypeCategory.Enum => c is { AllowedValues.Length: > 0 }
-            ? Avoiding(scope, c, () => global::System.Enum.ToObject(type, scope.Faker.Random.Element(c.AllowedValues)!))
-            : BoxedEnum(scope, type, kind),
+        TypeCategory.Enum => c is { AllowedValues.Length: > 0 } ? AllowedBoxedEnum(scope, type, c) : BoxedEnum(scope, type, kind),
         _ => null,
     };
+
+    /// <summary>One of the <c>[AllowedValues]</c> of an enum member of a runtime type, avoiding <c>[DeniedValues]</c>.</summary>
+    [RequiresDynamicCode("Generates enum values for types only known at runtime.")]
+    private static object AllowedBoxedEnum(FakeScope scope, Type type, MemberConstraints c) =>
+        Avoiding(scope, c, () => global::System.Enum.ToObject(type, scope.Faker.Random.Element(c.AllowedValues!)!));
 
     /// <summary>Random enum value for a runtime type, matching the identity for sex/gender enums.</summary>
     [RequiresDynamicCode("Reads enum values for types only known at runtime.")]

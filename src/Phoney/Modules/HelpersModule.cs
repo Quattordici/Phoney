@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Phoney.Templates;
 
 namespace Phoney.Modules;
 
@@ -127,22 +128,32 @@ public sealed partial class HelpersModule : FakerModule
     internal string ReplaceHashRunsWithoutLeadingZero(string text)
     {
         // A loop, not a Regex: the first use of one costs a process milliseconds, and every address has a building number.
-        var first = text.IndexOf('#', StringComparison.Ordinal);
-        if (first < 0)
+        if (!text.Contains('#', StringComparison.Ordinal))
             return text;
-        var sb = new StringBuilder(text.Length + 8);
-        var position = 0;
-        while (first >= 0)
+        var builder = new TextBuilder(stackalloc char[64]);
+        AppendHashRunsWithoutLeadingZero(text, ref builder);
+        return builder.ToStringAndDispose();
+    }
+
+    /// <summary>Writes <paramref name="text"/> into <paramref name="builder"/> with each run of <c>#</c> replaced like <see cref="ReplaceHashRunsWithoutLeadingZero"/> (the same draws).</summary>
+    internal void AppendHashRunsWithoutLeadingZero(string text, ref TextBuilder builder)
+    {
+        var random = Random;
+        var rest = text.AsSpan();
+        while (rest.IndexOf('#') is var first and >= 0)
         {
-            var end = first;
-            while (end < text.Length && text[end] == '#')
-                end++;
-            sb.Append(text, position, first - position).Append(Faker.String.Numeric(end - first, allowLeadingZeros: false));
-            position = end;
-            first = text.IndexOf('#', position);
+            builder.Append(rest[..first]);
+            rest = rest[first..];
+            var run = rest.IndexOfAnyExcept('#') is var end and >= 0 ? end : rest.Length;
+            // What String.Numeric(run, allowLeadingZeros: false) draws: a digit from 1–9, then digits from 0–9.
+            var digits = builder.AppendSpan(run);
+            digits[0] = (char)('1' + random.Index(9));
+            for (var i = 1; i < digits.Length; i++)
+                digits[i] = (char)('0' + random.Index(10));
+            rest = rest[run..];
         }
 
-        return sb.Append(text, position, text.Length - position).ToString();
+        builder.Append(rest);
     }
 
     /// <summary>

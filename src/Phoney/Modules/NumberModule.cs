@@ -162,27 +162,54 @@ public sealed class NumberModule : FakerModule
     /// </summary>
     /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>, or no value with <paramref name="decimals"/> places lies between them.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="decimals"/> is negative or more than 28.</exception>
-    public decimal Decimal(decimal min = 0, decimal max = 1, int decimals = 2)
+    public decimal Decimal(decimal min = 0, decimal max = 1, int decimals = 2) => Decimal(min, max, decimals, out _);
+
+    /// <summary>
+    /// <see cref="Decimal(decimal, decimal, int)"/> that also says which step it drew when the range fits the fast path: the value is
+    /// <paramref name="steps"/> × 10^-<paramref name="decimals"/>, between <see cref="DecimalSteps.First"/> and <see cref="DecimalSteps.Last"/>.
+    /// <see cref="DecimalSteps.Steps"/> is 0 when the slow path ran (or the step drawn is zero), so callers fall back to decimal arithmetic.
+    /// </summary>
+    internal decimal Decimal(decimal min, decimal max, int decimals, out DecimalSteps steps)
     {
+        steps = default;
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
         ArgumentOutOfRangeException.ThrowIfNegative(decimals);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, MaxDecimalPlaces);
 
+        // The common case: both ends scaled by 10^decimals fit in a long, so the value is built from its digits (same draw, same result as decimal arithmetic).
+        if (decimals <= MaxLongPlaces && TryScale(min, decimals, ceiling: true, out var start) && TryScale(max, decimals, ceiling: false, out var end))
+        {
+            if (end < start)
+                throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
+            var drawn = Random.Long(0, end - start);
+            var step = start + drawn;
+            if (step != 0)
+            {
+                steps = new DecimalSteps(step, start, end);
+                return FromSteps(step, decimals);
+            }
+
+            // A zero keeps the sign decimal arithmetic gives it (-0 from a negative minimum), so it is divided out like before.
+            var scale = DecimalPowers[decimals];
+            return decimal.Round((decimal.Ceiling(min * scale) + drawn) / scale, decimals);
+        }
+
         var largest = Math.Max(Math.Abs(min), Math.Abs(max));
         if (decimals <= MaxLongPlaces && largest <= DecimalPowers[MaxLongPlaces - decimals])
         {
-            // The common case: every step fits in a long, so the value is built from its digits instead of divided out (same draw, same result).
+            // Every step fits in a long, but an end has more than 64 bits of digits (many decimals beyond the ones asked for): scale it with decimal arithmetic.
             var scale = DecimalPowers[decimals];
             var first = decimal.Ceiling(min * scale);
             var last = decimal.Floor(max * scale);
             if (last < first)
                 throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
-            var start = (long)first;
-            var drawn = Random.Long(0, (long)last - start);
-            var steps = start + drawn;
-            // A zero keeps the sign decimal arithmetic gives it (-0 from a negative minimum), so it is divided out like before.
-            return steps != 0 ? FromSteps(steps, decimals) : decimal.Round((first + drawn) / scale, decimals);
+            var from = (long)first;
+            var drawn = Random.Long(0, (long)last - from);
+            var step = from + drawn;
+            if (step != 0)
+                steps = new DecimalSteps(step, from, (long)last);
+            return step != 0 ? FromSteps(step, decimals) : decimal.Round((first + drawn) / scale, decimals);
         }
 
         // A value too large to scale by 10^decimals can't hold that many places either: keep as many as fit.
@@ -225,6 +252,54 @@ public sealed class NumberModule : FakerModule
         1_000_000_000_000_000_000m,
     ];
 
+    /// <summary>The powers of ten that fit in a <see cref="ulong"/>, 10^0 to 10^19.</summary>
+    private static readonly ulong[] UInt64Powers =
+    [
+        1UL, 10UL, 100UL, 1_000UL, 10_000UL, 100_000UL, 1_000_000UL, 10_000_000UL, 100_000_000UL, 1_000_000_000UL, 10_000_000_000UL, 100_000_000_000UL,
+        1_000_000_000_000UL, 10_000_000_000_000UL, 100_000_000_000_000UL, 1_000_000_000_000_000UL, 10_000_000_000_000_000UL, 100_000_000_000_000_000UL,
+        1_000_000_000_000_000_000UL, 10_000_000_000_000_000_000UL,
+    ];
+
+    /// <summary>
+    /// <c>Ceiling</c> (or <c>Floor</c>) of <paramref name="value"/> × 10^<paramref name="places"/> in integer arithmetic, exactly what the decimal operations give;
+    /// false when the value has more than 64 bits of digits or the result is not within ±10^18, where the caller uses decimal arithmetic.
+    /// </summary>
+    private static bool TryScale(decimal value, int places, bool ceiling, out long scaled)
+    {
+        scaled = 0;
+        Span<int> bits = stackalloc int[4];
+        decimal.GetBits(value, bits);
+        if (bits[2] != 0)
+            return false;
+        var mantissa = (uint)bits[0] | ((ulong)(uint)bits[1] << 32);
+        var scale = (bits[3] >> 16) & 0xFF;
+        var negative = bits[3] < 0;
+        ulong magnitude;
+        if (places >= scale)
+        {
+            var power = UInt64Powers[places - scale];
+            if (mantissa != 0 && mantissa > Limit / power)
+                return false;
+            magnitude = mantissa * power;
+        }
+        else
+        {
+            // A mantissa of 64 bits is below 10^20, so dividing by more than 10^19 leaves only the remainder.
+            var (quotient, remainder) = scale - places > 19 ? (0UL, mantissa) : Math.DivRem(mantissa, UInt64Powers[scale - places]);
+            magnitude = quotient;
+            if (remainder != 0 && ceiling != negative)
+                magnitude++; // up for a positive ceiling, away from zero (down) for a negative floor
+        }
+
+        if (magnitude > Limit)
+            return false;
+        scaled = negative ? -(long)magnitude : (long)magnitude;
+        return true;
+    }
+
+    /// <summary>The largest scaled end <see cref="TryScale"/> returns: 10^18, as on the decimal fast path.</summary>
+    private const ulong Limit = 1_000_000_000_000_000_000UL;
+
     /// <summary>
     /// <paramref name="steps"/> (not zero) × 10^-<paramref name="places"/> with trailing zeros dropped, exactly what <c>decimal.Round(steps / 10^places, places)</c> returns
     /// (division keeps the smallest scale), without dividing.
@@ -241,6 +316,9 @@ public sealed class NumberModule : FakerModule
 
         return new decimal((int)(uint)magnitude, (int)(uint)(magnitude >> 32), 0, negative, (byte)places);
     }
+
+    /// <summary>A step drawn by <see cref="Decimal(decimal, decimal, int, out DecimalSteps)"/>: the value × 10^decimals and the range it was drawn from.</summary>
+    internal readonly record struct DecimalSteps(long Steps, long First, long Last);
 
     /// <summary>Returns a byte between <paramref name="min"/> and <paramref name="max"/>.</summary>
     /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>

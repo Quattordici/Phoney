@@ -138,16 +138,26 @@ public sealed class FakeScope
     /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
     /// between it and the reference date, so <c>UpdatedAt</c> is never before <c>CreatedAt</c>.
     /// </summary>
-    internal DateTimeOffset Created => _created ??= Faker.Date.Past();
+    internal DateTimeOffset Created
+    {
+        get
+        {
+            if (!_hasCreated)
+                (_created, _hasCreated) = (Faker.Date.Past(), true);
+            return _created;
+        }
+    }
 
     /// <summary>Whether a "created"-style member already received <see cref="Created"/>.</summary>
     internal bool CreatedClaimed { get; set; }
 
-    private DateTimeOffset? _created;
-    private int? _forcedCount;
+    // A scope is allocated for every object, so its state is kept compact: no nullable structs, -1 for "no forced count".
+    private DateTimeOffset _created;
+    private bool _hasCreated;
+    private int _forcedCount = -1;
 
     /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
-    internal void ForceNextCollectionCount(int? count) => _forcedCount = count;
+    internal void ForceNextCollectionCount(int? count) => _forcedCount = count ?? -1;
 
     // Set when NestedObject returns null because the object can't exist here (depth limit, cycle, no subtype or model), so collections leave that element out.
     private bool _cutOff;
@@ -400,7 +410,7 @@ public sealed class FakeScope
     public HashSet<TElement> Set<TElement>(Func<FakeScope, TElement> element, MemberConstraints? constraints = null)
     {
         var count = CollectionCount(constraints);
-        var set = new HashSet<TElement>();
+        var set = new HashSet<TElement>(count); // sized up front; a set without removals enumerates in insertion order whatever its capacity
         // A cut-off element still counts once, as the null it used to be, so the loop draws exactly what it always did.
         var cutOff = 0;
         for (var i = 0; i < count * 10 && set.Count + cutOff < count; i++)
@@ -449,9 +459,10 @@ public sealed class FakeScope
     /// </summary>
     public int CollectionCount(MemberConstraints? constraints = null)
     {
-        if (_forcedCount is { } forced)
+        if (_forcedCount >= 0)
         {
-            _forcedCount = null; // for the member's own collection only, not for collections nested in its elements
+            var forced = _forcedCount;
+            _forcedCount = -1; // for the member's own collection only, not for collections nested in its elements
             return forced;
         }
 
@@ -562,10 +573,14 @@ public sealed class FakeScope
         RuleKind.Factory => slot.Value is Func<Faker, TValue> typed ? typed(Faker) : (TValue)slot.BoxedFactory!(Faker)!,
         RuleKind.Generator => (TValue)((INestedGenerator)slot.Value!).CreateNested(this)!,
         RuleKind.Convention => Convert<TValue>(((Func<FakeScope, object?>)slot.Value!)(this)),
-        RuleKind.Constraint => Convert<TValue>(((Func<FakeScope, Func<FakeScope, object?>, object?>)slot.Value!)(this, s => fallback(s))),
+        RuleKind.Constraint => ProduceConstraint(slot, fallback),
         RuleKind.Ignore => default!,
         _ => fallback(this),
     };
+
+    // Apart from Produce, so the closure over the fallback is only allocated for constraint rules, not on every call.
+    private TValue ProduceConstraint<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback) =>
+        Convert<TValue>(((Func<FakeScope, Func<FakeScope, object?>, object?>)slot.Value!)(this, s => fallback(s)));
 
     [return: NotNullIfNotNull(nameof(value))]
     private static TValue Convert<TValue>(object? value) => value is null ? default! : (TValue)value;

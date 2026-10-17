@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using Phoney.Data;
 using Phoney.Modules;
 
 namespace Phoney.Templates;
@@ -199,13 +200,18 @@ public static partial class TemplateFunctions
     private static void RegisterLocation(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
-        f["location.zipCode"] = (faker, a) => faker.Location.ZipCode(a.String(0, "format", null));
-        Add("location.city", x => x.Location.City());
-        Add("location.buildingNumber", x => x.Location.BuildingNumber());
-        Add("location.street", x => x.Location.Street());
-        f["location.streetAddress"] = (faker, a) => faker.Location.StreetAddress(a.Bool(0, "useFullAddress") ?? false);
-        Add("location.postalAddress", x => x.Location.PostalAddress());
-        Add("location.secondaryAddress", x => x.Location.SecondaryAddress());
+        // The address parts locale templates nest most write straight into the template's buffer; each draws what its LocationModule method draws.
+        f["location.zipCode"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
+            x.Random.AppendReplacedSymbols(a.String(0, "format", null) ?? x.Pick(DataKeys.LocationPostcode), ref t));
+        f["location.city"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) => x.AppendPick(DataKeys.LocationCityPattern, ref t));
+        f["location.buildingNumber"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) =>
+            x.Helpers.AppendHashRunsWithoutLeadingZero(x.Pick(DataKeys.LocationBuildingNumber), ref t));
+        f["location.street"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) => x.AppendPick(DataKeys.LocationStreetPattern, ref t));
+        f["location.streetAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
+            x.AppendPick(a.Bool(0, "useFullAddress") ?? false ? DataKeys.LocationStreetAddressFull : DataKeys.LocationStreetAddressNormal, ref t));
+        f["location.postalAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) => x.AppendPick(DataKeys.LocationPostalAddress, ref t));
+        f["location.secondaryAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) =>
+            x.Helpers.AppendHashRunsWithoutLeadingZero(x.Pick(DataKeys.LocationSecondaryAddress), ref t));
         Add("location.county", x => x.Location.County());
         Add("location.country", x => x.Location.Country());
         Add("location.continent", x => x.Location.Continent());

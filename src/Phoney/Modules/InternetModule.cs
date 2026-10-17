@@ -33,7 +33,34 @@ public sealed partial class InternetModule : FakerModule
     public string Email(string? firstName = null, string? lastName = null, string? provider = null, bool allowSpecialCharacters = false)
     {
         provider ??= Faker.Pick(DataKeys.InternetFreeEmail);
-        var local = RemoveInvalidEmailChars(Username(firstName, lastName));
+        var text = new Templates.TextBuilder(stackalloc char[96]);
+        AppendRawUsername(firstName, lastName, ref text);
+        if (!allowSpecialCharacters && Ascii.IsValid(text.Written))
+        {
+            // The common case, built in one buffer: the steps below on an ASCII username (dropping what isn't allowed covers ToAscii's quotes and spaces).
+            var chars = text.Written;
+            var length = 0;
+            foreach (var c in chars)
+            {
+                if (IsEmailLocalChar(c))
+                    chars[length++] = c;
+            }
+
+            length = Math.Min(length, 50);
+            var collapsed = 0;
+            for (var i = 0; i < length; i++)
+            {
+                if (chars[i] != '.' || collapsed == 0 || chars[collapsed - 1] != '.')
+                    chars[collapsed++] = chars[i];
+            }
+
+            var localPart = chars[..collapsed].Trim('.');
+            var email = string.Concat(localPart, "@", provider);
+            text.Dispose();
+            return email;
+        }
+
+        var local = RemoveInvalidEmailChars(ToAscii(text.ToStringAndDispose()));
         if (local.Length > 50)
             local = local[..50];
         if (allowSpecialCharacters)
@@ -62,20 +89,35 @@ public sealed partial class InternetModule : FakerModule
     /// </summary>
     public string Username(string? firstName = null, string? lastName = null)
     {
+        var text = new Templates.TextBuilder(stackalloc char[96]);
+        AppendRawUsername(firstName, lastName, ref text);
+        return ToAscii(text.ToStringAndDispose());
+    }
+
+    /// <summary>Writes the username before <see cref="ToAscii"/>; draws the names that are not given, the separator, the number and the shape, in that order.</summary>
+    private void AppendRawUsername(string? firstName, string? lastName, ref Templates.TextBuilder text)
+    {
         var hasLastName = lastName is not null;
         firstName ??= Faker.Person.FirstName();
         lastName ??= Faker.Person.LastName();
         var separator = Random.Bool() ? '.' : '_';
-        var disambiguator = Random.Int(0, 99).ToString(CultureInfo.InvariantCulture);
+        var disambiguator = Random.Int(0, 99);
 
         // faker.js offers "first<sep>last99", "first<sep>last" and, without an explicit last name, "first99".
-        var raw = Random.Index(hasLastName ? 2 : 3) switch
+        var shape = Random.Index(hasLastName ? 2 : 3);
+        text.Append(firstName);
+        if (shape < 2)
         {
-            0 => $"{firstName}{separator}{lastName}{disambiguator}",
-            1 => $"{firstName}{separator}{lastName}",
-            _ => $"{firstName}{disambiguator}",
-        };
-        return ToAscii(raw);
+            text.Append(separator);
+            text.Append(lastName);
+        }
+
+        if (shape != 1)
+        {
+            if (disambiguator >= 10)
+                text.Append((char)('0' + (disambiguator / 10)));
+            text.Append((char)('0' + (disambiguator % 10)));
+        }
     }
 
     /// <summary>Returns a display name, e.g. <c>Nettie_Zboncak40</c>; unlike <see cref="Username"/> it keeps non-ASCII letters.</summary>
@@ -359,10 +401,10 @@ public sealed partial class InternetModule : FakerModule
     private string ValidDomainWord(string word)
     {
         var slug = HelpersModule.Slugify(word);
-        if (DomainSlug().IsMatch(slug))
+        if (IsDomainSlug(slug))
             return slug;
         slug = HelpersModule.Slugify(Faker.Lorem.Word());
-        return DomainSlug().IsMatch(slug) ? slug : Faker.String.Alpha(Random.Int(4, 8), Casing.Lower);
+        return IsDomainSlug(slug) ? slug : Faker.String.Alpha(Random.Int(4, 8), Casing.Lower);
     }
 
     /// <summary>Writes a JSON object and encodes it as base64url without padding (JWT segment).</summary>
@@ -426,9 +468,22 @@ public sealed partial class InternetModule : FakerModule
     [GeneratedRegex(@"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})$")]
     private static partial Regex CidrBlock();
 
-    /// <summary>A slug usable as a domain label: letters and inner dashes.</summary>
-    [GeneratedRegex("^[a-z][a-z-]*[a-z]$", RegexOptions.IgnoreCase)]
-    private static partial Regex DomainSlug();
+    /// <summary>
+    /// Whether <paramref name="slug"/> is usable as a domain label: ASCII letters with inner dashes (<c>^[a-z][a-z-]*[a-z]$</c>, ignoring case). A loop: this runs for
+    /// every URL, email domain and company website. <see cref="HelpersModule.Slugify"/> has already decomposed compatibility characters (the Kelvin sign is a K by then).
+    /// </summary>
+    internal static bool IsDomainSlug(ReadOnlySpan<char> slug)
+    {
+        if (slug.Length < 2 || !char.IsAsciiLetter(slug[0]) || !char.IsAsciiLetter(slug[^1]))
+            return false;
+        foreach (var c in slug[1..^1])
+        {
+            if (!char.IsAsciiLetter(c) && c != '-')
+                return false;
+        }
+
+        return true;
+    }
 }
 
 /// <summary>Classes of HTTP status codes.</summary>

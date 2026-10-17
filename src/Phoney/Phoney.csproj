@@ -8,6 +8,8 @@
     <PackageId>Phoney</PackageId>
     <Description>Fast, easy and flexible fake data for .NET: 76 locales imported from faker.js, convention-based object population with interfaces and subtypes, fluent rules, deterministic seeds, TimeProvider support, and a source generator and analyzer for reflection-free, AOT-safe generation.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- For [module: SkipLocalsInit] (AssemblyInfo.cs): stack buffers are written before they are read, so zeroing them is wasted work on hot paths. No unsafe code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

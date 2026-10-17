@@ -5,19 +5,6 @@ namespace Phoney.Modules;
 /// <summary>Addresses, places and coordinates (faker.js <c>location</c>).</summary>
 public sealed class LocationModule : FakerModule
 {
-    /// <summary>Runs <paramref name="value"/>, returning <see langword="null"/> when the data isn't applicable to the locale.</summary>
-    private static string? OrNull(Func<string> value)
-    {
-        try
-        {
-            return value();
-        }
-        catch (PhoneyDataUnavailableException)
-        {
-            return null;
-        }
-    }
-
     internal LocationModule(Faker faker) : base(faker)
     {
     }
@@ -27,13 +14,37 @@ public sealed class LocationModule : FakerModule
     /// <see langword="null"/>. Country-specific locales (<c>de_AT</c>, <c>en_US</c>…) put the address in their country,
     /// named in the locale's language (<c>Österreich</c>); language-wide locales (<c>de</c>, <c>sv</c>) leave it out.
     /// </summary>
-    public AddressProfile Address() => new(
-        StreetAddress(),
-        City(),
-        OrNull(() => ZipCode()),
-        OrNull(() => State()),
-        LocaleCountryName(Faker.Data.Info),
-        Faker.Data.Info.Country);
+    public AddressProfile Address()
+    {
+        var street = StreetAddress();
+        var city = City();
+        string? zipCode, state;
+        try
+        {
+            zipCode = ZipCode();
+        }
+        catch (PhoneyDataUnavailableException)
+        {
+            zipCode = null;
+        }
+
+        try
+        {
+            state = State();
+        }
+        catch (PhoneyDataUnavailableException)
+        {
+            state = null;
+        }
+
+        var info = Faker.Data.Info;
+        if (!ReferenceEquals(info, _countryOf))
+            (_countryName, _countryOf) = (LocaleCountryName(info), info); // the locale's country name is parsed once per faker, not per address
+        return new AddressProfile(street, city, zipCode, state, _countryName, info.Country);
+    }
+
+    private LocaleInfo? _countryOf;
+    private string? _countryName;
 
     /// <summary>
     /// The locale's country in its own language, taken from faker.js' native locale name: <c>Deutsch (Österreich)</c>
