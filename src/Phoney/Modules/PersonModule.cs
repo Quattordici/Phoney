@@ -63,39 +63,100 @@ public sealed class PersonModule : FakerModule
         // Substitute the name parts ourselves (as faker.js does with mustache) so they share one sex and the
         // caller's first/last name are honoured; anything else in the pattern is evaluated afterwards.
         // Each part is drawn only when the pattern has it, always in this order, so unused parts consume no randomness and need no data.
-        var pattern = RawPattern(DataKeys.PersonName);
-        var prefix = pattern.Contains(PrefixTag, StringComparison.Ordinal) ? Prefix(s) : null;
-        var first = pattern.Contains(FirstNameTag, StringComparison.Ordinal) ? firstName ?? FirstName(s) : null;
-        var middle = pattern.Contains(MiddleNameTag, StringComparison.Ordinal) ? MiddleName(s) : null;
-        var last = pattern.Contains(LastNameTag, StringComparison.Ordinal) ? lastName ?? LastName(s) : null;
-        var suffix = pattern.Contains(SuffixTag, StringComparison.Ordinal) ? Suffix() : null;
+        var entry = Faker.Data.Strings(DataKeys.PersonName);
+        var pattern = entry.Parsed(entry.PickIndex(Random), NamePattern.Parse); // split into parts once per pattern, not per name
+        var prefix = pattern.Has(NamePart.Prefix) ? Prefix(s) : null;
+        var first = pattern.Has(NamePart.FirstName) ? firstName ?? FirstName(s) : null;
+        var middle = pattern.Has(NamePart.MiddleName) ? MiddleName(s) : null;
+        var last = pattern.Has(NamePart.LastName) ? lastName ?? LastName(s) : null;
+        var suffix = pattern.Has(NamePart.Suffix) ? Suffix() : null;
 
-        // One pass over the pattern instead of a Replace (and a new string) per part.
-        var name = new DefaultInterpolatedStringHandler(0, 0, CultureInfo.InvariantCulture, stackalloc char[128]);
-        var rest = pattern.AsSpan();
-        while (rest.IndexOf(TagStart, StringComparison.Ordinal) is var at and >= 0)
+        var name = new Templates.TextBuilder(stackalloc char[128]);
+        foreach (var (part, literal) in pattern.Parts)
         {
-            name.AppendFormatted(rest[..at]);
-            rest = rest[at..];
-            var part = PartAt(rest, PrefixTag, prefix) ?? PartAt(rest, FirstNameTag, first) ?? PartAt(rest, MiddleNameTag, middle) ??
-                PartAt(rest, LastNameTag, last) ?? PartAt(rest, SuffixTag, suffix);
-            if (part is var (tag, value))
+            name.Append(part switch
             {
-                name.AppendFormatted(value);
-                rest = rest[tag.Length..];
-            }
-            else
-            {
-                name.AppendFormatted(TagStart); // another expression: evaluated by Parse below
-                rest = rest[TagStart.Length..];
-            }
+                NamePart.Prefix => prefix,
+                NamePart.FirstName => first,
+                NamePart.MiddleName => middle,
+                NamePart.LastName => last,
+                NamePart.Suffix => suffix,
+                _ => literal,
+            });
         }
 
-        name.AppendFormatted(rest);
-        return Faker.Parse(name.ToStringAndClear());
+        return Faker.Parse(name.ToStringAndDispose());
+    }
 
-        static (string Tag, string Value)? PartAt(ReadOnlySpan<char> text, string tag, string? value) =>
-            value is not null && text.StartsWith(tag, StringComparison.Ordinal) ? (tag, value) : null;
+    /// <summary>The parts of a name pattern <see cref="FullName"/> substitutes.</summary>
+    private enum NamePart : byte
+    {
+        Literal,
+        Prefix,
+        FirstName,
+        MiddleName,
+        LastName,
+        Suffix,
+    }
+
+    /// <summary>A name pattern split into literal text and the name parts in it, parsed once per pattern.</summary>
+    private sealed class NamePattern
+    {
+        private readonly int _present;
+
+        private NamePattern((NamePart Part, string? Literal)[] parts)
+        {
+            Parts = parts;
+            foreach (var (part, _) in parts)
+                _present |= 1 << (int)part;
+        }
+
+        public (NamePart Part, string? Literal)[] Parts { get; }
+
+        public bool Has(NamePart part) => (_present & (1 << (int)part)) != 0;
+
+        /// <summary>
+        /// Splits <paramref name="pattern"/> at the five tags; any other <c>{{person.…}}</c> expression stays literal text, which <see cref="Faker.Parse"/>
+        /// evaluates after the substitution.
+        /// </summary>
+        public static NamePattern Parse(string pattern)
+        {
+            var parts = new List<(NamePart, string?)>();
+            var literal = new System.Text.StringBuilder();
+            var rest = pattern.AsSpan();
+            while (rest.IndexOf(TagStart, StringComparison.Ordinal) is var at and >= 0)
+            {
+                literal.Append(rest[..at]);
+                rest = rest[at..];
+                var tag = PartAt(rest);
+                if (tag is var (part, length))
+                {
+                    if (literal.Length > 0)
+                        parts.Add((NamePart.Literal, literal.ToString()));
+                    literal.Clear();
+                    parts.Add((part, null));
+                    rest = rest[length..];
+                }
+                else
+                {
+                    literal.Append(TagStart);
+                    rest = rest[TagStart.Length..];
+                }
+            }
+
+            literal.Append(rest);
+            if (literal.Length > 0)
+                parts.Add((NamePart.Literal, literal.ToString()));
+            return new NamePattern([.. parts]);
+
+            static (NamePart Part, int Length)? PartAt(ReadOnlySpan<char> text) =>
+                text.StartsWith(PrefixTag, StringComparison.Ordinal) ? (NamePart.Prefix, PrefixTag.Length)
+                : text.StartsWith(FirstNameTag, StringComparison.Ordinal) ? (NamePart.FirstName, FirstNameTag.Length)
+                : text.StartsWith(MiddleNameTag, StringComparison.Ordinal) ? (NamePart.MiddleName, MiddleNameTag.Length)
+                : text.StartsWith(LastNameTag, StringComparison.Ordinal) ? (NamePart.LastName, LastNameTag.Length)
+                : text.StartsWith(SuffixTag, StringComparison.Ordinal) ? (NamePart.Suffix, SuffixTag.Length)
+                : null;
+        }
     }
 
     private const string TagStart = "{{person.";
@@ -174,13 +235,6 @@ public sealed class PersonModule : FakerModule
         if (plain >= 0 && data.TryStrings(plain) is { } plainEntry)
             return plainEntry;
         throw data.Missing(plain >= 0 ? plain : generic, "strings");
-    }
-
-    /// <summary>Picks a raw (unevaluated) pattern from a weighted or plain list.</summary>
-    private string RawPattern(int key)
-    {
-        var entry = Faker.Data.Strings(key);
-        return entry[entry.PickIndex(Random)];
     }
 }
 

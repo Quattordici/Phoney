@@ -65,9 +65,20 @@ public sealed class CommerceModule : FakerModule
         if (min == max)
             return decimal.Round(min, decimals);
 
-        var generated = Faker.Number.Decimal(min, max, decimals);
+        var generated = Faker.Number.Decimal(min, max, decimals, out var drawn);
         if (decimals == 0)
             return generated;
+
+        if (drawn.Steps != 0)
+        {
+            // The value is drawn.Steps × 10^-decimals (well below 10^18), so the last digit is swapped in integer arithmetic: the same draws and the same
+            // decimal as the arithmetic below, which always ends with exactly `decimals` places (12.5 becomes 12.59 or 12.50).
+            var newDigit = LastPriceDigit();
+            var swapped = drawn.Steps - (drawn.Steps % 10) + newDigit;
+            return swapped >= drawn.First && swapped <= drawn.Last
+                ? new decimal((int)(uint)(ulong)swapped, (int)(uint)((ulong)swapped >> 32), 0, false, (byte)decimals)
+                : generated;
+        }
 
         // A price this large keeps fewer places (see Number.Decimal): change the last one it has. Below 10^(28 - places) there is always room, so the multiplication is skipped.
         var places = decimals;
@@ -75,18 +86,21 @@ public sealed class CommerceModule : FakerModule
             places--;
         var unit = new decimal(1, 0, 0, false, (byte)places); // 10^-places
         var lastDigit = decimal.Truncate(generated * NumberModule.Pow10(places)) % 10; // = generated / unit, without dividing
-        var newLastDigit = Random.Index(10) switch
-        {
-            < 5 => 9,  // weight 5
-            < 8 => 5,  // weight 3
-            8 => 0,    // weight 1
-            _ => Random.Index(10), // weight 1: any digit
-        };
+        var newLastDigit = LastPriceDigit();
         if (newLastDigit > lastDigit && generated > NearMaxValue)
             return generated; // the new digit wouldn't fit next to decimal.MaxValue
         var combined = generated - (lastDigit * unit) + (newLastDigit * unit);
         return combined >= min && combined <= max ? combined : generated;
     }
+
+    /// <summary>The digit a price ends with: 9, then 5 and 0 are favoured.</summary>
+    private int LastPriceDigit() => Random.Index(10) switch
+    {
+        < 5 => 9,  // weight 5
+        < 8 => 5,  // weight 3
+        8 => 0,    // weight 1
+        _ => Random.Index(10), // weight 1: any digit
+    };
 
     /// <summary><see cref="decimal.MaxValue"/> − 9: above it, a larger last digit may not fit.</summary>
     private const decimal NearMaxValue = 79_228_162_514_264_337_593_543_950_326m;

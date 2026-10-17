@@ -347,20 +347,24 @@ public sealed class SeededRandom
     public string ReplaceSymbols(string pattern)
     {
         ArgumentNullException.ThrowIfNull(pattern);
-        return string.Create(pattern.Length, (pattern, this), static (span, state) =>
+        return string.Create(pattern.Length, (pattern, this), static (span, state) => state.Item2.ReplaceSymbols(state.pattern, span));
+    }
+
+    /// <summary>Writes <paramref name="pattern"/> with its symbols replaced into <paramref name="text"/> (the draws of <see cref="ReplaceSymbols(string)"/>).</summary>
+    internal void AppendReplacedSymbols(string pattern, ref Templates.TextBuilder text) => ReplaceSymbols(pattern, text.AppendSpan(pattern.Length));
+
+    private void ReplaceSymbols(ReadOnlySpan<char> pattern, Span<char> destination)
+    {
+        for (var i = 0; i < destination.Length; i++)
         {
-            var (p, r) = state;
-            for (var i = 0; i < span.Length; i++)
+            destination[i] = pattern[i] switch
             {
-                span[i] = p[i] switch
-                {
-                    '#' => r.Digit(),
-                    '?' => r.Letter(upper: true),
-                    '*' => r.Bool() ? r.Digit() : r.Letter(upper: true),
-                    var c => c,
-                };
-            }
-        });
+                '#' => Digit(),
+                '?' => Letter(upper: true),
+                '*' => Bool() ? Digit() : Letter(upper: true),
+                var c => c,
+            };
+        }
     }
 
     /// <summary>Returns a random version 4 <see cref="System.Guid"/>.</summary>

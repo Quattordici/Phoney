@@ -106,11 +106,31 @@ internal sealed class Template
             if (_segments.Length == 1)
                 return _segments[0].Evaluate(faker);
 
-            // Joined on the stack: the result string is the only allocation.
-            var text = new DefaultInterpolatedStringHandler(_literalLength, _segments.Length, CultureInfo.InvariantCulture, stackalloc char[256]);
+            // Joined on the stack, nested templates included: the result string is the only allocation.
+            var text = new TextBuilder(stackalloc char[256]);
             foreach (var segment in _segments)
-                text.AppendFormatted(segment.Evaluate(faker));
-            return text.ToStringAndClear();
+                segment.AppendTo(ref text, faker);
+            return text.ToStringAndDispose();
+        }
+        finally
+        {
+            t_depth--;
+        }
+    }
+
+    /// <summary>Evaluates the template into <paramref name="text"/>, drawing exactly what <see cref="Evaluate"/> draws.</summary>
+    public void AppendTo(ref TextBuilder text, Faker faker)
+    {
+        if (++t_depth > MaxDepth)
+        {
+            t_depth = 0;
+            throw new PhoneyDataException($"Template recursion is too deep while evaluating '{Text}'. Does the data reference itself?");
+        }
+
+        try
+        {
+            foreach (var segment in _segments)
+                segment.AppendTo(ref text, faker);
         }
         finally
         {
@@ -136,6 +156,9 @@ internal sealed class Template
     {
         /// <summary>Bound faker.js-style method, e.g. <c>person.firstName</c>; wins over data paths like in faker.js.</summary>
         private TemplateFunction? _function;
+
+        /// <summary>The built-in behind <see cref="_function"/> when it can write its text straight into the caller's buffer, otherwise <see langword="null"/>.</summary>
+        private TemplateWriter? _writer;
 
         /// <summary>Arguments parsed once from <c>name(args)</c> expressions.</summary>
         private TemplateArgs _args = TemplateArgs.Empty;
@@ -174,13 +197,49 @@ internal sealed class Template
                 segment._function = TemplateFunctions.Get(name)
                     ?? throw new FormatException($"Unknown template function '{name}' in '{{{{{expression}}}}}'.");
                 segment._args = TemplateArgs.Parse(expression[(parenthesis + 1)..^1]);
+                segment._writer = WritingFunction.WriterOf(segment._function);
                 return segment;
             }
 
             segment._function = TemplateFunctions.Get(expression);
             if (segment._function is null)
                 segment.ResolveDataPath();
+            else
+                segment._writer = WritingFunction.WriterOf(segment._function);
             return segment;
+        }
+
+        /// <summary>Writes the segment's text into <paramref name="text"/>, with the same draws as <see cref="Evaluate"/>; nested templates and writing built-ins add no string of their own.</summary>
+        public void AppendTo(ref TextBuilder text, Faker faker)
+        {
+            if (Literal is not null)
+            {
+                text.Append(Literal);
+                return;
+            }
+
+            if (_writer is not null)
+            {
+                var mark = text.Length;
+                try
+                {
+                    _writer(faker, _args, ref text);
+                }
+                catch (PhoneyDataUnavailableException)
+                {
+                    text.Length = mark; // as in Evaluate: the part is left empty, also when it failed halfway
+                }
+
+                return;
+            }
+
+            if (_function is null && _key >= 0 && faker.Data.Get(_key) is StringsEntry strings)
+            {
+                strings.AppendTo(strings.PickIndex(faker.Random), faker, ref text);
+                return;
+            }
+
+            text.Append(Evaluate(faker));
         }
 
         /// <summary>Produces the segment's text.</summary>

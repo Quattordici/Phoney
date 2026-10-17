@@ -36,9 +36,25 @@ public sealed class DateModule : FakerModule
     {
         ValidateRange(minYears, maxYears);
         var reference = Reference(referenceDate);
-        var latest = AddYears(reference, -minYears) is { } end ? AddSeconds(end, -1) : null;
-        return Between(AddYears(reference, -maxYears) ?? DateTimeOffset.MinValue, latest ?? throw NoDate(minYears, "years", "before", reference));
+        var bounds = _past;
+        if (bounds is null || bounds.Reference != reference || bounds.Min != minYears || bounds.Max != maxYears)
+        {
+            // The calendar arithmetic is done once per reference date and range (objects ask for the same past year again and again); the draw is Between's.
+            var latest = AddYears(reference, -minYears) is { } end ? AddSeconds(end, -1) : null;
+            var from = (AddYears(reference, -maxYears) ?? DateTimeOffset.MinValue).ToUnixTimeMilliseconds();
+            var to = (latest ?? throw NoDate(minYears, "years", "before", reference)).ToUnixTimeMilliseconds();
+            if (from > to)
+                throw new ArgumentException("'from' must be before 'to'.", "from");
+            _past = bounds = new PastBounds(reference, minYears, maxYears, from, to);
+        }
+
+        return DateTimeOffset.FromUnixTimeMilliseconds(Random.Long(bounds.FromMs, bounds.ToMs));
     }
+
+    private PastBounds? _past;
+
+    /// <summary>The range <see cref="Past(int, int, DateTimeOffset?)"/> last drew from, in Unix milliseconds.</summary>
+    private sealed record PastBounds(DateTimeOffset Reference, int Min, int Max, long FromMs, long ToMs);
 
     /// <summary>Returns a date in the future, up to <paramref name="years"/> years after the reference date (no later than year 9999).</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="years"/> is not positive.</exception>

@@ -129,6 +129,13 @@ public sealed partial class Faker : IFaker
     /// <summary>Picks a value (weighted if applicable) and evaluates its templates.</summary>
     internal string Pick(StringsEntry entry) => entry.Resolve(entry.PickIndex(Random), this);
 
+    /// <summary>Like <see cref="Pick(int)"/>, writing the value into <paramref name="text"/> instead of returning it.</summary>
+    internal void AppendPick(int key, ref TextBuilder text)
+    {
+        var entry = Data.Strings(key);
+        entry.AppendTo(entry.PickIndex(Random), this, ref text);
+    }
+
     /// <summary>Picks a random record from a records table, e.g. airports.</summary>
     internal (RecordsEntry Table, int Row) PickRecord(int key)
     {
