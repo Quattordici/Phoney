@@ -91,7 +91,7 @@ public sealed class FinanceModule : FakerModule
     /// <summary>Returns an ISO 4217 numeric currency code, e.g. <c>752</c>.</summary>
     public string CurrencyNumericCode() => Currency().NumericCode;
 
-    /// <summary>Returns a card issuer the locale has number formats for.</summary>
+    /// <summary>Returns a card issuer the locale has number formats for, or any issuer (with its built-in format) when the locale has none.</summary>
     public CardIssuer CreditCardIssuer()
     {
         var available = CardIssuers.Where(c => Faker.Data.Has(c.Key)).ToArray();

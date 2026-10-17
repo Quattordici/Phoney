@@ -274,7 +274,7 @@ public sealed class StabilityTests
         HelpersModule.LuhnCheck(number.Replace("-", "", StringComparison.Ordinal)).ShouldBeTrue();
         Enum.IsDefined(faker.Finance.CreditCardIssuer()).ShouldBeTrue();
         for (var seed = 0; seed < 50; seed++)
-            new Faker("base", seed).Finance.CreditCardNumber(CardIssuer.AmericanExpress)[..2].ShouldBeOneOf("34", "37");
+            new Faker("base", seed).Finance.CreditCardNumber(CardIssuer.AmericanExpress)[..2].ShouldBe("37");
     }
 }
 
