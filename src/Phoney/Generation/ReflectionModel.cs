@@ -260,13 +260,31 @@ internal sealed class ReflectionTypeModel : IFakeModel
     private static bool IsPolymorphic(Type type) => type.IsInterface || type.IsAbstract;
 
     /// <summary>
-    /// The producer for a type that is generated as a value of its own when it is asked for directly (<c>Fake.One&lt;int&gt;()</c>, <c>Fake.Many&lt;Guid&gt;(5)</c>):
-    /// scalars, byte buffers, tuples and key/value pairs, produced like members of that type; <see langword="null"/> for objects, which have members to populate.
+    /// The producer for a type that is generated as a value of its own when it is asked for directly (<c>Fake.One&lt;int&gt;()</c>, <c>Fake.Many&lt;Guid&gt;(5)</c>,
+    /// <c>Fake.One&lt;List&lt;Customer&gt;&gt;()</c>): scalars, byte buffers, collections, tuples and key/value pairs, produced like members of that type, and
+    /// interfaces and abstract classes, created as one of their subtypes; <see langword="null"/> for objects, which have members to populate.
     /// </summary>
-    internal static Func<FakeScope, object?>? RootValue(Type type) =>
-        FakeMember.ScalarCategory(type) != TypeCategory.Other || type == typeof(byte[]) || type == typeof(Memory<byte>) || type == typeof(ReadOnlyMemory<byte>) || CompositeParts(type) is not null
-            ? Producer(type, "", ConventionKind.None, false)
-            : null;
+    internal static Func<FakeScope, object?>? RootValue(Type type)
+    {
+        if (FakeMember.ScalarCategory(type) != TypeCategory.Other || type == typeof(byte[]) || type == typeof(Memory<byte>) || type == typeof(ReadOnlyMemory<byte>) ||
+            CollectionTypes.IsGeneratedCollection(type) || CompositeParts(type) is not null)
+        {
+            return Producer(type, "", ConventionKind.None, false);
+        }
+
+        if (IsPolymorphic(type) && !type.ContainsGenericParameters)
+            return s => s.NestedObject(type) ?? throw NoSubtype(type);
+        return null;
+    }
+
+    /// <summary>The exception for an interface or abstract class asked for directly that has no subtype to create.</summary>
+    private static InvalidOperationException NoSubtype(Type type)
+    {
+        var kind = type.IsInterface ? "an interface" : "an abstract class";
+        return new InvalidOperationException(
+            $"{type.Name} is {kind}, so Phoney needs a subtype to create. Register one on the generator with .Subtype<{type.Name}, YourType>(), " +
+            $"app-wide with Fake.Subtypes.Add<{type.Name}, YourType>(), or with [JsonDerivedType(typeof(YourType))] on {type.Name}; or create it yourself with .CreateWith(...).");
+    }
 
     /// <summary>Builds the value producer for a member type: scalar conventions, collections, nested objects.</summary>
     internal static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints = null)
