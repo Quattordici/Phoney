@@ -24,9 +24,11 @@ public sealed class RootTypeTests
     [Test]
     public void A_collection_asked_for_directly_is_reproducible()
     {
-        var first = Fake.For<List<Customer>>().Seed(3).Generate(4).Select(l => string.Join(",", l.Select(c => c.Email)));
-        var again = Fake.For<List<Customer>>().Seed(3).Generate(4).Select(l => string.Join(",", l.Select(c => c.Email)));
-        again.ShouldBe(first);
+        Fake.For<List<Customer>>().Seed(3).Generate(2).Select(l => string.Join(",", l.Select(c => c.Email))).ShouldBe(
+        [
+            "Walker.Lemke43@hotmail.com,Mamie_Stehr25@yahoo.com",
+            "Richard.Thiel83@hotmail.com,Helen.Weber@yahoo.com,Lelia.Gulgowski94@hotmail.com",
+        ]);
     }
 
     [Test]

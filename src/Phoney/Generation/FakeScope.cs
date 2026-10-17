@@ -152,15 +152,17 @@ public sealed class FakeScope
     // Set when NestedObject returns null because the object can't exist here (depth limit, cycle, no subtype or model), so collections leave that element out.
     private bool _cutOff;
 
-    /// <summary>Produces one collection element; <see langword="false"/> when it was cut off (see <see cref="NestedObject"/>) and must be left out.</summary>
+    /// <summary>
+    /// Produces one collection element; <see langword="false"/> when it was cut off (see <see cref="NestedObject"/>) and must be left out. Only a
+    /// <see langword="null"/> element counts: one whose own parts were cut off (a dictionary without keys, a tuple without an object) is still a value.
+    /// </summary>
     private bool TryElement<TElement>(Func<FakeScope, TElement> element, out TElement value)
     {
         _cutOff = false;
         value = element(this);
-        if (!_cutOff)
-            return true;
+        var cutOff = _cutOff && value is null;
         _cutOff = false;
-        return false;
+        return !cutOff;
     }
 
     /// <summary>

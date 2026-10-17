@@ -23,13 +23,21 @@ public sealed class ArgumentValidationTests
     }
 
     [Test]
+    public void Prices_next_to_the_largest_decimal_do_not_overflow()
+    {
+        var (min, max) = (decimal.MaxValue - 1, decimal.MaxValue);
+        for (var seed = 0; seed < 200; seed++)
+            new Faker("en", seed).Commerce.Price(min, max).ShouldBeInRange(min, max);
+    }
+
+    [Test]
     public void Decimals_keep_the_places_the_magnitude_allows()
     {
         // 1e20 with 10 places needs 31 digits; a decimal holds 28–29, so the value keeps as many places as fit.
         var value = new Faker("en", 2).Number.Decimal(1e20m, 2e20m, decimals: 10);
 
-        value.ShouldBeInRange(1e20m, 2e20m);
-        ((int)value.Scale).ShouldBeLessThanOrEqualTo(10);
+        value.ShouldBe(110217911323039500000m);
+        value.Scale.ShouldBe((byte)0);
     }
 
     [Test]

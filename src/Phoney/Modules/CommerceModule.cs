@@ -82,9 +82,14 @@ public sealed class CommerceModule : FakerModule
             8 => 0,    // weight 1
             _ => Random.Index(10), // weight 1: any digit
         };
+        if (newLastDigit > lastDigit && generated > NearMaxValue)
+            return generated; // the new digit wouldn't fit next to decimal.MaxValue
         var combined = generated - (lastDigit * unit) + (newLastDigit * unit);
         return combined >= min && combined <= max ? combined : generated;
     }
+
+    /// <summary><see cref="decimal.MaxValue"/> − 9: above it, a larger last digit may not fit.</summary>
+    private const decimal NearMaxValue = 79_228_162_514_264_337_593_543_950_326m;
 
     /// <summary>Returns a price formatted with <paramref name="symbol"/>, e.g. <c>$39.99</c>.</summary>
     public string PriceText(string symbol = "", decimal min = 1, decimal max = 1000, int decimals = 2) =>

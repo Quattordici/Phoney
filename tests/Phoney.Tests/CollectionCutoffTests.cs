@@ -29,6 +29,12 @@ public sealed class GeneratedFolder
     public List<string> Tags { get; set; } = [];
 }
 
+public sealed class Cabinet
+{
+    public List<Dictionary<IBadge, int>> Lookups { get; set; } = [];
+    public List<(string Name, Cabinet Owner)> Pairs { get; set; } = [];
+}
+
 [FakeFor<GeneratedFolder>]
 public static partial class FolderFakes;
 
@@ -96,5 +102,17 @@ public sealed class CollectionCutoffTests
             "Miss Ferne Durgan|volva,causa",
             "Ms. Kianna Kling|terga,provident,demonstro",
         ]);
+    }
+
+    [Test]
+    public void A_collection_whose_own_parts_are_cut_off_is_still_an_element()
+    {
+        // The dictionaries get no keys (IBadge has no subtype) and the tuples no owner (a cycle), but each is a value of its own, so the lists keep them.
+        var cabinet = Fake.For<Cabinet>().Seed(1).Generate();
+
+        cabinet.Lookups.ShouldNotBeEmpty();
+        cabinet.Lookups.ShouldAllBe(d => d.Count == 0);
+        cabinet.Pairs.ShouldNotBeEmpty();
+        cabinet.Pairs.ShouldAllBe(p => p.Owner == null && p.Name.Length > 0);
     }
 }
