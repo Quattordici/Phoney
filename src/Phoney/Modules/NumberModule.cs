@@ -150,24 +150,48 @@ public sealed class NumberModule : FakerModule
         return Math.Round(steps / factor, digits);
     }
 
-    /// <summary>Returns a decimal between <paramref name="min"/> and <paramref name="max"/> with <paramref name="decimals"/> decimal places.</summary>
+    /// <summary>
+    /// Returns a decimal between <paramref name="min"/> and <paramref name="max"/> with <paramref name="decimals"/> decimal places (fewer for values
+    /// so large that a <see cref="decimal"/> can't hold that many places). Any range works, up to <see cref="decimal.MinValue"/> to <see cref="decimal.MaxValue"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>, or no value with <paramref name="decimals"/> places lies between them.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="decimals"/> is negative or more than 28.</exception>
     public decimal Decimal(decimal min = 0, decimal max = 1, int decimals = 2)
     {
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
         ArgumentOutOfRangeException.ThrowIfNegative(decimals);
-        var factor = Pow10(decimals);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, MaxDecimalPlaces);
+
+        // A value too large to scale by 10^decimals can't hold that many places either: keep as many as fit.
+        var largest = Math.Max(Math.Abs(min), Math.Abs(max));
+        var places = decimals;
+        while (places > 0 && largest > decimal.MaxValue / Pow10(places))
+            places--;
+
+        var factor = Pow10(places);
         var low = decimal.Ceiling(min * factor);
         var high = decimal.Floor(max * factor);
         if (high < low)
             throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
+        if (low < 0 && high > decimal.MaxValue + low)
+        {
+            // The width doesn't fit in a decimal (e.g. MinValue to MaxValue): interpolate between the ends instead.
+            var share = (decimal)Random.Double();
+            var value = decimal.Floor((low * (1 - share)) + (high * share));
+            return decimal.Round(Math.Clamp(value, low, high) / factor, places);
+        }
+
         var range = high - low;
         // decimal has more precision than one double draw; combine two draws for wide ranges.
         var offset = range <= long.MaxValue
             ? Random.Long(0, (long)range)
-            : decimal.Floor((decimal)Random.Double() * (range + 1));
-        return decimal.Round((low + offset) / factor, decimals);
+            : decimal.Floor((decimal)Random.Double() * (range < decimal.MaxValue ? range + 1 : range));
+        return decimal.Round((low + offset) / factor, places);
     }
+
+    /// <summary>The most decimal places a <see cref="decimal"/> has.</summary>
+    internal const int MaxDecimalPlaces = 28;
 
     /// <summary>Returns a byte between <paramref name="min"/> and <paramref name="max"/>.</summary>
     /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>

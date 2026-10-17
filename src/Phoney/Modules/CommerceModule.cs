@@ -58,6 +58,8 @@ public sealed class CommerceModule : FakerModule
     /// </summary>
     public decimal Price(decimal min = 1, decimal max = 1000, int decimals = 2)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(decimals);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, NumberModule.MaxDecimalPlaces);
         if (min < 0 || max < 0)
             return 0;
         if (min == max)
@@ -70,6 +72,8 @@ public sealed class CommerceModule : FakerModule
         var unit = 1m;
         for (var i = 0; i < decimals; i++)
             unit /= 10;
+        while (unit < 1 && generated > decimal.MaxValue * unit)
+            unit *= 10; // a price this large keeps fewer places (see Number.Decimal): change the last one it has
         var lastDigit = decimal.Truncate(generated / unit) % 10;
         var newLastDigit = Random.Index(10) switch
         {

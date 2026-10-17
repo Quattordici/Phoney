@@ -1,0 +1,85 @@
+using System.Globalization;
+using Phoney.Modules;
+
+namespace Phoney.Tests;
+
+/// <summary>Edge-case arguments either work or fail with an argument exception that names the parameter, never with an arithmetic or internal error.</summary>
+public sealed class ArgumentValidationTests
+{
+    [Test]
+    [Arguments("0", "79228162514264337593543950335")]
+    [Arguments("-79228162514264337593543950335", "1")]
+    [Arguments("-79228162514264337593543950335", "79228162514264337593543950335")]
+    [Arguments("100000000000000000000", "1000000000000000000000")]
+    public void Decimals_cover_the_whole_decimal_range(string low, string high)
+    {
+        var (min, max) = (decimal.Parse(low, CultureInfo.InvariantCulture), decimal.Parse(high, CultureInfo.InvariantCulture));
+        var faker = new Faker("en", 1);
+        for (var i = 0; i < 200; i++)
+            faker.Number.Decimal(min, max).ShouldBeInRange(min, max);
+        faker.Finance.Amount(min, max).ShouldBeInRange(min, max);
+        if (min >= 0)
+            faker.Commerce.Price(min, max).ShouldBeInRange(min, max);
+    }
+
+    [Test]
+    public void Decimals_keep_the_places_the_magnitude_allows()
+    {
+        // 1e20 with 10 places needs 31 digits; a decimal holds 28–29, so the value keeps as many places as fit.
+        var value = new Faker("en", 2).Number.Decimal(1e20m, 2e20m, decimals: 10);
+
+        value.ShouldBeInRange(1e20m, 2e20m);
+        ((int)value.Scale).ShouldBeLessThanOrEqualTo(10);
+    }
+
+    [Test]
+    public void Wide_ranges_do_not_change_the_values_of_ranges_that_already_worked()
+    {
+        // Pinned before wide ranges were supported.
+        new Faker("en", 3).Number.Decimal(0, 1000, 2).ShouldBe(690.64m);
+        new Faker("en", 4).Number.Decimal(-5, 5, 4).ShouldBe(-2.3657m);
+        new Faker("en", 5).Commerce.Price().ShouldBe(289.15m);
+        new Faker("en", 6).Number.Decimal(0, 100_000_000_000_000_000_000m, 0).ShouldBe(76703131424633500000m);
+    }
+
+    [Test]
+    public void More_than_28_decimal_places_is_an_argument_error()
+    {
+        var faker = new Faker("en", 1);
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Number.Decimal(0, 1, 29)).ParamName.ShouldBe("decimals");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Finance.Amount(0, 1, 29)).ParamName.ShouldBe("decimals");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Commerce.Price(1, 2, 29)).ParamName.ShouldBe("decimals");
+        faker.Number.Decimal(0, 1, 28).ShouldBeInRange(0, 1);
+    }
+
+    [Test]
+    [Arguments(0, 10)]
+    [Arguments(-1, 10)]
+    [Arguments(2000, 10_000)]
+    public void Birthdate_years_outside_1_to_9999_are_an_argument_error(int minYear, int maxYear)
+    {
+        var exception = Should.Throw<ArgumentOutOfRangeException>(() => new Faker("en", 1).Date.BirthdateInYears(minYear, maxYear));
+        exception.ParamName.ShouldBe(minYear < 1 ? "minYear" : "maxYear");
+    }
+
+    [Test]
+    public void Birthdate_years_at_the_limits_work()
+    {
+        var date = new Faker("en", 1).Date.BirthdateInYears(1, 9999);
+        date.Year.ShouldBeInRange(1, 9999);
+    }
+
+    [Test]
+    public void An_undefined_card_issuer_is_an_argument_error()
+    {
+        var exception = Should.Throw<ArgumentOutOfRangeException>(() => new Faker("en", 1).Finance.CreditCardNumber((CardIssuer)999));
+        exception.ParamName.ShouldBe("issuer");
+    }
+
+    [Test]
+    public void A_null_password_prefix_is_an_argument_error()
+    {
+        var exception = Should.Throw<ArgumentNullException>(() => new Faker("en", 1).Internet.Password(prefix: null!));
+        exception.ParamName.ShouldBe("prefix");
+    }
+}
