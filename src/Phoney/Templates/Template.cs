@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Text;
+using System.Runtime.CompilerServices;
 using Phoney.Data;
 
 namespace Phoney.Templates;
@@ -106,10 +106,11 @@ internal sealed class Template
             if (_segments.Length == 1)
                 return _segments[0].Evaluate(faker);
 
-            var sb = new StringBuilder(_literalLength + (_segments.Length * 8));
+            // Joined on the stack: the result string is the only allocation.
+            var text = new DefaultInterpolatedStringHandler(_literalLength, _segments.Length, CultureInfo.InvariantCulture, stackalloc char[256]);
             foreach (var segment in _segments)
-                sb.Append(segment.Evaluate(faker));
-            return sb.ToString();
+                text.AppendFormatted(segment.Evaluate(faker));
+            return text.ToStringAndClear();
         }
         finally
         {

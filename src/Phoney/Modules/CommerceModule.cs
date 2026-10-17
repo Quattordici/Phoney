@@ -69,12 +69,12 @@ public sealed class CommerceModule : FakerModule
         if (decimals == 0)
             return generated;
 
-        var unit = 1m;
-        for (var i = 0; i < decimals; i++)
-            unit /= 10;
-        while (unit < 1 && generated > decimal.MaxValue * unit)
-            unit *= 10; // a price this large keeps fewer places (see Number.Decimal): change the last one it has
-        var lastDigit = decimal.Truncate(generated / unit) % 10;
+        // A price this large keeps fewer places (see Number.Decimal): change the last one it has. Below 10^(28 - places) there is always room, so the multiplication is skipped.
+        var places = decimals;
+        while (places > 0 && generated >= NumberModule.Pow10(Math.Min(18, NumberModule.MaxDecimalPlaces - places)) && generated > decimal.MaxValue * new decimal(1, 0, 0, false, (byte)places))
+            places--;
+        var unit = new decimal(1, 0, 0, false, (byte)places); // 10^-places
+        var lastDigit = decimal.Truncate(generated * NumberModule.Pow10(places)) % 10; // = generated / unit, without dividing
         var newLastDigit = Random.Index(10) switch
         {
             < 5 => 9,  // weight 5

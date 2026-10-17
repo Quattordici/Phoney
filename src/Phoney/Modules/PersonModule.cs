@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using Phoney.Data;
 
 namespace Phoney.Modules;
@@ -60,14 +62,48 @@ public sealed class PersonModule : FakerModule
         var s = sex ?? Sex();
         // Substitute the name parts ourselves (as faker.js does with mustache) so they share one sex and the
         // caller's first/last name are honoured; anything else in the pattern is evaluated afterwards.
-        var result = RawPattern(DataKeys.PersonName);
-        result = Substitute(result, "{{person.prefix}}", () => Prefix(s));
-        result = Substitute(result, "{{person.firstName}}", () => firstName ?? FirstName(s));
-        result = Substitute(result, "{{person.middleName}}", () => MiddleName(s));
-        result = Substitute(result, "{{person.lastName}}", () => lastName ?? LastName(s));
-        result = Substitute(result, "{{person.suffix}}", Suffix);
-        return Faker.Parse(result);
+        // Each part is drawn only when the pattern has it, always in this order, so unused parts consume no randomness and need no data.
+        var pattern = RawPattern(DataKeys.PersonName);
+        var prefix = pattern.Contains(PrefixTag, StringComparison.Ordinal) ? Prefix(s) : null;
+        var first = pattern.Contains(FirstNameTag, StringComparison.Ordinal) ? firstName ?? FirstName(s) : null;
+        var middle = pattern.Contains(MiddleNameTag, StringComparison.Ordinal) ? MiddleName(s) : null;
+        var last = pattern.Contains(LastNameTag, StringComparison.Ordinal) ? lastName ?? LastName(s) : null;
+        var suffix = pattern.Contains(SuffixTag, StringComparison.Ordinal) ? Suffix() : null;
+
+        // One pass over the pattern instead of a Replace (and a new string) per part.
+        var name = new DefaultInterpolatedStringHandler(0, 0, CultureInfo.InvariantCulture, stackalloc char[128]);
+        var rest = pattern.AsSpan();
+        while (rest.IndexOf(TagStart, StringComparison.Ordinal) is var at and >= 0)
+        {
+            name.AppendFormatted(rest[..at]);
+            rest = rest[at..];
+            var part = PartAt(rest, PrefixTag, prefix) ?? PartAt(rest, FirstNameTag, first) ?? PartAt(rest, MiddleNameTag, middle) ??
+                PartAt(rest, LastNameTag, last) ?? PartAt(rest, SuffixTag, suffix);
+            if (part is var (tag, value))
+            {
+                name.AppendFormatted(value);
+                rest = rest[tag.Length..];
+            }
+            else
+            {
+                name.AppendFormatted(TagStart); // another expression: evaluated by Parse below
+                rest = rest[TagStart.Length..];
+            }
+        }
+
+        name.AppendFormatted(rest);
+        return Faker.Parse(name.ToStringAndClear());
+
+        static (string Tag, string Value)? PartAt(ReadOnlySpan<char> text, string tag, string? value) =>
+            value is not null && text.StartsWith(tag, StringComparison.Ordinal) ? (tag, value) : null;
     }
+
+    private const string TagStart = "{{person.";
+    private const string PrefixTag = "{{person.prefix}}";
+    private const string FirstNameTag = "{{person.firstName}}";
+    private const string MiddleNameTag = "{{person.middleName}}";
+    private const string LastNameTag = "{{person.lastName}}";
+    private const string SuffixTag = "{{person.suffix}}";
 
     /// <summary>Returns a gender identity, e.g. <c>Trans*Man</c>.</summary>
     public string Gender() => Faker.Pick(DataKeys.PersonGender);
@@ -139,10 +175,6 @@ public sealed class PersonModule : FakerModule
             return plainEntry;
         throw data.Missing(plain >= 0 ? plain : generic, "strings");
     }
-
-    /// <summary>Replaces <paramref name="placeholder"/> only when present, so unused parts consume no randomness and need no data.</summary>
-    private static string Substitute(string pattern, string placeholder, Func<string> value) =>
-        pattern.Contains(placeholder, StringComparison.Ordinal) ? pattern.Replace(placeholder, value(), StringComparison.Ordinal) : pattern;
 
     /// <summary>Picks a raw (unevaluated) pattern from a weighted or plain list.</summary>
     private string RawPattern(int key)
