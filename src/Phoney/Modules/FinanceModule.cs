@@ -15,7 +15,7 @@ public sealed class FinanceModule : FakerModule
     /// </summary>
     private static readonly (CardIssuer Issuer, int Key, string Default)[] CardIssuers =
     [
-        (CardIssuer.AmericanExpress, DataKeys.FinanceCreditCardAmericanExpress, "3[4-7]##-######-####L"),
+        (CardIssuer.AmericanExpress, DataKeys.FinanceCreditCardAmericanExpress, "37##-######-####L"), // 34 or 37; a range would also give 35 (JCB) and 36 (Diners)
         (CardIssuer.DinersClub, DataKeys.FinanceCreditCardDinersClub, "30[0-5]#-######-###L"),
         (CardIssuer.Discover, DataKeys.FinanceCreditCardDiscover, "6011-####-####-###L"),
         (CardIssuer.Jcb, DataKeys.FinanceCreditCardJcb, "35[28-89]-####-####-###L"),
@@ -91,11 +91,11 @@ public sealed class FinanceModule : FakerModule
     /// <summary>Returns an ISO 4217 numeric currency code, e.g. <c>752</c>.</summary>
     public string CurrencyNumericCode() => Currency().NumericCode;
 
-    /// <summary>Returns a card issuer the locale has number formats for.</summary>
+    /// <summary>Returns a card issuer the locale has number formats for, or any issuer (with its built-in format) when the locale has none.</summary>
     public CardIssuer CreditCardIssuer()
     {
         var available = CardIssuers.Where(c => Faker.Data.Has(c.Key)).ToArray();
-        return Random.Element(available).Issuer;
+        return Random.Element(available.Length > 0 ? available : CardIssuers).Issuer; // without locale formats, every issuer has a built-in one
     }
 
     /// <summary>Returns a credit card number with a valid Luhn check digit, from a random issuer unless one is given.</summary>

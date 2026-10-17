@@ -218,6 +218,7 @@ public sealed partial class InternetModule : FakerModule
     public string Password(int length = 15, bool memorable = false, Regex? pattern = null, string prefix = "")
     {
         ArgumentNullException.ThrowIfNull(prefix);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
         var sb = new StringBuilder(prefix, Math.Max(length, prefix.Length));
         Span<char> one = stackalloc char[1];
         var misses = 0;

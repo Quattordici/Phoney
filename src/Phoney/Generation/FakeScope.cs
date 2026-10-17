@@ -72,7 +72,7 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     /// <summary>Attempts per value before <see cref="Filter"/> gives up.</summary>
     public int FilterAttempts { get; set; }
 
-    /// <summary>The name of the member the slot belongs to, for messages about <see cref="Filter"/>.</summary>
+    /// <summary>The name of the member the slot belongs to, for the messages of <see cref="Unique"/> and <see cref="Filter"/>.</summary>
     public string? MemberName { get; set; }
 
     /// <summary>How many values may be produced for one result: the smallest limit of the checks that apply (uniqueness, condition).</summary>
@@ -305,7 +305,7 @@ public sealed class FakeScope
         }
 
         throw slot.Filter is null
-            ? new InvalidOperationException($"Could not generate a unique value for member {member} of {_type.Name} after {attempts} attempts. Use a source with more distinct values.")
+            ? new InvalidOperationException($"Could not generate a unique value for {_type.Name}.{slot.MemberName} after {attempts} attempts. Give the member a source with more distinct values, or raise maxAttempts.")
             : new InvalidOperationException(
                 $"Could not generate {_type.Name}.{slot.MemberName} {(slot.Unique ? "unique and " : "")}satisfying its Where condition after {attempts} attempts. "
                 + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");

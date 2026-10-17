@@ -91,19 +91,26 @@ public sealed partial class HelpersModule : FakerModule
     public List<T> Multiple<T>(Func<T> factory, int count = 3)
     {
         ArgumentNullException.ThrowIfNull(factory);
-        var list = new List<T>(Math.Max(0, count));
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        var list = new List<T>(count);
         for (var i = 0; i < count; i++)
             list.Add(factory());
         return list;
     }
 
     /// <summary>Calls <paramref name="factory"/> a random number of times between <paramref name="min"/> and <paramref name="max"/>.</summary>
-    public List<T> Multiple<T>(Func<T> factory, int min, int max) => Multiple(factory, Random.Int(min, max));
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> is negative.</exception>
+    public List<T> Multiple<T>(Func<T> factory, int min, int max)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(min);
+        return Multiple(factory, Random.Int(min, max));
+    }
 
     /// <summary>Returns up to <paramref name="count"/> distinct values produced by <paramref name="factory"/> (gives up after 1000 attempts per value).</summary>
     public List<T> UniqueValues<T>(Func<T> factory, int count)
     {
         ArgumentNullException.ThrowIfNull(factory);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
         var set = new HashSet<T>();
         var result = new List<T>(count);
         for (var attempts = 0; result.Count < count && attempts < 1000 * count; attempts++)

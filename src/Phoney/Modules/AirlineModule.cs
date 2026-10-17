@@ -61,6 +61,8 @@ public sealed class AirlineModule : FakerModule
     /// <summary>Returns a flight number of 1–4 digits (no leading zero), optionally padded to 4 digits.</summary>
     public string FlightNumber(int? length = null, bool addLeadingZeros = false)
     {
+        if (length is { } requested)
+            ArgumentOutOfRangeException.ThrowIfNegative(requested, nameof(length));
         var number = Faker.String.Numeric(length ?? Random.Int(1, 4), allowLeadingZeros: false);
         return addLeadingZeros ? number.PadLeft(4, '0') : number;
     }

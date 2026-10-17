@@ -395,8 +395,10 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// Makes a member unique across everything this generator instance produces. Retries up to
     /// <paramref name="maxAttempts"/> times per object, then throws.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxAttempts"/> is less than 1.</exception>
     public ObjectGenerator<T> Unique<TValue>(Expression<Func<T, TValue>> member, int maxAttempts = 1000)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
         var name = MemberName(member);
         return Derive(_config with { Unique = _config.Unique.SetItem(name, maxAttempts) });
     }
@@ -1013,7 +1015,12 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             var slot = slots[index] ??= new RuleSlot(RuleKind.Default, null, unique: false, maxAttempts: 0);
             slot.Filter = filter.Accepts;
             slot.FilterAttempts = filter.MaxAttempts;
-            slot.MemberName = name;
+        }
+
+        for (var i = 0; i < slots.Length; i++)
+        {
+            if (slots[i] is { } named)
+                named.MemberName = members[i].Name; // for the messages of Unique and Where
         }
 
         // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
