@@ -52,7 +52,13 @@
     <ItemGroup>
       <_ReadyToRunRuntime Include="$(ReadyToRunPackRuntimes)" />
     </ItemGroup>
-    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="Publish" Properties="TargetFramework=$(TargetFramework);RuntimeIdentifier=%(_ReadyToRunRuntime.Identity);SelfContained=false;PublishReadyToRun=true;PublishDir=$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)r2r/$(TargetFramework)/%(_ReadyToRunRuntime.Identity)/" />
+    <!--
+      Crossgen2 compiles the IL assembly that ships in lib/<tfm>, not a separate build per runtime: a RID-specific compile differs (its PDB path, the
+      regex generator's file hashes), so its PDB would be in no symbol package and debuggers would find no symbols or Source Link for the copy most
+      machines load. The copy keeps the IL's debug directory, so lib/<tfm>/Phoney.pdb in the .snupkg serves every runtime.
+    -->
+    <Copy SourceFiles="@(IntermediateAssembly);$(IntermediateOutputPath)$(TargetName).pdb" DestinationFolder="$(IntermediateOutputPath)%(_ReadyToRunRuntime.Identity)/" />
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="Publish" Properties="TargetFramework=$(TargetFramework);RuntimeIdentifier=%(_ReadyToRunRuntime.Identity);SelfContained=false;PublishReadyToRun=true;NoBuild=true;PublishDocumentationFile=false;PublishDir=$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)r2r/$(TargetFramework)/%(_ReadyToRunRuntime.Identity)/" />
     <ItemGroup>
       <TfmSpecificPackageFile Include="$(BaseIntermediateOutputPath)r2r/$(TargetFramework)/%(_ReadyToRunRuntime.Identity)/$(AssemblyName).dll" PackagePath="runtimes/%(_ReadyToRunRuntime.Identity)/lib/$(TargetFramework)" />
     </ItemGroup>
