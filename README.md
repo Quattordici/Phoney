@@ -4,7 +4,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Phoney.svg?label=NuGet)](https://www.nuget.org/packages/Phoney)
 [![NuGet downloads](https://img.shields.io/nuget/dt/Phoney.svg?label=Downloads)](https://www.nuget.org/packages/Phoney)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Quattordici_Phoney&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Quattordici_Phoney)
-[![Snyk](https://snyk.io/test/github/Quattordici/Phoney/badge.svg)](https://snyk.io/test/github/Quattordici/Phoney)
+[![Snyk](https://snyk.io/test/github/Quattordici/Phoney/badge.svg)](https://github.com/Quattordici/Phoney/actions/workflows/ci.yml?query=branch%3Amain)
 [![Phoney.TUnit](https://img.shields.io/nuget/vpre/Phoney.TUnit.svg?label=Phoney.TUnit)](https://www.nuget.org/packages/Phoney.TUnit)
 [![Phoney.Xunit](https://img.shields.io/nuget/vpre/Phoney.Xunit.svg?label=Phoney.Xunit)](https://www.nuget.org/packages/Phoney.Xunit)
 [![Phoney.NUnit](https://img.shields.io/nuget/vpre/Phoney.NUnit.svg?label=Phoney.NUnit)](https://www.nuget.org/packages/Phoney.NUnit)
