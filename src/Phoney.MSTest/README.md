@@ -26,4 +26,4 @@ public class OrderTests
 - **`PHONEY_SEED=123 dotnet test`** moves the seed of every `[FakeData]` test at once, to run the whole suite on other data; the same value replays it.
 - **Replayable random data**: `FakeSeed.Run(() => { … }, TestContext.WriteLine)` (or `RunAsync`) runs a test body on a seeded `Fake` facade, new on every run, and reports the seed when it throws; `PHONEY_SEED=… dotnet test` or `FakeSeed.Run(…, seed: n)` replays it.
 - Custom conventions (`Fake.Conventions.Add(...)`), subtypes (`Fake.Subtypes.Add<IShape, Circle>()`, `[JsonDerivedType]`) and source-generated models (`[FakeFor<T>]`) apply. Test data is created while MSTest discovers tests, so register them before that, for example in a module initializer.
-- It fills method parameters. See the [main README](https://github.com/Quattordici/Phoney#test-data-in-xunit-nunit-and-mstest) for the full feature set.
+- It fills method parameters. See the [main README](https://github.com/Quattordici/Phoney#test-data-in-xunit-nunit-mstest-and-tunit) for the full feature set.
