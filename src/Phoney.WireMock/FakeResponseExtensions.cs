@@ -62,6 +62,30 @@ public static class FakeResponseExtensions
         return Json(response, request => JsonSerializer.Serialize(generator.GenerateFor(KeyOf(keyOf, request)), typeInfo));
     }
 
+    /// <summary>
+    /// Answers with the JSON of <paramref name="body"/>, which gets the request and a faker that belongs to it (<see cref="Faker.Keyed"/> of the key), for bodies
+    /// that aren't one generated type: <c>WithFakeJson((request, faker) =&gt; new { id = request.PathSegments[^1], name = faker.Person.FullName() })</c>.
+    /// </summary>
+    /// <param name="response">The response builder.</param>
+    /// <param name="body">Makes the body from the request and its faker.</param>
+    /// <param name="key">The key of the request (<see cref="FakeRequestKey.PathAndQuery"/> when <see langword="null"/>).</param>
+    /// <param name="options">Serializer options; <see cref="JsonSerializerDefaults.Web"/> when <see langword="null"/>.</param>
+    /// <param name="locale">The locale of the faker; <see cref="Fake.Locale"/> when <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="response"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+    [RequiresUnreferencedCode(ReflectionJson)]
+    [RequiresDynamicCode(ReflectionJsonCode)]
+    public static IResponseBuilder WithFakeJson(
+        this IResponseBuilder response, Func<IRequestMessage, Faker, object?> body, Func<IRequestMessage, string>? key = null, JsonSerializerOptions? options = null, string? locale = null)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(body);
+        var faker = new Faker(locale ?? Fake.Locale);
+        var keyOf = key ?? FakeRequestKey.PathAndQuery;
+        var serializer = options ?? WebOptions;
+        serializer.MakeReadOnly(populateMissingResolver: true);
+        return Json(response, request => JsonSerializer.Serialize(body(request, faker.Keyed(KeyOf(keyOf, request))), serializer));
+    }
+
     /// <summary>Answers with a JSON array of <paramref name="count"/> objects that belong to the request: item <c>i</c> is the object of <c>{key}#{i}</c>.</summary>
     /// <param name="response">The response builder.</param>
     /// <param name="generator">Makes the objects; its rules and seed apply.</param>
@@ -136,30 +160,6 @@ public static class FakeResponseExtensions
 
             return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
         });
-    }
-
-    /// <summary>
-    /// Answers with the JSON of <paramref name="body"/>, which gets the request and a faker that belongs to it (<see cref="Faker.Keyed"/> of the key), for bodies
-    /// that aren't one generated type: <c>WithFakeJson((request, faker) =&gt; new { id = request.PathSegments[^1], name = faker.Person.FullName() })</c>.
-    /// </summary>
-    /// <param name="response">The response builder.</param>
-    /// <param name="body">Makes the body from the request and its faker.</param>
-    /// <param name="key">The key of the request (<see cref="FakeRequestKey.PathAndQuery"/> when <see langword="null"/>).</param>
-    /// <param name="options">Serializer options; <see cref="JsonSerializerDefaults.Web"/> when <see langword="null"/>.</param>
-    /// <param name="locale">The locale of the faker; <see cref="Fake.Locale"/> when <see langword="null"/>.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="response"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
-    [RequiresUnreferencedCode(ReflectionJson)]
-    [RequiresDynamicCode(ReflectionJsonCode)]
-    public static IResponseBuilder WithFakeJson(
-        this IResponseBuilder response, Func<IRequestMessage, Faker, object?> body, Func<IRequestMessage, string>? key = null, JsonSerializerOptions? options = null, string? locale = null)
-    {
-        ArgumentNullException.ThrowIfNull(response);
-        ArgumentNullException.ThrowIfNull(body);
-        var faker = new Faker(locale ?? Fake.Locale);
-        var keyOf = key ?? FakeRequestKey.PathAndQuery;
-        var serializer = options ?? WebOptions;
-        serializer.MakeReadOnly(populateMissingResolver: true);
-        return Json(response, request => JsonSerializer.Serialize(body(request, faker.Keyed(KeyOf(keyOf, request))), serializer));
     }
 
     // Freezes the options with the reflection resolver when they have none, as the first JsonSerializer.Serialize call with them would.
