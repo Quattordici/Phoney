@@ -27,6 +27,9 @@ internal sealed class Template
     [ThreadStatic]
     private static int t_depth;
 
+    /// <summary>How deep templates are nested on this thread right now (0 outside an evaluation).</summary>
+    internal static int Depth => t_depth;
+
     private readonly Segment[] _segments;
 
     private Template(string text, Segment[] segments)
@@ -97,7 +100,7 @@ internal sealed class Template
     {
         if (++t_depth > MaxDepth)
         {
-            t_depth = 0;
+            t_depth--; // the frames above unwind through their finally blocks and bring the depth back to 0
             throw new PhoneyDataException($"Template recursion is too deep while evaluating '{Text}'. Does the data reference itself?");
         }
 
@@ -123,7 +126,7 @@ internal sealed class Template
     {
         if (++t_depth > MaxDepth)
         {
-            t_depth = 0;
+            t_depth--; // the frames above unwind through their finally blocks and bring the depth back to 0
             throw new PhoneyDataException($"Template recursion is too deep while evaluating '{Text}'. Does the data reference itself?");
         }
 
