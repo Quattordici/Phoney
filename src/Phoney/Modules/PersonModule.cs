@@ -72,20 +72,30 @@ public sealed class PersonModule : FakerModule
         var suffix = pattern.Has(NamePart.Suffix) ? Suffix() : null;
 
         var name = new Templates.TextBuilder(stackalloc char[128]);
-        foreach (var (part, literal) in pattern.Parts)
+        string text;
+        try
         {
-            name.Append(part switch
+            foreach (var (part, literal) in pattern.Parts)
             {
-                NamePart.Prefix => prefix,
-                NamePart.FirstName => first,
-                NamePart.MiddleName => middle,
-                NamePart.LastName => last,
-                NamePart.Suffix => suffix,
-                _ => literal,
-            });
+                name.Append(part switch
+                {
+                    NamePart.Prefix => prefix,
+                    NamePart.FirstName => first,
+                    NamePart.MiddleName => middle,
+                    NamePart.LastName => last,
+                    NamePart.Suffix => suffix,
+                    _ => literal,
+                });
+            }
+
+            text = name.Written.ToString();
+        }
+        finally
+        {
+            name.Dispose();
         }
 
-        return Faker.Parse(name.ToStringAndDispose());
+        return Faker.Parse(text);
     }
 
     /// <summary>The parts of a name pattern <see cref="FullName"/> substitutes.</summary>

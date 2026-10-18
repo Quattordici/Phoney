@@ -268,7 +268,7 @@ public sealed class NumberModule : FakerModule
     {
         scaled = 0;
         Span<int> bits = stackalloc int[4];
-        decimal.GetBits(value, bits);
+        _ = decimal.GetBits(value, bits); // always 4 ints
         if (bits[2] != 0)
             return false;
         var mantissa = (uint)bits[0] | ((ulong)(uint)bits[1] << 32);

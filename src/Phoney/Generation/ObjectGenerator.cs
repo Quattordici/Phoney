@@ -735,12 +735,14 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             throw new NotSupportedException($"VerifyRules checks when a call has generated its objects, and a stream never ends. Generate a fixed number of {typeof(T).Name} objects with Generate(count), or call VerifyRules(false).");
         return Endless();
 
+#pragma warning disable S2190 // an endless stream by design: the caller stops enumerating (Take, First), which ends the iterator
         IEnumerable<T> Endless()
         {
             var run = Start();
             while (true)
                 yield return run.Create(_state.NextIndex(1));
         }
+#pragma warning restore S2190
     }
 
     /// <summary>
