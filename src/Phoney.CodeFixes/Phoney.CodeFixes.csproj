@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <!-- The IDE provides the workspace assemblies; only the analyzer package itself is shipped. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />
   </ItemGroup>
 </Project>

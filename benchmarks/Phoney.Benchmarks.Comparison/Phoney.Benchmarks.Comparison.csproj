@@ -23,6 +23,8 @@
     <PackageReference Include="AutoBogus" />
     <PackageReference Include="Bogus" />
     <PackageReference Include="Faker.Net" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="NBuilder" />
   </ItemGroup>
 
