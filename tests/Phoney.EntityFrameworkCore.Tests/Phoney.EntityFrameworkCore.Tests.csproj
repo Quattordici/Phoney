@@ -14,6 +14,10 @@
     <PackageReference Include="TUnit" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TestAgainstFloors)' == 'true'">
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Shouldly" />
   </ItemGroup>

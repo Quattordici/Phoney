@@ -24,6 +24,10 @@
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)images/phoney-icon-128.png" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
+  <!-- SonarQube Cloud analyses everything under tests/ as test code: it doesn't recognise TUnit projects (or the AOT smoke app) by their references. -->
+  <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').StartsWith('tests'))">
+    <SonarQubeTestProject>true</SonarQubeTestProject>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>

@@ -1,8 +1,10 @@
 <Project>
   <!--
-    Dependency floors of the integration packages: the lowest versions whose build and tests pass (found by building the library against the floor and running its tests with the
+    Dependency floors of the add-on packages: the lowest versions whose build and tests pass (found by building the library against the floor and running its tests with the
     framework at the floor and at the newest). MSTest 3.x is binary incompatible with 4.x apps; TUnit 1.0 fails the FakeSeed executor-order test; NodaTime 3.0 lacks LocalDate.ToDateOnly.
+    EF Core 8.0.0-8.0.8 bring Microsoft.Extensions.Caching.Memory 8.0.0, which has a high severity advisory (NuGet audit fails the build).
     The tests run on the newest versions, or on the floors with -p:TestAgainstFloors=true (the "floors" CI job).
+    Renovate (.github/renovate.json5) never touches a *Floor; it updates each *Latest through the "renovate: depName" comment above it.
   -->
   <PropertyGroup>
     <XunitFloor>3.0.0</XunitFloor>
@@ -10,12 +12,26 @@
     <MSTestFloor>4.0.0</MSTestFloor>
     <TUnitFloor>1.10.0</TUnitFloor>
     <NodaTimeFloor>3.1.0</NodaTimeFloor>
+    <DependencyInjectionFloor>8.0.0</DependencyInjectionFloor>
+    <EfCore8Floor>8.0.10</EfCore8Floor>
+    <EfCore10Floor>10.0.0</EfCore10Floor>
 
+    <!-- renovate: depName=xunit.v3 -->
     <XunitLatest>4.0.2</XunitLatest>
+    <!-- renovate: depName=NUnit -->
     <NUnitLatest>5.0.0</NUnitLatest>
+    <!-- renovate: depName=MSTest -->
     <MSTestLatest>4.5.1</MSTestLatest>
+    <!-- renovate: depName=TUnit -->
     <TUnitLatest>1.75.0</TUnitLatest>
+    <!-- renovate: depName=NodaTime -->
     <NodaTimeLatest>3.3.5</NodaTimeLatest>
+    <!-- renovate: depName=Microsoft.Extensions.DependencyInjection -->
+    <DependencyInjectionLatest>10.0.13</DependencyInjectionLatest>
+    <!-- renovate: depName=Microsoft.EntityFrameworkCore.Sqlite -->
+    <EfCore8Latest>8.0.31</EfCore8Latest>
+    <!-- renovate: depName=Microsoft.EntityFrameworkCore.Sqlite -->
+    <EfCore10Latest>10.0.12</EfCore10Latest>
 
     <!-- The versions the test projects of the integration packages run against. -->
     <XunitTestVersion>$(XunitLatest)</XunitTestVersion>
@@ -23,6 +39,9 @@
     <MSTestTestVersion>$(MSTestLatest)</MSTestTestVersion>
     <TUnitTestVersion>$(TUnitLatest)</TUnitTestVersion>
     <NodaTimeTestVersion>$(NodaTimeLatest)</NodaTimeTestVersion>
+    <DependencyInjectionTestVersion>$(DependencyInjectionLatest)</DependencyInjectionTestVersion>
+    <EfCore8TestVersion>$(EfCore8Latest)</EfCore8TestVersion>
+    <EfCore10TestVersion>$(EfCore10Latest)</EfCore10TestVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TestAgainstFloors)' == 'true'">
     <XunitTestVersion>$(XunitFloor)</XunitTestVersion>
@@ -30,6 +49,9 @@
     <MSTestTestVersion>$(MSTestFloor)</MSTestTestVersion>
     <TUnitTestVersion>$(TUnitFloor)</TUnitTestVersion>
     <NodaTimeTestVersion>$(NodaTimeFloor)</NodaTimeTestVersion>
+    <DependencyInjectionTestVersion>$(DependencyInjectionFloor)</DependencyInjectionTestVersion>
+    <EfCore8TestVersion>$(EfCore8Floor)</EfCore8TestVersion>
+    <EfCore10TestVersion>$(EfCore10Floor)</EfCore10TestVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,20 +65,24 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <!-- Add-on packages depend on the lowest version that supports every target, so apps can use any newer one. -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DependencyInjectionFloor)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(DependencyInjectionTestVersion)" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <PackageVersion Include="NodaTime" Version="$(NodaTimeFloor)" />
   </ItemGroup>
 
-  <!-- EF Core: each target framework uses the EF Core release built for it. -->
+  <!-- EF Core: each target framework uses the EF Core release built for it. The add-on depends on the floor, the tests run on Microsoft.EntityFrameworkCore.Sqlite. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.31" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.31" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(EfCore8Floor)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCore8TestVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'net8.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(EfCore10Floor)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCore10TestVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Only for the floors run: the SQLite native library of the oldest EF Core releases has a high severity advisory, and the tests need a working one. -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 
   <ItemGroup>
@@ -71,6 +97,8 @@
     <PackageVersion Include="NUnit" Version="$(NUnitFloor)" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <!-- Coverage for the SonarQube Cloud job; TUnit brings it, the NUnit and xUnit runners need it added. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
     <PackageVersion Include="MSTest.TestFramework" Version="$(MSTestFloor)" />
     <PackageVersion Include="MSTest" Version="$(MSTestTestVersion)" />
     <!-- TUnit.Core is the dependency of the Phoney.TUnit package; TUnit is the test framework of every test project. -->
