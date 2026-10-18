@@ -174,6 +174,18 @@ public sealed class ForkAndKeyedTests
     }
 
     [Test]
+    public void Unique_is_refused_with_keys()
+    {
+        // A key that comes again must give the same object, which Unique would reject as a duplicate and replace.
+        var generator = Fake.For<Patient>().Unique(p => p.Email);
+        var real = new List<Patient> { new() { Email = "anna@real.se" }, new() { Email = "anna@real.se" } };
+
+        Should.Throw<InvalidOperationException>(() => generator.GenerateFor("k")).Message.ShouldContain("Unique");
+        Should.Throw<InvalidOperationException>(() => generator.Pseudonymize(real[0], p => p.Email));
+        Should.Throw<InvalidOperationException>(() => generator.Pseudonymize(real, p => p.Email));
+    }
+
+    [Test]
     public void Keyed_generation_is_thread_safe()
     {
         var generator = Fake.For<Patient>().Seed(3);

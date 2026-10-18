@@ -631,14 +631,14 @@ Faker faker = new Faker("sv").Keyed(user.Email);                // in another lo
 Customer c = Fake.For<Customer>().GenerateFor("customer:42");   // the whole object for a key
 
 List<Customer> masked = Fake.For<Customer>()
-    .Seed(secret)                                                // a private seed: knowing a key doesn't reveal its stand-in
     .Ignore(x => x.Id)                                           // keep what isn't personal
     .Pseudonymize(customers, x => x.Email);                      // the same real email gets the same fake person in every table
 ```
 
 - `Pseudonymize` reads the key before it changes anything and then regenerates every member that isn't ignored (`PopulateMode.All`), so names, email, address and birthdate of the stand-in still agree with each other.
 - The key becomes a seed with `SeededRandom.KeySeed` (FNV-1a and SplitMix64, never `string.GetHashCode`, which .NET randomizes per process), mixed with the generator's `Seed` when there is one. Keyed dates are relative to `Faker.DefaultSeededReferenceDate` unless you set a `ReferenceDate` or `TimeProvider`, so they don't drift either.
-- Without a seed the mapping is public: anyone who knows a key can compute its stand-in. Use a private seed (or a secret in the key) when that matters.
+- The mapping is reproducible, not secret: anyone who knows a key (and the seed, if any) can compute its stand-in, and a seed is not a secret, because the generated values can reveal it. When a stand-in must not lead back to a real key, make the key a keyed hash with a secret you keep out of the data, for example `x => Convert.ToHexString(HMACSHA256.HashData(secret, Encoding.UTF8.GetBytes(x.Email)))`.
+- `Unique` can't be combined with `GenerateFor` or `Pseudonymize` (it throws): a key that comes again must give the same object, which `Unique` would reject as a duplicate.
 - A keyed object is position 0, so `Sequence` and `Cycle` give it their first value.
 
 ### Values that agree

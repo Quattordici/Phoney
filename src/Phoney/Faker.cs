@@ -121,8 +121,8 @@ public sealed partial class Faker : IFaker
     /// </summary>
     /// <remarks>
     /// The faker keeps this faker's locale, and its dates are relative to <see cref="DefaultSeededReferenceDate"/> unless this faker has a
-    /// <see cref="ReferenceDate"/> or <see cref="TimeProvider"/>. Anyone who knows a key can compute its stand-in; to make the mapping secret, put a secret
-    /// in the key or use <see cref="ObjectGenerator{T}.Pseudonymize(T, Func{T, string})"/> with a seed you keep private.
+    /// <see cref="ReferenceDate"/> or <see cref="TimeProvider"/>. The mapping is reproducible, not secret: anyone who knows a key can compute its stand-in.
+    /// When that matters, use a keyed hash of the real value (HMAC with a secret you keep out of the data) as the key.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     public Faker Keyed(string key) => Derived(SeededRandom.KeySeed(key), seeded: true);

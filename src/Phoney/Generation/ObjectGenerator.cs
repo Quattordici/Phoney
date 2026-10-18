@@ -826,13 +826,15 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>
     /// Generates the object that belongs to <paramref name="key"/>: the same key gives the same object in every run, process and machine, whatever else
     /// this generator made before, e.g. <c>Fake.For&lt;Customer&gt;().GenerateFor("customer:42")</c>. With a <see cref="Seed"/>, the seed is mixed in, so
-    /// a seed you keep private makes the mapping from keys to objects secret.
+    /// another seed gives another mapping. The mapping is reproducible, not secret (generated values can reveal the seed): when an object must not lead back
+    /// to its key, use a keyed hash of the real value (HMAC with a secret you keep out of the data) as the key.
     /// </summary>
     /// <remarks>
     /// Dates are relative to <see cref="Faker.DefaultSeededReferenceDate"/> unless a <see cref="ReferenceDate"/> or <see cref="TimeProvider"/> is set, so
     /// they don't drift either. Every keyed object is position 0 of a sequence, so <see cref="Sequence{TValue}"/> and <see cref="Cycle{TValue}"/> give it their first value.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The generator has a <see cref="Unique{TValue}"/> rule: a key that comes again must give the same object.</exception>
     public T GenerateFor(string key)
     {
         var itemSeed = KeyedSeed(key);
@@ -844,15 +846,16 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>
     /// Replaces the data of <paramref name="instance"/> with stand-ins that belong to its key: every member is generated again (<see cref="PopulateMode.All"/>)
     /// from <c>keyOf(instance)</c>, read before anything is changed, so the same real customer gets the same fake name, email and address in every table, run and
-    /// process. Keep members such as ids with <see cref="Ignore{TValue}"/>, and use a private <see cref="Seed"/> so the mapping can't be recomputed from known keys.
+    /// process. Keep members such as ids with <see cref="Ignore{TValue}"/>. The mapping is reproducible, not secret, as for <see cref="GenerateFor"/>.
     /// </summary>
     /// <example>
     /// <code>
-    /// var masked = Fake.For&lt;Customer&gt;().Seed(secret).Ignore(c =&gt; c.Id).Pseudonymize(customers, c =&gt; c.Email);
+    /// var masked = Fake.For&lt;Customer&gt;().Ignore(c =&gt; c.Id).Pseudonymize(customers, c =&gt; c.Email);
     /// </code>
     /// </example>
     /// <returns><paramref name="instance"/>, or a changed copy when <typeparamref name="T"/> is a struct.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instance"/> or <paramref name="keyOf"/> is <see langword="null"/>, or the key is.</exception>
+    /// <exception cref="InvalidOperationException">The generator has a <see cref="Unique{TValue}"/> rule: a key that comes again must give the same object.</exception>
     public T Pseudonymize(T instance, Func<T, string> keyOf)
     {
         if (instance is null)
@@ -889,6 +892,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         if (key is null)
             throw new ArgumentNullException(nameof(key), "The key of an object can't be null.");
+        if (!_config.Unique.IsEmpty)
+        {
+            throw new InvalidOperationException(
+                $"Unique can't be combined with GenerateFor or Pseudonymize on {typeof(T).Name}: a key that comes again must give the same object, "
+                + "which Unique would reject as a duplicate and replace. Remove the Unique rule; different keys already give different objects almost always.");
+        }
+
         return SeededRandom.DeriveSeed(unchecked((_config.Seed ?? 0) ^ KeyStreamSalt), SeededRandom.KeySeed(key));
     }
 

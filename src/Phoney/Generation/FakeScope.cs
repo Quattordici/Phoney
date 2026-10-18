@@ -360,10 +360,19 @@ public sealed class FakeScope
             return false;
         if (_pendingClaims is null)
             return true;
-        foreach (var (slot, value) in _pendingClaims)
+
+        // All or nothing, so an object that loses one value to another thread doesn't keep the others claimed. Only root scopes have such slots,
+        // and they share the generator's slots array, so it serialises the claims of every object of the run.
+        lock (_slots!)
         {
-            if (!slot.TryClaim(value))
-                return false;
+            foreach (var (slot, value) in _pendingClaims)
+            {
+                if (slot.IsClaimed(value))
+                    return false;
+            }
+
+            foreach (var (slot, value) in _pendingClaims)
+                slot.TryClaim(value);
         }
 
         return true;
