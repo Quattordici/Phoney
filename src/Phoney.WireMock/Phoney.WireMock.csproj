@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Phoney.WireMock</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Not IsAotCompatible (WireMock.Net is not trim safe), but the analyzers still flag reflection that is added unannounced: the JsonTypeInfo overloads stay reflection free. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <IsPackable>true</IsPackable>
+    <PackageId>Phoney.WireMock</PackageId>
+    <Description>Phoney fake data for WireMock.Net mocks: Response.Create().WithFakeJson(Fake.For&lt;Customer&gt;()) answers every request with a realistic JSON body that belongs to its URL, so /customers/42 is the same customer in every request, run and machine.</Description>
+    <PackageTags>$(PackageTags);wiremock;mock;http;api</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WireMock.Net.Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PrivateAssets=none: installing only this package still brings Phoney's [FakeFor<T>] source generator. -->
+    <ProjectReference Include="../Phoney/Phoney.csproj" PrivateAssets="none" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

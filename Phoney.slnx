@@ -16,6 +16,7 @@
     <Project Path="src/Phoney.MSTest/Phoney.MSTest.csproj" />
     <Project Path="src/Phoney.NUnit/Phoney.NUnit.csproj" />
     <Project Path="src/Phoney.TUnit/Phoney.TUnit.csproj" />
+    <Project Path="src/Phoney.WireMock/Phoney.WireMock.csproj" />
     <Project Path="src/Phoney.Xunit/Phoney.Xunit.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -28,6 +29,7 @@
     <Project Path="tests/Phoney.MSTest.Tests/Phoney.MSTest.Tests.csproj" />
     <Project Path="tests/Phoney.NUnit.Tests/Phoney.NUnit.Tests.csproj" />
     <Project Path="tests/Phoney.TUnit.Tests/Phoney.TUnit.Tests.csproj" />
+    <Project Path="tests/Phoney.WireMock.Tests/Phoney.WireMock.Tests.csproj" />
     <Project Path="tests/Phoney.Xunit.Tests/Phoney.Xunit.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

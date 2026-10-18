@@ -62,6 +62,8 @@
         'Microsoft.Extensions.DependencyInjection.Abstractions',
         'Microsoft.EntityFrameworkCore',
         'Microsoft.EntityFrameworkCore.Sqlite',
+        'WireMock.Net.Shared',
+        'WireMock.Net.Minimal',
         'Microsoft.CodeAnalysis.CSharp',
         'Microsoft.CodeAnalysis.CSharp.Workspaces',
       ],
