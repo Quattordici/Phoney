@@ -44,7 +44,7 @@ public sealed class DateModule : FakerModule
             var from = (AddYears(reference, -maxYears) ?? DateTimeOffset.MinValue).ToUnixTimeMilliseconds();
             var to = (latest ?? throw NoDate(minYears, "years", "before", reference)).ToUnixTimeMilliseconds();
             if (from > to)
-                throw new ArgumentException("'from' must be before 'to'.", "from");
+                throw new ArgumentException($"No date lies between {maxYears} and {minYears} years before {reference:O}.", nameof(maxYears));
             _past = bounds = new PastBounds(reference, minYears, maxYears, from, to);
         }
 

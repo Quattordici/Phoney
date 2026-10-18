@@ -151,6 +151,11 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
+      # The release binary, checked against its published SHA-256, instead of npx, which would run the npm package's install scripts.
+      - uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04 # v1.0.0
+        if: steps.token.outputs.present == 'true'
+        with:
+          snyk-version: v1.1307.4
       - if: steps.token.outputs.present == 'true'
         run: dotnet restore
       # Only the packages users install (src/); tests, benchmarks, samples and tools never ship. High and critical issues fail the job.
@@ -158,13 +163,13 @@ jobs:
         if: steps.token.outputs.present == 'true'
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: npx --yes snyk@1.1307.4 test --all-projects --exclude=tests,benchmarks,samples,tools --severity-threshold=high
+        run: snyk test --all-projects --exclude=tests,benchmarks,samples,tools --severity-threshold=high
       # On main the result is also recorded in the Snyk dashboard, which then reports new vulnerabilities in released dependencies.
       - name: Record the dependencies of main
         if: steps.token.outputs.present == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: npx --yes snyk@1.1307.4 monitor --all-projects --exclude=tests,benchmarks,samples,tools
+        run: snyk monitor --all-projects --exclude=tests,benchmarks,samples,tools
 
   # SonarQube Cloud (free for public repositories): bugs, code smells and security hotspots, with pull request decoration. Import the
   # repository at sonarcloud.io, turn its Automatic Analysis off (CI analysis replaces it) and add the secret SONAR_TOKEN; the organization and

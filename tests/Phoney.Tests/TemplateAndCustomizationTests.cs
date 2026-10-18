@@ -30,6 +30,17 @@ public sealed class TemplateAndCustomizationTests
         Should.Throw<PhoneyDataException>(() => _faker.Parse("{{nothing.here}}")).Message.ShouldContain("nothing.here");
 
     [Test]
+    public void Self_referencing_data_fails_and_leaves_the_depth_limit_intact()
+    {
+        Locales.Register("en_LOOP", l => l.FallbackTo("en").Set("person.nickname", "{{person.nickname}}"));
+        var faker = new Faker("en_LOOP");
+
+        Should.Throw<PhoneyDataException>(() => faker.Parse("{{person.nickname}}")).Message.ShouldContain("too deep");
+        Should.Throw<PhoneyDataException>(() => faker.Pick("person.nickname")).Message.ShouldContain("too deep");
+        Template.Depth.ShouldBe(0);
+    }
+
+    [Test]
     public void Custom_template_functions_can_be_registered()
     {
         TemplateFunctions.Register("test.sku", (f, _) => f.Random.ReplaceSymbols("SKU-####"));
