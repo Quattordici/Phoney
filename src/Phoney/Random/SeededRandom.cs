@@ -156,7 +156,7 @@ public sealed class SeededRandom
         var value = double.IsFinite(range)
             ? min + (fraction * range)
             : (min * (1 - fraction)) + (max * fraction); // the width overflows a double; this form stays between the bounds
-        return value < max || max == min ? value : Math.BitDecrement(max); // rounding can land on max, which the range excludes
+        return value < max || max <= min ? value : Math.BitDecrement(max); // rounding can land on max, which the range excludes
     }
 
     /// <summary>Returns a decimal in <c>[min, max)</c>. Any range works, up to <see cref="decimal.MinValue"/> to <see cref="decimal.MaxValue"/>.</summary>
