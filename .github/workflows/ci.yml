@@ -26,7 +26,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # macos-latest is Apple Silicon and ubuntu-24.04-arm is Linux on arm64: seeded data must be bit-identical off x64 too, on both of the
+        # arm64 runtimes the package ships ReadyToRun code for.
+        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -39,6 +41,13 @@ jobs:
       - run: dotnet build -c Release
       # Tests run on net8.0 and net10.0 in CI (see tests/Phoney.Tests/Phoney.Tests.csproj).
       - run: dotnet test -c Release --no-build
+      # Containers and AOT apps often run without ICU (InvariantGlobalization): seeded data must be the same there (see Modules/Decomposition.cs).
+      - name: Test with invariant globalization
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet test -c Release --no-build
+        env:
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
+          DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY: false # lets tests create named cultures such as sr-Latn-RS
 
   floors:
     name: Dependency floors
@@ -117,6 +126,97 @@ jobs:
       - name: Fail if committed data differs from a fresh import
         run: git diff --exit-code -- data src/Phoney/Resources src/Phoney/Data/Generated README.md
 
+  # Snyk Open Source (free for public repositories): known vulnerabilities in the NuGet dependencies of the shipped packages. Needs the
+  # repository secret SNYK_TOKEN (snyk.io → Account settings → Auth token); without it (forks, or before it is set) the job only says so.
+  snyk:
+    name: Snyk dependency scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # The token is only given to the steps that call Snyk, never to restore or build code.
+      - name: Check for a token
+        id: token
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [[ -n "$SNYK_TOKEN" ]]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::SNYK_TOKEN is not set, so the Snyk scan was skipped."; fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: steps.token.outputs.present == 'true'
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - if: steps.token.outputs.present == 'true'
+        run: dotnet restore
+      # Only the packages users install (src/); tests, benchmarks, samples and tools never ship. High and critical issues fail the job.
+      - name: Scan the shipped packages
+        if: steps.token.outputs.present == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: npx --yes snyk@1.1307.4 test --all-projects --exclude=tests,benchmarks,samples,tools --severity-threshold=high
+      # On main the result is also recorded in the Snyk dashboard, which then reports new vulnerabilities in released dependencies.
+      - name: Record the dependencies of main
+        if: steps.token.outputs.present == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: npx --yes snyk@1.1307.4 monitor --all-projects --exclude=tests,benchmarks,samples,tools
+
+  # SonarQube Cloud (free for public repositories): bugs, code smells and security hotspots, with pull request decoration. Import the
+  # repository at sonarcloud.io, turn its Automatic Analysis off (CI analysis replaces it) and add the secret SONAR_TOKEN; the organization and
+  # project keys default to the ones the import creates and can be changed with the repository variables SONAR_ORGANIZATION and SONAR_PROJECT_KEY.
+  sonar:
+    name: SonarQube Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The token is only given to the scanner's begin and end steps, never to the build.
+      - name: Check for a token
+        id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [[ -n "$SONAR_TOKEN" ]]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::SONAR_TOKEN is not set, so the SonarQube Cloud analysis was skipped."; fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          fetch-depth: 0 # blame information, so new issues are attributed to the change that made them
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: steps.token.outputs.present == 'true'
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Install the scanner
+        if: steps.token.outputs.present == 'true'
+        run: |
+          dotnet tool install --global dotnet-sonarscanner --version 11.3.0
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+      - name: Begin the analysis
+        if: steps.token.outputs.present == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || 'quattordici' }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'Quattordici_Phoney' }}
+        # Generated and imported files are checked by their own pipeline (the data job), not reviewed by hand.
+        run: >-
+          dotnet sonarscanner begin /k:"$SONAR_PROJECT_KEY" /o:"$SONAR_ORGANIZATION" /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN"
+          /d:sonar.exclusions="data/**,src/Phoney/Data/Generated/**,src/Phoney/Resources/**,benchmarks/**,samples/**,tools/**"
+      - name: Build
+        if: steps.token.outputs.present == 'true'
+        run: dotnet build -c Release
+      - name: End the analysis
+        if: steps.token.outputs.present == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
   pack:
     name: Pack
     needs: [build, aot, data]
@@ -142,7 +242,12 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
-          dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION"
+          # Phoney also carries a ReadyToRun copy per common runtime (Phoney.csproj, PackReadyToRun), so the first call of a process skips most JIT work.
+          dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION" -p:PackReadyToRun=true
+          for rid in win-x64 linux-x64 linux-arm64 osx-arm64; do for tfm in net8.0 net10.0; do
+            unzip -l "artifacts/packages/Phoney.$VERSION.nupkg" | grep -q "runtimes/$rid/lib/$tfm/Phoney.dll" \
+              || { echo "::error::The Phoney package has no ReadyToRun assembly for $rid/$tfm."; exit 1; }
+          done; done
           dotnet pack src/Phoney.TUnit -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.Xunit -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.NUnit -c Release -o artifacts/packages -p:Version="$VERSION"

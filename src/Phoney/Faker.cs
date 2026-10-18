@@ -52,6 +52,9 @@ public sealed partial class Faker : IFaker
         Random = random ?? throw new ArgumentNullException(nameof(random));
     }
 
+    /// <summary>Whether the faker was seeded, so its values and dates are reproducible.</summary>
+    internal bool IsSeeded => _seeded;
+
     /// <summary>The locale code, e.g. <c>de_AT</c>.</summary>
     public string Locale => Data.Info.Code;
 
@@ -93,6 +96,43 @@ public sealed partial class Faker : IFaker
 
     /// <inheritdoc />
     IFaker IFaker.Seed(long seed) => Seed(seed);
+
+    /// <summary>
+    /// Returns a new faker for item <paramref name="index"/> of parallel work: same locale and dates, its own randomness derived from this faker's
+    /// seed and the index only. A <see cref="Faker"/> is not thread-safe, so give each task or loop iteration a fork: the data of item <em>n</em> is then
+    /// the same whatever the thread timing, and reproducible when this faker is seeded.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// var faker = new Faker(seed: 42);
+    /// Parallel.For(0, 1000, i =&gt; Save(faker.Fork(i).Person.FullName()));   // item i is always the same name
+    /// </code>
+    /// </example>
+    /// <remarks>It reads the seed this faker was created or last reseeded with, never its current position, so forking draws nothing and is safe from any thread.</remarks>
+    public Faker Fork(long index) => Derived(SeededRandom.DeriveSeed(Random.Seed, index), _seeded);
+
+    /// <inheritdoc />
+    IFaker IFaker.Fork(long index) => Fork(index);
+
+    /// <summary>
+    /// Returns a faker whose values depend on <paramref name="key"/> only: the same key gives the same person, address and email in every run, process
+    /// and machine, whatever this faker's seed. Use it to replace real data with stable stand-ins (<c>faker.Keyed(customer.Email).Person.FullName()</c>),
+    /// so the same customer gets the same fake name in every table.
+    /// </summary>
+    /// <remarks>
+    /// The faker keeps this faker's locale, and its dates are relative to <see cref="DefaultSeededReferenceDate"/> unless this faker has a
+    /// <see cref="ReferenceDate"/> or <see cref="TimeProvider"/>. The mapping is reproducible, not secret: anyone who knows a key can compute its stand-in.
+    /// When that matters, use a keyed hash of the real value (HMAC with a secret you keep out of the data) as the key.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    public Faker Keyed(string key) => Derived(SeededRandom.KeySeed(key), seeded: true);
+
+    /// <inheritdoc />
+    IFaker IFaker.Keyed(string key) => Keyed(key);
+
+    /// <summary>A faker over the same data and dates with its own sequence from <paramref name="seed"/>.</summary>
+    private Faker Derived(long seed, bool seeded) =>
+        new(Data, new SeededRandom(seed)) { _seeded = seeded, _referenceDate = _referenceDate, TimeProvider = TimeProvider };
 
     /// <summary>
     /// Evaluates <c>{{...}}</c> expressions in <paramref name="template"/>, faker.js style. An expression is either a

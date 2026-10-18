@@ -33,6 +33,31 @@
     <None Include="../Phoney.CodeFixes/bin/$(Configuration)/netstandard2.0/Phoney.CodeFixes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
+  <!--
+    ReadyToRun: `dotnet pack -p:PackReadyToRun=true` (CI does) adds Phoney.dll precompiled per runtime under runtimes/<rid>/lib/<tfm>, next to the IL-only
+    lib/<tfm> for every other platform. The host picks the copy for the machine's runtime (also in RID-less apps and `dotnet test`), so the first call
+    skips most of the JIT work; the IL is the same, so the data is too. Native AOT and trimming compile from the IL.
+  -->
+  <PropertyGroup>
+    <PackReadyToRun Condition="'$(PackReadyToRun)' == ''">false</PackReadyToRun>
+    <!-- The platforms most development machines and CI agents run on; others use the IL in lib/<tfm> as before. -->
+    <ReadyToRunPackRuntimes>win-x64;linux-x64;linux-arm64;osx-arm64</ReadyToRunPackRuntimes>
+    <RuntimeIdentifiers Condition="'$(PackReadyToRun)' == 'true'">$(ReadyToRunPackRuntimes)</RuntimeIdentifiers>
+    <!-- Restore must see PublishReadyToRun too, or it doesn't download the Crossgen2 compiler the publishes below need (NETSDK1094). It only affects publishing. -->
+    <PublishReadyToRun Condition="'$(PackReadyToRun)' == 'true'">true</PublishReadyToRun>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);AddReadyToRunAssemblies</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="AddReadyToRunAssemblies" Condition="'$(PackReadyToRun)' == 'true'">
+    <ItemGroup>
+      <_ReadyToRunRuntime Include="$(ReadyToRunPackRuntimes)" />
+    </ItemGroup>
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="Publish" Properties="TargetFramework=$(TargetFramework);RuntimeIdentifier=%(_ReadyToRunRuntime.Identity);SelfContained=false;PublishReadyToRun=true;PublishDir=$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)r2r/$(TargetFramework)/%(_ReadyToRunRuntime.Identity)/" />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(BaseIntermediateOutputPath)r2r/$(TargetFramework)/%(_ReadyToRunRuntime.Identity)/$(AssemblyName).dll" PackagePath="runtimes/%(_ReadyToRunRuntime.Identity)/lib/$(TargetFramework)" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />

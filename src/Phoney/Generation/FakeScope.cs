@@ -81,11 +81,24 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     /// <summary>Attempts per value before uniqueness gives up.</summary>
     public int MaxAttempts { get; } = maxAttempts;
 
+    /// <summary>
+    /// Whether a duplicate makes the whole object be generated again instead of the member: set for members whose value comes from the object's
+    /// <see cref="Identity"/>, where drawing the member again returns the same cached value (and the name, email and address must keep agreeing).
+    /// </summary>
+    public bool RetriesObject { get; set; }
+
     /// <summary>Records <paramref name="value"/>; false when it was produced before.</summary>
     public bool TryClaim(object? value)
     {
         lock (_seen!)
             return _seen.Add(value);
+    }
+
+    /// <summary>Whether <paramref name="value"/> was produced before, without recording it.</summary>
+    public bool IsClaimed(object? value)
+    {
+        lock (_seen!)
+            return _seen.Contains(value);
     }
 }
 
@@ -302,6 +315,8 @@ public sealed class FakeScope
             return fallback(this);
         if (!slot.Unique && slot.Filter is null)
             return Produce(slot, fallback);
+        if (slot.RetriesObject)
+            return ProduceForObjectRetry(slot, fallback);
 
         // A condition is checked first, so only accepted values use up the unique ones.
         var attempts = slot.Attempts;
@@ -319,6 +334,48 @@ public sealed class FakeScope
             : new InvalidOperationException(
                 $"Could not generate {_type.Name}.{slot.MemberName} {(slot.Unique ? "unique and " : "")}satisfying its Where condition after {attempts} attempts. "
                 + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");
+    }
+
+    // Unique identity values of this object, claimed only once the whole object is accepted (see RuleSlot.RetriesObject).
+    private List<(RuleSlot Slot, object? Value)>? _pendingClaims;
+
+    /// <summary>Whether a unique identity value of this object was produced before, so the object has to be generated again.</summary>
+    internal bool HasDuplicate { get; private set; }
+
+    /// <summary>Produces a unique identity value once; a duplicate marks the object for another attempt instead of drawing the member again.</summary>
+    private TValue ProduceForObjectRetry<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback)
+    {
+        var value = Produce(slot, fallback);
+        if (slot.IsClaimed(value))
+            HasDuplicate = true;
+        else
+            (_pendingClaims ??= []).Add((slot, value));
+        return value;
+    }
+
+    /// <summary>Claims the unique identity values of an accepted object; false when another thread claimed one of them first (the object is then generated again).</summary>
+    internal bool TryClaimPending()
+    {
+        if (HasDuplicate)
+            return false;
+        if (_pendingClaims is null)
+            return true;
+
+        // All or nothing, so an object that loses one value to another thread doesn't keep the others claimed. Only root scopes have such slots,
+        // and they share the generator's slots array, so it serialises the claims of every object of the run.
+        lock (_slots!)
+        {
+            foreach (var (slot, value) in _pendingClaims)
+            {
+                if (slot.IsClaimed(value))
+                    return false;
+            }
+
+            foreach (var (slot, value) in _pendingClaims)
+                slot.TryClaim(value);
+        }
+
+        return true;
     }
 
     /// <summary>Untyped <see cref="Get{TValue}"/> used by the reflection model.</summary>

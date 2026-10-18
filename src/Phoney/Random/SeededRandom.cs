@@ -49,6 +49,24 @@ public sealed class SeededRandom
         return (long)SplitMix64(ref x);
     }
 
+    /// <summary>
+    /// Turns <paramref name="key"/> into a seed that is the same in every process and on every machine (unlike <see cref="string.GetHashCode()"/>, which
+    /// .NET randomizes per process): FNV-1a over the UTF-16 code units, then mixed like <see cref="DeriveSeed"/>. Used by <see cref="Faker.Keyed"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    public static long KeySeed(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        var hash = 0xCBF29CE484222325UL;
+        foreach (var c in key)
+        {
+            hash = (hash ^ (byte)c) * 0x100000001B3UL;
+            hash = (hash ^ (byte)(c >> 8)) * 0x100000001B3UL;
+        }
+
+        return (long)SplitMix64(ref hash);
+    }
+
     /// <summary>Returns 64 random bits.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ulong NextUInt64()

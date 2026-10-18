@@ -365,7 +365,7 @@ public sealed partial class InternetModule : FakerModule
         if (Ascii.IsValid(text))
             return text.Replace("'", "", StringComparison.Ordinal).Replace(" ", "", StringComparison.Ordinal);
 
-        var decomposed = text.Normalize(NormalizationForm.FormKD);
+        var decomposed = Decomposition.FormKD(text);
         var sb = new StringBuilder(decomposed.Length);
         foreach (var rune in decomposed.EnumerateRunes())
         {

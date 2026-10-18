@@ -27,8 +27,9 @@
 - **Conditions and checked rules**: `.Where(o => o.Total > 100)` keeps only objects that satisfy a condition, and `.VerifyRules()` fails when a nested rule, `Subtype`, `WithGeneratorFor` or `WithConvention` never applied to anything.
 - **Type-wide rules**: `.WithGeneratorFor(Fake.For<Address>().Locale("de"))` generates every nested `Address` in the graph with one generator.
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
+- **Stable stand-ins for real data**: `Fake.Keyed("customer:42")` and `.GenerateFor(key)` give the same fake person for a key on every machine, and `.Pseudonymize(customers, c => c.Email)` masks real data while the same customer keeps the same stand-in in every table.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
-- **Deterministic**: same seed means same data, dates included, on every OS and .NET version and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
+- **Deterministic**: same seed means same data, dates included, on every OS, CPU and .NET version, with or without ICU (`InvariantGlobalization`), and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
 - **Trim and Native AOT safe** with the source generator.
 - **Integrations**: `[FakeData]` for TUnit tests, `services.AddPhoney()` for dependency injection and ASP.NET Core, `HasFakeData` for EF Core seeding, and NodaTime types.
 
@@ -143,6 +144,22 @@ Fake.Seed(42);                                // or seed the facade app-wide (ev
 ```
 
 `ObjectGenerator<T>.Seed(n)` does the same for a generator. For tests that should run on random data but be replayable, see [`[FakeSeed]`](#test-data-in-tunit) and `FakeSeed.Pick()`. One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing, so use sequential generation when such results must be stable.
+
+A `Faker` is not thread-safe, and a `Fake.Seeded` scope flows into the tasks and `Parallel.For` workers started inside it, so they would all share its one faker. Give each parallel item a fork instead: a faker of its own whose randomness comes from the seed and the item's index only, so item *n* is the same whatever the thread timing.
+
+```csharp
+using var _ = Fake.Seeded(42);
+Parallel.For(0, 1_000, i =>
+{
+    using var fork = Fake.Fork(i);                  // Fake.*, Fake.One/Many/For use item i's own faker
+    Save(Fake.Person.FullName(), Fake.One<Order>());
+});
+
+var faker = new Faker(seed: 42);
+await Task.WhenAll(Enumerable.Range(0, 10).Select(i => Task.Run(() => Use(faker.Fork(i)))));   // the same for a Faker
+```
+
+`ObjectGenerator<T>.GenerateParallel` does this for you.
 
 ### Controlling "now" with `TimeProvider`
 
@@ -345,7 +362,7 @@ var customers = Fake.For<Customer>()
     .With(x => x.Status, CustomerStatus.Active)                    // fixed value
     .With(x => x.Email, (f, x) => f.Internet.Email(x.FirstName, x.LastName, provider: "example.se")) // depends on the object
     .With(x => x.Address, Fake.For<Address>().Locale("de"))        // nested generator
-    .Unique(x => x.Email)
+    .Unique(x => x.Email)                                          // never the same email twice
     .Ignore(x => x.InternalNotes)
     .Generate(100);                                                // also: Generate(), Stream(), GenerateParallel(n)
 ```
@@ -353,6 +370,7 @@ var customers = Fake.For<Customer>()
 - **Supported shapes**: classes with a parameterless constructor, records and classes with constructor parameters (the constructor with most parameters is used), `init` and `required` members, public fields, structs, nested objects (also closed generic classes such as `Result<Order>` or `Paged<Order>`), interfaces and abstract classes (through [subtypes](#interfaces-and-subtypes)), `T[]`, `List<T>` and its interfaces, `HashSet<T>`, `Dictionary<K,V>` and [more collection types](#collection-types), enums, nullable types, `byte[]`, `Memory<byte>`, two-dimensional arrays (`T[,]`), tuples (`(int, string)`, `Tuple<…>`), `KeyValuePair<K,V>`, and `Guid`, `DateTime(Offset)`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri`, `IPAddress` (IPv6 for a name such as `Ipv6Address`), `Version`, `Rune` plus every numeric type, `Half`, `Int128`, `UInt128`, `BigInteger` and `nint`/`nuint` included. A value type asked for directly gets a value too: `Fake.One<Guid>()`, `Fake.Many<int>(10)`, and so does a collection (`Fake.One<List<Customer>>()` has 1–3 generated customers) or an interface or abstract class (`Fake.For<IShape>().Subtype<IShape, Circle, Square>().Generate()` is one of its [subtypes](#interfaces-and-subtypes)).
 - **What is left alone**: framework types Phoney has no generator for keep their default, a framework struct such as `JsonElement`, `Range` or `System.Drawing.Color` its zero value and a framework class (`Stream`, `CultureInfo`, `TimeZoneInfo`, `Task<T>`, `JsonNode`…) `null`, as do arrays of more than two dimensions. Set them with `.With(x => x.Culture, …)`. `CultureInfo` and `TimeZoneInfo` depend on the data of the machine, which would break the promise that a seed gives the same data everywhere.
 - **Cycles** (`Customer → Order → Customer`) stop with `null`, or point back at the containing object with [`WithBackReferences()`](#back-references). A collection never holds such a `null`: elements that can't be created (a cycle, the depth limit, an interface without subtypes) are left out, so `Node.Children` is empty where the tree stops. `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
+- **Uniqueness**: `Unique(x => x.Email, maxAttempts)` keeps a member unique across everything the generator instance creates. A member that comes from the object's identity (names, email, username, address, birthdate…) is not drawn again on its own, which would break the agreement between name and email: on a duplicate the whole object is generated again, so the email still belongs to the name. Objects that never meet a duplicate are the ones you would get without `Unique`.
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members (base class first; within a class its public fields, then its properties, each in declaration order; read-only collections last), then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation that defines it, so new members can't silently get meaningless data. The included analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`, so a new member breaks the build instead of the test run. It can't see app-wide `Fake.Conventions` (registered at runtime): cover such members with `.Ignore(...)`/`.With(...)` or suppress the warning.
@@ -601,6 +619,27 @@ List<Customer> filled = generator.Populate(customers);            // many at onc
 - Members you `Ignore` are never touched; rules that depend on the object and `AfterCreate` run afterwards; `CreateWith` is ignored because nothing is created. Records are filled through their `init` properties, and a struct is populated as a copy (use the return value).
 - A `false` or `0` that you set on purpose counts as unset in `MissingOnly`: protect it with `.Ignore(x => x.IsActive)`.
 - With a seed, `Populate(new T(), PopulateMode.All)` gives exactly what `Generate()` gives.
+
+### Data tied to a key
+
+A key can stand for an object: the same key gives the same values in every run, process and machine, whatever else was generated before and whether or not anything is seeded. That makes stable stand-ins for real data, for example to copy production data to a test system without the personal details while the joins still work.
+
+```csharp
+string name = Fake.Keyed("customer:42").Person.FullName();     // always the same name for customer 42
+Faker faker = new Faker("sv").Keyed(user.Email);                // in another locale, from any faker
+
+Customer c = Fake.For<Customer>().GenerateFor("customer:42");   // the whole object for a key
+
+List<Customer> masked = Fake.For<Customer>()
+    .Ignore(x => x.Id)                                           // keep what isn't personal
+    .Pseudonymize(customers, x => x.Email);                      // the same real email gets the same fake person in every table
+```
+
+- `Pseudonymize` reads the key before it changes anything and then regenerates every member that isn't ignored (`PopulateMode.All`), so names, email, address and birthdate of the stand-in still agree with each other.
+- The key becomes a seed with `SeededRandom.KeySeed` (FNV-1a and SplitMix64, never `string.GetHashCode`, which .NET randomizes per process), mixed with the generator's `Seed` when there is one. Keyed dates are relative to `Faker.DefaultSeededReferenceDate` unless you set a `ReferenceDate` or `TimeProvider`, so they don't drift either.
+- The mapping is reproducible, not secret: anyone who knows a key (and the seed, if any) can compute its stand-in, and a seed is not a secret, because the generated values can reveal it. When a stand-in must not lead back to a real key, make the key a keyed hash with a secret you keep out of the data, for example `x => Convert.ToHexString(HMACSHA256.HashData(secret, Encoding.UTF8.GetBytes(x.Email)))`.
+- `Unique` can't be combined with `GenerateFor` or `Pseudonymize` (it throws): a key that comes again must give the same object, which `Unique` would reject as a duplicate.
+- A keyed object is position 0, so `Sequence` and `Cycle` give it their first value.
 
 ### Values that agree
 
@@ -1039,6 +1078,8 @@ Bogus works with Native AOT for single values but not for objects (it builds its
 | Faker.Net | 25 ms | 19 ms | 4.2 ms |
 
 Most of Phoney's first call is JIT compilation of its own code, not reading data: a locale file is indexed when it is opened and each entry is decoded the first time its key is read, so a process that uses a few dozen of the ~270 keys of `en` never builds the rest. It is paid once per process, so it matters for short-lived tools and not for services or test runs. `cold-phases` shows the time and the JIT time of each step.
+
+The Phoney package therefore also carries `Phoney.dll` precompiled with ReadyToRun for `win-x64`, `linux-x64`, `linux-arm64` and `osx-arm64` (under `runtimes/<rid>/lib/<tfm>`). The .NET host loads the copy for its platform by itself, also in apps and test projects without a runtime identifier, so the first object of a process comes about twice as fast without any setting (on Linux x64 from 80 ms to 35 ms for a source-generated model). It is the same IL, so the data is identical; other platforms use the plain assembly as before, and Native AOT and trimming compile from the IL.
 
 Reproduce the tables with:
 

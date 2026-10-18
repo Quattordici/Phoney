@@ -116,6 +116,24 @@ using (Fake.Seeded(seed))
 using (Fake.Seeded(seed))
     Console.WriteLine($"seed {seed} again: {Fake.Person.FullName()}");   // the same person
 
+// 7e. Parallel work and stand-ins tied to a key -----------------------------------------------
+Console.WriteLine("\n== Forks and keys");
+using (Fake.Seeded(7))
+{
+    var names = new string[4];
+    Parallel.For(0, names.Length, i =>
+    {
+        using var fork = Fake.Fork(i);           // each item its own faker: the same names whatever the thread timing
+        names[i] = Fake.Person.FullName();
+    });
+    Console.WriteLine(string.Join(", ", names));
+}
+
+Console.WriteLine($"customer:42 is always {Fake.Keyed("customer:42").Person.FullName()}");
+var real = new List<Customer> { new() { Id = 1, Email = "anna@example.com" }, new() { Id = 2, Email = "anna@example.com" } };
+foreach (var masked in Fake.For<Customer>().Seed(99).Ignore(c => c.Id).Pseudonymize(real, c => c.Email))
+    Console.WriteLine($"  #{masked.Id}: {masked.FirstName} {masked.LastName} <{masked.Email}>");   // the same stand-in for the same person
+
 // 8. Time from a TimeProvider -----------------------------------------------------------------
 Console.WriteLine("\n== TimeProvider");
 var clock = new FixedClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));

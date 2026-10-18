@@ -108,6 +108,12 @@ public interface IFaker
     /// <inheritdoc cref="Faker.Seed"/>
     IFaker Seed(long seed);
 
+    /// <inheritdoc cref="Faker.Fork"/>
+    IFaker Fork(long index);
+
+    /// <inheritdoc cref="Faker.Keyed"/>
+    IFaker Keyed(string key);
+
     /// <inheritdoc cref="Faker.Parse"/>
     string Parse(string template);
 

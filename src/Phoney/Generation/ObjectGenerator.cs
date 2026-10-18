@@ -823,6 +823,93 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         return result;
     }
 
+    /// <summary>
+    /// Generates the object that belongs to <paramref name="key"/>: the same key gives the same object in every run, process and machine, whatever else
+    /// this generator made before, e.g. <c>Fake.For&lt;Customer&gt;().GenerateFor("customer:42")</c>. With a <see cref="Seed"/>, the seed is mixed in, so
+    /// another seed gives another mapping. The mapping is reproducible, not secret (generated values can reveal the seed): when an object must not lead back
+    /// to its key, use a keyed hash of the real value (HMAC with a secret you keep out of the data) as the key.
+    /// </summary>
+    /// <remarks>
+    /// Dates are relative to <see cref="Faker.DefaultSeededReferenceDate"/> unless a <see cref="ReferenceDate"/> or <see cref="TimeProvider"/> is set, so
+    /// they don't drift either. Every keyed object is position 0 of a sequence, so <see cref="Sequence{TValue}"/> and <see cref="Cycle{TValue}"/> give it their first value.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The generator has a <see cref="Unique{TValue}"/> rule: a key that comes again must give the same object.</exception>
+    public T GenerateFor(string key)
+    {
+        var itemSeed = KeyedSeed(key);
+        var item = Start(stableDates: true).CreateFrom(0, null, itemSeed);
+        VerifyUsage();
+        return item;
+    }
+
+    /// <summary>
+    /// Replaces the data of <paramref name="instance"/> with stand-ins that belong to its key: every member is generated again (<see cref="PopulateMode.All"/>)
+    /// from <c>keyOf(instance)</c>, read before anything is changed, so the same real customer gets the same fake name, email and address in every table, run and
+    /// process. Keep members such as ids with <see cref="Ignore{TValue}"/>. The mapping is reproducible, not secret, as for <see cref="GenerateFor"/>.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// var masked = Fake.For&lt;Customer&gt;().Ignore(c =&gt; c.Id).Pseudonymize(customers, c =&gt; c.Email);
+    /// </code>
+    /// </example>
+    /// <returns><paramref name="instance"/>, or a changed copy when <typeparamref name="T"/> is a struct.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> or <paramref name="keyOf"/> is <see langword="null"/>, or the key is.</exception>
+    /// <exception cref="InvalidOperationException">The generator has a <see cref="Unique{TValue}"/> rule: a key that comes again must give the same object.</exception>
+    public T Pseudonymize(T instance, Func<T, string> keyOf)
+    {
+        if (instance is null)
+            throw new ArgumentNullException(nameof(instance));
+        ArgumentNullException.ThrowIfNull(keyOf);
+        var itemSeed = KeyedSeed(keyOf(instance));
+        var item = Start(stableDates: true).PopulateFrom(instance, 0, PopulateMode.All, itemSeed);
+        VerifyUsage();
+        return item;
+    }
+
+    /// <summary>Like <see cref="Pseudonymize(T, Func{T, string})"/> for every object of <paramref name="instances"/>; every key is read before any object is changed.</summary>
+    /// <returns>The changed objects in the same order (copies for structs).</returns>
+    public List<T> Pseudonymize(IEnumerable<T> instances, Func<T, string> keyOf)
+    {
+        ArgumentNullException.ThrowIfNull(instances);
+        ArgumentNullException.ThrowIfNull(keyOf);
+        // Every key is read before anything changes: an object that is in the list twice must keep its real key the second time.
+        var items = new List<(T Item, long Seed)>();
+        foreach (var item in instances)
+        {
+            if (item is null)
+                throw new ArgumentException("The collection contains a null element.", nameof(instances));
+            items.Add((item, KeyedSeed(keyOf(item))));
+        }
+
+        var run = Start(stableDates: true);
+        var result = new List<T>(items.Count);
+        foreach (var (item, seed) in items)
+            result.Add(run.PopulateFrom(item, 0, PopulateMode.All, seed));
+
+        if (result.Count > 0)
+            VerifyUsage();
+        return result;
+    }
+
+    /// <summary>The item seed of <paramref name="key"/>: from the key and the configured seed only (never the random base seed of an unseeded generator), so it is stable everywhere.</summary>
+    private long KeyedSeed(string key)
+    {
+        if (key is null)
+            throw new ArgumentNullException(nameof(key), "The key of an object can't be null.");
+        if (!_config.Unique.IsEmpty)
+        {
+            throw new InvalidOperationException(
+                $"Unique can't be combined with GenerateFor or Pseudonymize on {typeof(T).Name}: a key that comes again must give the same object, "
+                + "which Unique would reject as a duplicate and replace. Remove the Unique rule; different keys already give different objects almost always.");
+        }
+
+        return SeededRandom.DeriveSeed(unchecked((_config.Seed ?? 0) ^ KeyStreamSalt), SeededRandom.KeySeed(key));
+    }
+
+    /// <summary>Separates keyed objects from the objects of the generator's own sequence.</summary>
+    private const long KeyStreamSalt = 0x6B65_7965_64L;
+
     /// <inheritdoc />
     Type INestedGenerator.GeneratedType => typeof(T);
 
@@ -904,7 +991,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     }
 
     /// <summary>Prepares a run: compiled rules, a faker for the locale and the base seed. Nested generators inherit the parent's locale and reference date.</summary>
-    private Run Start(long? seed = null, Faker? parentFaker = null)
+    private Run Start(long? seed = null, Faker? parentFaker = null, bool stableDates = false)
     {
         var compiled = _state.Compiled ?? _state.Publish(Compile());
         var data = parentFaker is not null && _config.Locale is null ? parentFaker.Data : LocaleStore.Get(_config.Locale ?? Fake.Locale);
@@ -913,7 +1000,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // seeded generators so their relative dates don't drift with the clock; unseeded generators use the current time.
         if (_config.ReferenceDate is null && _config.TimeProvider is { } clock)
             faker.TimeProvider = clock;
-        else if ((_config.ReferenceDate ?? parentFaker?.ReferenceDate ?? (_config.Seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
+        else if ((_config.ReferenceDate ?? parentFaker?.ReferenceDate ?? (_config.Seed is not null || stableDates ? Faker.DefaultSeededReferenceDate : null)) is { } date)
             faker.ReferenceDate = date;
         return new Run(this, compiled, faker, seed ?? BaseSeed);
     }
@@ -1017,6 +1104,18 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             slot.FilterAttempts = filter.MaxAttempts;
         }
 
+        // A unique member read from the object's identity can't be drawn again on its own (the identity is cached, and name, email and
+        // address must agree), so a duplicate generates the whole object again; the strictest limit of such members applies.
+        var objectRetries = 0;
+        for (var i = 0; i < slots.Length; i++)
+        {
+            if (slots[i] is { Kind: RuleKind.Default, Unique: true } unique && _config.Settings.WithNameConventions && IdentityBound.Contains(members[i].Convention))
+            {
+                unique.RetriesObject = true;
+                objectRetries = objectRetries == 0 ? unique.MaxAttempts : Math.Min(objectRetries, unique.MaxAttempts);
+            }
+        }
+
         for (var i = 0; i < slots.Length; i++)
         {
             if (slots[i] is { } named)
@@ -1031,7 +1130,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
             Usage = usage,
         };
-        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage);
+        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries);
     }
 
     /// <summary>
@@ -1119,56 +1218,84 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     private sealed class Run(ObjectGenerator<T> generator, Compiled compiled, Faker faker, long seed)
     {
         /// <summary>Creates item <paramref name="index"/>; its seed depends only on the base seed and the index (and the attempt, when a condition rejects an object).</summary>
-        public T Create(long index, FakeScope? parent = null)
+        public T Create(long index, FakeScope? parent = null) => CreateFrom(index, parent, SeededRandom.DeriveSeed(seed, index));
+
+        /// <summary>Creates an object from <paramref name="itemSeed"/> (and attempts derived from it), as item <paramref name="index"/>.</summary>
+        public T CreateFrom(long index, FakeScope? parent, long itemSeed)
         {
             var filters = generator._config.Filters;
-            var itemSeed = SeededRandom.DeriveSeed(seed, index);
-            if (filters.IsEmpty)
-                return CreateOnce(index, parent, itemSeed);
+            if (filters.IsEmpty && compiled.ObjectRetries == 0)
+                return CreateOnce(index, parent, itemSeed, out _);
 
-            var limit = Filter.AttemptLimit(filters);
+            var limit = AttemptLimit(filters);
             for (var attempt = 0; attempt < limit; attempt++)
             {
-                var item = CreateOnce(index, parent, Filter.AttemptSeed(itemSeed, attempt));
-                if (Filter.Accepts(filters, item))
+                var item = CreateOnce(index, parent, Filter.AttemptSeed(itemSeed, attempt), out var scope);
+                if (Filter.Accepts(filters, item) && scope.TryClaimPending())
                     return item;
             }
 
-            throw Filter.Exhausted(typeof(T), filters, limit);
+            throw Exhausted(filters, limit);
+        }
+
+        /// <summary>The attempts an object gets: the smallest limit of the conditions and of the unique identity members.</summary>
+        private int AttemptLimit(ImmutableList<Filter> filters) =>
+            filters.IsEmpty ? compiled.ObjectRetries
+            : compiled.ObjectRetries == 0 ? Filter.AttemptLimit(filters)
+            : Math.Min(compiled.ObjectRetries, Filter.AttemptLimit(filters));
+
+        /// <summary>The error when no attempt gave an acceptable object.</summary>
+        private InvalidOperationException Exhausted(ImmutableList<Filter> filters, int attempts)
+        {
+            if (!filters.IsEmpty && (compiled.ObjectRetries == 0 || attempts < compiled.ObjectRetries))
+                return Filter.Exhausted(typeof(T), filters, attempts);
+            var names = string.Join(", ", compiled.Slots.Where(s => s is { RetriesObject: true }).Select(s => s!.MemberName));
+            return new InvalidOperationException(
+                $"Could not generate a {typeof(T).Name} with a unique {names} after {attempts} attempts: almost every value was produced before. "
+                + "Give the member a source with more distinct values with .With(…), generate fewer objects, or raise maxAttempts.");
         }
 
         /// <summary>Populates <paramref name="instance"/> as item <paramref name="index"/> of the sequence.</summary>
-        public T Populate(T instance, long index, PopulateMode mode)
+        public T Populate(T instance, long index, PopulateMode mode) => PopulateFrom(instance, index, mode, SeededRandom.DeriveSeed(seed, index));
+
+        /// <summary>Populates <paramref name="instance"/> from <paramref name="itemSeed"/> (and attempts derived from it), as item <paramref name="index"/>.</summary>
+        public T PopulateFrom(T instance, long index, PopulateMode mode, long itemSeed)
         {
             var filters = generator._config.Filters;
-            var itemSeed = SeededRandom.DeriveSeed(seed, index);
-            if (filters.IsEmpty)
-                return PopulateOnce(instance, index, mode, itemSeed);
+            if (filters.IsEmpty && compiled.ObjectRetries == 0)
+                return PopulateOnce(instance, index, mode, itemSeed, out _);
 
-            if (mode != PopulateMode.All)
+            if (mode != PopulateMode.All && !filters.IsEmpty)
             {
                 throw new InvalidOperationException(
                     $"A Where condition can't be combined with PopulateMode.{mode}: the values {typeof(T).Name} keeps can't be generated again when the condition rejects the object. Use PopulateMode.All, or Generate().");
             }
 
-            var limit = Filter.AttemptLimit(filters);
+            var limit = AttemptLimit(filters);
             var item = instance;
             for (var attempt = 0; attempt < limit; attempt++)
             {
-                item = PopulateOnce(item, index, mode, Filter.AttemptSeed(itemSeed, attempt));
-                if (Filter.Accepts(filters, item))
+                item = PopulateOnce(item, index, mode, Filter.AttemptSeed(itemSeed, attempt), out var scope);
+                if (Filter.Accepts(filters, item) && scope.TryClaimPending())
                     return item;
+                if (mode != PopulateMode.All)
+                {
+                    // The values filled in are now set, so a second pass would keep them: there is nothing to draw again.
+                    throw new InvalidOperationException(
+                        $"Could not populate a {typeof(T).Name} with a unique {string.Join(", ", compiled.Slots.Where(s => s is { RetriesObject: true }).Select(s => s!.MemberName))}: the value was produced before, and PopulateMode.{mode} can't generate the object again. "
+                        + "Use PopulateMode.All, or give the member values with .With(…).");
+                }
             }
 
-            throw Filter.Exhausted(typeof(T), filters, limit);
+            throw Exhausted(filters, limit);
         }
 
-        private T CreateOnce(long index, FakeScope? parent, long itemSeed)
+        private T CreateOnce(long index, FakeScope? parent, long itemSeed, out FakeScope scope)
         {
             faker.Random.Reseed(itemSeed);
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent, compiled.RootChildren);
+            scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent, compiled.RootChildren);
 
             T item;
             if (config.Factory is { } factory)
@@ -1200,12 +1327,12 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             return item;
         }
 
-        private T PopulateOnce(T instance, long index, PopulateMode mode, long itemSeed)
+        private T PopulateOnce(T instance, long index, PopulateMode mode, long itemSeed, out FakeScope scope)
         {
             faker.Random.Reseed(itemSeed);
             var config = generator._config;
             var model = generator._model;
-            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), null, compiled.RootChildren);
+            scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), null, compiled.RootChildren);
 
             var item = model.Populate(instance, scope, mode);
             foreach (var (member, rule) in compiled.Dependent)
@@ -1261,8 +1388,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 + "Almost every generated object is rejected: set the members the condition looks at with .With(…) so that it can hold, loosen the condition, or raise maxAttempts.");
     }
 
-    /// <summary>Rules bound to member indices, plus rules that run after creation.</summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage);
+    /// <summary>Rules bound to member indices, plus rules that run after creation; <paramref name="ObjectRetries"/> is the attempt limit of unique identity members (0 when there are none).</summary>
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false);
