@@ -177,7 +177,7 @@ jobs:
   sonar:
     name: SonarQube Cloud
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       # The token is only given to the scanner's begin and end steps, never to the build.
       - name: Check for a token
@@ -213,9 +213,14 @@ jobs:
         run: >-
           dotnet sonarscanner begin /k:"$SONAR_PROJECT_KEY" /o:"$SONAR_ORGANIZATION" /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN"
           /d:sonar.exclusions="data/**,src/Phoney/Data/Generated/**,src/Phoney/Resources/**,benchmarks/**,samples/**,tools/**"
+          /d:sonar.cs.vscoveragexml.reportsPaths="TestResults/*.xml"
       - name: Build
         if: steps.token.outputs.present == 'true'
         run: dotnet build -c Release
+      # Coverage for the quality gate: every test project writes a coverage file (named by a GUID) to TestResults/; test assemblies are left out.
+      - name: Test with coverage
+        if: steps.token.outputs.present == 'true'
+        run: dotnet test -c Release --no-build -- --coverage --coverage-output-format xml
       - name: End the analysis
         if: steps.token.outputs.present == 'true'
         env:

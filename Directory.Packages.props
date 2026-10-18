@@ -71,6 +71,8 @@
     <PackageVersion Include="NUnit" Version="$(NUnitFloor)" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <!-- Coverage for the SonarQube Cloud job; TUnit brings it, the NUnit and xUnit runners need it added. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
     <PackageVersion Include="MSTest.TestFramework" Version="$(MSTestFloor)" />
     <PackageVersion Include="MSTest" Version="$(MSTestTestVersion)" />
     <!-- TUnit.Core is the dependency of the Phoney.TUnit package; TUnit is the test framework of every test project. -->
