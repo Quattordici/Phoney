@@ -126,6 +126,77 @@ jobs:
       - name: Fail if committed data differs from a fresh import
         run: git diff --exit-code -- data src/Phoney/Resources src/Phoney/Data/Generated README.md
 
+  # Snyk Open Source (free for public repositories): known vulnerabilities in the NuGet dependencies of the shipped packages. Needs the
+  # repository secret SNYK_TOKEN (snyk.io → Account settings → Auth token); without it (forks, or before it is set) the job only says so.
+  snyk:
+    name: Snyk dependency scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Skip without a token
+        if: env.SNYK_TOKEN == ''
+        run: echo "::notice::SNYK_TOKEN is not set, so the Snyk scan was skipped."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: env.SNYK_TOKEN != ''
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: env.SNYK_TOKEN != ''
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - if: env.SNYK_TOKEN != ''
+        run: dotnet restore
+      # Only the packages users install (src/); tests, benchmarks, samples and tools never ship. High and critical issues fail the job.
+      - name: Scan the shipped packages
+        if: env.SNYK_TOKEN != ''
+        run: npx --yes snyk@1.1307.4 test --all-projects --exclude=tests,benchmarks,samples,tools --severity-threshold=high
+      # On main the result is also recorded in the Snyk dashboard, which then reports new vulnerabilities in released dependencies.
+      - name: Record the dependencies of main
+        if: env.SNYK_TOKEN != '' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npx --yes snyk@1.1307.4 monitor --all-projects --exclude=tests,benchmarks,samples,tools
+
+  # SonarQube Cloud (free for public repositories): bugs, code smells and security hotspots, with pull request decoration. Import the
+  # repository at sonarcloud.io, turn its Automatic Analysis off (CI analysis replaces it) and add the secret SONAR_TOKEN; the organization and
+  # project keys default to the ones the import creates and can be changed with the repository variables SONAR_ORGANIZATION and SONAR_PROJECT_KEY.
+  sonar:
+    name: SonarQube Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Skip without a token
+        if: env.SONAR_TOKEN == ''
+        run: echo "::notice::SONAR_TOKEN is not set, so the SonarQube Cloud analysis was skipped."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: env.SONAR_TOKEN != ''
+        with:
+          fetch-depth: 0 # blame information, so new issues are attributed to the change that made them
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: env.SONAR_TOKEN != ''
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Build with the scanner
+        if: env.SONAR_TOKEN != ''
+        env:
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || 'quattordici' }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'Quattordici_Phoney' }}
+        run: |
+          set -euo pipefail
+          dotnet tool install --global dotnet-sonarscanner --version 11.3.0
+          # Generated and imported files are checked by their own pipeline (the data job), not reviewed by hand.
+          dotnet sonarscanner begin /k:"$SONAR_PROJECT_KEY" /o:"$SONAR_ORGANIZATION" /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.exclusions="data/**,src/Phoney/Data/Generated/**,src/Phoney/Resources/**,benchmarks/**,samples/**,tools/**"
+          dotnet build -c Release
+          dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
   pack:
     name: Pack
     needs: [build, aot, data]
