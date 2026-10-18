@@ -62,7 +62,7 @@
     <PackageVersion Include="Bogus" Version="35.6.5" />
     <PackageVersion Include="Faker.Net" Version="2.0.163" />
     <PackageVersion Include="NBuilder" Version="6.1.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <!-- Add-on packages depend on the lowest version that supports every target, so apps can use any newer one. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DependencyInjectionFloor)" />
@@ -82,7 +82,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Only for the floors run: the SQLite native library of the oldest EF Core releases has a high severity advisory, and the tests need a working one. -->
-    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 
   <ItemGroup>
@@ -98,7 +98,7 @@
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <!-- Coverage for the SonarQube Cloud job; TUnit brings it, the NUnit and xUnit runners need it added. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
     <PackageVersion Include="MSTest.TestFramework" Version="$(MSTestFloor)" />
     <PackageVersion Include="MSTest" Version="$(MSTestTestVersion)" />
     <!-- TUnit.Core is the dependency of the Phoney.TUnit package; TUnit is the test framework of every test project. -->
