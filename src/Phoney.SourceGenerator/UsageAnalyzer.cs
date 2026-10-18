@@ -71,7 +71,8 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             CheckGenerator(context, call, symbols);
 
         CheckArguments(context, call);
-        if (onGenerator && AnalyzerSupport.Terminals.Contains(method.Name))
+        // A keyed call gives every key its own object, so a constant seed in a loop is the point there (it keeps the mapping stable).
+        if (onGenerator && AnalyzerSupport.Terminals.Contains(method.Name) && method.Name is not ("GenerateFor" or "Pseudonymize"))
             CheckSeedInLoop(context, call, symbols);
     }
 

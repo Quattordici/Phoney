@@ -142,7 +142,12 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
-          dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION"
+          # Phoney also carries a ReadyToRun copy per common runtime (Phoney.csproj, PackReadyToRun), so the first call of a process skips most JIT work.
+          dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION" -p:PackReadyToRun=true
+          for rid in win-x64 linux-x64 linux-arm64 osx-arm64; do for tfm in net8.0 net10.0; do
+            unzip -l "artifacts/packages/Phoney.$VERSION.nupkg" | grep -q "runtimes/$rid/lib/$tfm/Phoney.dll" \
+              || { echo "::error::The Phoney package has no ReadyToRun assembly for $rid/$tfm."; exit 1; }
+          done; done
           dotnet pack src/Phoney.TUnit -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.Xunit -c Release -o artifacts/packages -p:Version="$VERSION"
           dotnet pack src/Phoney.NUnit -c Release -o artifacts/packages -p:Version="$VERSION"

@@ -534,6 +534,14 @@ public sealed class UsageAnalyzerTests
                 for (var batch = Fake.For<Product>().Seed(2).Generate(2); batch.Count > 5; batch.RemoveAt(0))
                     products.Add(batch[0]);
             }
+            public static void F(List<Product> products, string[] keys)
+            {
+                // Keyed calls give every key its own object, so the constant seed keeps the mapping stable.
+                foreach (var key in keys)
+                    products.Add(Fake.For<Product>().Seed(1).GenerateFor(key));
+                for (var i = 0; i < products.Count; i++)
+                    products[i] = Fake.For<Product>().Seed(1).Pseudonymize(products[i], p => p.ToString()!);
+            }
             """, cancellationToken);
 
         diagnostics.ShouldBeEmpty();

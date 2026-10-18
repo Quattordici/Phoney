@@ -63,7 +63,7 @@ public static partial class Fake
     public static Faker Faker => s_scoped.Value ?? ThreadFaker;
 
     /// <summary>Whether the facade currently produces reproducible values (a <see cref="Seeded"/> scope or <see cref="Seed"/>).</summary>
-    public static bool IsSeeded => s_scoped.Value is not null || Volatile.Read(ref s_seed) is not null;
+    public static bool IsSeeded => s_scoped.Value is { } scoped ? scoped.IsSeeded : Volatile.Read(ref s_seed) is not null;
 
     private static Faker ThreadFaker
     {
@@ -104,6 +104,10 @@ public static partial class Fake
     /// }
     /// </code>
     /// </example>
+    /// <remarks>
+    /// The scope's faker flows into tasks and <c>Parallel.For</c> workers started inside it, and a <see cref="Phoney.Faker"/> is not thread-safe:
+    /// give each parallel item its own with <see cref="Fork"/>, or generate objects with <see cref="ObjectGenerator{T}.GenerateParallel"/>.
+    /// </remarks>
     /// <param name="seed">The seed.</param>
     /// <param name="locale">Locale for the scope; defaults to <see cref="Locale"/>.</param>
     public static IDisposable Seeded(long seed, string? locale = null)
@@ -113,7 +117,36 @@ public static partial class Fake
         return new Scope(previous);
     }
 
-    /// <summary>Restores the facade's previous faker when a <see cref="Seeded"/> scope ends.</summary>
+    /// <summary>
+    /// Gives the current async flow its own faker for item <paramref name="index"/> of parallel work, until the returned scope is disposed: a fork of
+    /// <see cref="Faker"/> (see <see cref="Phoney.Faker.Fork"/>). Inside a <see cref="Seeded"/> scope every task and <c>Parallel.For</c> worker would
+    /// otherwise share the scope's one faker, which is not thread-safe; with a fork per item, item <em>n</em> gets the same data whatever the thread timing.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// using var _ = Fake.Seeded(42);
+    /// Parallel.For(0, 1000, i =&gt;
+    /// {
+    ///     using var fork = Fake.Fork(i);
+    ///     Save(Fake.Person.FullName(), Fake.One&lt;Order&gt;());   // the same for item i on every run
+    /// });
+    /// </code>
+    /// </example>
+    public static IDisposable Fork(long index)
+    {
+        var previous = s_scoped.Value;
+        s_scoped.Value = Faker.Fork(index);
+        return new Scope(previous);
+    }
+
+    /// <summary>
+    /// A faker whose values depend on <paramref name="key"/> only (see <see cref="Phoney.Faker.Keyed"/>), in the facade's <see cref="Locale"/>:
+    /// <c>Fake.Keyed("customer:42").Person.FullName()</c> is the same name in every run, process and machine.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    public static Faker Keyed(string key) => Faker.Keyed(key);
+
+    /// <summary>Restores the facade's previous faker when a <see cref="Seeded"/> or <see cref="Fork"/> scope ends.</summary>
     private sealed class Scope(Faker? previous) : IDisposable
     {
         private bool _disposed;
