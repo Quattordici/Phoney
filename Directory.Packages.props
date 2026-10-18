@@ -5,11 +5,11 @@
     The tests run on the newest versions, or on the floors with -p:TestAgainstFloors=true (the "floors" CI job).
   -->
   <PropertyGroup>
-    <XunitFloor>3.2.2</XunitFloor>
-    <NUnitFloor>4.6.1</NUnitFloor>
-    <MSTestFloor>4.5.1</MSTestFloor>
-    <TUnitFloor>1.75.0</TUnitFloor>
-    <NodaTimeFloor>3.3.5</NodaTimeFloor>
+    <XunitFloor>3.0.0</XunitFloor>
+    <NUnitFloor>4.0.0</NUnitFloor>
+    <MSTestFloor>4.0.0</MSTestFloor>
+    <TUnitFloor>1.10.0</TUnitFloor>
+    <NodaTimeFloor>3.1.0</NodaTimeFloor>
 
     <XunitLatest>4.0.2</XunitLatest>
     <NUnitLatest>5.0.0</NUnitLatest>
@@ -41,7 +41,7 @@
     <PackageVersion Include="Faker.Net" Version="2.0.163" />
     <PackageVersion Include="NBuilder" Version="6.1.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.3.4" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <!-- Add-on packages depend on the lowest version that supports every target, so apps can use any newer one. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
@@ -61,8 +61,8 @@
 
   <ItemGroup>
     <!-- Kept at the Roslyn version shipped with the .NET 8 SDK so the generator runs on every supported toolchain. -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <!-- Test frameworks of the integration packages. The extensibility package is the dependency of the Phoney.* package (at its floor); the framework that runs the tests of it
          is $(...TestVersion) (xunit.v3 and MSTest are separate ids, NUnit is overridden in its test project). -->
