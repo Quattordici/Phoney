@@ -1,0 +1,71 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    // Actions stay pinned by SHA; Renovate rewrites the SHA and the "# vX" comment together.
+    'helpers:pinGitHubActionDigests',
+  ],
+  schedule: ['before 6am on monday'],
+  customManagers: [
+    {
+      // The versions the tests run on are MSBuild properties (Directory.Packages.props). Each *Latest has a
+      // "renovate: depName" comment above it; the *Floor properties have none, so nothing ever raises a floor.
+      customType: 'regex',
+      managerFilePatterns: ['/^Directory\\.Packages\\.props$/'],
+      matchStrings: [
+        '<!-- renovate: depName=(?<depName>[^\\s]+) -->\\s*<\\w+Latest>(?<currentValue>[^<]+)</\\w+Latest>',
+      ],
+      datasourceTemplate: 'nuget',
+    },
+  ],
+  packageRules: [
+    {
+      groupName: 'nuget minor and patch',
+      matchDatasources: ['nuget'],
+      matchUpdateTypes: ['minor', 'patch'],
+    },
+    {
+      groupName: 'actions',
+      matchManagers: ['github-actions'],
+    },
+    {
+      // Each target framework runs on the EF Core release built for it.
+      matchDepNames: ['Microsoft.EntityFrameworkCore.Sqlite'],
+      matchCurrentVersion: '/^8\\./',
+      allowedVersions: '/^8\\./',
+    },
+    {
+      matchDepNames: ['Microsoft.EntityFrameworkCore.Sqlite'],
+      matchCurrentVersion: '/^10\\./',
+      allowedVersions: '/^10\\./',
+    },
+    {
+      // Pinned for the floors run of the EF Core tests, which still use SQLitePCLRaw 2.
+      matchDepNames: ['SQLitePCLRaw.bundle_e_sqlite3'],
+      allowedVersions: '<3',
+    },
+    {
+      // Floors (dependencies of the shipped packages) and the versions set through properties are not updated by the
+      // NuGet manager: a floor is raised by hand only when the code needs a newer API, and the *Latest properties
+      // belong to the custom manager above. Roslyn stays at the version of the .NET 8 SDK so the generator loads there.
+      matchManagers: ['nuget'],
+      matchDepNames: [
+        'xunit.v3',
+        'xunit.v3.extensibility.core',
+        'NUnit',
+        'MSTest',
+        'MSTest.TestFramework',
+        'TUnit',
+        'TUnit.Core',
+        'NodaTime',
+        'Microsoft.Extensions.DependencyInjection',
+        'Microsoft.Extensions.DependencyInjection.Abstractions',
+        'Microsoft.EntityFrameworkCore',
+        'Microsoft.EntityFrameworkCore.Sqlite',
+        'Microsoft.CodeAnalysis.CSharp',
+        'Microsoft.CodeAnalysis.CSharp.Workspaces',
+      ],
+      enabled: false,
+    },
+  ],
+}

@@ -62,12 +62,12 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
-      # The packages are built against the lowest versions of xUnit.net, NUnit, MSTest, TUnit and NodaTime they declare (Directory.Packages.props); every other job tests with
+      # The packages are built against the lowest versions of xUnit.net, NUnit, MSTest, TUnit, NodaTime, Microsoft.Extensions.DependencyInjection and EF Core they declare (Directory.Packages.props); every other job tests with
       # the newest. Here the test projects run on those lowest versions too, so a newer API creeping in fails this job instead of the users on older versions.
       - name: Build and test the integration packages on their dependency floors
         run: |
           set -euo pipefail
-          for framework in Xunit NUnit MSTest TUnit NodaTime; do
+          for framework in Xunit NUnit MSTest TUnit NodaTime DependencyInjection EntityFrameworkCore; do
             dotnet test --project "tests/Phoney.$framework.Tests" -c Release -p:TestAgainstFloors=true
           done
       # Guards the job itself: if the switch stopped working, the tests above would silently run on the newest versions.
@@ -87,6 +87,10 @@ jobs:
           check TUnit TUnit TUnitFloor
           check TUnit TUnit.Core TUnitFloor
           check NodaTime NodaTime NodaTimeFloor
+          check DependencyInjection Microsoft.Extensions.DependencyInjection DependencyInjectionFloor
+          check DependencyInjection Microsoft.Extensions.DependencyInjection.Abstractions DependencyInjectionFloor
+          check EntityFrameworkCore Microsoft.EntityFrameworkCore EfCore8Floor
+          check EntityFrameworkCore Microsoft.EntityFrameworkCore EfCore10Floor
 
   aot:
     name: Native AOT smoke test
