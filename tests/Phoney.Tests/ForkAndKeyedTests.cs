@@ -166,6 +166,19 @@ public sealed class ForkAndKeyedTests
     }
 
     [Test]
+    public void Pseudonymize_reads_every_key_before_it_changes_anything()
+    {
+        // The same object twice: the second key must still be the real email, not the stand-in the first pass wrote.
+        var patient = new Patient { Email = "anna@real.se" };
+        var expected = Fake.For<Patient>().Seed(7).Pseudonymize(new Patient { Email = "anna@real.se" }, p => p.Email).Email;
+
+        var masked = Fake.For<Patient>().Seed(7).Pseudonymize([patient, patient], p => p.Email);
+
+        masked[0].Email.ShouldBe(expected);
+        masked[1].Email.ShouldBe(expected);
+    }
+
+    [Test]
     public void Keys_must_not_be_null()
     {
         Should.Throw<ArgumentNullException>(() => Fake.Keyed(null!));

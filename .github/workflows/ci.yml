@@ -132,31 +132,38 @@ jobs:
     name: Snyk dependency scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
-      - name: Skip without a token
-        if: env.SNYK_TOKEN == ''
-        run: echo "::notice::SNYK_TOKEN is not set, so the Snyk scan was skipped."
+      # The token is only given to the steps that call Snyk, never to restore or build code.
+      - name: Check for a token
+        id: token
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [[ -n "$SNYK_TOKEN" ]]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::SNYK_TOKEN is not set, so the Snyk scan was skipped."; fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: env.SNYK_TOKEN != ''
+        if: steps.token.outputs.present == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        if: env.SNYK_TOKEN != ''
+        if: steps.token.outputs.present == 'true'
         with:
           dotnet-version: |
             8.0.x
             10.0.x
-      - if: env.SNYK_TOKEN != ''
+      - if: steps.token.outputs.present == 'true'
         run: dotnet restore
       # Only the packages users install (src/); tests, benchmarks, samples and tools never ship. High and critical issues fail the job.
       - name: Scan the shipped packages
-        if: env.SNYK_TOKEN != ''
+        if: steps.token.outputs.present == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: npx --yes snyk@1.1307.4 test --all-projects --exclude=tests,benchmarks,samples,tools --severity-threshold=high
       # On main the result is also recorded in the Snyk dashboard, which then reports new vulnerabilities in released dependencies.
       - name: Record the dependencies of main
-        if: env.SNYK_TOKEN != '' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.token.outputs.present == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: npx --yes snyk@1.1307.4 monitor --all-projects --exclude=tests,benchmarks,samples,tools
 
   # SonarQube Cloud (free for public repositories): bugs, code smells and security hotspots, with pull request decoration. Import the
@@ -166,36 +173,49 @@ jobs:
     name: SonarQube Cloud
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
-      - name: Skip without a token
-        if: env.SONAR_TOKEN == ''
-        run: echo "::notice::SONAR_TOKEN is not set, so the SonarQube Cloud analysis was skipped."
+      # The token is only given to the scanner's begin and end steps, never to the build.
+      - name: Check for a token
+        id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [[ -n "$SONAR_TOKEN" ]]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::SONAR_TOKEN is not set, so the SonarQube Cloud analysis was skipped."; fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: env.SONAR_TOKEN != ''
+        if: steps.token.outputs.present == 'true'
         with:
           fetch-depth: 0 # blame information, so new issues are attributed to the change that made them
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        if: env.SONAR_TOKEN != ''
+        if: steps.token.outputs.present == 'true'
         with:
           dotnet-version: |
             8.0.x
             10.0.x
-      - name: Build with the scanner
-        if: env.SONAR_TOKEN != ''
+      - name: Install the scanner
+        if: steps.token.outputs.present == 'true'
+        run: |
+          dotnet tool install --global dotnet-sonarscanner --version 11.3.0
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+      - name: Begin the analysis
+        if: steps.token.outputs.present == 'true'
         env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || 'quattordici' }}
           SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'Quattordici_Phoney' }}
-        run: |
-          set -euo pipefail
-          dotnet tool install --global dotnet-sonarscanner --version 11.3.0
-          # Generated and imported files are checked by their own pipeline (the data job), not reviewed by hand.
-          dotnet sonarscanner begin /k:"$SONAR_PROJECT_KEY" /o:"$SONAR_ORGANIZATION" /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN" \
-            /d:sonar.exclusions="data/**,src/Phoney/Data/Generated/**,src/Phoney/Resources/**,benchmarks/**,samples/**,tools/**"
-          dotnet build -c Release
-          dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+        # Generated and imported files are checked by their own pipeline (the data job), not reviewed by hand.
+        run: >-
+          dotnet sonarscanner begin /k:"$SONAR_PROJECT_KEY" /o:"$SONAR_ORGANIZATION" /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$SONAR_TOKEN"
+          /d:sonar.exclusions="data/**,src/Phoney/Data/Generated/**,src/Phoney/Resources/**,benchmarks/**,samples/**,tools/**"
+      - name: Build
+        if: steps.token.outputs.present == 'true'
+        run: dotnet build -c Release
+      - name: End the analysis
+        if: steps.token.outputs.present == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
   pack:
     name: Pack

@@ -867,20 +867,25 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         return item;
     }
 
-    /// <summary>Like <see cref="Pseudonymize(T, Func{T, string})"/> for every object of <paramref name="instances"/>.</summary>
+    /// <summary>Like <see cref="Pseudonymize(T, Func{T, string})"/> for every object of <paramref name="instances"/>; every key is read before any object is changed.</summary>
     /// <returns>The changed objects in the same order (copies for structs).</returns>
     public List<T> Pseudonymize(IEnumerable<T> instances, Func<T, string> keyOf)
     {
         ArgumentNullException.ThrowIfNull(instances);
         ArgumentNullException.ThrowIfNull(keyOf);
-        var run = Start(stableDates: true);
-        var result = new List<T>();
+        // Every key is read before anything changes: an object that is in the list twice must keep its real key the second time.
+        var items = new List<(T Item, long Seed)>();
         foreach (var item in instances)
         {
             if (item is null)
                 throw new ArgumentException("The collection contains a null element.", nameof(instances));
-            result.Add(run.PopulateFrom(item, 0, PopulateMode.All, KeyedSeed(keyOf(item))));
+            items.Add((item, KeyedSeed(keyOf(item))));
         }
+
+        var run = Start(stableDates: true);
+        var result = new List<T>(items.Count);
+        foreach (var (item, seed) in items)
+            result.Add(run.PopulateFrom(item, 0, PopulateMode.All, seed));
 
         if (result.Count > 0)
             VerifyUsage();
