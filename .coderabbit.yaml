@@ -10,7 +10,7 @@ reviews:
     enabled: true
     drafts: false
     ignore_usernames:
-      - dependabot[bot]
+      - renovate[bot]
       - github-actions[bot]
   # Generated or imported output; CI already fails when it drifts from a fresh import.
   path_filters:
