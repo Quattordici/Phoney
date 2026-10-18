@@ -29,7 +29,7 @@
 - **Testable time**: relative dates follow a `TimeProvider` such as `FakeTimeProvider`.
 - **Stable stand-ins for real data**: `Fake.Keyed("customer:42")` and `.GenerateFor(key)` give the same fake person for a key on every machine, and `.Pseudonymize(customers, c => c.Email)` masks real data while the same customer keeps the same stand-in in every table.
 - **Fast**: lookups are array indexed and allocation free, templates are parsed once, and a **source generator** makes generation reflection free.
-- **Deterministic**: same seed means same data, dates included, on every OS and .NET version and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
+- **Deterministic**: same seed means same data, dates included, on every OS, CPU and .NET version, with or without ICU (`InvariantGlobalization`), and every day you run it; item *n* is the same whether you generate 1 or 1,000,000 items, sequentially or in parallel.
 - **Trim and Native AOT safe** with the source generator.
 - **Integrations**: `[FakeData]` for TUnit tests, `services.AddPhoney()` for dependency injection and ASP.NET Core, `HasFakeData` for EF Core seeding, and NodaTime types.
 

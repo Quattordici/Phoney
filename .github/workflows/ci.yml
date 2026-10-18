@@ -26,8 +26,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is Apple Silicon: the arm64 run checks that seeded data is bit-identical off x64 too, and covers the osx-arm64 ReadyToRun build.
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # macos-latest is Apple Silicon and ubuntu-24.04-arm is Linux on arm64: seeded data must be bit-identical off x64 too, on both of the
+        # arm64 runtimes the package ships ReadyToRun code for.
+        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -40,6 +41,13 @@ jobs:
       - run: dotnet build -c Release
       # Tests run on net8.0 and net10.0 in CI (see tests/Phoney.Tests/Phoney.Tests.csproj).
       - run: dotnet test -c Release --no-build
+      # Containers and AOT apps often run without ICU (InvariantGlobalization): seeded data must be the same there (see Modules/Decomposition.cs).
+      - name: Test with invariant globalization
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet test -c Release --no-build
+        env:
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
+          DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY: false # lets tests create named cultures such as sr-Latn-RS
 
   floors:
     name: Dependency floors

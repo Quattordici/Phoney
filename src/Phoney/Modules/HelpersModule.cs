@@ -66,7 +66,7 @@ public sealed partial class HelpersModule : FakerModule
     public static string Slugify(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var decomposed = text.Normalize(NormalizationForm.FormKD);
+        var decomposed = Decomposition.FormKD(text);
         var sb = new StringBuilder(decomposed.Length);
         foreach (var c in decomposed)
         {
