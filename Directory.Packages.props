@@ -62,7 +62,7 @@
     <PackageVersion Include="Bogus" Version="35.6.5" />
     <PackageVersion Include="Faker.Net" Version="2.0.163" />
     <PackageVersion Include="NBuilder" Version="6.1.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <!-- Add-on packages depend on the lowest version that supports every target, so apps can use any newer one. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DependencyInjectionFloor)" />
