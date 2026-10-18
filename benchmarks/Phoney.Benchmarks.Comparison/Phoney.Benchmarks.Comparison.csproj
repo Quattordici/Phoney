@@ -23,6 +23,7 @@
     <PackageReference Include="AutoBogus" />
     <PackageReference Include="Bogus" />
     <PackageReference Include="Faker.Net" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="6.0.2" />
     <PackageReference Include="NBuilder" />
   </ItemGroup>
 
