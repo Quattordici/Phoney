@@ -164,7 +164,7 @@ public sealed class DateModule : FakerModule
         ArgumentOutOfRangeException.ThrowIfGreaterThan(maxYear, 9999);
         if (maxYear < minYear)
             throw new ArgumentException($"Max year {maxYear} must be greater than or equal to min year {minYear}.", nameof(maxYear));
-        return Between(new DateOnly(minYear, 1, 2), new DateOnly(maxYear, 12, 30));
+        return Between(new DateOnly(minYear, 1, 1), new DateOnly(maxYear, 12, 31));
     }
 
     /// <summary>Returns a month name in the locale's language, e.g. <c>January</c>.</summary>

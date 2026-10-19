@@ -8,6 +8,32 @@ public sealed class EdgeCaseTests
     private static Faker Make() => new("en", seed: 7);
 
     [Test]
+    public void Birthdates_in_a_year_can_fall_on_its_first_and_last_day()
+    {
+        var faker = Make();
+
+        var days = Enumerable.Range(0, 20_000).Select(_ => faker.Date.BirthdateInYears(2000, 2000)).ToHashSet();
+
+        days.ShouldContain(new DateOnly(2000, 1, 1));
+        days.ShouldContain(new DateOnly(2000, 12, 31));
+        days.ShouldAllBe(d => d.Year == 2000);
+    }
+
+    [Test]
+    [Arguments(Casing.Lower)]
+    [Arguments(Casing.Upper)]
+    public void Single_case_hex_digits_are_equally_likely(Casing casing)
+    {
+        var faker = Make();
+        var text = faker.String.Hexadecimal(160_000, casing, prefix: "");
+        var counts = text.GroupBy(c => c).ToDictionary(g => g.Key, g => g.Count());
+
+        counts.Count.ShouldBe(16);
+        // Each digit is 1/16 (10,000); a letter drawn twice as often as a digit would be about 14,500.
+        counts.Values.ShouldAllBe(n => n > 9_400 && n < 10_600);
+    }
+
+    [Test]
     public void Between_never_returns_a_moment_before_from()
     {
         var from = new DateTimeOffset(2020, 1, 1, 0, 0, 0, 0, TimeSpan.Zero).AddTicks(5_000); // half a millisecond in

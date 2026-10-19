@@ -7,8 +7,8 @@ public sealed class StringModule : FakerModule
     private const string Upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private const string Lower = "abcdefghijklmnopqrstuvwxyz";
     private const string HexMixed = "0123456789abcdefABCDEF";
-    internal const string HexLower = "0123456789abcdefabcdef";
-    private const string HexUpper = "0123456789ABCDEFABCDEF";
+    internal const string HexLower = "0123456789abcdef";
+    private const string HexUpper = "0123456789ABCDEF";
     private const string Symbols = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
     private const string CrockfordBase32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
     private const string NanoIdAlphabet = Digits + Upper + Lower + "_-";
@@ -100,7 +100,7 @@ public sealed class StringModule : FakerModule
     /// <summary>Returns <c>0x</c> followed by <paramref name="length"/> hexadecimal digits.</summary>
     public string Hexadecimal(int length = 1, Casing casing = Casing.Mixed, string prefix = "0x")
     {
-        // The cased alphabets keep the 22 positions of the mixed one, so a casing changes the letters' case, never the draws.
+        // One draw per digit in every casing; a single-case alphabet holds each digit once, so all sixteen are equally likely.
         return Prefixed(casing switch { Casing.Upper => HexUpper, Casing.Lower => HexLower, _ => HexMixed }, length, prefix);
     }
 
