@@ -38,11 +38,15 @@ internal static class ParentKeys
             return;
         }
 
-        if ((!member.IsSettable && !member.FillsExisting) || model.GetMember(node, index) is not { } value)
-            return;
+        if ((member.IsSettable || member.FillsExisting) && model.GetMember(node, index) is { } value)
+            VisitChildren(node, value, CollectionTypes.IsGeneratedCollection(member.Type), key, depth, ancestors);
+    }
 
+    /// <summary>Visits <paramref name="value"/> (each element when it is a collection) one level deeper, with <paramref name="node"/> as the nearest ancestor.</summary>
+    private static void VisitChildren(object node, object value, bool isCollection, ParentKey key, int depth, List<object> ancestors)
+    {
         ancestors.Add(node);
-        if (CollectionTypes.IsGeneratedCollection(member.Type))
+        if (isCollection)
         {
             foreach (var element in value is IDictionary dictionary ? dictionary.Values : (IEnumerable)value)
             {

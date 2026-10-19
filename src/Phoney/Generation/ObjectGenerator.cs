@@ -742,11 +742,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             throw new ArgumentException($"'{foreignKey}' must select a settable member: {steps[^1].Member.Name} has no setter.", nameof(foreignKey));
 
         // The objects on the path are the owners of its members; the owner of the foreign key is not its own parent.
-        foreach (var step in steps.Skip(1))
-        {
-            if (step.Owner.IsValueType)
-                throw new ArgumentException($"'{foreignKey}' goes through {step.Owner.Name}, and {step.Owner.Name} is a value type: a key set on a copy would be lost. Use a class for it.", nameof(foreignKey));
-        }
+        if (steps.Skip(1).Select(step => step.Owner).FirstOrDefault(owner => owner.IsValueType) is { } valueType)
+            throw new ArgumentException($"'{foreignKey}' goes through {valueType.Name}, and {valueType.Name} is a value type: a key set on a copy would be lost. Use a class for it.", nameof(foreignKey));
 
         if (!steps.Take(steps.Count - 1).Any(step => typeof(TParent).IsAssignableFrom(step.Owner)))
             throw new ArgumentException($"{typeof(TParent).Name} can't be the parent: no object on the path to {foreignKey.Body} is a {typeof(TParent).Name}.", nameof(key));
