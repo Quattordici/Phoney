@@ -26,7 +26,10 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
     private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "WithGeneratorFor", "Subtype" };
 
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
+    /// <summary><c>Unique</c>, which alone accepts a combination of members.</summary>
+    private const string UniqueMethod = "Unique";
+
+    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", UniqueMethod, "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
     private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
@@ -133,7 +136,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 if (Constant(call, "min") is { } low)
                     Check(context, call, "max", v => v >= low, $"at least {low.ToString(CultureInfo.InvariantCulture)} (the minimum)");
                 break;
-            case "Unique" or "Where":
+            case UniqueMethod or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
                 break;
         }
@@ -240,6 +243,25 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static void CheckRule(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
         var method = call.TargetMethod;
+        if (selector.Kind == SelectorKind.Combination)
+        {
+            if (method.Name != UniqueMethod)
+            {
+                Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
+                return;
+            }
+
+            if (GeneratedMembers(call, symbols) is not var (owner, described))
+                return;
+            foreach (var part in selector.Path!.Split(','))
+            {
+                if (!described.Any(m => m.Name == part))
+                    Report(context, selector, $"'{owner.Name}.{part}' is not a public settable member or constructor parameter, so it can't be part of a unique combination and the generator throws when it is first used.");
+            }
+
+            return;
+        }
+
         if (selector.Kind == SelectorKind.NotDirect)
         {
             Report(context, selector, "The rule must select a member of the generated type (x => x.Name), of a nested object (x => x.Address.City) or of each element of a collection (x => x.Lines.Each().Sku). A member of a string, number or date has no members to give a rule to.");
@@ -248,7 +270,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
 
         if (selector.IsNested)
         {
-            if (method.Name == "Unique")
+            if (method.Name == UniqueMethod)
             {
                 Report(context, selector, $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.");
                 return;
@@ -273,9 +295,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             }
         }
 
-        if (method.ContainingType.TypeArguments.FirstOrDefault() is not INamedTypeSymbol type || StartsFromCustomModel(call, symbols))
-            return;
-        if (symbols.Describe(type) is not { } members)
+        if (GeneratedMembers(call, symbols) is not var (type, members))
             return;
 
         var member = members.FirstOrDefault(m => m.Name == selector.Name);
@@ -292,6 +312,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             Report(context, selector, $"'{type.Name}.{selector.Name}' is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
         }
     }
+
+    /// <summary>The generated type of the rule's generator and its members as the model describes them, or <see langword="null"/> when they can't be known (a custom model).</summary>
+    private static (INamedTypeSymbol Type, List<MemberModel> Members)? GeneratedMembers(IInvocationOperation call, Symbols symbols) =>
+        call.TargetMethod.ContainingType.TypeArguments.FirstOrDefault() is INamedTypeSymbol type && !StartsFromCustomModel(call, symbols) && symbols.Describe(type) is { } members
+            ? (type, members)
+            : null;
 
     /// <summary><c>Where(x =&gt; x.Member, condition)</c>: a condition on one member, unlike <c>Where(x =&gt; …)</c> on the whole object.</summary>
     private static bool IsMemberCondition(IMethodSymbol method) =>

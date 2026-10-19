@@ -45,6 +45,17 @@ public sealed class StrictAnalyzerTests
     }
 
     [Test]
+    public async Task A_unique_combination_does_not_cover_its_members(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("""
+            public static object A() => Fake.For<Product>().Strict().Unique(p => new { p.Flavor, p.Shelf }).Generate(3);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(1);
+        diagnostics[0].GetMessage().ShouldContain("Flavor, Shelf");
+    }
+
+    [Test]
     public async Task Rules_before_and_after_Strict_cover_members(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("""

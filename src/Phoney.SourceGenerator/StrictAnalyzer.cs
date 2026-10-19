@@ -86,6 +86,8 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             if (MemberRules.Contains(name))
             {
                 var selector = RuleSelector.Read(call);
+                if (selector.Kind == SelectorKind.Combination)
+                    continue; // a unique combination checks members, it doesn't give them values
                 if (selector.Kind != SelectorKind.Member)
                     return; // the member can't be read from the source, so don't guess
                 if (!selector.IsNested)

@@ -48,7 +48,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     }
 
     /// <summary>Whether the compiled rules hold nothing of one generator instance (unique sets, rule usage, a seed-dependent feed order), so copies that only change run settings can share them.</summary>
-    private bool CompiledIsShareable => _config.Unique.IsEmpty && !_config.Verify && _config.Feed is null;
+    private bool CompiledIsShareable => _config.Unique.IsEmpty && _config.UniqueKeys.IsEmpty && !_config.Verify && _config.Feed is null;
 
     /// <summary>A copy with fresh per-instance state (positions, random base seed) that reuses the rules this generator already compiled.</summary>
     internal ObjectGenerator<T> Fresh() => new(_model, _config, new State(CompiledIsShareable ? _state : null));
@@ -405,12 +405,49 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// Makes a member unique across everything this generator instance produces. Retries up to
     /// <paramref name="maxAttempts"/> times per object, then throws.
     /// </summary>
+    /// <remarks>
+    /// Select several members with an anonymous type to make their combination unique while each may repeat, as in a join table or a per-tenant key:
+    /// <c>.Unique(x =&gt; new { x.UserId, x.RoleId })</c>. The combination is read from the finished object (after rules that depend on the object),
+    /// and an object whose combination was produced before is generated again as a whole, so objects without a duplicate are the ones you get without the rule.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxAttempts"/> is less than 1.</exception>
+    /// <exception cref="ArgumentException"><paramref name="member"/> doesn't select a member, or an anonymous type of members, of <typeparamref name="T"/>.</exception>
     public ObjectGenerator<T> Unique<TValue>(Expression<Func<T, TValue>> member, int maxAttempts = 1000)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
+        ArgumentNullException.ThrowIfNull(member);
+        if (member.Body is NewExpression { Members: not null } combination)
+        {
+            var names = CombinationMembers(member, combination);
+            if (names.Length > 1)
+                return Derive(_config with { UniqueKeys = _config.UniqueKeys.SetItem(string.Join(",", names), maxAttempts) });
+            return Derive(_config with { Unique = _config.Unique.SetItem(names[0], maxAttempts) });
+        }
+
         var name = MemberName(member);
         return Derive(_config with { Unique = _config.Unique.SetItem(name, maxAttempts) });
+    }
+
+    /// <summary>The member names of <c>x =&gt; new { x.A, x.B }</c>, in order and without repeats.</summary>
+    private static string[] CombinationMembers<TValue>(Expression<Func<T, TValue>> expression, NewExpression combination)
+    {
+        var names = new List<string>(combination.Arguments.Count);
+        foreach (var argument in combination.Arguments)
+        {
+            var node = argument;
+            while (node is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
+                node = convert.Operand;
+            if (node is not MemberExpression { Member: PropertyInfo or FieldInfo } access || access.Expression != expression.Parameters[0])
+            {
+                throw new ArgumentException(
+                    $"'{expression}' must select members of {typeof(T).Name} directly, like x => new {{ x.UserId, x.RoleId }}: '{argument}' is not one.", nameof(expression));
+            }
+
+            if (!names.Contains(access.Member.Name))
+                names.Add(access.Member.Name);
+        }
+
+        return names.Count > 0 ? [.. names] : throw new ArgumentException($"'{expression}' must select at least one member of {typeof(T).Name}.", nameof(expression));
     }
 
     /// <summary>
@@ -912,7 +949,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         if (key is null)
             throw new ArgumentNullException(nameof(key), "The key of an object can't be null.");
-        if (!_config.Unique.IsEmpty)
+        if (!_config.Unique.IsEmpty || !_config.UniqueKeys.IsEmpty)
         {
             throw new InvalidOperationException(
                 $"Unique can't be combined with GenerateFor or Pseudonymize on {typeof(T).Name}: a key that comes again must give the same object, "
@@ -1135,6 +1172,10 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             }
         }
 
+        var combinations = UniqueCombinations(members, known, slots);
+        foreach (var attempts in combinations.Select(c => c.MaxAttempts))
+            objectRetries = objectRetries == 0 ? attempts : Math.Min(objectRetries, attempts);
+
         for (var i = 0; i < slots.Length; i++)
         {
             if (slots[i] is { } named)
@@ -1149,7 +1190,45 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
             Usage = usage,
         };
-        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries, registrations);
+        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries, combinations, registrations);
+    }
+
+    /// <summary>
+    /// Binds the combinations of <c>Unique(x =&gt; new { … })</c> to member indices. Settable members are read from the finished object; constructor parameters
+    /// can't be read back, so their slot keeps the value it produces (after the strict check, so this doesn't count as a rule for the member).
+    /// </summary>
+    private UniqueCombination[] UniqueCombinations(IReadOnlyList<FakeMember> members, Dictionary<string, int> known, RuleSlot?[] slots)
+    {
+        if (_config.UniqueKeys.IsEmpty)
+            return [];
+
+        var combinations = new List<UniqueCombination>(_config.UniqueKeys.Count);
+        foreach (var (key, attempts) in _config.UniqueKeys.OrderBy(k => k.Key, StringComparer.Ordinal))
+        {
+            var names = key.Split(',');
+            var indices = new int[names.Length];
+            var recorded = new bool[names.Length];
+            for (var i = 0; i < names.Length; i++)
+            {
+                if (!known.TryGetValue(names[i], out indices[i]))
+                    throw new InvalidOperationException($"{typeof(T).Name}.{names[i]} is not a generated member, so it can't be part of a unique combination.");
+                var member = members[indices[i]];
+                recorded[i] = !member.IsSettable && !member.FillsExisting;
+                if (!recorded[i])
+                    continue;
+                if (_config.Factory is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"{typeof(T).Name}.{names[i]} is a constructor parameter, and CreateWith creates the objects, so its value can't be read for the unique combination. Make the member settable, or leave it out of the combination.");
+                }
+
+                (slots[indices[i]] ??= new RuleSlot(RuleKind.Default, null, unique: false, maxAttempts: 0)).RecordsKeyPart = true;
+            }
+
+            combinations.Add(new UniqueCombination(indices, names, recorded, attempts));
+        }
+
+        return [.. combinations];
     }
 
     /// <summary>
@@ -1250,7 +1329,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             for (var attempt = 0; attempt < limit; attempt++)
             {
                 var item = CreateOnce(index, parent, Filter.AttemptSeed(itemSeed, attempt), out var scope);
-                if (Filter.Accepts(filters, item) && scope.TryClaimPending())
+                if (Filter.Accepts(filters, item) && scope.TryClaimPending(CombinationsOf(item, scope)))
                     return item;
             }
 
@@ -1268,10 +1347,25 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         {
             if (!filters.IsEmpty && (compiled.ObjectRetries == 0 || attempts < compiled.ObjectRetries))
                 return Filter.Exhausted(typeof(T), filters, attempts);
-            var names = string.Join(", ", compiled.Slots.Where(s => s is { RetriesObject: true }).Select(s => s!.MemberName));
             return new InvalidOperationException(
-                $"Could not generate a {typeof(T).Name} with a unique {names} after {attempts} attempts: almost every value was produced before. "
+                $"Could not generate a {typeof(T).Name} with a unique {UniqueNames()} after {attempts} attempts: almost every value was produced before. "
                 + "Give the member a source with more distinct values with .With(…), generate fewer objects, or raise maxAttempts.");
+        }
+
+        /// <summary>What has to be unique per object, for messages: "FirstName, combination of UserId and RoleId".</summary>
+        private string UniqueNames() => string.Join(", ", compiled.Slots.Where(s => s is { RetriesObject: true }).Select(s => s!.MemberName)
+            .Concat(compiled.Combinations.Select(c => c.Description)));
+
+        /// <summary>The values of the unique combinations on a finished object, or <see langword="null"/> when there are none.</summary>
+        private (UniqueCombination, object?[])[]? CombinationsOf(T item, FakeScope scope)
+        {
+            if (compiled.Combinations.Length == 0)
+                return null;
+            var model = generator._model;
+            var values = new (UniqueCombination, object?[])[compiled.Combinations.Length];
+            for (var i = 0; i < values.Length; i++)
+                values[i] = (compiled.Combinations[i], compiled.Combinations[i].Read(scope, member => model.Get(item, member)));
+            return values;
         }
 
         /// <summary>Populates <paramref name="instance"/> as item <paramref name="index"/> of the sequence.</summary>
@@ -1295,13 +1389,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             for (var attempt = 0; attempt < limit; attempt++)
             {
                 item = PopulateOnce(item, index, mode, Filter.AttemptSeed(itemSeed, attempt), out var scope);
-                if (Filter.Accepts(filters, item) && scope.TryClaimPending())
+                if (Filter.Accepts(filters, item) && scope.TryClaimPending(CombinationsOf(item, scope)))
                     return item;
                 if (mode != PopulateMode.All)
                 {
                     // The values filled in are now set, so a second pass would keep them: there is nothing to draw again.
                     throw new InvalidOperationException(
-                        $"Could not populate a {typeof(T).Name} with a unique {string.Join(", ", compiled.Slots.Where(s => s is { RetriesObject: true }).Select(s => s!.MemberName))}: the value was produced before, and PopulateMode.{mode} can't generate the object again. "
+                        $"Could not populate a {typeof(T).Name} with a unique {UniqueNames()}: the value was produced before, and PopulateMode.{mode} can't generate the object again. "
                         + "Use PopulateMode.All, or give the member values with .With(…).");
                 }
             }
@@ -1407,8 +1501,11 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 + "Almost every generated object is rejected: set the members the condition looks at with .With(…) so that it can hold, loosen the condition, or raise maxAttempts.");
     }
 
-    /// <summary>Rules bound to member indices, plus rules that run after creation; <paramref name="ObjectRetries"/> is the attempt limit of unique identity members (0 when there are none).</summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, Registrations Registrations);
+    /// <summary>
+    /// Rules bound to member indices, plus rules that run after creation; <paramref name="ObjectRetries"/> is the attempt limit of unique identity members and
+    /// <paramref name="Combinations"/> (0 when there are none).
+    /// </summary>
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false);
@@ -1465,6 +1562,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         int RuleCount,
         ImmutableDictionary<string, PathSpec> PathRules,
         ImmutableDictionary<string, int> Unique,
+        ImmutableDictionary<string, int> UniqueKeys,
         ImmutableList<CustomConvention> Conventions,
         ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
         ImmutableDictionary<Type, INestedGenerator> TypeGenerators,
@@ -1483,6 +1581,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
             0,
             ImmutableDictionary.Create<string, PathSpec>(StringComparer.Ordinal),
+            ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             ImmutableDictionary.Create<string, int>(StringComparer.Ordinal),
             [],
             ImmutableDictionary<Type, ImmutableArray<Type>>.Empty,
