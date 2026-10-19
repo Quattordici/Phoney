@@ -31,16 +31,54 @@ public sealed class HalfWindow
     [Range(0, 1, MinimumIsExclusive = true, MaximumIsExclusive = true)] public Half Share { get; set; }
 }
 
-/// <summary>A <c>[Range]</c> narrower than two decimals.</summary>
+/// <summary><c>[Range]</c>s narrower than two decimals, and limits a <see cref="double"/> can't tell apart.</summary>
 public sealed class Narrow
 {
     [Range(typeof(decimal), "0.001", "0.009")] public decimal Rate { get; set; }
+    [Range(typeof(decimal), "0.0000000000000000001", "0.0000000000000000009")] public decimal Tiny { get; set; }
+    [Range(typeof(decimal), "0", "0.000000000000000001", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Open { get; set; }
+    [Range(typeof(decimal), "0.1000000000000000001", "0.1000000000000000009")] public decimal Precise { get; set; }
+}
+
+/// <summary>Excluded limits that leave no value of the member's type.</summary>
+public sealed class NoWholeNumber
+{
+    [Range(1, 2, MinimumIsExclusive = true, MaximumIsExclusive = true)] public int Count { get; set; }
+}
+
+/// <inheritdoc cref="NoWholeNumber"/>
+public sealed class NoDay
+{
+    [Range(typeof(DateOnly), "2020-01-01", "2020-01-02", MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateOnly Day { get; set; }
+}
+
+/// <inheritdoc cref="NoWholeNumber"/>
+public sealed class NoMoment
+{
+    [Range(typeof(DateTime), "2020-01-01", "2020-01-01", MinimumIsExclusive = true)] public DateTime At { get; set; }
+}
+
+/// <inheritdoc cref="NoWholeNumber"/>
+public sealed class NoFraction
+{
+    [Range(1.0, 1.0, MaximumIsExclusive = true)] public double Share { get; set; }
+}
+
+/// <inheritdoc cref="NoWholeNumber"/>
+public sealed class NoDecimal
+{
+    [Range(typeof(decimal), "1", "1", MinimumIsExclusive = true)] public decimal Amount { get; set; }
 }
 
 [FakeFor<OpenWindow>]
 [FakeFor<Narrow>]
 [FakeFor<FloatWindow>]
 [FakeFor<HalfWindow>]
+[FakeFor<NoWholeNumber>]
+[FakeFor<NoDay>]
+[FakeFor<NoMoment>]
+[FakeFor<NoFraction>]
+[FakeFor<NoDecimal>]
 public static partial class ExclusiveRangeFakes;
 
 public sealed class ExclusiveRangeTests
@@ -163,6 +201,34 @@ public sealed class ExclusiveRangeTests
     {
         var generator = generated ? ExclusiveRangeFakes.Narrow : new ObjectGenerator<Narrow>(new ReflectionModel<Narrow>());
 
-        generator.Seed(1).Generate(200).ShouldAllBe(n => n.Rate >= 0.001m && n.Rate <= 0.009m);
+        var values = generator.Seed(1).Generate(200);
+
+        values.ShouldAllBe(n => Failing(n).Length == 0);
+        values.ShouldAllBe(n => n.Rate >= 0.001m && n.Rate <= 0.009m);
+        values.ShouldAllBe(n => n.Tiny >= 0.0000000000000000001m && n.Tiny <= 0.0000000000000000009m);
+        values.ShouldAllBe(n => n.Open > 0m && n.Open < 0.000000000000000001m);
+        values.ShouldAllBe(n => n.Precise >= 0.1000000000000000001m && n.Precise <= 0.1000000000000000009m);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public void Excluded_limits_that_leave_no_value_say_so(bool generated)
+    {
+        Action[] runs =
+        [
+            () => (generated ? ExclusiveRangeFakes.NoWholeNumber : new ObjectGenerator<NoWholeNumber>(new ReflectionModel<NoWholeNumber>())).Generate(1),
+            () => (generated ? ExclusiveRangeFakes.NoDay : new ObjectGenerator<NoDay>(new ReflectionModel<NoDay>())).Generate(1),
+            () => (generated ? ExclusiveRangeFakes.NoMoment : new ObjectGenerator<NoMoment>(new ReflectionModel<NoMoment>())).Generate(1),
+            () => (generated ? ExclusiveRangeFakes.NoFraction : new ObjectGenerator<NoFraction>(new ReflectionModel<NoFraction>())).Generate(1),
+            () => (generated ? ExclusiveRangeFakes.NoDecimal : new ObjectGenerator<NoDecimal>(new ReflectionModel<NoDecimal>())).Generate(1),
+        ];
+
+        foreach (var run in runs)
+        {
+            var message = Should.Throw<InvalidOperationException>(run).Message;
+            message.ShouldContain("[Range(");
+            message.ShouldContain(".With(");
+        }
     }
 }

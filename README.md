@@ -566,7 +566,7 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 | Annotation | Effect |
 |---|---|
 | `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` | string length; element count for collections |
-| `[Range]` | numbers and dates within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`); `MinimumIsExclusive`/`MaximumIsExclusive` leave the limit out, and a decimal range narrower than 0.01 gets more decimals |
+| `[Range]` | numbers and dates within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`); `MinimumIsExclusive`/`MaximumIsExclusive` leave the limit out, a decimal range narrower than 0.01 gets more decimals, and a range with no value of the member's type inside throws when generating |
 | `[RegularExpression]` | a value matching the pattern |
 | `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | a value of that format, whatever the member is called |
 | `[AllowedValues]`, `[DeniedValues]` | one of / none of the listed values |

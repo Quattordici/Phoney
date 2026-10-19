@@ -223,7 +223,9 @@ public static class ConventionValues
         {
             var first = global::System.DateOnly.FromDateTime(from.UtcDateTime).AddDays(constraints.RangeMinExclusive ? 1 : 0);
             var last = global::System.DateOnly.FromDateTime(to.UtcDateTime).AddDays(constraints.RangeMaxExclusive ? -1 : 0);
-            return first <= last ? scope.Faker.Date.Between(first, last) : first;
+            if (first > last)
+                throw NoValueInRange(constraints, typeof(DateOnly));
+            return scope.Faker.Date.Between(first, last);
         }
 
         return global::System.DateOnly.FromDateTime(DateTimeOffset(scope, kind, constraints).UtcDateTime);
@@ -424,16 +426,43 @@ public static class ConventionValues
             || !double.TryParse(a, NumberStyles.Float, CultureInfo.InvariantCulture, out var min)
             || !double.TryParse(b, NumberStyles.Float, CultureInfo.InvariantCulture, out var max))
             return false;
-        range = new NumericRange(min, max, c.RangeMinExclusive, c.RangeMaxExclusive);
+        range = new NumericRange(min, max, c);
         return true;
     }
 
-    /// <summary>A numeric <c>[Range]</c>; an exclusive limit is itself outside it.</summary>
-    private readonly record struct NumericRange(double Min, double Max, bool MinExclusive, bool MaxExclusive)
+    /// <summary>A numeric <c>[Range]</c> read from <paramref name="Source"/>; an exclusive limit is itself outside it.</summary>
+    private readonly record struct NumericRange(double Min, double Max, MemberConstraints Source)
     {
+        public bool MinExclusive => Source.RangeMinExclusive;
+
+        public bool MaxExclusive => Source.RangeMaxExclusive;
+
         /// <summary>Whether <paramref name="value"/> lies outside the range.</summary>
         public bool Excludes(double value) =>
             (MinExclusive ? value <= Min : value < Min) || (MaxExclusive ? value >= Max : value > Max);
+
+        /// <summary>The limits as decimals, digit for digit as written (a double keeps about 15), within what a decimal holds.</summary>
+        public (decimal Low, decimal High) Decimals() => (Exact(Source.RangeMin, Min), Exact(Source.RangeMax, Max));
+
+        private static decimal Exact(string? text, double parsed) =>
+            decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) ? exact : (decimal)Math.Clamp(parsed, -7.9e28, 7.9e28);
+
+        /// <summary>The error for a range in which <paramref name="type"/> has no value.</summary>
+        public InvalidOperationException Empty(Type type) => NoValueInRange(Source, type);
+    }
+
+    /// <summary>The error for a <c>[Range]</c> with no value of <paramref name="type"/> inside, e.g. <c>[Range(1, 2)]</c> with both limits excluded for an <see cref="int"/>.</summary>
+    private static InvalidOperationException NoValueInRange(MemberConstraints c, Type type)
+    {
+        var excluded = (c.RangeMinExclusive, c.RangeMaxExclusive) switch
+        {
+            (true, true) => ", MinimumIsExclusive = true, MaximumIsExclusive = true",
+            (true, false) => ", MinimumIsExclusive = true",
+            (false, true) => ", MaximumIsExclusive = true",
+            _ => "",
+        };
+        return new InvalidOperationException(
+            $"Phoney cannot generate values for [Range({c.RangeMin}, {c.RangeMax}{excluded})]: no {type.Name} lies inside it. Widen the range, include a limit, or add a rule with .With(...) for this member.");
     }
 
     /// <summary>Parses a date <c>[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]</c>.</summary>
@@ -448,7 +477,7 @@ public static class ConventionValues
 
     /// <summary>
     /// Like <see cref="TryDateRange"/> with the excluded limits moved one tick inside, which <c>DateModule.Between</c>
-    /// rounds to the nearest millisecond inside.
+    /// rounds to the nearest millisecond inside; throws when nothing is left.
     /// </summary>
     private static bool TryOpenDateRange(MemberConstraints c, out DateTimeOffset from, out DateTimeOffset to)
     {
@@ -458,7 +487,7 @@ public static class ConventionValues
             from = from.AddTicks(1);
         if (c.RangeMaxExclusive)
             to = to.AddTicks(-1);
-        return from <= to;
+        return from <= to ? true : throw NoValueInRange(c, typeof(DateTimeOffset));
     }
 
     /// <summary>A uniform value of <typeparamref name="T"/> in <paramref name="range"/>, clamped to the type's range.</summary>
@@ -467,7 +496,7 @@ public static class ConventionValues
     {
         var (min, max) = (range.Min, range.Max);
         if (typeof(T) == typeof(decimal))
-            return T.CreateSaturating(DecimalInRange(scope, (decimal)Math.Max(min, -7.9e28), (decimal)Math.Min(max, 7.9e28), range));
+            return T.CreateSaturating(DecimalInRange(scope, range));
 
         if (typeof(T) == typeof(float))
             return T.CreateSaturating(Narrow<float>(FractionalInRange(scope, range), range));
@@ -488,7 +517,9 @@ public static class ConventionValues
             highest--;
         var from = ToLong(Math.Max(lowest, typeMin));
         var to = ToLong(Math.Min(highest, typeMax));
-        return T.CreateSaturating(to < from ? from : scope.Faker.Random.Long(from, to));
+        if (to < from)
+            throw range.Empty(typeof(T));
+        return T.CreateSaturating(scope.Faker.Random.Long(from, to));
 
         // Explicit clamping: casting an out-of-range double to long is undefined in C#.
         static long ToLong(double d) => d >= 9.2233720368547748E18 ? long.MaxValue : d <= -9.2233720368547758E18 ? long.MinValue : (long)d;
@@ -503,7 +534,8 @@ public static class ConventionValues
         if (!range.Excludes(value))
             return value;
         // Rounding landed on an excluded limit: the drawn value is in [min, max), so only an excluded minimum needs a step inside.
-        return range.MinExclusive && drawn <= min ? Math.BitIncrement(min) : drawn;
+        value = range.MinExclusive && drawn <= min ? Math.BitIncrement(min) : drawn;
+        return range.Excludes(value) ? throw range.Empty(typeof(double)) : value;
     }
 
     /// <summary>
@@ -514,48 +546,59 @@ public static class ConventionValues
         where TFloat : IFloatingPointIeee754<TFloat>
     {
         var narrowed = TFloat.CreateSaturating(value);
-        var (low, high) = (TFloat.CreateSaturating(range.Min), TFloat.CreateSaturating(range.Max));
-        var asDouble = double.CreateSaturating(narrowed);
-        // Conversion is monotonic, so the value is at most at the converted limit, and one step is enough.
-        if (range.MinExclusive ? narrowed <= low || asDouble <= range.Min : narrowed < low || asDouble < range.Min)
-            return TFloat.BitIncrement(narrowed);
-        if (range.MaxExclusive ? narrowed >= high || asDouble >= range.Max : narrowed > high || asDouble > range.Max)
-            return TFloat.BitDecrement(narrowed);
-        return narrowed;
+        // Conversion is monotonic, so the value is at most at the converted limit, and one step is enough when the range holds a TFloat at all.
+        if (Below(narrowed))
+            narrowed = TFloat.BitIncrement(narrowed);
+        else if (Above(narrowed))
+            narrowed = TFloat.BitDecrement(narrowed);
+        return Below(narrowed) || Above(narrowed) ? throw range.Empty(typeof(TFloat)) : narrowed;
+
+        bool Below(TFloat v) => range.MinExclusive
+            ? v <= TFloat.CreateSaturating(range.Min) || double.CreateSaturating(v) <= range.Min
+            : v < TFloat.CreateSaturating(range.Min) || double.CreateSaturating(v) < range.Min;
+
+        bool Above(TFloat v) => range.MaxExclusive
+            ? v >= TFloat.CreateSaturating(range.Max) || double.CreateSaturating(v) >= range.Max
+            : v > TFloat.CreateSaturating(range.Max) || double.CreateSaturating(v) > range.Max;
     }
 
     /// <summary>
-    /// A decimal in <paramref name="range"/> between <paramref name="low"/> and <paramref name="high"/>, with two decimals, or with as many more as it takes to have a value inside
-    /// (<c>[Range(typeof(decimal), "0.001", "0.009")]</c> has none with two).
+    /// A decimal in <paramref name="range"/>, with two decimals, or with as many more as it takes to have a value inside
+    /// (<c>[Range(typeof(decimal), "0.001", "0.009")]</c> has none with two). The limits are read as decimals, not doubles, so no digit is lost.
     /// </summary>
-    private static decimal DecimalInRange(FakeScope scope, decimal low, decimal high, NumericRange range)
+    private static decimal DecimalInRange(FakeScope scope, NumericRange range)
     {
         const int Usual = 2;
-        if (Math.Abs(low) >= DecimalStepLimit || Math.Abs(high) >= DecimalStepLimit)
-            return scope.Faker.Number.Decimal(low, high, Usual); // steps of 0.01 are far smaller than such a range
+        var (low, high) = range.Decimals();
+        var magnitude = Math.Max(Math.Abs(low), Math.Abs(high));
+        if (magnitude >= DecimalStepLimit) // steps of 0.01 are far smaller than such a range, and any step inside an excluded limit will do
+        {
+            var (from, to) = (range.MinExclusive ? low + 0.01m : low, range.MaxExclusive ? high - 0.01m : high);
+            return from <= to ? scope.Faker.Number.Decimal(from, to, Usual) : throw range.Empty(typeof(decimal));
+        }
 
         var places = Usual;
         var scale = 100m;
         var (first, last) = Inside(scale);
-        while (decimal.Ceiling(first * scale) > decimal.Floor(last * scale) && places < MostDecimalPlaces)
+        // More places while there is no value with these, as long as the limits scaled by ten more still fit a decimal.
+        while (!HasStep(first, last, scale) && places < Modules.NumberModule.MaxDecimalPlaces && magnitude <= decimal.MaxValue / (scale * 10))
         {
             places++;
             scale *= 10;
             (first, last) = Inside(scale);
         }
 
-        return scope.Faker.Number.Decimal(first, Math.Max(first, last), places);
+        return HasStep(first, last, scale) ? scope.Faker.Number.Decimal(first, last, places) : throw range.Empty(typeof(decimal));
 
         // The first and last values inside with steps of 1/step: an excluded limit moves to the next step inside.
         (decimal First, decimal Last) Inside(decimal step) =>
             (range.MinExclusive ? (decimal.Floor(low * step) + 1) / step : low, range.MaxExclusive ? (decimal.Ceiling(high * step) - 1) / step : high);
+
+        static bool HasStep(decimal first, decimal last, decimal step) => decimal.Ceiling(first * step) <= decimal.Floor(last * step);
     }
 
-    /// <summary>Limits from which <see cref="DecimalInRange"/> keeps two places: below it, scaling by up to 10^<see cref="MostDecimalPlaces"/> fits a decimal.</summary>
+    /// <summary>Limits from which <see cref="DecimalInRange"/> keeps two places; below it, at least 19 places fit a decimal.</summary>
     private const decimal DecimalStepLimit = 1_000_000_000m;
-
-    /// <summary>The most places <see cref="DecimalInRange"/> tries.</summary>
-    private const int MostDecimalPlaces = 18;
 
     /// <summary>An allowed value as invariant text.</summary>
     private static string Text(object? value) => value switch
