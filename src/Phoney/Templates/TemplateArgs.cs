@@ -93,7 +93,25 @@ public sealed class TemplateArgs
 
     /// <summary>Like <see cref="Characters"/> for an option that only an options object can give.</summary>
     internal string? OptionCharacters(int index, string option) =>
-        index < _json.Length && _json[index].ValueKind == JsonValueKind.Object ? Characters(index, option) : null;
+        IsOptions(index) ? Characters(index, option) : null;
+
+    /// <summary>Whether argument <paramref name="index"/> is an options object (<c>{"min": 1, "max": 6}</c>) rather than a plain value.</summary>
+    public bool IsOptions(int index) => index < _json.Length && _json[index].ValueKind == JsonValueKind.Object;
+
+    /// <summary>
+    /// A <c>min</c>/<c>max</c> range, as faker.js reads it: from an options object (<c>{"min": 1, "max": 6}</c>), from one plain value, which is the
+    /// maximum (<c>number.int(6)</c>), or from two plain values, the minimum and the maximum.
+    /// </summary>
+    internal (int? Min, int? Max) IntRange() =>
+        IsOptions(0) ? (Int(0, "min"), Int(0, "max"))
+        : Count > 1 ? (Int(0), Int(1))
+        : (null, Int(0));
+
+    /// <summary>Like <see cref="IntRange"/> for fractional numbers.</summary>
+    internal (double? Min, double? Max) DoubleRange() =>
+        IsOptions(0) ? (Double(0, "min"), Double(0, "max"))
+        : Count > 1 ? (Double(0), Double(1))
+        : (null, Double(0));
 
     /// <summary>
     /// Argument <paramref name="index"/> as an integer; when the argument is an options object, reads

@@ -18,6 +18,48 @@ public sealed class TemplateArgumentTests
     private static IEnumerable<string> Many(string template, int count = 40) =>
         Enumerable.Range(0, count).Select(i => Parse(template, seed: 100 + i));
 
+    // faker.js: number.int(6) is "max 6". The plain value used to be read as min, max and multipleOf at once, so it always gave 6 (or 0 for number.int(0), which threw).
+    [Test]
+    [Arguments("{{number.int(6)}}", 0, 6, 10)]
+    [Arguments("{{number.int(0)}}", 0, 0, 10)]
+    [Arguments("{{number.binary(7)}}", 0, 7, 2)]
+    [Arguments("{{number.octal(20)}}", 0, 20, 8)]
+    [Arguments("{{number.hex(20)}}", 0, 20, 16)]
+    [Arguments("{{number.romanNumeral(12)}}", 1, 12, 0)]
+    [Arguments("{{number.long(6)}}", 0, 6, 10)]
+    [Arguments("{{number.long(3, 6)}}", 3, 6, 10)]
+    public void A_plain_number_is_the_maximum(string template, int min, int max, int radix)
+    {
+        var values = Many(template, 300).Select(text => radix == 0 ? FromRoman(text) : Convert.ToInt32(text, radix)).ToList();
+
+        values.ShouldAllBe(v => v >= min && v <= max);
+        values.Distinct().Count().ShouldBe(max - min + 1, string.Join(",", values.Distinct().Order()));
+    }
+
+    private static int FromRoman(string roman)
+    {
+        var digits = roman.Select(c => c switch { 'I' => 1, 'V' => 5, 'X' => 10, 'L' => 50, 'C' => 100, 'D' => 500, _ => 1000 }).ToArray();
+        return digits.Select((d, i) => i + 1 < digits.Length && d < digits[i + 1] ? -d : d).Sum();
+    }
+
+    [Test]
+    public void A_plain_number_is_the_maximum_of_a_float()
+    {
+        var values = Many("{{number.float(5)}}", 200).Select(t => double.Parse(t, System.Globalization.CultureInfo.InvariantCulture)).ToList();
+
+        values.ShouldAllBe(v => v >= 0 && v <= 5);
+        values.Distinct().Count().ShouldBeGreaterThan(100);
+    }
+
+    [Test]
+    public void Legacy_positional_prices_and_amounts_are_min_max_and_decimals()
+    {
+        Many("{{commerce.price(5, 10, 0)}}").ShouldAllBe(p => int.Parse(p, System.Globalization.CultureInfo.InvariantCulture) >= 5 && int.Parse(p, System.Globalization.CultureInfo.InvariantCulture) <= 10);
+        Many("{{commerce.price(5, 10, 0)}}").Distinct().Count().ShouldBeGreaterThan(1);
+        Many("{{finance.amount(5, 10, 1)}}").ShouldAllBe(p => p.Length >= 3 && p.IndexOf('.') == p.Length - 2);
+        Many("{{finance.amount(5, 10, 1)}}").Distinct().Count().ShouldBeGreaterThan(1);
+    }
+
     [Test]
     public void Functions_without_arguments_use_their_defaults()
     {
