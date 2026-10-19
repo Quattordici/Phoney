@@ -179,7 +179,7 @@ internal sealed class ModelBuilder
                 writable.Remove(match);
             var name = match?.Name ?? Capitalize(parameter.Name);
             // Annotations may sit on the parameter or (with [property: …]) on the generated property.
-            var attributes = parameter.GetAttributes().Concat(match?.GetAttributes() ?? Enumerable.Empty<AttributeData>());
+            var attributes = parameter.GetAttributes().Concat(match is null ? Enumerable.Empty<AttributeData>() : AttributesOf(match));
             var parameterMember = Member(type, name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), isConstructorParameter: true, isInitOnly: false, inInitializer: false, declaringType: type, isField: false, attributes, members.Count);
             // A record's positional property behind the parameter can be set on an existing object.
             if (match is IPropertySymbol parameterProperty)
@@ -202,7 +202,7 @@ internal sealed class ModelBuilder
             if (member is IPropertySymbol p)
             {
                 var initOnly = p.SetMethod!.IsInitOnly;
-                members.Add(Member(type, p.Name, p.Type, IsNullableReference(p.Type, p.NullableAnnotation), false, initOnly, initOnly || p.IsRequired, p.ContainingType, isField: false, p.GetAttributes(), members.Count));
+                members.Add(Member(type, p.Name, p.Type, IsNullableReference(p.Type, p.NullableAnnotation), false, initOnly, initOnly || p.IsRequired, p.ContainingType, isField: false, AttributesOf(p), members.Count));
             }
             else if (member is IFieldSymbol f)
             {
@@ -217,7 +217,7 @@ internal sealed class ModelBuilder
             if (!taken.Add(member.Name))
                 continue;
             var (memberType, annotation) = member is IPropertySymbol property ? (property.Type, property.NullableAnnotation) : (((IFieldSymbol)member).Type, ((IFieldSymbol)member).NullableAnnotation);
-            var filled = Member(type, member.Name, memberType, IsNullableReference(memberType, annotation), false, false, false, member.ContainingType, isField: member is IFieldSymbol, member.GetAttributes(), members.Count);
+            var filled = Member(type, member.Name, memberType, IsNullableReference(memberType, annotation), false, false, false, member.ContainingType, isField: member is IFieldSymbol, AttributesOf(member), members.Count);
             filled.Settable = false;
             filled.FillsExisting = true;
             filled.FillTypeArguments = string.Join(", ", ((INamedTypeSymbol)memberType).TypeArguments.Select(Fq));
@@ -669,5 +669,41 @@ internal sealed class ModelBuilder
     }
 
     /// <summary>Upper-cases the first character (constructor parameter → property name).</summary>
+    /// <summary>
+    /// The attributes of <paramref name="member"/> with those it inherits from the properties it overrides, as <c>Attribute.GetCustomAttributes(member, inherit: true)</c>
+    /// returns them to the reflection model and the validator: an inherited attribute is added unless its usage says <c>Inherited = false</c>, or it allows one use only and the override has its own.
+    /// </summary>
+    private static IEnumerable<AttributeData> AttributesOf(ISymbol member)
+    {
+        var attributes = member.GetAttributes().ToList();
+        for (var overridden = (member as IPropertySymbol)?.OverriddenProperty; overridden is not null; overridden = overridden.OverriddenProperty)
+        {
+            var declared = attributes.Select(a => a.AttributeClass).ToList();
+            foreach (var attribute in overridden.GetAttributes())
+            {
+                var (inherited, allowMultiple) = Usage(attribute.AttributeClass);
+                if (inherited && (allowMultiple || !declared.Any(c => SymbolEqualityComparer.Default.Equals(c, attribute.AttributeClass))))
+                    attributes.Add(attribute);
+            }
+        }
+
+        return attributes;
+    }
+
+    /// <summary>The <c>Inherited</c> and <c>AllowMultiple</c> of an attribute class's <c>[AttributeUsage]</c> (its own or a base class's), with their defaults.</summary>
+    private static (bool Inherited, bool AllowMultiple) Usage(INamedTypeSymbol? attributeClass)
+    {
+        for (var type = attributeClass; type is not null; type = type.BaseType)
+        {
+            var usage = type.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "System.AttributeUsageAttribute");
+            if (usage is null)
+                continue;
+            var named = usage.NamedArguments.ToDictionary(a => a.Key, a => a.Value.Value);
+            return (!named.TryGetValue("Inherited", out var i) || i is not false, named.TryGetValue("AllowMultiple", out var m) && m is true);
+        }
+
+        return (true, false);
+    }
+
     private static string Capitalize(string name) => name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name.Substring(1);
 }
