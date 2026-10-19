@@ -115,8 +115,14 @@ public sealed class ModuleCorrectnessTests
         var vin = _faker.Vehicle.Vin();
         vin.Length.ShouldBe(17);
         vin.ShouldNotContain('I');
-        vin[8].ToString().ShouldBe(VehicleModule.VinCheckDigit(vin));
+        vin[8].ShouldBe(VehicleModule.VinCheckDigit(vin));
     }
+
+    [Test]
+    [Arguments("1M8GDM9AXKP042788", 'X')] // the ISO 3779 example of the North American check digit
+    [Arguments("11111111111111111", '1')]
+    [Arguments("5GZCZ43D13S812715", '1')]
+    public void Vin_check_digit_matches_known_vins(string vin, char check) => VehicleModule.VinCheckDigit(vin).ShouldBe(check);
 
     [Test]
     public void Ipv4_respects_networks_and_cidr_blocks()
@@ -129,6 +135,21 @@ public sealed class ModuleCorrectnessTests
 
         _faker.Internet.Ipv4("1.2.3.4/32").ShouldBe("1.2.3.4");
     }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("10.0.0.0")]
+    [Arguments("10.0.0/8")]
+    [Arguments("10.0.0.0/")]
+    [Arguments("10.0.0.0/8/")]
+    [Arguments("1000.0.0.0/8")]
+    [Arguments("10.0.0.0/100")]
+    [Arguments("10.a.0.0/8")]
+    [Arguments(" 10.0.0.0/8")]
+    [Arguments("10.0.0.0/33")]
+    [Arguments("256.0.0.0/8")]
+    public void Ipv4_rejects_malformed_cidr_blocks(string cidr) =>
+        Should.Throw<ArgumentException>(() => _faker.Internet.Ipv4(cidr)).ParamName.ShouldBe("cidrBlock");
 
     [Test]
     public void Emails_are_well_formed()

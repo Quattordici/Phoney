@@ -35,6 +35,27 @@ public class ValueBenchmarks
     [Benchmark(Description = "Helpers.FromRegExp")]
     public string FromRegExp() => _faker.Helpers.FromRegExp("[A-Z]{3}-\\d{4}");
 
+    [Benchmark(Description = "String.AlphaNumeric(10)")]
+    public string AlphaNumeric() => _faker.String.AlphaNumeric(10);
+
+    [Benchmark(Description = "Vehicle.Vin")]
+    public string Vin() => _faker.Vehicle.Vin();
+
+    [Benchmark(Description = "Finance.CreditCardNumber")]
+    public string CreditCardNumber() => _faker.Finance.CreditCardNumber();
+
+    [Benchmark(Description = "Internet.Ipv4")]
+    public string Ipv4() => _faker.Internet.Ipv4();
+
+    [Benchmark(Description = "Internet.Ipv6")]
+    public string Ipv6() => _faker.Internet.Ipv6();
+
+    [Benchmark(Description = "Internet.UserAgent (template with arguments)")]
+    public string UserAgent() => _faker.Internet.UserAgent();
+
+    [Benchmark(Description = "Internet.Jwt")]
+    public string Jwt() => _faker.Internet.Jwt();
+
     [Benchmark(Description = "SeededRandom.Int")]
     public int RandomInt() => _faker.Random.Int(0, 1000);
 
@@ -77,6 +98,29 @@ public class GenerationBenchmarks
 
     [Benchmark(Description = "Source-generated, parallel")]
     public Customer[] GeneratedParallel() => _generated.GenerateParallel(Count);
+}
+
+/// <summary>One object through the static facade, which builds a generator per call.</summary>
+[MemoryDiagnoser]
+public class FacadeBenchmarks
+{
+    [Benchmark(Baseline = true, Description = "Cached generator, Generate()")]
+    public Customer Cached() => CachedGenerator.Generate();
+
+    [Benchmark(Description = "Fake.ForGenerated<T>().Generate()")]
+    public Customer One() => Fake.ForGenerated<Customer>().Generate();
+
+    [Benchmark(Description = "Fake.ForGenerated<T>().Generate() in Fake.Seeded")]
+    public Customer Seeded()
+    {
+        using var _ = Fake.Seeded(1);
+        return Fake.ForGenerated<Customer>().Generate();
+    }
+
+    [Benchmark(Description = "Fake.ForGenerated<T>().Populate(x)")]
+    public Customer Populate() => Fake.ForGenerated<Customer>().Populate(new Customer());
+
+    private static readonly ObjectGenerator<Customer> CachedGenerator = BenchmarkFakes.Customer;
 }
 
 /// <summary>Collections of every kind through the reflection model (sets, lists, arrays, dictionaries) against the generated model.</summary>

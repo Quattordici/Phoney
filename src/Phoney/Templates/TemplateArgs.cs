@@ -101,6 +101,40 @@ public sealed class TemplateArgs
     /// </summary>
     public int? Int(int index, string? option = null)
     {
+        // The arguments never change and templates are evaluated over and over, so each number is read from the JSON once.
+        var cached = Volatile.Read(ref _ints);
+        for (var entry = cached; entry is not null; entry = entry.Next)
+        {
+            if (entry.Index == index && string.Equals(entry.Option, option, StringComparison.Ordinal))
+                return entry.Value;
+        }
+
+        var value = ReadInt(index, option);
+        if ((cached?.Count ?? 0) < MaxCachedInts)
+            Volatile.Write(ref _ints, new CachedInt(index, option, value, cached)); // a racing write may drop an entry, which is then read again
+        return value;
+    }
+
+    private const int MaxCachedInts = 8;
+
+    private CachedInt? _ints;
+
+    /// <summary>A number <see cref="Int"/> read, in an immutable list so threads evaluating the same template can share it without locks.</summary>
+    private sealed class CachedInt(int index, string? option, int? value, CachedInt? next)
+    {
+        public int Index { get; } = index;
+
+        public string? Option { get; } = option;
+
+        public int? Value { get; } = value;
+
+        public CachedInt? Next { get; } = next;
+
+        public int Count { get; } = (next?.Count ?? 0) + 1;
+    }
+
+    private int? ReadInt(int index, string? option)
+    {
         if (index >= _json.Length)
             return null;
         var value = _json[index];
@@ -146,10 +180,26 @@ public sealed class TemplateArgs
     }
 
     /// <summary>Argument <paramref name="index"/> as an array of strings (<c>["a","b"]</c>).</summary>
-    public string[] Strings(int index)
+    public string[] Strings(int index) => [.. SharedStrings(index)];
+
+    /// <summary>Like <see cref="Strings"/>, read from the JSON once and shared: callers must not change the array.</summary>
+    internal string[] SharedStrings(int index)
     {
         if (index >= _json.Length || _json[index].ValueKind != JsonValueKind.Array)
             throw new FormatException($"Template argument {index} must be a JSON array.");
-        return [.. _json[index].EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString()! : e.GetRawText())];
+        var strings = Volatile.Read(ref _strings);
+        if (strings?[index] is { } shared)
+            return shared;
+        var values = _json[index].EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString()! : e.GetRawText()).ToArray();
+        if (strings is null)
+        {
+            Interlocked.CompareExchange(ref _strings, new string[]?[_json.Length], null);
+            strings = _strings!;
+        }
+
+        Volatile.Write(ref strings[index], values); // racing threads store equal arrays
+        return values;
     }
+
+    private string[]?[]? _strings;
 }

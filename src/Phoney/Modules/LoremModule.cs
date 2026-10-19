@@ -1,5 +1,5 @@
-using System.Text;
 using Phoney.Data;
+using Phoney.Templates;
 
 namespace Phoney.Modules;
 
@@ -22,9 +22,9 @@ public sealed class LoremModule : FakerModule
     public string Words(int count = 3)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
-        var sb = new StringBuilder();
-        AppendWords(sb, count);
-        return sb.ToString();
+        var text = new TextBuilder(stackalloc char[256]);
+        AppendWords(ref text, count);
+        return text.ToStringAndDispose();
     }
 
     /// <summary>Returns a sentence of <paramref name="wordCount"/> words (3–10 when not given), capitalized and ending with a period.</summary>
@@ -32,9 +32,19 @@ public sealed class LoremModule : FakerModule
     {
         if (wordCount is { } words)
             ArgumentOutOfRangeException.ThrowIfNegative(words, nameof(wordCount));
-        var sb = new StringBuilder();
-        AppendSentence(sb, wordCount ?? Random.Int(3, 10));
-        return sb.ToString();
+        var text = new TextBuilder(stackalloc char[256]);
+        AppendSentence(ref text, wordCount ?? Random.Int(3, 10));
+        return text.ToStringAndDispose();
+    }
+
+    /// <summary>A sentence of <paramref name="wordCount"/> words without its closing period, like <c>Sentence(wordCount).TrimEnd('.')</c> in one allocation.</summary>
+    internal string Title(int wordCount)
+    {
+        var text = new TextBuilder(stackalloc char[256]);
+        AppendSentence(ref text, wordCount);
+        while (text.Length > 0 && text.Written[^1] == '.')
+            text.Length--;
+        return text.ToStringAndDispose();
     }
 
     /// <summary>Returns <paramref name="sentenceCount"/> sentences (2–6 when not given) joined by <paramref name="separator"/>.</summary>
@@ -42,16 +52,9 @@ public sealed class LoremModule : FakerModule
     {
         if (sentenceCount is { } sentences)
             ArgumentOutOfRangeException.ThrowIfNegative(sentences, nameof(sentenceCount));
-        var count = sentenceCount ?? Random.Int(2, 6);
-        var sb = new StringBuilder();
-        for (var i = 0; i < count; i++)
-        {
-            if (i > 0)
-                sb.Append(separator);
-            AppendSentence(sb, Random.Int(3, 10));
-        }
-
-        return sb.ToString();
+        var text = new TextBuilder(stackalloc char[512]);
+        AppendSentences(ref text, sentenceCount ?? Random.Int(2, 6), separator);
+        return text.ToStringAndDispose();
     }
 
     /// <summary>Returns a paragraph of <paramref name="sentenceCount"/> sentences.</summary>
@@ -65,10 +68,15 @@ public sealed class LoremModule : FakerModule
     public string Paragraphs(int paragraphCount = 3, string separator = "\n")
     {
         ArgumentOutOfRangeException.ThrowIfNegative(paragraphCount);
-        var paragraphs = new string[paragraphCount];
-        for (var i = 0; i < paragraphs.Length; i++)
-            paragraphs[i] = Paragraph();
-        return string.Join(separator, paragraphs);
+        var text = new TextBuilder(stackalloc char[1024]);
+        for (var i = 0; i < paragraphCount; i++)
+        {
+            if (i > 0)
+                text.Append(separator);
+            AppendSentences(ref text, 3, " "); // a Paragraph()
+        }
+
+        return text.ToStringAndDispose();
     }
 
     /// <summary>Returns <paramref name="lineCount"/> sentences (1–5 when not given), one per line.</summary>
@@ -97,24 +105,35 @@ public sealed class LoremModule : FakerModule
     };
 
     /// <summary>Appends <paramref name="count"/> space-separated lorem words.</summary>
-    private void AppendWords(StringBuilder sb, int count)
+    private void AppendWords(ref TextBuilder text, int count)
     {
         var entry = Faker.Data.Strings(DataKeys.LoremWord);
         for (var i = 0; i < count; i++)
         {
             if (i > 0)
-                sb.Append(' ');
-            sb.Append(entry[entry.PickIndex(Random)]);
+                text.Append(' ');
+            text.Append(entry[entry.PickIndex(Random)]);
         }
     }
 
     /// <summary>Appends a capitalized sentence ending with a period.</summary>
-    private void AppendSentence(StringBuilder sb, int wordCount)
+    private void AppendSentence(ref TextBuilder text, int wordCount)
     {
-        var start = sb.Length;
-        AppendWords(sb, wordCount);
-        if (sb.Length > start)
-            sb[start] = char.ToUpperInvariant(sb[start]);
-        sb.Append('.');
+        var start = text.Length;
+        AppendWords(ref text, wordCount);
+        if (text.Length > start)
+            text.Written[start] = char.ToUpperInvariant(text.Written[start]);
+        text.Append('.');
+    }
+
+    /// <summary>Appends <paramref name="count"/> sentences of 3–10 words joined by <paramref name="separator"/>.</summary>
+    private void AppendSentences(ref TextBuilder text, int count, string separator)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            if (i > 0)
+                text.Append(separator);
+            AppendSentence(ref text, Random.Int(3, 10));
+        }
     }
 }

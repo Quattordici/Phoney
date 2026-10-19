@@ -7,6 +7,8 @@ public sealed class VehicleModule : FakerModule
 {
     // Letters I, O and Q are never used in VINs (confusable with 1 and 0).
     private const string VinExclude = "oiqOIQ";
+    private const string Upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private const string Digits = "0123456789";
 
     /// <summary>ISO 3779 position weights used for the VIN check digit.</summary>
     private static readonly int[] VinWeights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
@@ -40,11 +42,18 @@ public sealed class VehicleModule : FakerModule
     public string Vin()
     {
         var s = Faker.String;
-        var vin = s.AlphaNumeric(10, Casing.Upper, VinExclude)
-            + s.Alpha(1, Casing.Upper, VinExclude)
-            + s.AlphaNumeric(1, Casing.Upper, VinExclude)
-            + s.Numeric(5);
-        return string.Concat(vin.AsSpan(0, 8), VinCheckDigit(vin), vin.AsSpan(9));
+        var alphaNumeric = s.Exclude(StringModule.DigitsAndLettersFor(Casing.Upper), VinExclude);
+        var alpha = s.Exclude(Upper, VinExclude);
+        // Ten letters or digits, a letter, a letter or digit and five digits (the check digit at index 8 replaces a drawn one), in one buffer.
+        return string.Create(17, (alphaNumeric, alpha, Random), static (vin, state) =>
+        {
+            var (alphaNumeric, alpha, random) = state;
+            StringModule.Fill(vin[..10], alphaNumeric, random);
+            StringModule.Fill(vin[10..11], alpha, random);
+            StringModule.Fill(vin[11..12], alphaNumeric, random);
+            StringModule.Fill(vin[12..], Digits, random);
+            vin[8] = VinCheckDigit(vin);
+        });
     }
 
     /// <summary>Returns a UK-style vehicle registration mark, e.g. <c>MF59EEW</c>.</summary>
@@ -52,13 +61,13 @@ public sealed class VehicleModule : FakerModule
         Faker.String.Alpha(2, Casing.Upper) + Faker.String.Numeric(2) + Faker.String.Alpha(3, Casing.Upper);
 
     /// <summary>Computes the ISO 3779 check digit (0-9 or X) of a 17-character VIN.</summary>
-    internal static string VinCheckDigit(string vin)
+    internal static char VinCheckDigit(ReadOnlySpan<char> vin)
     {
         var checksum = 0;
         for (var i = 0; i < vin.Length && i < VinWeights.Length; i++)
             checksum += Transliterate(vin[i]) * VinWeights[i];
         var remainder = checksum % 11;
-        return remainder == 10 ? "X" : ((char)('0' + remainder)).ToString();
+        return remainder == 10 ? 'X' : (char)('0' + remainder);
 
         // Letters map to numbers per ISO 3779 (I, O and Q never occur).
         static int Transliterate(char c) => c switch
