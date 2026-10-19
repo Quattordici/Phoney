@@ -1007,6 +1007,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         var compiled = _state.Compiled ?? _state.Publish(Compile());
         var data = parentFaker is not null && _config.Locale is null ? parentFaker.Data : LocaleStore.Get(_config.Locale ?? Fake.Locale);
+        // A new faker per run, never a pooled one: rules, AfterCreate actions, conventions and Stream() enumerators can keep the faker, and a
+        // pooled faker would be reseeded under them by later runs, silently changing seeded data (a nested run also needs its own while the parent's
+        // is in use). The facade's per-call cost is in compiling rules, which Fresh() shares; keep a generator to avoid the faker too.
         var faker = new Faker(data, new SeededRandom(0));
         // Explicit date, else the configured clock, else the parent's date (nested generators), else a fixed date for
         // seeded generators so their relative dates don't drift with the clock; unseeded generators use the current time.
