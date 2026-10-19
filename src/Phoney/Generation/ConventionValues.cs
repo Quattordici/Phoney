@@ -494,7 +494,6 @@ public static class ConventionValues
     private static T InRange<T>(FakeScope scope, NumericRange range)
         where T : INumber<T>
     {
-        var (min, max) = (range.Min, range.Max);
         if (typeof(T) == typeof(decimal))
             return T.CreateSaturating(DecimalInRange(scope, range));
 
@@ -505,15 +504,16 @@ public static class ConventionValues
         if (typeof(T) == typeof(double))
             return T.CreateSaturating(FractionalInRange(scope, range));
 
-        // Integers: whole numbers inside the range and inside the type (CreateSaturating maps ±∞ to the type's limits).
+        // Integers: whole numbers inside the range and inside the type, from the limits as written (a double can't tell long.MinValue from the next one).
+        var (low, high) = range.Decimals();
         var unbounded = typeof(T) == typeof(System.Numerics.BigInteger); // has no limits to saturate to
-        var typeMin = unbounded ? double.NegativeInfinity : double.CreateSaturating(T.CreateSaturating(double.NegativeInfinity));
-        var typeMax = unbounded ? double.PositiveInfinity : double.CreateSaturating(T.CreateSaturating(double.PositiveInfinity));
-        var lowest = Math.Ceiling(min);
-        var highest = Math.Floor(max);
-        if (range.MinExclusive && lowest <= min) // Ceiling(min) is never below min: this is a whole-number limit that is excluded
+        var typeMin = unbounded ? decimal.MinValue : decimal.CreateSaturating(T.CreateSaturating(decimal.MinValue));
+        var typeMax = unbounded ? decimal.MaxValue : decimal.CreateSaturating(T.CreateSaturating(decimal.MaxValue));
+        var lowest = decimal.Ceiling(low);
+        var highest = decimal.Floor(high);
+        if (range.MinExclusive && lowest <= low) // Ceiling(low) is never below low: this is a whole-number limit that is excluded
             lowest++;
-        if (range.MaxExclusive && highest >= max)
+        if (range.MaxExclusive && highest >= high)
             highest--;
         var from = ToLong(Math.Max(lowest, typeMin));
         var to = ToLong(Math.Min(highest, typeMax));
@@ -521,8 +521,7 @@ public static class ConventionValues
             throw range.Empty(typeof(T));
         return T.CreateSaturating(scope.Faker.Random.Long(from, to));
 
-        // Explicit clamping: casting an out-of-range double to long is undefined in C#.
-        static long ToLong(double d) => d >= 9.2233720368547748E18 ? long.MaxValue : d <= -9.2233720368547758E18 ? long.MinValue : (long)d;
+        static long ToLong(decimal d) => d >= long.MaxValue ? long.MaxValue : d <= long.MinValue ? long.MinValue : (long)d;
     }
 
     /// <summary>A double in <paramref name="range"/>, rounded to two decimals unless rounding lands on an excluded limit.</summary>
@@ -571,9 +570,9 @@ public static class ConventionValues
         const int Usual = 2;
         var (low, high) = range.Decimals();
         var magnitude = Math.Max(Math.Abs(low), Math.Abs(high));
-        if (magnitude >= DecimalStepLimit) // steps of 0.01 are far smaller than such a range, and any step inside an excluded limit will do
+        if (magnitude > decimal.MaxValue / 100) // limits this large can't be scaled to hundredths, and a decimal this size has few places anyway
         {
-            var (from, to) = (range.MinExclusive ? low + 0.01m : low, range.MaxExclusive ? high - 0.01m : high);
+            var (from, to) = (range.MinExclusive ? low + 1 : low, range.MaxExclusive ? high - 1 : high);
             return from <= to ? scope.Faker.Number.Decimal(from, to, Usual) : throw range.Empty(typeof(decimal));
         }
 
@@ -596,9 +595,6 @@ public static class ConventionValues
 
         static bool HasStep(decimal first, decimal last, decimal step) => decimal.Ceiling(first * step) <= decimal.Floor(last * step);
     }
-
-    /// <summary>Limits from which <see cref="DecimalInRange"/> keeps two places; below it, at least 19 places fit a decimal.</summary>
-    private const decimal DecimalStepLimit = 1_000_000_000m;
 
     /// <summary>An allowed value as invariant text.</summary>
     private static string Text(object? value) => value switch

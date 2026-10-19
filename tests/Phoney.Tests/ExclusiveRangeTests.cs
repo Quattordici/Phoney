@@ -38,6 +38,8 @@ public sealed class Narrow
     [Range(typeof(decimal), "0.0000000000000000001", "0.0000000000000000009")] public decimal Tiny { get; set; }
     [Range(typeof(decimal), "0", "0.000000000000000001", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Open { get; set; }
     [Range(typeof(decimal), "0.1000000000000000001", "0.1000000000000000009")] public decimal Precise { get; set; }
+    [Range(typeof(decimal), "1000000000.001", "1000000000.009")] public decimal Large { get; set; }
+    [Range(typeof(long), "-9223372036854775808", "-9223372036854775806", MinimumIsExclusive = true, MaximumIsExclusive = true)] public long Edge { get; set; }
 }
 
 /// <summary>Excluded limits that leave no value of the member's type.</summary>
@@ -208,6 +210,8 @@ public sealed class ExclusiveRangeTests
         values.ShouldAllBe(n => n.Tiny >= 0.0000000000000000001m && n.Tiny <= 0.0000000000000000009m);
         values.ShouldAllBe(n => n.Open > 0m && n.Open < 0.000000000000000001m);
         values.ShouldAllBe(n => n.Precise >= 0.1000000000000000001m && n.Precise <= 0.1000000000000000009m);
+        values.ShouldAllBe(n => n.Large >= 1000000000.001m && n.Large <= 1000000000.009m);
+        values.ShouldAllBe(n => n.Edge == long.MinValue + 1); // the limits are one apart in a double
     }
 
     [Test]
