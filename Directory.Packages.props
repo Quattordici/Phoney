@@ -3,6 +3,7 @@
     Dependency floors of the add-on packages: the lowest versions whose build and tests pass (found by building the library against the floor and running its tests with the
     framework at the floor and at the newest). MSTest 3.x is binary incompatible with 4.x apps; TUnit 1.0 fails the FakeSeed executor-order test; NodaTime 3.0 lacks LocalDate.ToDateOnly.
     EF Core 8.0.0-8.0.8 bring Microsoft.Extensions.Caching.Memory 8.0.0, which has a high severity advisory (NuGet audit fails the build).
+    Phoney.WireMock builds against WireMock.Net.Shared 2.0.0, but the WireMock.Net servers before 2.12.0 bring a Scriban.Signed with advisories, so its tests can't run there.
     The tests run on the newest versions, or on the floors with -p:TestAgainstFloors=true (the "floors" CI job).
     Renovate (.github/renovate.json5) never touches a *Floor; it updates each *Latest through the "renovate: depName" comment above it.
   -->
@@ -15,6 +16,7 @@
     <DependencyInjectionFloor>8.0.0</DependencyInjectionFloor>
     <EfCore8Floor>8.0.10</EfCore8Floor>
     <EfCore10Floor>10.0.0</EfCore10Floor>
+    <WireMockFloor>2.12.0</WireMockFloor>
 
     <!-- renovate: depName=xunit.v3 -->
     <XunitLatest>4.0.2</XunitLatest>
@@ -32,6 +34,8 @@
     <EfCore8Latest>8.0.31</EfCore8Latest>
     <!-- renovate: depName=Microsoft.EntityFrameworkCore.Sqlite -->
     <EfCore10Latest>10.0.12</EfCore10Latest>
+    <!-- renovate: depName=WireMock.Net.Minimal -->
+    <WireMockLatest>2.19.0</WireMockLatest>
 
     <!-- The versions the test projects of the integration packages run against. -->
     <XunitTestVersion>$(XunitLatest)</XunitTestVersion>
@@ -42,6 +46,7 @@
     <DependencyInjectionTestVersion>$(DependencyInjectionLatest)</DependencyInjectionTestVersion>
     <EfCore8TestVersion>$(EfCore8Latest)</EfCore8TestVersion>
     <EfCore10TestVersion>$(EfCore10Latest)</EfCore10TestVersion>
+    <WireMockTestVersion>$(WireMockLatest)</WireMockTestVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TestAgainstFloors)' == 'true'">
     <XunitTestVersion>$(XunitFloor)</XunitTestVersion>
@@ -52,6 +57,7 @@
     <DependencyInjectionTestVersion>$(DependencyInjectionFloor)</DependencyInjectionTestVersion>
     <EfCore8TestVersion>$(EfCore8Floor)</EfCore8TestVersion>
     <EfCore10TestVersion>$(EfCore10Floor)</EfCore10TestVersion>
+    <WireMockTestVersion>$(WireMockFloor)</WireMockTestVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -69,6 +75,9 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(DependencyInjectionTestVersion)" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <PackageVersion Include="NodaTime" Version="$(NodaTimeFloor)" />
+    <!-- Phoney.WireMock depends on the builder interfaces only; the tests run the server of the same release. -->
+    <PackageVersion Include="WireMock.Net.Shared" Version="$(WireMockFloor)" />
+    <PackageVersion Include="WireMock.Net.Minimal" Version="$(WireMockTestVersion)" />
   </ItemGroup>
 
   <!-- EF Core: each target framework uses the EF Core release built for it. The add-on depends on the floor, the tests run on Microsoft.EntityFrameworkCore.Sqlite. -->

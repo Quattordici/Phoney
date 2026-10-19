@@ -30,6 +30,7 @@
 | `Phoney.DependencyInjection` | [`services.AddPhoney()`, `IFaker`, injectable generators](#dependency-injection-and-aspnet-core) | [![NuGet](https://img.shields.io/nuget/v/Phoney.DependencyInjection.svg?label=)](https://www.nuget.org/packages/Phoney.DependencyInjection) |
 | `Phoney.EntityFrameworkCore` | [`HasFakeData` seed data](#ef-core-seeding) | [![NuGet](https://img.shields.io/nuget/v/Phoney.EntityFrameworkCore.svg?label=)](https://www.nuget.org/packages/Phoney.EntityFrameworkCore) |
 | `Phoney.NodaTime` | [NodaTime values and members](#nodatime) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NodaTime.svg?label=)](https://www.nuget.org/packages/Phoney.NodaTime) |
+| `Phoney.WireMock` | [Fake JSON bodies for WireMock.Net mocks](#wiremocknet-mocks) | [![NuGet](https://img.shields.io/nuget/v/Phoney.WireMock.svg?label=)](https://www.nuget.org/packages/Phoney.WireMock) |
 
 Targets .NET 8 and .NET 10.
 
@@ -776,6 +777,19 @@ var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate
 ```
 
 `Instant`, `OffsetDateTime`, `ZonedDateTime`, `LocalDateTime`, `LocalDate`, `LocalTime` and `Duration` members are generated like their built-in counterparts, so `CreatedAt`, `ExpiresAt`, `BirthDate` and `Age` agree, with reflection and with source-generated models. See the [package README](src/Phoney.NodaTime/README.md).
+
+## WireMock.Net mocks
+
+The `Phoney.WireMock` package answers WireMock.Net requests with fake JSON that belongs to the URL:
+
+```csharp
+server.Given(Request.Create().WithPath("/customers/*").UsingGet())
+      .RespondWith(Response.Create().WithFakeJson(Fake.For<Customer>()));       // /customers/42 is always the same customer
+server.Given(Request.Create().WithPath("/customers").UsingGet())
+      .RespondWith(Response.Create().WithFakeJsonList(Fake.For<Customer>(), 5, 20)); // a stable 5 to 20 per URL
+```
+
+Nothing is stored: each body is `GenerateFor` of the request's key (the path and query by default, or your own, such as the id), so your assertions can compute the expected object. Rules and seeds apply, and a `JsonTypeInfo<T>` overload keeps it reflection free. See the [package README](src/Phoney.WireMock/README.md).
 
 ## Performance
 
