@@ -26,7 +26,10 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
     private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "WithGeneratorFor", "Subtype" };
 
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
+    /// <summary><c>Unique</c>, which alone accepts a combination of members.</summary>
+    private const string UniqueMethod = "Unique";
+
+    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", UniqueMethod, "Invalid", "Boundary", "Sequence", "Cycle" };
 
     /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
     private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
@@ -133,7 +136,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 if (Constant(call, "min") is { } low)
                     Check(context, call, "max", v => v >= low, $"at least {low.ToString(CultureInfo.InvariantCulture)} (the minimum)");
                 break;
-            case "Unique" or "Where":
+            case UniqueMethod or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
                 break;
         }
@@ -242,7 +245,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         var method = call.TargetMethod;
         if (selector.Kind == SelectorKind.Combination)
         {
-            if (method.Name != "Unique")
+            if (method.Name != UniqueMethod)
             {
                 Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
                 return;
@@ -267,7 +270,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
 
         if (selector.IsNested)
         {
-            if (method.Name == "Unique")
+            if (method.Name == UniqueMethod)
             {
                 Report(context, selector, $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.");
                 return;

@@ -319,9 +319,13 @@ public sealed class FakeScope
         if (!slot.Unique && slot.Filter is null && !slot.RecordsKeyPart)
             return Produce(slot, fallback);
 
-        var value = !slot.Unique && slot.Filter is null ? Produce(slot, fallback)
-            : slot.RetriesObject ? ProduceForObjectRetry(slot, fallback)
-            : ProduceChecked(slot, fallback);
+        TValue value;
+        if (!slot.Unique && slot.Filter is null)
+            value = Produce(slot, fallback);
+        else if (slot.RetriesObject)
+            value = ProduceForObjectRetry(slot, fallback);
+        else
+            value = ProduceChecked(slot, fallback);
         if (slot.RecordsKeyPart)
             (_keyParts ??= [])[member] = value;
         return value;

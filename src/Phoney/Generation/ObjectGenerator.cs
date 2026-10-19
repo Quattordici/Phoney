@@ -1173,8 +1173,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         }
 
         var combinations = UniqueCombinations(members, known, slots);
-        foreach (var combination in combinations)
-            objectRetries = objectRetries == 0 ? combination.MaxAttempts : Math.Min(objectRetries, combination.MaxAttempts);
+        foreach (var attempts in combinations.Select(c => c.MaxAttempts))
+            objectRetries = objectRetries == 0 ? attempts : Math.Min(objectRetries, attempts);
 
         for (var i = 0; i < slots.Length; i++)
         {
