@@ -70,6 +70,16 @@ public sealed class EdgeCaseTests
         BitConverter.DoubleToInt64Bits(longitude).ShouldBe(PinnedLongitudeBits);
     }
 
+    [Test]
+    [Arguments(0.0, 180.0)]
+    [Arguments(90.0, -180.0)]
+    [Arguments(-90.0, 0.0)]
+    public void A_zero_radius_gives_the_origin_itself(double latitude, double longitude)
+    {
+        for (var seed = 0; seed < 20; seed++)
+            new Faker("en", seed).Location.NearbyGpsCoordinate((latitude, longitude), 0).ShouldBe((latitude, longitude));
+    }
+
     private const long PinnedLatitudeBits = 4633540400198287834; // 59.28472211840899
     private const long PinnedLongitudeBits = 4625775252713656800; // 18.05501537265252
 
@@ -116,8 +126,12 @@ public sealed class EdgeCaseTests
         Should.Throw<ArgumentOutOfRangeException>(() => Make().Random.Elements([1, 2, 3], -1)).ParamName.ShouldBe("count");
 
     [Test]
-    public void Unique_values_for_huge_counts_still_try() =>
-        Make().Helpers.UniqueValues(() => 1, 3_000_000).ShouldBe([1]);
+    public void Unique_values_for_huge_counts_still_try()
+    {
+        var next = 0;
+
+        Make().Helpers.UniqueValues(() => next++, 3_000_000).Count.ShouldBe(3_000_000); // 1000 × count overflowed an int and gave nothing
+    }
 
     [Test]
     public void Time_ordered_ids_reject_timestamps_before_1970()

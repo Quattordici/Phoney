@@ -62,10 +62,19 @@ public sealed class LocaleDataTests
         var data = new Faker(locale).Data;
         for (var key = 0; key < DataKeys.Count; key++)
         {
-            if (data.Get(DataKeys.Paths[key]) is StringsEntry strings)
+            var entry = data.Get(DataKeys.Paths[key]);
+            if (entry is StringsEntry strings)
             {
                 foreach (var value in strings.Values)
                     value.ShouldNotContain("  ", customMessage: $"{locale}: '{DataKeys.Paths[key]}'");
+            }
+            else if (entry is RecordsEntry records)
+            {
+                for (var row = 0; row < records.Count; row++)
+                {
+                    for (var field = 0; field < records.Fields.Count; field++)
+                        records.Get(row, field)?.ShouldNotContain("  ", customMessage: $"{locale}: '{DataKeys.Paths[key]}' row {row}, {records.Fields[field]}");
+                }
             }
         }
     }

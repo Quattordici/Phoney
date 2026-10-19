@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using Produce = System.Func<Phoney.Generation.FakeScope, System.Func<Phoney.Generation.FakeScope, object?>, object?>;
 
@@ -183,8 +184,8 @@ internal static class ConstraintCases
                 return FractionalBound(type, text, outside, exclusive, inward);
 
             var number = decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
-            if (type == typeof(decimal)) // a whole unit outside an inclusive bound, the last digit a decimal holds inside an excluded one
-                return ToNumber(type, (outside, exclusive) switch { (true, false) => number - inward, (false, true) => number + (inward * LastDigit(number)), _ => number });
+            if (type == typeof(decimal)) // a whole unit outside an inclusive bound, the nearest decimal inside an excluded one
+                return ToNumber(type, (outside, exclusive) switch { (true, false) => number - inward, (false, true) => NextDecimal(number, inward), _ => number });
 
             // Whole-number types: the nearest whole number inside the range, and the one next to it outside.
             var inside = (side, exclusive) switch
@@ -202,13 +203,18 @@ internal static class ConstraintCases
         }
     }
 
-    /// <summary>The smallest step at the size of <paramref name="value"/> that a decimal still holds: 28 significant digits (1e-28 next to zero, 1e-18 next to 1e10).</summary>
-    private static decimal LastDigit(decimal value)
+    /// <summary>The decimal nearest to <paramref name="value"/> in the <paramref name="direction"/>: the smallest power of ten (down to 1e-28) that a sum still holds exactly.</summary>
+    private static decimal NextDecimal(decimal value, int direction)
     {
-        var digits = 1;
-        for (var whole = decimal.Truncate(Math.Abs(value)); whole >= 10; whole = decimal.Truncate(whole / 10))
-            digits++;
-        return new decimal(1, 0, 0, isNegative: false, scale: (byte)Math.Max(0, 28 - digits));
+        for (var scale = (byte)28; scale > 0; scale--)
+        {
+            var step = new decimal(1, 0, 0, isNegative: direction < 0, scale);
+            var next = value + step;
+            if (next - value == step) // a sum with more digits than a decimal holds is rounded
+                return next;
+        }
+
+        return value + direction;
     }
 
     /// <summary>A date bound of a <see cref="DateTime"/>, <see cref="DateTimeOffset"/> or <see cref="DateOnly"/> member: a day outside an inclusive bound, a day or a tick inside an excluded one.</summary>
@@ -226,36 +232,33 @@ internal static class ConstraintCases
         return type == typeof(DateTimeOffset) ? date : DateOnly.FromDateTime(date.UtcDateTime);
     }
 
-    /// <summary>A bound of a <see cref="double"/>, <see cref="float"/> or <see cref="Half"/> member: a whole unit outside an inclusive bound, the next value inside an excluded one.</summary>
+    /// <summary>A bound of a <see cref="double"/>, <see cref="float"/> or <see cref="Half"/> member: a whole unit outside an inclusive bound, else the value at the limit.</summary>
     private static object FractionalBound(Type type, string text, bool outside, bool exclusive, int inward)
     {
         var limit = double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
-        if (exclusive && !outside)
-            return NextInside(type, limit, inward);
-        var fractional = outside && !exclusive ? limit - inward : limit;
-        return type == typeof(Half) ? (Half)fractional : Convert.ChangeType(fractional, type, CultureInfo.InvariantCulture);
+        if (outside && !exclusive)
+            return type == typeof(Half) ? (Half)(limit - inward) : Convert.ChangeType(limit - inward, type, CultureInfo.InvariantCulture);
+        // Inside an excluded limit strictly; the inclusive bound itself and the excluded limit (the invalid case) may sit on it.
+        var direction = outside ? -inward : inward;
+        if (type == typeof(float))
+            return AtLimit<float>(limit, direction, strict: exclusive && !outside);
+        if (type == typeof(Half))
+            return AtLimit<Half>(limit, direction, strict: exclusive && !outside);
+        return AtLimit<double>(limit, direction, strict: exclusive && !outside);
     }
 
-    /// <summary>The value of <paramref name="type"/> (<see cref="double"/>, <see cref="float"/> or <see cref="Half"/>) closest to <paramref name="limit"/> on its <paramref name="inward"/> side.</summary>
-    private static object NextInside(Type type, double limit, int inward)
+    /// <summary>
+    /// The <typeparamref name="TFloat"/> nearest to <paramref name="limit"/> on its <paramref name="direction"/> side (beyond it when <paramref name="strict"/>), on that side whether
+    /// the validator compares as a <see cref="double"/> or, with a float operand, as a <typeparamref name="TFloat"/> with the limit converted too.
+    /// </summary>
+    private static TFloat AtLimit<TFloat>(double limit, int direction, bool strict)
+        where TFloat : IFloatingPointIeee754<TFloat>
     {
-        if (type == typeof(float))
-        {
-            var single = (float)limit;
-            if (inward > 0)
-                return single > limit ? single : MathF.BitIncrement(single);
-            return single < limit ? single : MathF.BitDecrement(single);
-        }
-
-        if (type == typeof(Half))
-        {
-            var half = (Half)limit;
-            if (inward > 0)
-                return (double)half > limit ? half : Half.BitIncrement(half);
-            return (double)half < limit ? half : Half.BitDecrement(half);
-        }
-
-        return inward > 0 ? Math.BitIncrement(limit) : Math.BitDecrement(limit);
+        var converted = TFloat.CreateSaturating(limit);
+        var side = double.CreateSaturating(converted).CompareTo(limit) * direction; // below zero: the conversion moved it to the other side
+        if (!strict && side >= 0)
+            return converted;
+        return direction > 0 ? TFloat.BitIncrement(converted) : TFloat.BitDecrement(converted);
     }
 
     /// <summary>A decimal as a number of <paramref name="type"/>, which may be one <see cref="Convert"/> does not support; throws <see cref="OverflowException"/> when it does not fit.</summary>

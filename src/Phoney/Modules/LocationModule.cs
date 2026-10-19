@@ -177,6 +177,8 @@ public sealed class LocationModule : FakerModule
         var angle = Faker.Number.Double(0, 2 * Math.PI, 5);
         var radiusKm = isMetric ? radius : radius * 1.60934;
         var distanceKm = Faker.Number.Double(0, radiusKm, 3) * 0.995; // 0.995 avoids float rounding past the radius
+        if (distanceKm <= 0)
+            return center; // as given: the normalization below would turn a longitude of 180 into -180
         var distanceDegrees = distanceKm / (40_000.0 / 360);
         var turns = angle / (2 * Math.PI);
         var latitude = (center.Latitude + (PureMath.SinTurns(turns) * distanceDegrees)) % 180;

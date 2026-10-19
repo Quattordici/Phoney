@@ -15,6 +15,22 @@ public sealed class OpenWindow
     [Range(typeof(DateOnly), "2020-01-01", "2020-01-03", MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateOnly Day { get; set; }
 }
 
+/// <summary>Exclusive limits that a <see cref="float"/> can't hold exactly: the validator compares as <see cref="double"/> or, with a float operand, as <see cref="float"/>.</summary>
+public sealed class FloatWindow
+{
+    [Range(0.1, 1.0, MinimumIsExclusive = true, MaximumIsExclusive = true)] public float AsDouble { get; set; }
+    [Range(typeof(float), "0.1", "0.7", MinimumIsExclusive = true, MaximumIsExclusive = true)] public float AsFloat { get; set; }
+    [Range(0.1, 0.7)] public float Inclusive { get; set; }
+    [Range(typeof(decimal), "1", "2", MinimumIsExclusive = true)] public decimal AboveOne { get; set; }
+}
+
+/// <summary>A <see cref="Half"/> next to an excluded limit: halves near 100 are 0.0625 apart, so rounding can land on it. (<c>RangeAttribute</c> can't validate a <see cref="Half"/>, so the tests compare.)</summary>
+public sealed class HalfWindow
+{
+    [Range(0, 100, MaximumIsExclusive = true)] public Half Percent { get; set; }
+    [Range(0, 1, MinimumIsExclusive = true, MaximumIsExclusive = true)] public Half Share { get; set; }
+}
+
 /// <summary>A <c>[Range]</c> narrower than two decimals.</summary>
 public sealed class Narrow
 {
@@ -23,6 +39,8 @@ public sealed class Narrow
 
 [FakeFor<OpenWindow>]
 [FakeFor<Narrow>]
+[FakeFor<FloatWindow>]
+[FakeFor<HalfWindow>]
 public static partial class ExclusiveRangeFakes;
 
 public sealed class ExclusiveRangeTests
@@ -86,6 +104,56 @@ public sealed class ExclusiveRangeTests
         foreach (var c in cases)
             Failing(c.Value).ShouldBe([c.Member], c.Description);
         cases.Where(c => c.Member == nameof(OpenWindow.OnlyTwo)).Select(c => c.Value.OnlyTwo).ShouldBe([1, 3]);
+    }
+
+    private static ObjectGenerator<FloatWindow> Floats(bool generated) =>
+        (generated ? ExclusiveRangeFakes.FloatWindow : new ObjectGenerator<FloatWindow>(new ReflectionModel<FloatWindow>())).Seed(3);
+
+    private static ObjectGenerator<HalfWindow> Halves(bool generated) =>
+        (generated ? ExclusiveRangeFakes.HalfWindow : new ObjectGenerator<HalfWindow>(new ReflectionModel<HalfWindow>())).Seed(3);
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public void Float_cases_hold_whether_the_validator_compares_as_double_or_float(bool generated)
+    {
+        var generator = Floats(generated);
+
+        foreach (var c in generator.BoundaryCases())
+            Failing(c.Value).ShouldBeEmpty(c.Description);
+        foreach (var c in generator.InvalidCases())
+            Failing(c.Value).ShouldBe([c.Member], c.Description);
+        generator.Generate(500).ShouldAllBe(f => Failing(f).Length == 0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public void The_boundary_next_to_an_excluded_decimal_is_the_nearest_decimal(bool generated) =>
+        Floats(generated).BoundaryCases().Where(c => c.Member == nameof(FloatWindow.AboveOne)).Select(c => c.Value.AboveOne)
+            .ShouldContain(1.0000000000000000000000000001m);
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public void Halves_never_round_onto_an_excluded_limit(bool generated)
+    {
+        var halves = Halves(generated).Generate(10_000);
+
+        halves.ShouldAllBe(h => h.Percent >= (Half)0 && h.Percent < (Half)100);
+        halves.ShouldAllBe(h => h.Share > (Half)0 && h.Share < (Half)1);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public void Half_boundary_and_invalid_cases_sit_on_the_right_side(bool generated)
+    {
+        var generator = Halves(generated);
+
+        generator.BoundaryCases().Where(c => c.Member == nameof(HalfWindow.Share)).Select(c => c.Value.Share)
+            .ShouldBe([Half.BitIncrement((Half)0), Half.BitDecrement((Half)1)]);
+        generator.InvalidCases().Where(c => c.Member == nameof(HalfWindow.Share)).Select(c => c.Value.Share).ShouldBe([(Half)0, (Half)1]);
     }
 
     [Test]

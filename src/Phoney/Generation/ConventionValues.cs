@@ -469,7 +469,11 @@ public static class ConventionValues
         if (typeof(T) == typeof(decimal))
             return T.CreateSaturating(DecimalInRange(scope, (decimal)Math.Max(min, -7.9e28), (decimal)Math.Min(max, 7.9e28), range));
 
-        if (typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half))
+        if (typeof(T) == typeof(float))
+            return T.CreateSaturating(Narrow<float>(FractionalInRange(scope, range), range));
+        if (typeof(T) == typeof(Half))
+            return T.CreateSaturating(Narrow<Half>(FractionalInRange(scope, range), range));
+        if (typeof(T) == typeof(double))
             return T.CreateSaturating(FractionalInRange(scope, range));
 
         // Integers: whole numbers inside the range and inside the type (CreateSaturating maps ±∞ to the type's limits).
@@ -500,6 +504,24 @@ public static class ConventionValues
             return value;
         // Rounding landed on an excluded limit: the drawn value is in [min, max), so only an excluded minimum needs a step inside.
         return range.MinExclusive && drawn <= min ? Math.BitIncrement(min) : drawn;
+    }
+
+    /// <summary>
+    /// <paramref name="value"/> (inside <paramref name="range"/>) as a <typeparamref name="TFloat"/>, moved one representable step inside when the conversion rounds it onto or
+    /// past a limit, compared as a <see cref="double"/> and as a <typeparamref name="TFloat"/> (a <c>[Range]</c> with a float operand converts its limits too). Draws nothing.
+    /// </summary>
+    private static TFloat Narrow<TFloat>(double value, NumericRange range)
+        where TFloat : IFloatingPointIeee754<TFloat>
+    {
+        var narrowed = TFloat.CreateSaturating(value);
+        var (low, high) = (TFloat.CreateSaturating(range.Min), TFloat.CreateSaturating(range.Max));
+        var asDouble = double.CreateSaturating(narrowed);
+        // Conversion is monotonic, so the value is at most at the converted limit, and one step is enough.
+        if (range.MinExclusive ? narrowed <= low || asDouble <= range.Min : narrowed < low || asDouble < range.Min)
+            return TFloat.BitIncrement(narrowed);
+        if (range.MaxExclusive ? narrowed >= high || asDouble >= range.Max : narrowed > high || asDouble > range.Max)
+            return TFloat.BitDecrement(narrowed);
+        return narrowed;
     }
 
     /// <summary>
