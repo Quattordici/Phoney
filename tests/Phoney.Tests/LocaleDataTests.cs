@@ -55,6 +55,22 @@ public sealed class LocaleDataTests
     }
 
     [Test]
+    [MethodDataSource(typeof(TestLocales), nameof(TestLocales.All))]
+    public void No_locale_value_has_a_run_of_spaces(string locale)
+    {
+        // faker.js has a few ("fort lover  🛃" from a bio pattern, "Búdkova  cesta"); the data compiler collapses them, as nothing in the data uses two spaces on purpose.
+        var data = new Faker(locale).Data;
+        for (var key = 0; key < DataKeys.Count; key++)
+        {
+            if (data.Get(DataKeys.Paths[key]) is StringsEntry strings)
+            {
+                foreach (var value in strings.Values)
+                    value.ShouldNotContain("  ", customMessage: $"{locale}: '{DataKeys.Paths[key]}'");
+            }
+        }
+    }
+
+    [Test]
     public void Fallback_is_resolved_per_entry_group_like_faker_js()
     {
         // de_AT defines its own person.first_name group, so none of it may come from de or en.

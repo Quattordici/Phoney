@@ -56,7 +56,7 @@ internal static class LocaleReader
                     Flatten(group, path + "." + child.Name, child.Value, leaves, code);
                 break;
             case JsonValueKind.String:
-                leaves.Add(path, new LeafEntry(path, group, EntryKind.Strings) { Strings = [value.GetString()!] });
+                leaves.Add(path, new LeafEntry(path, group, EntryKind.Strings) { Strings = [Clean(value.GetString()!)] });
                 break;
             case JsonValueKind.Array:
                 leaves.Add(path, FlattenArray(group, path, value, code));
@@ -71,7 +71,7 @@ internal static class LocaleReader
     {
         var items = array.EnumerateArray().ToList();
         if (items.Count == 0 || items.All(i => i.ValueKind == JsonValueKind.String))
-            return new LeafEntry(path, group, EntryKind.Strings) { Strings = items.Select(i => i.GetString()!).ToList() };
+            return new LeafEntry(path, group, EntryKind.Strings) { Strings = items.Select(i => Clean(i.GetString()!)).ToList() };
 
         if (items.All(i => i.ValueKind == JsonValueKind.Number))
             return new LeafEntry(path, group, EntryKind.Ints) { Ints = items.Select(i => i.GetInt32()).ToList() };
@@ -82,7 +82,7 @@ internal static class LocaleReader
             {
                 return new LeafEntry(path, group, EntryKind.Weighted)
                 {
-                    Strings = items.Select(i => i.GetProperty("value").GetString()!).ToList(),
+                    Strings = items.Select(i => Clean(i.GetProperty("value").GetString()!)).ToList(),
                     Weights = items.Select(i => i.GetProperty("weight").GetInt32()).ToList(),
                 };
             }
@@ -138,6 +138,24 @@ internal static class LocaleReader
     /// <summary>Whether an object key is a name (as opposed to data such as a MIME type).</summary>
     private static bool IsIdentifier(string name) => name.Length > 0 && name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
 
+    /// <summary>
+    /// Collapses runs of spaces into one: faker.js has a few by mistake (<c>"{{word.noun}} {{person.bio_supporter}}  {{internet.emoji}}"</c>, <c>"Búdkova  cesta"</c>) and
+    /// nothing uses them on purpose. Single leading spaces stay: suffixes such as <c>" do Norte"</c> are joined to the word before them.
+    /// </summary>
+    private static string Clean(string value)
+    {
+        if (!value.Contains("  ", StringComparison.Ordinal))
+            return value;
+        var text = new System.Text.StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c != ' ' || text.Length == 0 || text[^1] != ' ')
+                text.Append(c);
+        }
+
+        return text.ToString();
+    }
+
     /// <summary>Whether an object is a <c>{ value, weight }</c> pair.</summary>
     private static bool IsWeighted(JsonElement item)
     {
@@ -148,7 +166,7 @@ internal static class LocaleReader
     /// <summary>A JSON scalar as text; fails for nested values.</summary>
     private static string Scalar(JsonElement value, string where) => value.ValueKind switch
     {
-        JsonValueKind.String => value.GetString()!,
+        JsonValueKind.String => Clean(value.GetString()!),
         JsonValueKind.Number => value.GetRawText(),
         JsonValueKind.True => "true",
         JsonValueKind.False => "false",
