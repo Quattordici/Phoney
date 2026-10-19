@@ -23,6 +23,12 @@ public sealed class Employee
 
 public sealed record Pilot(string Callsign, int Hours);
 
+public sealed class LogEntry
+{
+    public DateTimeOffset At { get; set; }
+    public DateTime Logged { get; set; }
+}
+
 /// <summary><c>WithFeed</c> fills objects from the rows of a CSV or JSON data source.</summary>
 public sealed class DataFeedTests
 {
@@ -206,6 +212,37 @@ public sealed class DataFeedTests
         Should.Throw<InvalidOperationException>(() => DataFeed.FromJson("{}")).Message.ShouldContain("array");
         Should.Throw<InvalidOperationException>(() => DataFeed.FromJson("""[{"a":{"b":1}}]""")).Message.ShouldContain("flat");
         Should.Throw<ArgumentNullException>(() => Fake.For<Employee>().WithFeed(null!));
+    }
+
+    [Test]
+    public void Moments_without_an_offset_are_utc_and_moments_with_one_are_the_same_on_every_machine()
+    {
+        var feed = DataFeed.FromCsv("At,Logged\n2024-01-01T10:00:00,2024-01-01T10:00:00+02:00\n");
+
+        var entry = Fake.For<LogEntry>().WithFeed(feed).Generate();
+
+        entry.At.ShouldBe(new DateTimeOffset(2024, 1, 1, 10, 0, 0, TimeSpan.Zero));
+        entry.Logged.ShouldBe(new DateTime(2024, 1, 1, 8, 0, 0, DateTimeKind.Utc));
+        entry.Logged.Kind.ShouldBe(DateTimeKind.Utc);
+    }
+
+    [Test]
+    public void A_number_that_is_not_a_value_of_the_enum_is_an_error()
+    {
+        Fake.For<Employee>().WithFeed(DataFeed.FromCsv("Level\n1\n"), ignoreUnknownColumns: true).Generate().Level.ShouldBe(Seniority.Senior);
+
+        var message = Should.Throw<InvalidOperationException>(() => Fake.For<Employee>().WithFeed(DataFeed.FromCsv("Level\n7\n")).Generate()).Message;
+
+        message.ShouldContain("'7'");
+        message.ShouldContain("Junior, Senior");
+    }
+
+    [Test]
+    public void Booleans_may_have_spaces_around_them_like_numbers()
+    {
+        var employees = Fake.For<Employee>().WithFeed(DataFeed.FromCsv("Age, Active\n36, true\n41, no\n")).Generate(2);
+
+        employees.Select(e => (e.Age, e.Active)).ShouldBe([(36, true), (41, false)]);
     }
 
     [Test]

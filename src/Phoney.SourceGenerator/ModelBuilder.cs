@@ -359,7 +359,7 @@ internal sealed class ModelBuilder
         }
 
         if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, Rank: 1 })
-            return $"{s}.Bytes()";
+            return constraints is null ? $"{s}.Bytes()" : $"{s}.Bytes({constraints})";
         if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } memory && memory.TypeArguments[0].SpecialType == SpecialType.System_Byte &&
             memory.OriginalDefinition.ToDisplayString() is "System.Memory<T>" or "System.ReadOnlyMemory<T>")
         {

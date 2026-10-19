@@ -28,6 +28,47 @@ public sealed class ExportRow
     public ExportAddress Home { get; set; } = null!;
 }
 
+[Flags]
+public enum ExportAccess { None = 0, Read = 1, Write = 2 }
+
+/// <summary>A member of every scalar type the writers write.</summary>
+public sealed class EveryScalar
+{
+    public string Text { get; set; } = "";
+    public char Letter { get; set; }
+    public bool Flag { get; set; }
+    public byte Byte { get; set; }
+    public sbyte SByte { get; set; }
+    public short Short { get; set; }
+    public ushort UShort { get; set; }
+    public int Int { get; set; }
+    public uint UInt { get; set; }
+    public long Long { get; set; }
+    public ulong ULong { get; set; }
+    public float Single { get; set; }
+    public double Double { get; set; }
+    public decimal Decimal { get; set; }
+    public Half Half { get; set; }
+    public Int128 Int128 { get; set; }
+    public UInt128 UInt128 { get; set; }
+    public System.Numerics.BigInteger Big { get; set; }
+    public nint NInt { get; set; }
+    public nuint NUInt { get; set; }
+    public Guid Guid { get; set; }
+    public DateTime DateTime { get; set; }
+    public DateTimeOffset DateTimeOffset { get; set; }
+    public DateOnly DateOnly { get; set; }
+    public TimeOnly TimeOnly { get; set; }
+    public TimeSpan TimeSpan { get; set; }
+    public Uri Uri { get; set; } = null!;
+    public Rune Rune { get; set; }
+    public System.Net.IPAddress Ip { get; set; } = null!;
+    public Version Version { get; set; } = null!;
+    public ExportTier Tier { get; set; }
+    public ExportAccess Access { get; set; }
+    public int? Maybe { get; set; }
+}
+
 [FakeFor<ExportRow>]
 public static partial class ExportFakes;
 
@@ -71,6 +112,28 @@ public sealed class DataExportTests
 
         ShouldMatchScalars(back, expected);
         expected.Select(r => r.Note).ShouldContain(AwkwardNote);
+    }
+
+    [Test]
+    public void Every_scalar_type_that_is_written_reads_back_as_the_same_value()
+    {
+        var expected = Writer().Generate(20).Select(e => JsonSerializer.Serialize(e, AsText));
+
+        var reader = Fake.For<EveryScalar>().Seed(99);
+        foreach (var feed in new[] { DataFeed.FromCsv(Writer().ToCsv(20)), DataFeed.FromJson(Writer().ToJson(20)) })
+            reader.WithFeed(feed).Generate(20).Select(e => JsonSerializer.Serialize(e, AsText)).ShouldBe(expected);
+
+        static ObjectGenerator<EveryScalar> Writer() => Fake.For<EveryScalar>().Seed(5).With(x => x.Access, ExportAccess.Read | ExportAccess.Write);
+    }
+
+    /// <summary>Serializes the types System.Text.Json has no converter for as text, so the comparison sees every member.</summary>
+    private static readonly JsonSerializerOptions AsText = new() { Converters = { new ToStringConverter<Rune>(), new ToStringConverter<System.Net.IPAddress>(), new ToStringConverter<System.Numerics.BigInteger>(), new ToStringConverter<nint>(), new ToStringConverter<nuint>() } };
+
+    private sealed class ToStringConverter<TValue> : System.Text.Json.Serialization.JsonConverter<TValue>
+    {
+        public override TValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => throw new NotSupportedException();
+
+        public override void Write(Utf8JsonWriter writer, TValue value, JsonSerializerOptions options) => writer.WriteStringValue(value?.ToString());
     }
 
     [Test]

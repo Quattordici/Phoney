@@ -554,7 +554,7 @@ string json = Fake.For<Customer>().ToJson(10);                   // also WriteJs
 string csv = Fake.For<Customer>().ToCsv(100, delimiter: ';', columns: ["Id", "Email", "Country"]);
 ```
 
-- **One row per object**, picked by position (or by seed and position), so item *n* is the same however you generate. **Columns fill members by name**, ignoring case, spaces and underscores (`first_name` fills `FirstName`), constructor parameters included, converted with the invariant culture.
+- **One row per object**, picked by position (or by seed and position), so item *n* is the same however you generate. **Columns fill members by name**, ignoring case, spaces and underscores (`first_name` fills `FirstName`), constructor parameters included, converted with the invariant culture. A `DateTimeOffset` without an offset is UTC and a `DateTime` with one becomes UTC, so a feed reads the same on every machine; an enum takes a name or the number of a defined value.
 - **Strict about mistakes**: an unmatched column (unless `ignoreUnknownColumns: true`), a value that doesn't fit (the message names the row, column, value and type), ragged rows, duplicate columns and unterminated quotes throw when the feed is read or first used, not mid-run.
 - **Precedence**: a rule for the member wins over the feed, and the feed over conventions. Members without a column are generated independently of the row, so add the columns that must agree. A generator with a feed can't be nested.
 - **Writing** gives one column per readable scalar member (nested objects and collections are left out) in UTF-8, with invariant, round-trip formats, so `DataFeed.FromCsvFile` reads the values back. CSV follows RFC 4180, and JSON is an array of flat objects.
@@ -565,11 +565,11 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 
 | Annotation | Effect |
 |---|---|
-| `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` | string length; element count for collections |
-| `[Range]` | numbers and dates within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`); `MinimumIsExclusive`/`MaximumIsExclusive` leave the limit out, a decimal range narrower than 0.01 gets more decimals, and a range with no value of the member's type inside throws when generating |
-| `[RegularExpression]` | a value matching the pattern |
-| `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | a value of that format, whatever the member is called |
-| `[AllowedValues]`, `[DeniedValues]` | one of / none of the listed values |
+| `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` | string length; element count for collections; length of `byte[]`. When several apply, the strictest limits win; an email that has to be shortened or lengthened stays an email |
+| `[Range]` | numbers, dates, times of day and durations within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`, `[Range(typeof(TimeOnly), "09:00", "17:00")]`), and numbers as text for a string or as a character for a `char` (`[Range('a', 'f')]`); `MinimumIsExclusive`/`MaximumIsExclusive` leave the limit out, a decimal range narrower than 0.01 gets more decimals, and a range with no value of the member's type inside throws when generating |
+| `[RegularExpression]` | a value matching the pattern: classes, groups (also named), alternation, quantifiers, anchors and `\p{L}`/`\p{Lu}`/`\p{Ll}`/`\p{N}`; with lookarounds (`(?=.*\d)`) values are generated until one matches. A pattern Phoney can't generate (backreferences, other escapes) throws with the pattern in the message |
+| `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | a value of that format, whatever the member is called, also with `WithNameConventions(false)` |
+| `[AllowedValues]`, `[DeniedValues]` | one of / none of the listed values (for enums also their names); when the denied values leave nothing to pick, generating throws |
 | `[Required]` | never `null` (even with `NullProbability`) and never empty |
 
 ### Invalid and boundary data

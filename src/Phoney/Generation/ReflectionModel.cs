@@ -310,7 +310,7 @@ internal sealed class ReflectionTypeModel : IFakeModel
             return s => ConventionValues.Boxed(s, type, category, convention, constraints);
 
         if (type == typeof(byte[]))
-            return s => s.Bytes();
+            return constraints is null ? static s => s.Bytes() : s => s.Bytes(constraints);
         if (type == typeof(Memory<byte>))
             return static s => new Memory<byte>(s.Bytes());
         if (type == typeof(ReadOnlyMemory<byte>))

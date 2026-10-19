@@ -32,6 +32,20 @@ internal static class ConstraintReader
             parts[key] = value;
         }
 
+        // Several length annotations all apply, so the strictest limits win, whatever order they are written in.
+        int? minLength = null, maxLength = null;
+        void Min(int value)
+        {
+            minLength = minLength is { } current && current > value ? current : value;
+            Set("MinLength", Int(minLength.Value));
+        }
+
+        void Max(int value)
+        {
+            maxLength = maxLength is { } current && current < value ? current : value;
+            Set("MaxLength", Int(maxLength.Value));
+        }
+
         string? format = null;
         var required = false;
 
@@ -42,27 +56,27 @@ internal static class ConstraintReader
             {
                 case Ns + "StringLengthAttribute":
                     if (args.Length == 1 && args[0].Value is int max)
-                        Set("MaxLength", Int(max));
+                        Max(max);
                     foreach (var named in attribute.NamedArguments)
                     {
                         if (named.Key == "MinimumLength" && named.Value.Value is int min && min > 0)
-                            Set("MinLength", Int(min));
+                            Min(min);
                     }
 
                     break;
                 case Ns + "MaxLengthAttribute":
-                    if (args.Length == 1 && args[0].Value is int maxLength && maxLength > 0)
-                        Set("MaxLength", Int(maxLength));
+                    if (args.Length == 1 && args[0].Value is int maxLengthValue && maxLengthValue > 0)
+                        Max(maxLengthValue);
                     break;
                 case Ns + "MinLengthAttribute":
-                    if (args.Length == 1 && args[0].Value is int minLength)
-                        Set("MinLength", Int(minLength));
+                    if (args.Length == 1 && args[0].Value is int minLengthValue)
+                        Min(minLengthValue);
                     break;
                 case Ns + "LengthAttribute":
                     if (args.Length == 2 && args[0].Value is int lower && args[1].Value is int upper)
                     {
-                        Set("MinLength", Int(lower));
-                        Set("MaxLength", Int(upper));
+                        Min(lower);
+                        Max(upper);
                     }
 
                     break;

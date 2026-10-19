@@ -502,7 +502,11 @@ public sealed class FakeScope
         return dictionary;
     }
 
-    /// <summary>Returns <paramref name="length"/> random bytes (used for <c>byte[]</c> members).</summary>
+    /// <summary>Returns 16 random bytes, or as many as the member's <c>[MinLength]</c>/<c>[MaxLength]</c>/<c>[Length]</c> allow nearest to 16 (used for <c>byte[]</c> members).</summary>
+    public byte[] Bytes(MemberConstraints? constraints) =>
+        Bytes(constraints is null ? 16 : Math.Clamp(16, constraints.MinLength ?? 0, Math.Max(constraints.MinLength ?? 0, constraints.MaxLength ?? int.MaxValue)));
+
+    /// <summary>Returns <paramref name="length"/> random bytes.</summary>
     public byte[] Bytes(int length = 16)
     {
         var bytes = new byte[length];
