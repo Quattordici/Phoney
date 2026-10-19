@@ -33,37 +33,47 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>The model the generator runs against; <see cref="DataExport"/> reads the members of the objects through it.</summary>
     internal FakeModel<T> Model => _model;
     private readonly Config _config;
-    private readonly State _state = new();
+    private readonly State _state;
 
     /// <summary>Creates a generator over an explicit model (source-generated models use this constructor).</summary>
     public ObjectGenerator(FakeModel<T> model) : this(model ?? throw new ArgumentNullException(nameof(model)), Config.Default)
     {
     }
 
-    private ObjectGenerator(FakeModel<T> model, Config config)
+    private ObjectGenerator(FakeModel<T> model, Config config, State? state = null)
     {
         _model = model;
         _config = config;
+        _state = state ?? new State(null);
     }
 
+    /// <summary>Whether the compiled rules hold nothing of one generator instance (unique sets, rule usage, a seed-dependent feed order), so copies that only change run settings can share them.</summary>
+    private bool CompiledIsShareable => _config.Unique.IsEmpty && !_config.Verify && _config.Feed is null;
+
+    /// <summary>A copy with fresh per-instance state (positions, random base seed) that reuses the rules this generator already compiled.</summary>
+    internal ObjectGenerator<T> Fresh() => new(_model, _config, new State(CompiledIsShareable ? _state : null));
+
+    /// <summary>Like <see cref="Derive"/> for settings the compiled rules don't depend on (seed, locale, dates).</summary>
+    private ObjectGenerator<T> DeriveRun(Config config) => new(_model, config, new State(CompiledIsShareable ? _state : null));
+
     /// <summary>Uses <paramref name="locale"/> instead of <see cref="Fake.Locale"/>.</summary>
-    public ObjectGenerator<T> Locale(string locale) => Derive(_config with { Locale = Locales.Get(locale).Code });
+    public ObjectGenerator<T> Locale(string locale) => DeriveRun(_config with { Locale = Locales.Get(locale).Code });
 
     /// <summary>
     /// Makes generation reproducible: the same seed always yields the same sequence of objects. Relative dates use
     /// <see cref="Faker.DefaultSeededReferenceDate"/> unless <see cref="ReferenceDate"/> is set, so they are stable over time.
     /// </summary>
-    public ObjectGenerator<T> Seed(long seed) => Derive(_config with { Seed = seed });
+    public ObjectGenerator<T> Seed(long seed) => DeriveRun(_config with { Seed = seed });
 
     /// <summary>Sets the point in time relative dates are computed from (default: now, or a fixed date when seeded).</summary>
-    public ObjectGenerator<T> ReferenceDate(DateTimeOffset referenceDate) => Derive(_config with { ReferenceDate = referenceDate });
+    public ObjectGenerator<T> ReferenceDate(DateTimeOffset referenceDate) => DeriveRun(_config with { ReferenceDate = referenceDate });
 
     /// <summary>
     /// Reads "now" for relative dates from <paramref name="timeProvider"/> (e.g. a <c>FakeTimeProvider</c>), also when
     /// seeded. An explicit <see cref="ReferenceDate"/> takes precedence.
     /// </summary>
     public ObjectGenerator<T> TimeProvider(TimeProvider timeProvider) =>
-        Derive(_config with { TimeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) });
+        DeriveRun(_config with { TimeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) });
 
     /// <summary>Sets a member to a fixed value.</summary>
     public ObjectGenerator<T> With<TValue>(Expression<Func<T, TValue>> member, TValue value) =>
@@ -1017,6 +1027,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>Binds the rules (by member name) to the model's member indices and validates them.</summary>
     private Compiled Compile()
     {
+        var registrations = Registrations.Current; // read first: a registration made while compiling makes the result stale, never wrongly current
         var members = _model.Members;
         var slots = new RuleSlot?[members.Count];
         var dependent = new List<(int Member, Func<Faker, T, object?> Rule)>();
@@ -1132,7 +1143,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
             Usage = usage,
         };
-        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries);
+        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries, registrations);
     }
 
     /// <summary>
@@ -1391,13 +1402,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     }
 
     /// <summary>Rules bound to member indices, plus rules that run after creation; <paramref name="ObjectRetries"/> is the attempt limit of unique identity members (0 when there are none).</summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries);
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, Registrations Registrations);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false);
 
     /// <summary>Mutable per-instance state; derived generators start fresh.</summary>
-    private sealed class State
+    private sealed class State(State? shared)
     {
         private long _next;
 
@@ -1408,11 +1419,26 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
         private Compiled? _compiled;
 
-        /// <summary>Rules compiled against the model on first use.</summary>
-        public Compiled? Compiled => Volatile.Read(ref _compiled);
+        /// <summary>Rules compiled against the model on first use (by this generator or the one it shares compiled rules with).</summary>
+        public Compiled? Compiled
+        {
+            get
+            {
+                if (Volatile.Read(ref _compiled) is { } own)
+                    return own;
+                // Rules compiled by the generator this one was copied from, while the app-wide registrations are still the ones they were compiled with.
+                return shared?.Compiled is { } inherited && inherited.Registrations == Registrations.Current
+                    ? Interlocked.CompareExchange(ref _compiled, inherited, null) ?? inherited
+                    : null;
+            }
+        }
 
         /// <summary>Stores <paramref name="compiled"/> unless another thread compiled first, and returns the one every run shares (so uniqueness and rule usage are tracked in one place).</summary>
-        public Compiled Publish(Compiled compiled) => Interlocked.CompareExchange(ref _compiled, compiled, null) ?? compiled;
+        public Compiled Publish(Compiled compiled)
+        {
+            shared?.Publish(compiled); // so later copies of the same generator reuse it
+            return Interlocked.CompareExchange(ref _compiled, compiled, null) ?? compiled;
+        }
 
         /// <summary>Reserves <paramref name="count"/> consecutive item indices.</summary>
         public long NextIndex(int count) => Interlocked.Add(ref _next, count) - count;
@@ -1541,4 +1567,10 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             (member == "Values" && owner.IsGenericType && owner.GetGenericTypeDefinition() is var d && (d == typeof(Dictionary<,>) || d == typeof(IDictionary<,>) || d == typeof(IReadOnlyDictionary<,>)))
             || (member == "Value" && Nullable.GetUnderlyingType(owner) is not null);
     }
+}
+
+/// <summary>The app-wide registrations a generator's rules were compiled with (compared by reference: they are immutable snapshots).</summary>
+internal readonly record struct Registrations(object Conventions, object Subtypes, object Generators)
+{
+    public static Registrations Current => new(FakeConventions.All, FakeSubtypes.All, FakeGenerators.All);
 }

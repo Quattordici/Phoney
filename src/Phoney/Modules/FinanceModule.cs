@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Phoney.Data;
@@ -94,9 +95,12 @@ public sealed class FinanceModule : FakerModule
     /// <summary>Returns a card issuer the locale has number formats for, or any issuer (with its built-in format) when the locale has none.</summary>
     public CardIssuer CreditCardIssuer()
     {
-        var available = CardIssuers.Where(c => Faker.Data.Has(c.Key)).ToArray();
+        // The faker's data never changes, so the issuers it has formats for are found once.
+        var available = _availableIssuers ??= CardIssuers.Where(c => Faker.Data.Has(c.Key)).ToArray();
         return Random.Element(available.Length > 0 ? available : CardIssuers).Issuer; // without locale formats, every issuer has a built-in one
     }
+
+    private (CardIssuer Issuer, int Key, string Default)[]? _availableIssuers;
 
     /// <summary>Returns a credit card number with a valid Luhn check digit, from a random issuer unless one is given.</summary>
     public string CreditCardNumber(CardIssuer? issuer = null)
@@ -104,8 +108,13 @@ public sealed class FinanceModule : FakerModule
         if (issuer is { } requested && !Enum.IsDefined(requested))
             throw new ArgumentOutOfRangeException(nameof(issuer), requested, $"{requested} is not a {nameof(CardIssuer)}.");
         var chosen = issuer ?? CreditCardIssuer();
-        var (_, key, fallback) = CardIssuers.First(c => c.Issuer == chosen);
-        return FromCardFormat(Faker.TryPick(key) ?? fallback);
+        foreach (var (candidate, key, fallback) in CardIssuers)
+        {
+            if (candidate == chosen)
+                return FromCardFormat(Faker.TryPick(key) ?? fallback);
+        }
+
+        throw new UnreachableException($"{chosen} has no entry in {nameof(CardIssuers)}.");
     }
 
     /// <summary>

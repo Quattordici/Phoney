@@ -109,6 +109,18 @@ public sealed class FakeGeneratorsTests
     }
 
     [Test]
+    public void The_facade_sees_registrations_made_between_two_calls()
+    {
+        Fake.One<Manifest>().Main.Sku.ShouldNotBe("APP"); // the facade keeps the rules it compiled for Manifest
+        With(g => g.Add(Sku("APP")), () =>
+        {
+            Fake.One<Manifest>().Main.Sku.ShouldBe("APP");
+            Fake.ForGenerated<Manifest>().Generate().Main.Sku.ShouldBe("APP");
+        });
+        Fake.One<Manifest>().Main.Sku.ShouldNotBe("APP");
+    }
+
+    [Test]
     public void An_interface_can_use_the_generator_of_a_subtype() =>
         With(g => g.Add<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 4.5)), () =>
             Fake.For<Manifest>().Generate().Badge.ShouldBeOfType<Circle>().Radius.ShouldBe(4.5));

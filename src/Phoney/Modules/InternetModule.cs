@@ -1,13 +1,15 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Phoney.Data;
+using Phoney.Templates;
 
 namespace Phoney.Modules;
 
 /// <summary>Emails, usernames, URLs, IP addresses and other internet values (faker.js <c>internet</c>).</summary>
-public sealed partial class InternetModule : FakerModule
+public sealed class InternetModule : FakerModule
 {
     private static readonly string[] HttpMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
@@ -160,70 +162,156 @@ public sealed partial class InternetModule : FakerModule
     /// <summary>Returns a URL such as <c>https://dependable-lamp.com/</c>.</summary>
     /// <param name="appendSlash">Whether to end with <c>/</c>; random when <see langword="null"/>.</param>
     /// <param name="protocol">URL scheme.</param>
-    public string Url(bool? appendSlash = null, string protocol = "https") =>
-        $"{protocol}://{DomainName()}{((appendSlash ?? Random.Bool()) ? "/" : "")}";
+    public string Url(bool? appendSlash = null, string protocol = "https")
+    {
+        var text = new TextBuilder(stackalloc char[128]);
+        text.Append(protocol);
+        text.Append("://");
+        AppendDomainName(ref text);
+        if (appendSlash ?? Random.Bool())
+            text.Append('/');
+        return text.ToStringAndDispose();
+    }
 
     /// <summary>Returns a domain name, e.g. <c>slow-timer.info</c>.</summary>
-    public string DomainName() => $"{DomainWord()}.{DomainSuffix()}";
+    public string DomainName()
+    {
+        var text = new TextBuilder(stackalloc char[128]);
+        AppendDomainName(ref text);
+        return text.ToStringAndDispose();
+    }
 
     /// <summary>Returns a top-level domain suffix, e.g. <c>com</c>.</summary>
     public string DomainSuffix() => Faker.Pick(DataKeys.InternetDomainSuffix);
 
     /// <summary>Returns the first part of a domain name, e.g. <c>close-reality</c>, built from an adjective and a noun.</summary>
-    public string DomainWord() =>
-        $"{ValidDomainWord(Faker.Word.Adjective())}-{ValidDomainWord(Faker.Word.Noun())}".ToLowerInvariant();
+    public string DomainWord()
+    {
+        var text = new TextBuilder(stackalloc char[128]);
+        AppendDomainWord(ref text);
+        return text.ToStringAndDispose();
+    }
+
+    /// <summary>Appends <see cref="DomainWord"/>, a dot and <see cref="DomainSuffix"/>.</summary>
+    private void AppendDomainName(ref TextBuilder text)
+    {
+        AppendDomainWord(ref text);
+        text.Append('.');
+        text.Append(DomainSuffix());
+    }
+
+    /// <summary>Appends an adjective and a noun as domain words, lower-cased (both are ASCII, see <see cref="ValidDomainWord"/>).</summary>
+    private void AppendDomainWord(ref TextBuilder text)
+    {
+        var start = text.Length;
+        text.Append(ValidDomainWord(Faker.Word.Adjective()));
+        text.Append('-');
+        text.Append(ValidDomainWord(Faker.Word.Noun()));
+        Ascii.ToLowerInPlace(text.Written[start..], out _);
+    }
 
     /// <summary>Returns an IPv4 or IPv6 address.</summary>
     public string Ip() => Random.Bool() ? Ipv4() : Ipv6();
 
     /// <summary>Returns an IPv4 address inside <paramref name="network"/>, e.g. <c>192.168.1.42</c> for <see cref="IPv4Network.PrivateC"/>.</summary>
-    public string Ipv4(IPv4Network network = IPv4Network.Any) => Ipv4(network switch
+    public string Ipv4(IPv4Network network = IPv4Network.Any) => network switch
     {
-        IPv4Network.Loopback => "127.0.0.0/8",
-        IPv4Network.PrivateA => "10.0.0.0/8",
-        IPv4Network.PrivateB => "172.16.0.0/12",
-        IPv4Network.PrivateC => "192.168.0.0/16",
-        IPv4Network.TestNet1 => "192.0.2.0/24",
-        IPv4Network.TestNet2 => "198.51.100.0/24",
-        IPv4Network.TestNet3 => "203.0.113.0/24",
-        IPv4Network.LinkLocal => "169.254.0.0/16",
-        IPv4Network.Multicast => "224.0.0.0/4",
-        _ => "0.0.0.0/0",
-    });
+        IPv4Network.Loopback => Ipv4(0x7F00_0000, 8), // 127.0.0.0/8
+        IPv4Network.PrivateA => Ipv4(0x0A00_0000, 8), // 10.0.0.0/8
+        IPv4Network.PrivateB => Ipv4(0xAC10_0000, 12), // 172.16.0.0/12
+        IPv4Network.PrivateC => Ipv4(0xC0A8_0000, 16), // 192.168.0.0/16
+        IPv4Network.TestNet1 => Ipv4(0xC000_0200, 24), // 192.0.2.0/24
+        IPv4Network.TestNet2 => Ipv4(0xC633_6400, 24), // 198.51.100.0/24
+        IPv4Network.TestNet3 => Ipv4(0xCB00_7100, 24), // 203.0.113.0/24
+        IPv4Network.LinkLocal => Ipv4(0xA9FE_0000, 16), // 169.254.0.0/16
+        IPv4Network.Multicast => Ipv4(0xE000_0000, 4), // 224.0.0.0/4
+        _ => Ipv4(0, 0),
+    };
 
     /// <summary>Returns an IPv4 address inside a CIDR block such as <c>10.1.0.0/16</c>.</summary>
     public string Ipv4(string cidrBlock)
     {
         ArgumentNullException.ThrowIfNull(cidrBlock);
-        var match = CidrBlock().Match(cidrBlock);
-        if (!match.Success)
+        Span<int> octets = stackalloc int[4];
+        if (!TryParseCidr(cidrBlock, octets, out var prefix))
             throw new ArgumentException($"Invalid CIDR block '{cidrBlock}'. Use the format x.x.x.x/y.", nameof(cidrBlock));
-        var prefix = int.Parse(match.Groups[5].ValueSpan, CultureInfo.InvariantCulture);
         if (prefix > 32)
             throw new ArgumentException($"Invalid CIDR block '{cidrBlock}': the prefix length must be 0-32.", nameof(cidrBlock));
 
         uint ip = 0;
-        for (var i = 1; i <= 4; i++)
+        foreach (var octet in octets)
         {
-            var octet = int.Parse(match.Groups[i].ValueSpan, CultureInfo.InvariantCulture);
             if (octet > 255)
                 throw new ArgumentException($"Invalid CIDR block '{cidrBlock}': octets must be 0-255.", nameof(cidrBlock));
             ip = (ip << 8) | (uint)octet;
         }
 
+        return Ipv4(ip, prefix);
+    }
+
+    /// <summary>A random address in <paramref name="network"/>/<paramref name="prefix"/>: one draw for the host part, written in one allocation.</summary>
+    private string Ipv4(uint network, int prefix)
+    {
         var hostMask = prefix == 0 ? uint.MaxValue : prefix == 32 ? 0u : uint.MaxValue >> prefix;
-        var address = (ip & ~hostMask) | (uint)Random.Long(0, hostMask);
-        return $"{address >> 24}.{(address >> 16) & 0xFF}.{(address >> 8) & 0xFF}.{address & 0xFF}";
+        var address = (network & ~hostMask) | (uint)Random.Long(0, hostMask);
+        Span<char> text = stackalloc char[15];
+        var length = 0;
+        for (var shift = 24; shift >= 0; shift -= 8)
+        {
+            if (shift < 24)
+                text[length++] = '.';
+            ((address >> shift) & 0xFF).TryFormat(text[length..], out var written, provider: CultureInfo.InvariantCulture);
+            length += written;
+        }
+
+        return new string(text[..length]);
+    }
+
+    /// <summary>
+    /// Reads <c>a.b.c.d/prefix</c>: four numbers of one to three ASCII digits and a prefix of one or two. The ranges are checked by the caller,
+    /// so the message can say which part is wrong.
+    /// </summary>
+    private static bool TryParseCidr(ReadOnlySpan<char> text, Span<int> octets, out int prefix)
+    {
+        prefix = 0;
+        for (var part = 0; part < 5; part++)
+        {
+            var digits = 0;
+            var value = 0;
+            while (digits < text.Length && char.IsAsciiDigit(text[digits]))
+                value = (value * 10) + (text[digits++] - '0');
+            if (digits == 0 || digits > (part < 4 ? 3 : 2))
+                return false;
+            text = text[digits..];
+            if (part < 4)
+            {
+                octets[part] = value;
+                if (text.IsEmpty || text[0] != (part < 3 ? '.' : '/'))
+                    return false;
+                text = text[1..];
+            }
+            else
+            {
+                prefix = value;
+            }
+        }
+
+        return text.IsEmpty;
     }
 
     /// <summary>Returns a full (uncompressed) IPv6 address, e.g. <c>269f:1230:73e3:318d:842b:daab:326d:897b</c>.</summary>
-    public string Ipv6()
-    {
-        var parts = new string[8];
-        for (var i = 0; i < 8; i++)
-            parts[i] = Faker.String.Hexadecimal(4, Casing.Lower, prefix: "");
-        return string.Join(':', parts);
-    }
+    public string Ipv6() =>
+        string.Create(39, Random, static (text, random) =>
+        {
+            // Eight groups of four lower-case hexadecimal digits, drawn like String.Hexadecimal(4, Casing.Lower) each.
+            for (var group = 0; group < 8; group++)
+            {
+                var start = group * 5;
+                StringModule.Fill(text.Slice(start, 4), StringModule.HexLower, random);
+                if (group < 7)
+                    text[start + 4] = ':';
+            }
+        });
 
     /// <summary>Returns a port number between 1 and 65535.</summary>
     public int Port() => Random.Int(1, 65535);
@@ -340,22 +428,58 @@ public sealed partial class InternetModule : FakerModule
     public string Jwt()
     {
         var issuedAt = Faker.Date.Recent();
-        var header = Base64Url(w =>
-        {
-            w.WriteString("alg", JwtAlgorithm());
-            w.WriteString("typ", "JWT");
-        });
-        var payload = Base64Url(w =>
-        {
-            w.WriteNumber("iat", issuedAt.ToUnixTimeSeconds());
-            w.WriteNumber("exp", Faker.Date.Soon(referenceDate: issuedAt).ToUnixTimeSeconds());
-            w.WriteNumber("nbf", Faker.Date.Anytime().ToUnixTimeSeconds());
-            w.WriteString("iss", Faker.Company.Name());
-            w.WriteString("sub", Faker.String.Uuid());
-            w.WriteString("aud", Faker.String.Uuid());
-            w.WriteString("jti", Faker.String.Uuid());
-        });
-        return $"{header}.{payload}.{Faker.String.AlphaNumeric(64)}";
+        var json = _jwtJson ??= new ArrayBufferWriter<byte>(512);
+        var writer = _jwtWriter ??= new Utf8JsonWriter(json);
+        var text = new TextBuilder(stackalloc char[512]);
+
+        StartJson(json, writer);
+        writer.WriteString("alg", JwtAlgorithm());
+        writer.WriteString("typ", "JWT");
+        AppendBase64Url(json, writer, ref text);
+        text.Append('.');
+
+        StartJson(json, writer);
+        writer.WriteNumber("iat", issuedAt.ToUnixTimeSeconds());
+        writer.WriteNumber("exp", Faker.Date.Soon(referenceDate: issuedAt).ToUnixTimeSeconds());
+        writer.WriteNumber("nbf", Faker.Date.Anytime().ToUnixTimeSeconds());
+        writer.WriteString("iss", Faker.Company.Name());
+        writer.WriteString("sub", Faker.String.Uuid());
+        writer.WriteString("aud", Faker.String.Uuid());
+        writer.WriteString("jti", Faker.String.Uuid());
+        AppendBase64Url(json, writer, ref text);
+        text.Append('.');
+
+        StringModule.Fill(text.AppendSpan(64), StringModule.DigitsAndLettersFor(Casing.Mixed), Random);
+        return text.ToStringAndDispose();
+    }
+
+    // The JSON of a token's header and claims is written into one buffer and writer per faker (a faker is used by one thread at a time).
+    private ArrayBufferWriter<byte>? _jwtJson;
+    private Utf8JsonWriter? _jwtWriter;
+
+    /// <summary>Starts a JSON object in the emptied <paramref name="json"/> buffer.</summary>
+    private static void StartJson(ArrayBufferWriter<byte> json, Utf8JsonWriter writer)
+    {
+        json.ResetWrittenCount();
+        writer.Reset(json);
+        writer.WriteStartObject();
+    }
+
+    /// <summary>Ends the JSON object and appends it in unpadded base64url (RFC 7515).</summary>
+    private static void AppendBase64Url(ArrayBufferWriter<byte> json, Utf8JsonWriter writer, ref TextBuilder text)
+    {
+        writer.WriteEndObject();
+        writer.Flush();
+        var bytes = json.WrittenSpan;
+        var start = text.Length;
+        var chars = text.AppendSpan(((bytes.Length + 2) / 3) * 4);
+        Convert.TryToBase64Chars(bytes, chars, out var written);
+        var length = written;
+        while (length > 0 && chars[length - 1] == '=')
+            length--;
+        chars[..length].Replace('+', '-');
+        chars[..length].Replace('/', '_');
+        text.Length = start + length;
     }
 
     /// <summary>Removes diacritics, transliterates non-Latin letters and encodes anything else non-ASCII in base 36, like faker.js.</summary>
@@ -407,20 +531,6 @@ public sealed partial class InternetModule : FakerModule
         return IsDomainSlug(slug) ? slug : Faker.String.Alpha(Random.Int(4, 8), Casing.Lower);
     }
 
-    /// <summary>Writes a JSON object and encodes it as base64url without padding (JWT segment).</summary>
-    private static string Base64Url(Action<Utf8JsonWriter> write)
-    {
-        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer))
-        {
-            writer.WriteStartObject();
-            write(writer);
-            writer.WriteEndObject();
-        }
-
-        return Convert.ToBase64String(buffer.WrittenSpan).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-    }
-
     /// <summary>
     /// Removes the characters that are not allowed in generated email local parts (everything but <c>A-Z a-z 0-9 . _ + -</c>). Written as a loop
     /// because the first use of a <see cref="Regex"/> in a process costs more than the whole first email.
@@ -464,9 +574,6 @@ public sealed partial class InternetModule : FakerModule
         return sb.ToString();
     }
 
-    /// <summary><c>a.b.c.d/prefix</c>.</summary>
-    [GeneratedRegex(@"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})$")]
-    private static partial Regex CidrBlock();
 
     /// <summary>
     /// Whether <paramref name="slug"/> is usable as a domain label: ASCII letters with inner dashes (<c>^[a-z][a-z-]*[a-z]$</c>, ignoring case). A loop: this runs for

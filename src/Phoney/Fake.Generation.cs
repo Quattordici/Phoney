@@ -103,7 +103,7 @@ public static partial class Fake
     /// </example>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static ObjectGenerator<T> For<T>() => Configured(new ObjectGenerator<T>(ModelRegistry.For<T>()));
+    public static ObjectGenerator<T> For<T>() => Configured(Plain<T>.Get(ModelRegistry.For<T>()));
 
     /// <summary>
     /// Like <see cref="For{T}"/> for a type with a source-generated model (<see cref="FakeForAttribute{T}"/>), but without any
@@ -112,7 +112,31 @@ public static partial class Fake
     /// </summary>
     /// <example><code>var order = Fake.Populate(new Order { CustomerId = 42 }); // reflection
     /// var safe = Fake.ForGenerated&lt;Order&gt;().Populate(new Order { CustomerId = 42 }); // AOT safe</code></example>
-    public static ObjectGenerator<T> ForGenerated<T>() => Configured(new ObjectGenerator<T>(ModelRegistry.Generated<T>()));
+    public static ObjectGenerator<T> ForGenerated<T>() => Configured(Plain<T>.Get(ModelRegistry.Generated<T>()));
+
+    /// <summary>A new unconfigured generator per call that reuses the rules compiled for the type while the model and the app-wide registrations stay the same.</summary>
+    private static class Plain<T>
+    {
+        private sealed record Entry(FakeModel<T> Model, object Conventions, object Subtypes, object Generators, ObjectGenerator<T> Prototype);
+
+        private static Entry? s_entry;
+
+        public static ObjectGenerator<T> Get(FakeModel<T> model)
+        {
+            var conventions = FakeConventions.All;
+            var subtypes = FakeSubtypes.All;
+            var generators = FakeGenerators.All;
+            var entry = Volatile.Read(ref s_entry);
+            if (entry is null || !ReferenceEquals(entry.Model, model) || !ReferenceEquals(entry.Conventions, conventions)
+                || !ReferenceEquals(entry.Subtypes, subtypes) || !ReferenceEquals(entry.Generators, generators))
+            {
+                entry = new Entry(model, conventions, subtypes, generators, new ObjectGenerator<T>(model));
+                Volatile.Write(ref s_entry, entry);
+            }
+
+            return entry.Prototype.Fresh();
+        }
+    }
 
     /// <summary>Applies the facade's seed, locale, reference date and clock to a new generator.</summary>
     private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator)

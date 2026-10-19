@@ -81,7 +81,7 @@ public static class ConventionValues
                 ConventionKind.Department => f.Commerce.Department(),
                 ConventionKind.ProductName => f.Commerce.ProductName(),
                 ConventionKind.ProductDescription => f.Commerce.ProductDescription(),
-                ConventionKind.Title => f.Lorem.Sentence(f.Random.Int(2, 5)).TrimEnd('.'),
+                ConventionKind.Title => f.Lorem.Title(f.Random.Int(2, 5)),
                 ConventionKind.Description => f.Lorem.Sentences(2),
                 ConventionKind.Paragraph => f.Lorem.Paragraph(),
                 ConventionKind.Word => f.Lorem.Word(),

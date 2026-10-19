@@ -36,7 +36,7 @@ public sealed class DateModule : FakerModule
     {
         ValidateRange(minYears, maxYears);
         var reference = Reference(referenceDate);
-        var bounds = _past;
+        var bounds = Volatile.Read(ref s_past);
         if (bounds is null || bounds.Reference != reference || bounds.Min != minYears || bounds.Max != maxYears)
         {
             // The calendar arithmetic is done once per reference date and range (objects ask for the same past year again and again); the draw is Between's.
@@ -44,13 +44,14 @@ public sealed class DateModule : FakerModule
             var from = (AddYears(reference, -maxYears) ?? DateTimeOffset.MinValue).ToUnixTimeMilliseconds();
             var to = (latest ?? throw NoDate(minYears, "years", "before", reference)).ToUnixTimeMilliseconds();
             // ValidateRange keeps minYears below maxYears, so from lies at least a year before to.
-            _past = bounds = new PastBounds(reference, minYears, maxYears, from, to);
+            Volatile.Write(ref s_past, bounds = new PastBounds(reference, minYears, maxYears, from, to));
         }
 
         return DateTimeOffset.FromUnixTimeMilliseconds(Random.Long(bounds.FromMs, bounds.ToMs));
     }
 
-    private PastBounds? _past;
+    // Shared by every faker (the bounds depend on their inputs only, and the record is immutable), so a new faker with the usual reference date doesn't redo them.
+    private static PastBounds? s_past;
 
     /// <summary>The range <see cref="Past(int, int, DateTimeOffset?)"/> last drew from, in Unix milliseconds.</summary>
     private sealed record PastBounds(DateTimeOffset Reference, int Min, int Max, long FromMs, long ToMs);

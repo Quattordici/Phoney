@@ -129,7 +129,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterHelpers(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        f["helpers.arrayElement"] = (faker, a) => faker.Random.Element(a.Strings(0));
+        f["helpers.arrayElement"] = (faker, a) => faker.Random.Element(a.SharedStrings(0));
         f["helpers.fromRegExp"] = (faker, a) => faker.Helpers.FromRegExp(a.String(0) ?? "");
         f["helpers.replaceSymbols"] = (faker, a) => faker.Random.ReplaceSymbols(a.String(0) ?? "");
         f["helpers.replaceSymbolWithNumber"] = (faker, a) => faker.Helpers.ReplaceSymbolWithNumber(a.String(0) ?? "");
@@ -140,7 +140,12 @@ public static partial class TemplateFunctions
     private static void RegisterNumber(ConcurrentDictionary<string, TemplateFunction> f)
     {
         var inv = CultureInfo.InvariantCulture;
-        f["number.int"] = (faker, a) => Number(faker, a, 0, int.MaxValue).ToString(CultureInfo.InvariantCulture);
+        f["number.int"] = WritingFunction.Of(static (Faker faker, TemplateArgs a, ref TextBuilder t) =>
+        {
+            Span<char> digits = stackalloc char[20];
+            Number(faker, a, 0, int.MaxValue).TryFormat(digits, out var written, provider: CultureInfo.InvariantCulture);
+            t.Append(digits[..written]);
+        });
         f["number.float"] = (faker, a) =>
         {
             var min = a.Double(0, "min") ?? 0;

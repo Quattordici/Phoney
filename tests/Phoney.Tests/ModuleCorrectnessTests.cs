@@ -115,8 +115,14 @@ public sealed class ModuleCorrectnessTests
         var vin = _faker.Vehicle.Vin();
         vin.Length.ShouldBe(17);
         vin.ShouldNotContain('I');
-        vin[8].ToString().ShouldBe(VehicleModule.VinCheckDigit(vin));
+        vin[8].ShouldBe(VehicleModule.VinCheckDigit(vin));
     }
+
+    [Test]
+    [Arguments("1M8GDM9AXKP042788", 'X')] // the ISO 3779 example of the North American check digit
+    [Arguments("11111111111111111", '1')]
+    [Arguments("5GZCZ43D13S812715", '1')]
+    public void Vin_check_digit_matches_known_vins(string vin, char check) => VehicleModule.VinCheckDigit(vin).ShouldBe(check);
 
     [Test]
     public void Ipv4_respects_networks_and_cidr_blocks()

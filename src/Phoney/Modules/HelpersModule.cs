@@ -23,16 +23,18 @@ public sealed partial class HelpersModule : FakerModule
     internal string ReplaceSymbolWithNumber(string pattern, char symbol = '#')
     {
         ArgumentNullException.ThrowIfNull(pattern);
-        return string.Create(pattern.Length, (pattern, symbol, Random), static (span, state) =>
+        return string.Create(pattern.Length, (pattern, symbol, Random), static (span, state) => FillSymbols(span, state.pattern, state.symbol, state.Random));
+    }
+
+    /// <summary>Copies <paramref name="pattern"/> into <paramref name="span"/> with <paramref name="symbol"/> a digit and <c>!</c> a digit from 2 to 9.</summary>
+    private static void FillSymbols(Span<char> span, string pattern, char symbol, SeededRandom random)
+    {
+        for (var i = 0; i < span.Length; i++)
         {
-            var (p, sym, random) = state;
-            for (var i = 0; i < span.Length; i++)
-            {
-                span[i] = p[i] == sym ? random.Digit()
-                    : p[i] == '!' ? (char)('0' + random.Int(2, 9))
-                    : p[i];
-            }
-        });
+            span[i] = pattern[i] == symbol ? random.Digit()
+                : pattern[i] == '!' ? (char)('0' + random.Int(2, 9))
+                : pattern[i];
+        }
     }
 
     /// <summary>
@@ -44,28 +46,43 @@ public sealed partial class HelpersModule : FakerModule
     {
         ArgumentNullException.ThrowIfNull(pattern);
         var expanded = ExpandLegacyRanges(pattern);
-        var filled = ReplaceSymbolWithNumber(expanded, symbol);
-        var check = LuhnCheckDigit(filled);
-        var l = filled.IndexOf('L');
-        return l < 0 ? filled : string.Concat(filled.AsSpan(0, l), check.ToString(CultureInfo.InvariantCulture), filled.AsSpan(l + 1));
+        // Filled like ReplaceSymbolWithNumber, then the first L becomes the Luhn digit of everything before a trailing L, in the same buffer.
+        return string.Create(expanded.Length, (expanded, symbol, Random), static (span, state) =>
+        {
+            FillSymbols(span, state.expanded, state.symbol, state.Random);
+            var l = span.IndexOf('L');
+            if (l >= 0)
+                span[l] = (char)('0' + LuhnCheckDigit(span[^1] == 'L' ? span[..^1] : span));
+        });
     }
 
     /// <summary>Computes the Luhn check digit for <paramref name="digits"/> (an optional trailing <c>L</c> is the placeholder).</summary>
     public static int LuhnCheckDigit(string digits)
     {
         ArgumentNullException.ThrowIfNull(digits);
-        var body = digits.EndsWith('L') ? digits[..^1] : digits;
-        var sum = LuhnSum(body + "0");
+        return LuhnCheckDigit(digits.EndsWith('L') ? digits.AsSpan(0, digits.Length - 1) : digits);
+    }
+
+    /// <summary>The digit that makes <paramref name="body"/> followed by it pass the Luhn check.</summary>
+    private static int LuhnCheckDigit(ReadOnlySpan<char> body)
+    {
+        var sum = LuhnSum(body, alternate: true); // the body followed by a 0: the 0 adds nothing and makes the body's last digit the first doubled one
         return sum == 0 ? 0 : 10 - sum;
     }
 
     /// <summary>Whether <paramref name="digits"/> (spaces and dashes ignored) passes the Luhn check.</summary>
-    public static bool LuhnCheck(string digits) => LuhnSum(digits) == 0;
+    public static bool LuhnCheck(string digits)
+    {
+        ArgumentNullException.ThrowIfNull(digits);
+        return LuhnSum(digits, alternate: false) == 0;
+    }
 
     /// <summary>Turns text into a URL-friendly slug: removes diacritics, replaces spaces with dashes and drops other symbols.</summary>
     public static string Slugify(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
+        if (Ascii.IsValid(text))
+            return SlugifyAscii(text);
         var decomposed = Decomposition.FormKD(text);
         var sb = new StringBuilder(decomposed.Length);
         foreach (var c in decomposed)
@@ -79,6 +96,36 @@ public sealed partial class HelpersModule : FakerModule
         }
 
         return sb.ToString();
+    }
+
+    /// <summary><see cref="Slugify"/> for ASCII text, which has nothing to decompose and no marks: the text itself when every character stays.</summary>
+    private static string SlugifyAscii(string text)
+    {
+        var keepsAll = true;
+        foreach (var c in text)
+        {
+            if (!IsSlugChar(c))
+            {
+                keepsAll = false;
+                break;
+            }
+        }
+
+        if (keepsAll)
+            return text;
+        Span<char> slug = text.Length <= 256 ? stackalloc char[text.Length] : new char[text.Length];
+        var length = 0;
+        foreach (var c in text)
+        {
+            if (c == ' ')
+                slug[length++] = '-';
+            else if (IsSlugChar(c))
+                slug[length++] = c;
+        }
+
+        return new string(slug[..length]);
+
+        static bool IsSlugChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' or '-';
     }
 
     /// <summary>Returns <paramref name="factory"/>'s result with the given <paramref name="probability"/>, otherwise <see langword="default"/>.</summary>
@@ -162,6 +209,9 @@ public sealed partial class HelpersModule : FakerModule
     /// </summary>
     private string ExpandLegacyRanges(string pattern)
     {
+        // Each form needs a brace or a bracket, and most card formats have neither: no regex runs for them.
+        if (pattern.AsSpan().IndexOfAny('{', '[') < 0)
+            return pattern;
         pattern = RangeRepeat().Replace(pattern, m =>
         {
             var (min, max) = Ordered(int.Parse(m.Groups[2].ValueSpan, CultureInfo.InvariantCulture), int.Parse(m.Groups[3].ValueSpan, CultureInfo.InvariantCulture));
@@ -178,10 +228,9 @@ public sealed partial class HelpersModule : FakerModule
     }
 
     /// <summary>Luhn checksum modulo 10, ignoring spaces and dashes.</summary>
-    private static int LuhnSum(string digits)
+    private static int LuhnSum(ReadOnlySpan<char> digits, bool alternate)
     {
         var sum = 0;
-        var alternate = false;
         for (var i = digits.Length - 1; i >= 0; i--)
         {
             var c = digits[i];
