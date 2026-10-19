@@ -143,27 +143,44 @@ public sealed class LocationModule : FakerModule
     }
 
     /// <summary>Returns a latitude in degrees between <paramref name="min"/> and <paramref name="max"/>.</summary>
-    public double Latitude(double min = -90, double max = 90, int precision = 4) => Faker.Number.Double(min, max, precision);
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="precision"/> is outside 0–15, or a limit is not a finite number.</exception>
+    public double Latitude(double min = -90, double max = 90, int precision = 4) => Degrees(min, max, precision);
 
     /// <summary>Returns a longitude in degrees between <paramref name="min"/> and <paramref name="max"/>.</summary>
-    public double Longitude(double min = -180, double max = 180, int precision = 4) => Faker.Number.Double(min, max, precision);
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="precision"/> is outside 0–15, or a limit is not a finite number.</exception>
+    public double Longitude(double min = -180, double max = 180, int precision = 4) => Degrees(min, max, precision);
+
+    /// <summary>Degrees rounded to <paramref name="precision"/> decimals, with the precision checked under its own name.</summary>
+    private double Degrees(double min, double max, int precision)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(precision);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(precision, 15);
+        return Faker.Number.Double(min, max, precision);
+    }
 
     /// <summary>Returns a random coordinate within <paramref name="radius"/> of <paramref name="origin"/> (anywhere when no origin is given).</summary>
-    /// <param name="origin">Center point.</param>
-    /// <param name="radius">Maximum distance.</param>
+    /// <param name="origin">Center point: a latitude from -90 to 90 and a longitude from -180 to 180.</param>
+    /// <param name="radius">Maximum distance; zero gives the origin.</param>
     /// <param name="isMetric">Whether <paramref name="radius"/> is in kilometers (otherwise miles).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative or not finite, or <paramref name="origin"/> is not on the globe.</exception>
     public (double Latitude, double Longitude) NearbyGpsCoordinate((double Latitude, double Longitude)? origin = null, double radius = 10, bool isMetric = false)
     {
+        if (!double.IsFinite(radius) || radius < 0)
+            throw new ArgumentOutOfRangeException(nameof(radius), radius, "The radius must be a finite distance that is not negative.");
+        if (origin is { } given && !(Math.Abs(given.Latitude) <= 90 && Math.Abs(given.Longitude) <= 180)) // also false for NaN
+            throw new ArgumentOutOfRangeException(nameof(origin), given, "The origin needs a latitude from -90 to 90 and a longitude from -180 to 180.");
         if (origin is not { } center)
             return (Latitude(), Longitude());
 
-        // Ported from faker.js: move a random distance in a random direction on a spherical approximation.
+        // Ported from faker.js: move a random distance in a random direction on a spherical approximation. The sine and cosine are PureMath's, so a seed gives the same
+        // coordinate on every platform (Math.Sin/Cos use the machine's C library).
         var angle = Faker.Number.Double(0, 2 * Math.PI, 5);
         var radiusKm = isMetric ? radius : radius * 1.60934;
         var distanceKm = Faker.Number.Double(0, radiusKm, 3) * 0.995; // 0.995 avoids float rounding past the radius
         var distanceDegrees = distanceKm / (40_000.0 / 360);
-        var latitude = (center.Latitude + (Math.Sin(angle) * distanceDegrees)) % 180;
-        var longitude = center.Longitude + (Math.Cos(angle) * distanceDegrees);
+        var turns = angle / (2 * Math.PI);
+        var latitude = (center.Latitude + (PureMath.SinTurns(turns) * distanceDegrees)) % 180;
+        var longitude = center.Longitude + (PureMath.CosTurns(turns) * distanceDegrees);
         if (Math.Abs(latitude) > 90)
         {
             latitude = (Math.Sign(latitude) * 180) - latitude;

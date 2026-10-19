@@ -11,11 +11,15 @@ public sealed class LoremModule : FakerModule
     }
 
     /// <summary>Returns one placeholder word, optionally with a length between <paramref name="minLength"/> and <paramref name="maxLength"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">A length is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="maxLength"/> is less than <paramref name="minLength"/>.</exception>
+    /// <exception cref="PhoneyDataException">No word has a matching length and <paramref name="strategy"/> is <see cref="WordLengthStrategy.Fail"/>.</exception>
     public string Word(int? minLength = null, int? maxLength = null, WordLengthStrategy strategy = WordLengthStrategy.Fail)
     {
+        WordPicker.ValidateLengths(minLength, maxLength);
         if (WordPicker.TryPick(Faker.Data.Strings(DataKeys.LoremWord), Random, minLength, maxLength, strategy, out var word))
             return word;
-        throw new PhoneyDataException($"No lorem words of length {minLength}-{maxLength} in locale '{Faker.Locale}'.");
+        throw new PhoneyDataException($"No lorem words {WordPicker.DescribeLengths(minLength, maxLength)} in locale '{Faker.Locale}'.");
     }
 
     /// <summary>Returns <paramref name="count"/> space-separated words.</summary>

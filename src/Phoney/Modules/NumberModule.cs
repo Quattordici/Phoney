@@ -152,8 +152,10 @@ public sealed class NumberModule : FakerModule
             return Math.Clamp(Math.Round(Random.Double(min, max), digits), min, max);
         }
 
-        var steps = Long((long)Math.Ceiling(min * factor), (long)Math.Floor(max * factor));
-        return Math.Round(steps / factor, digits);
+        var (first, last) = ((long)Math.Ceiling(min * factor), (long)Math.Floor(max * factor));
+        if (last < first)
+            throw new ArgumentException($"No value with {digits} decimals between {min.ToString(CultureInfo.InvariantCulture)} and {max.ToString(CultureInfo.InvariantCulture)}.", nameof(fractionDigits));
+        return Math.Round(Long(first, last) / factor, digits);
     }
 
     /// <summary>
@@ -389,13 +391,23 @@ public sealed class NumberModule : FakerModule
     }
 
     /// <summary>Returns an integer between <paramref name="min"/> and <paramref name="max"/> formatted in binary (base 2).</summary>
-    public string Binary(int min = 0, int max = 1) => Convert.ToString(Int(min, max), 2);
+    public string Binary(int min = 0, int max = 1) => InBase(Int(min, max), 2);
 
     /// <summary>Returns an integer between <paramref name="min"/> and <paramref name="max"/> formatted in octal (base 8).</summary>
-    public string Octal(int min = 0, int max = 7) => Convert.ToString(Int(min, max), 8);
+    public string Octal(int min = 0, int max = 7) => InBase(Int(min, max), 8);
 
     /// <summary>Returns an integer between <paramref name="min"/> and <paramref name="max"/> formatted in lower-case hexadecimal.</summary>
-    public string Hex(int min = 0, int max = 15) => Int(min, max).ToString("x", CultureInfo.InvariantCulture);
+    public string Hex(int min = 0, int max = 15) => InBase(Int(min, max), 16);
+
+    /// <summary>
+    /// <paramref name="value"/> in base 2, 8 or 16 with a minus sign when it is negative, as faker.js writes it (<c>-5</c> is <c>-101</c>):
+    /// <see cref="Convert.ToString(int, int)"/> would write the two's complement, <c>11111111111111111111111111111011</c>.
+    /// </summary>
+    private static string InBase(int value, int toBase)
+    {
+        var digits = Convert.ToString(Math.Abs((long)value), toBase); // through long, so int.MinValue has a magnitude
+        return value < 0 ? "-" + digits : digits;
+    }
 
     /// <summary>Returns a Roman numeral between <paramref name="min"/> and <paramref name="max"/> (1–3999).</summary>
     public string RomanNumeral(int min = 1, int max = 3999)

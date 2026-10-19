@@ -1,7 +1,7 @@
 namespace Phoney;
 
 /// <summary>
-/// The logarithm and cosine that normally distributed numbers need, written with <c>+ - * /</c>, comparisons and bit operations only. Those are exactly rounded by IEEE 754 on every
+/// The logarithm, cosine and sine that normally distributed numbers and nearby coordinates need, written with <c>+ - * /</c>, comparisons and bit operations only. Those are exactly rounded by IEEE 754 on every
 /// platform, whereas <see cref="Math.Log(double)"/> and <see cref="Math.Cos(double)"/> call the C library of the machine, which may round the last bit differently on Linux, Windows and ARM.
 /// Seeded data must be the same everywhere, so the numbers are made here. Both are accurate to a few units of the last digit, far beyond what fake data needs.
 /// </summary>
@@ -85,7 +85,13 @@ internal static class PureMath
     }
 
     /// <summary>cos(2π·<paramref name="turns"/>) for <paramref name="turns"/> in [0, 1]: the quarter turn is found exactly, and a Taylor series is summed for an angle of at most π/4.</summary>
-    public static double CosTurns(double turns)
+    public static double CosTurns(double turns) => CosSinTurns(turns).Cos;
+
+    /// <summary>sin(2π·<paramref name="turns"/>) for <paramref name="turns"/> in [0, 1], like <see cref="CosTurns"/>.</summary>
+    public static double SinTurns(double turns) => CosSinTurns(turns).Sin;
+
+    /// <summary>The cosine and sine of 2π·<paramref name="turns"/>, from the same two series.</summary>
+    private static (double Cos, double Sin) CosSinTurns(double turns)
     {
         var quarters = turns * 4; // exact: a power of two
         var quadrant = (int)quarters;
@@ -111,10 +117,10 @@ internal static class PureMath
         var sinPhi = nearEnd ? cos : sin;
         return (quadrant & 3) switch
         {
-            0 => cosPhi,
-            1 => -sinPhi,
-            2 => -cosPhi,
-            _ => sinPhi,
+            0 => (cosPhi, sinPhi),
+            1 => (-sinPhi, cosPhi),
+            2 => (-cosPhi, -sinPhi),
+            _ => (sinPhi, -cosPhi),
         };
     }
 }

@@ -32,8 +32,11 @@ public sealed class InternetModule : FakerModule
     /// <param name="lastName">Last name to base the local part on.</param>
     /// <param name="provider">Domain to use instead of a random free email provider.</param>
     /// <param name="allowSpecialCharacters">Whether the local part may contain RFC 5322 special characters such as <c>!#$%</c>.</param>
+    /// <exception cref="ArgumentException"><paramref name="provider"/> is empty or white space.</exception>
     public string Email(string? firstName = null, string? lastName = null, string? provider = null, bool allowSpecialCharacters = false)
     {
+        if (provider is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider);
         provider ??= Faker.Pick(DataKeys.InternetFreeEmail);
         var text = new Templates.TextBuilder(stackalloc char[96]);
         AppendRawUsername(firstName, lastName, ref text);
