@@ -67,7 +67,9 @@ public sealed class LocaleData
         var entry = Get(key);
         return entry switch
         {
-            null => new PhoneyDataException($"Locale '{Info.Code}' has no data for '{path}' (also checked fallback locales: {string.Join(", ", Info.Fallback)})."),
+            null => new PhoneyDataException(Info.Fallback.Count == 0
+                ? $"Locale '{Info.Code}' has no data for '{path}'."
+                : $"Locale '{Info.Code}' has no data for '{path}' (also checked fallback locales: {string.Join(", ", Info.Fallback)})."),
             { Kind: EntryKind.Unavailable } => new PhoneyDataUnavailableException($"The data for '{path}' isn't applicable to locale '{Info.Code}'."),
             _ => new PhoneyDataException($"Data '{path}' in locale '{Info.Code}' is {entry.Kind}, expected {expected}."),
         };

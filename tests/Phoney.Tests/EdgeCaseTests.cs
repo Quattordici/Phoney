@@ -196,4 +196,11 @@ public sealed class EdgeCaseTests
     [Arguments(" ")]
     public void An_email_provider_must_have_text(string provider) =>
         Should.Throw<ArgumentException>(() => Make().Internet.Email(provider: provider)).ParamName.ShouldBe("provider");
+
+    [Test]
+    public void A_missing_value_in_a_locale_without_fallback_does_not_list_an_empty_chain()
+    {
+        var error = Should.Throw<PhoneyDataException>(() => new Faker("base").Person.FirstName());
+        error.Message.ShouldBe("Locale 'base' has no data for 'person.first_name.generic'.");
+    }
 }

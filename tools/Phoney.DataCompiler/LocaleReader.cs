@@ -13,7 +13,7 @@ internal static class LocaleReader
         var fakerVersion = root.GetProperty("fakerVersion").GetString()!;
         var methods = root.GetProperty("methods").EnumerateArray().Select(m => m.GetString()!).ToList();
 
-        var locales = new List<RawLocale>();
+        var read = new List<(string Code, List<string> Fallback, Dictionary<string, string> Metadata, Dictionary<string, LeafEntry> Leaves)>();
         foreach (var locale in root.GetProperty("locales").EnumerateArray())
         {
             var code = locale.GetProperty("code").GetString()!;
@@ -34,10 +34,59 @@ internal static class LocaleReader
                 }
             }
 
-            locales.Add(new RawLocale(code, fallback, metadata, leaves));
+            read.Add((code, fallback, metadata, leaves));
         }
 
+        var byCode = read.ToDictionary(l => l.Code, l => l.Leaves, StringComparer.Ordinal);
+        var locales = read.Select(l =>
+        {
+            // The templates that can use this locale's values: its own and those of its fallback chain.
+            var joined = JoinedEntries(l.Fallback.Prepend(l.Code).Where(byCode.ContainsKey).SelectMany(code => byCode[code].Values));
+            return new RawLocale(l.Code, l.Fallback, l.Metadata, l.Leaves.ToDictionary(e => e.Key, e => TrimEnds(e.Value, joined), StringComparer.Ordinal));
+        }).ToList();
         return (fakerVersion, methods, locales);
+    }
+
+    /// <summary>
+    /// The entry groups that some template joins straight to the placeholder before it (<c>{{person.lastName}}{{location.city_suffix}}</c>, or <c>{{location.buildingNumber}}</c> by its
+    /// method name): their values start with the space or comma that separates them (<c>" aan de Rijn"</c>, <c>", 12"</c>).
+    /// </summary>
+    private static HashSet<string> JoinedEntries(IEnumerable<LeafEntry> leaves)
+    {
+        var joined = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var text in leaves.SelectMany(l => l.Strings.Concat(l.Rows.SelectMany(r => r)).OfType<string>()))
+        {
+            for (var at = text.IndexOf("}}{{", StringComparison.Ordinal); at >= 0; at = text.IndexOf("}}{{", at + 4, StringComparison.Ordinal))
+            {
+                var start = at + 4;
+                var end = start;
+                while (end < text.Length && (char.IsAsciiLetterOrDigit(text[end]) || text[end] is '_' or '.'))
+                    end++;
+                var parts = text[start..end].Split('.');
+                if (parts.Length >= 2)
+                    joined.Add(parts[0] + "." + SnakeCase(parts[1]));
+            }
+        }
+
+        return joined;
+    }
+
+    /// <summary>A faker.js method name as the name of its data (<c>buildingNumber</c> → <c>building_number</c>).</summary>
+    private static string SnakeCase(string name) => string.Concat(name.Select((c, i) => char.IsAsciiLetterUpper(c) ? (i > 0 ? "_" : "") + char.ToLowerInvariant(c) : c.ToString()));
+
+    /// <summary>
+    /// Removes the spaces faker.js has at the ends of a few values by mistake (<c>" بابل"</c>, <c>"রংপুর "</c>, and hy street suffixes, which their pattern already puts a space before).
+    /// Values of <paramref name="joined"/> entries keep a leading space, which separates them from the word they are joined to.
+    /// </summary>
+    private static LeafEntry TrimEnds(LeafEntry leaf, HashSet<string> joined)
+    {
+        var keepStart = joined.Contains(leaf.Group);
+        string Trim(string value) => keepStart ? value.TrimEnd() : value.Trim();
+        return leaf with
+        {
+            Strings = [.. leaf.Strings.Select(Trim)],
+            Rows = [.. leaf.Rows.Select(row => (IReadOnlyList<string?>)[.. row.Select(v => v is null ? null : Trim(v))])],
+        };
     }
 
     /// <summary>Flattens a value into leaves: objects become dotted paths, <c>null</c> marks unavailable data.</summary>

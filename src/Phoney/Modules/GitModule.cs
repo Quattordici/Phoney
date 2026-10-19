@@ -25,7 +25,7 @@ public sealed class GitModule : FakerModule
         return string.Create(CultureInfo.InvariantCulture, $"{date:ddd MMM} {date.Day,2} {date:HH:mm:ss yyyy} +0000");
     }
 
-    /// <summary>Returns a commit as <c>git log</c> prints it: commit, author, date and an indented message.</summary>
+    /// <summary>Returns a commit as <c>git log</c> prints it: commit, author (name and email of one person), date and an indented message.</summary>
     /// <param name="lineEnding"><c>"\n"</c> (default) or <c>"\r\n"</c>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="lineEnding"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="lineEnding"/> is neither <c>"\n"</c> nor <c>"\r\n"</c>.</exception>
@@ -36,8 +36,10 @@ public sealed class GitModule : FakerModule
             throw new ArgumentException("The line ending must be \"\\n\" or \"\\r\\n\".", nameof(lineEnding));
 
         var sha = CommitSha();
-        var author = $"{Faker.Person.FirstName()} {Faker.Person.LastName()}";
-        var email = Faker.Internet.Email();
+        var firstName = Faker.Person.FirstName();
+        var lastName = Faker.Person.LastName();
+        var author = $"{firstName} {lastName}";
+        var email = Faker.Internet.Email(firstName, lastName); // one person, as in faker.js
         var date = CommitDate();
         var message = CommitMessage();
         return string.Join(lineEnding, $"commit {sha}", $"Author: {author} <{email}>", $"Date:   {date}", "", $"    {message}", "");
