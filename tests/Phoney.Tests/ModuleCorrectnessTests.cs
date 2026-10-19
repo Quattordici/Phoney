@@ -87,6 +87,47 @@ public sealed class ModuleCorrectnessTests
         }
     }
 
+    // Expected check digits computed with python-stdnum: ean.calc_check_digit("400638133393") == "1", ("9638507") == "4".
+    [Test]
+    [Arguments("400638133393", "4006381333931")]
+    [Arguments("9638507", "96385074")]
+    public void Ean_check_digits_match_an_independent_implementation(string prefix, string expected)
+    {
+        var code = prefix.Length == 12 ? _faker.Commerce.Ean13(prefix) : _faker.Commerce.Ean8(prefix);
+        code.ShouldBe(expected);
+    }
+
+    [Test]
+    public void Ean_codes_have_the_right_length_prefix_and_check_digit()
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            var ean13 = _faker.Commerce.Ean13("40");
+            ean13.Length.ShouldBe(13);
+            ean13.ShouldStartWith("40");
+            EanCheckSum(ean13).ShouldBe(0, ean13);
+            var ean8 = _faker.Commerce.Ean8();
+            ean8.Length.ShouldBe(8);
+            EanCheckSum(ean8).ShouldBe(0, ean8);
+        }
+
+        // Weights 1 and 3 from the right-hand check digit, so the sum of a valid code is a multiple of 10.
+        static int EanCheckSum(string code) => code.Reverse().Select((c, idx) => (c - '0') * (idx % 2 == 0 ? 1 : 3)).Sum() % 10;
+    }
+
+    [Test]
+    [Arguments("12345678901234")]
+    [Arguments("12a")]
+    public void Ean_prefixes_must_be_digits_that_leave_room_for_the_check_digit(string prefix) =>
+        Should.Throw<ArgumentException>(() => _faker.Commerce.Ean13(prefix)).ParamName.ShouldBe("prefix");
+
+    [Test]
+    public void Ean_functions_are_available_in_templates()
+    {
+        _faker.Parse("{{commerce.ean13}}").ShouldMatch("^\\d{13}$");
+        _faker.Parse("{{commerce.ean8}}").ShouldMatch("^\\d{8}$");
+    }
+
     [Test]
     public void Upc_has_a_valid_check_digit()
     {

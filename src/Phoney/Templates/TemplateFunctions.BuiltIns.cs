@@ -311,6 +311,8 @@ public static partial class TemplateFunctions
         Add("commerce.productDescription", x => x.Commerce.ProductDescription());
         Add("commerce.isbn", x => x.Commerce.Isbn());
         Add("commerce.upc", x => x.Commerce.Upc());
+        Add("commerce.ean13", x => x.Commerce.Ean13());
+        Add("commerce.ean8", x => x.Commerce.Ean8());
         f["commerce.price"] = (faker, a) => faker.Commerce.PriceText(
             a.OptionString(0, "symbol", "")!, (decimal)(a.Double(0, "min") ?? 1), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2);
         f["commerce.priceText"] = f["commerce.price"];

@@ -72,7 +72,7 @@ A `Faker` groups values by topic:
 | `Location` | `Address()`, `StreetAddress()`, `City()`, `ZipCode()`, `State()`, `Country()`, `CountryCode()`, `Latitude()`, `NearbyGpsCoordinate()` |
 | `Internet` | `Email()`, `Username()`, `Url()`, `DomainName()`, `Ipv4(IPv4Network.PrivateC)`, `Ipv6()`, `Mac()`, `Password()`, `UserAgent()`, `Jwt()`, `Emoji()`, `Color()` |
 | `Phone` | `Number(PhoneStyle.International)`, `Imei()` |
-| `Company` / `Commerce` | `Name()`, `CatchPhrase()`, `ProductName()`, `Price()`, `Isbn()`, `Upc()` |
+| `Company` / `Commerce` | `Name()`, `CatchPhrase()`, `ProductName()`, `Price()`, `Isbn()`, `Upc()`, `Ean13("40")`, `Ean8()` |
 | `Finance` | `Iban()`, `Bic()`, `CreditCardNumber(CardIssuer.Visa)`, `Currency()`, `Amount()`, `RoutingNumber()`, `BitcoinAddress()` |
 | `NationalId` | `Person()`, `Company()`, `Vat()`: a Swedish personnummer, a US SSN, a Brazilian CPF… with valid check digits ([more](#national-and-tax-ids)) |
 | `Date` | `Past()`, `Future()`, `Recent()`, `Soon()`, `Between(...)`, `Birthdate(18, 65)`, `Month()`, `Weekday()` |
@@ -80,7 +80,7 @@ A `Faker` groups values by topic:
 | `String` / `Number` | `Uuid()`, `UuidV7()`, `Ulid()`, `NanoId()`, `AlphaNumeric(10)`, `Int(1, 6)`, `Decimal(0, 100, 2)`, `Normal(175, 8)`, and one call per numeric type (`Byte()`, `UShort()`, `Int128()`, `Half()`, `BigInteger(min, max)`…) |
 | `Color` | `Human()`, `Hex()`, `Rgb()` (typed, with `ToCss()`/`ToHex()`), `Hsl()`, `Lab()` |
 | `Image` | `Url(640, 480)`, `Avatar(Sex.Female)`, `AvatarGitHub()`, `DataUri()` (self-contained SVG) |
-| `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `Slugify()`, `LuhnCheck()`, `Multiple(f => …, 5)`, `UniqueValues(…, 10)` |
+| `Helpers` | `FromRegExp("[A-Z]{3}-\\d{4}")`, `Slugify()`, `LuhnCheck()`, `Multiple(() => …, 5)`, `UniqueValues(() => …, 10)` |
 | `Git` | `Branch()`, `CommitMessage()`, `CommitSha()`, `CommitDate()`, `CommitEntry()` (a commit as `git log` prints it) |
 | `Airline` | `Airline()`, `Airport()`, `Airplane()`, `FlightNumber()`, `RecordLocator()`, `Seat()` |
 | also | `Animal`, `Book`, `Music`, `Food`, `Hacker`, `Vehicle` (with valid VINs), `Science`, `Database`, `System` |
@@ -166,7 +166,7 @@ NationalIds.Register(new MyEmployeeNumbers());                       // your own
 ## Locales
 
 ```csharp
-Locales.All;                      // 77 locales with code, title, endonym, script, fallback chain
+Locales.All;                      // 76 locales plus `base`, with code, title, endonym, script, fallback chain
 new Faker("de-AT");               // de_AT → de → en → base
 new Faker(CultureInfo.CurrentCulture); // "sv-SE" → sv, "sr-Latn-RS" → sr_RS_latin
 Fake.Locale = "fr";               // default for Fake.* and generators

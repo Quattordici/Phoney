@@ -23,6 +23,20 @@ public sealed class ArgumentValidationTests
     }
 
     [Test]
+    public void Empty_value_lists_name_the_rule_and_the_member()
+    {
+        var generator = Fake.For<ArgumentHolder>();
+        Should.Throw<ArgumentException>(() => generator.WithOneOf(x => x.Name, Array.Empty<string>())).Message.ShouldStartWith("WithOneOf(x => x.Name) needs at least one value");
+        Should.Throw<ArgumentException>(() => generator.WithOneOf(x => x.Name, Array.Empty<int>(), i => i.ToString(CultureInfo.InvariantCulture))).Message.ShouldStartWith("WithOneOf(x => x.Name) needs at least one item");
+        Should.Throw<ArgumentException>(() => generator.Cycle(x => x.Name, Array.Empty<string>())).Message.ShouldStartWith("Cycle(x => x.Name) needs at least one value");
+    }
+
+    public sealed class ArgumentHolder
+    {
+        public string Name { get; set; } = "";
+    }
+
+    [Test]
     public void Prices_next_to_the_largest_decimal_do_not_overflow()
     {
         var (min, max) = (decimal.MaxValue - 1, decimal.MaxValue);

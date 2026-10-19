@@ -30,6 +30,27 @@ public sealed class TemplateAndCustomizationTests
         Should.Throw<PhoneyDataException>(() => _faker.Parse("{{nothing.here}}")).Message.ShouldContain("nothing.here");
 
     [Test]
+    [Arguments("{{person.firstNme}}", "person.firstName")]
+    [Arguments("{{persn.lastName}}", "person.lastName")]
+    [Arguments("{{person.last_name.generc}}", "person.last_name.generic")]
+    [Arguments("{{Person.FirstNme}}", "person.firstName")]
+    public void Unresolved_expressions_suggest_the_closest_name(string template, string suggestion) =>
+        Should.Throw<PhoneyDataException>(() => _faker.Parse(template)).Message.ShouldEndWith($"Did you mean '{suggestion}'?");
+
+    [Test]
+    public void Unknown_functions_suggest_the_closest_name() =>
+        Should.Throw<FormatException>(() => _faker.Parse("{{string.numerc(6)}}")).Message.ShouldEndWith("Did you mean 'string.numeric'?");
+
+    [Test]
+    public void Unknown_data_paths_suggest_the_closest_path() =>
+        Should.Throw<PhoneyDataException>(() => _faker.Pick("person.last_name.generc")).Message.ShouldBe(
+            "Unknown data path 'person.last_name.generc'. Did you mean 'person.last_name.generic'?");
+
+    [Test]
+    public void Nothing_is_suggested_when_no_name_is_close() =>
+        Should.Throw<PhoneyDataException>(() => _faker.Parse("{{nothing.here}}")).Message.ShouldNotContain("Did you mean");
+
+    [Test]
     public void Self_referencing_data_fails_and_leaves_the_depth_limit_intact()
     {
         // A lone reference nests through Evaluate, one with text around it through AppendTo.

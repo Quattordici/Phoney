@@ -152,7 +152,7 @@ public sealed partial class Faker : IFaker
     {
         ArgumentNullException.ThrowIfNull(path);
         if (!KeyRegistry.TryGetId(path, out var key))
-            throw new PhoneyDataException($"Unknown data path '{path}'.");
+            throw new PhoneyDataException($"Unknown data path '{path}'.{NameSuggestions.For(path, KeyRegistry.AllPaths())}");
         return Pick(key);
     }
 

@@ -234,7 +234,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentNullException.ThrowIfNull(values);
         if (values.Count == 0)
-            throw new ArgumentException("Provide at least one value.", nameof(values));
+            throw new ArgumentException($"WithOneOf({member}) needs at least one value to pick from.", nameof(values));
         return With(member, f => f.Random.Element(values));
     }
 
@@ -394,7 +394,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(select);
         if (source.Count == 0)
-            throw new ArgumentException("Provide at least one item.", nameof(source));
+            throw new ArgumentException($"WithOneOf({member}) needs at least one item to pick from.", nameof(source));
         return With(member, f => select(f.Random.Element(source)));
     }
 
@@ -566,7 +566,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentNullException.ThrowIfNull(values);
         if (values.Count == 0)
-            throw new ArgumentException("Provide at least one value.", nameof(values));
+            throw new ArgumentException($"Cycle({member}) needs at least one value to cycle through.", nameof(values));
         var copy = values.ToArray();
         return Sequence(member, i => copy[(int)(i % copy.Length)]);
     }
