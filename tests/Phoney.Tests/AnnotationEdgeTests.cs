@@ -29,6 +29,7 @@ public sealed class Annotated
     [RegularExpression("^(?=.*\\d)[a-z\\d]{8}$")] public string Password { get; set; } = "";
     [RegularExpression("^(?!admin)[a-z]{5}$")] public string Login { get; set; } = "";
     [RegularExpression("^\\p{Lu}\\p{Ll}{3}[\\p{N}]$")] public string Word { get; set; } = "";
+    [RegularExpression("^[a-z]{2}\\B[a-z ]{2}$")] public string Joined { get; set; } = "";
 }
 
 /// <summary>An exclusive <see cref="TimeSpan"/> range.</summary>
@@ -187,7 +188,7 @@ public sealed class AnnotationEdgeTests
         Make(true).Generate(50).Select(Describe).ShouldBe(Make(false).Generate(50).Select(Describe));
 
         static string Describe(Annotated a) =>
-            $"{a.Code} {a.Tag} {a.Note} {a.Email} {a.LongEmail} {Convert.ToHexString(a.Short)} {Convert.ToHexString(a.Long)} {a.Wait} {a.Opens:O} {a.Level} {a.Grade} {a.NotRed} {a.Phone} {a.Password} {a.Login} {a.Word}";
+            $"{a.Code} {a.Tag} {a.Note} {a.Email} {a.LongEmail} {Convert.ToHexString(a.Short)} {Convert.ToHexString(a.Long)} {a.Wait} {a.Opens:O} {a.Level} {a.Grade} {a.NotRed} {a.Phone} {a.Password} {a.Login} {a.Word} {a.Joined}";
     }
 
     [Test]
@@ -214,5 +215,8 @@ public sealed class AnnotationEdgeTests
         faker.Helpers.FromRegExp("[\\p{Lu}]{3}").ShouldMatch("^[A-Z]{3}$");
         faker.Helpers.FromRegExp("(?<y>\\d{4})-(?'m'\\d{2})").ShouldMatch("^\\d{4}-\\d{2}$");
         faker.Helpers.FromRegExp("(?<=x)ab(?<!y)").ShouldBe("ab");
+        Modules.PatternGenerator.Get("^[a-z]+$").IsExact.ShouldBeTrue(); // anchors at the ends always hold
+        Modules.PatternGenerator.Get("a\\bb").IsExact.ShouldBeFalse(); // an anchor inside can fail, so values are checked
+        Modules.PatternGenerator.Get("a|^b").IsExact.ShouldBeFalse();
     }
 }

@@ -819,7 +819,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentNullException.ThrowIfNull(instances);
         // Checked before anything is filled in: a null element must not leave the elements before it changed and the sequence moved.
-        var items = instances as IReadOnlyCollection<T> ?? [.. instances];
+        T[] items = [.. instances]; // one snapshot, so a sequence that can be read only once is still filled
         foreach (var item in items)
         {
             if (item is null)
@@ -827,8 +827,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         }
 
         var run = Start();
-        var first = _state.NextIndex(items.Count);
-        var result = new List<T>(items.Count);
+        var first = _state.NextIndex(items.Length);
+        var result = new List<T>(items.Length);
         var index = 0;
         foreach (var item in items)
             result.Add(run.Populate(item, first + index++, mode));

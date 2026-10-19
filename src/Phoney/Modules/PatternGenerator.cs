@@ -140,7 +140,7 @@ internal sealed class PatternGenerator
         private readonly string _pattern;
         private int _pos;
         private bool _ignoreCase;
-        private bool _hasLookaround;
+        private bool _hasZeroWidth; // a lookaround or an anchor inside the pattern, which generation cannot guarantee
 
         public Parser(string pattern)
         {
@@ -167,7 +167,7 @@ internal sealed class PatternGenerator
         }
 
         /// <summary>Whether the parsed pattern has no lookarounds, so its text always matches.</summary>
-        public readonly bool IsExact => !_hasLookaround;
+        public readonly bool IsExact => !_hasZeroWidth;
 
         /// <summary>Parses the whole pattern.</summary>
         public Node ParsePattern()
@@ -231,7 +231,10 @@ internal sealed class PatternGenerator
             switch (c)
             {
                 case '^' or '$':
-                    return null; // anchors produce no output
+                    // Anchors produce no output; only those at the very start or end are sure to hold.
+                    if (!(c == '^' && _pos == 1 || c == '$' && _pos == _pattern.Length))
+                        _hasZeroWidth = true;
+                    return null;
                 case '.':
                     return new SetNode(Alphanumeric);
                 case '(':
@@ -241,7 +244,7 @@ internal sealed class PatternGenerator
                     Expect(')');
                     if (!zeroWidth)
                         return inner;
-                    _hasLookaround = true;
+                    _hasZeroWidth = true;
                     return null; // a lookaround matches no text of its own
                 }
 
@@ -443,11 +446,18 @@ internal sealed class PatternGenerator
                 'p' => new SetNode(ReadCategory()),
                 'P' => new SetNode(Outside(ReadCategory())),
                 'b' when inClass => new LiteralNode("\b"),
-                'b' or 'B' or 'A' or 'z' or 'Z' or 'G' when !inClass => new LiteralNode(""), // anchors produce no output
+                'b' or 'B' or 'A' or 'z' or 'Z' or 'G' when !inClass => Anchor(), // anchors produce no output and may not hold
                 >= '1' and <= '9' or 'k' => throw Error("backreferences are not supported"),
                 _ when char.IsAsciiLetter(c) => throw Error($"the escape \\{c} is not supported"),
                 _ => new LiteralNode(c.ToString()),
             };
+        }
+
+        /// <summary>An anchor inside the pattern: no output, and generated values must be checked because it may not hold.</summary>
+        private LiteralNode Anchor()
+        {
+            _hasZeroWidth = true;
+            return new LiteralNode("");
         }
 
         /// <summary>The alphanumeric characters that are not in <paramref name="characters"/>, as negated classes are taken.</summary>
