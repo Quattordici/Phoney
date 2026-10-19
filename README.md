@@ -566,7 +566,7 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 | Annotation | Effect |
 |---|---|
 | `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` | string length; element count for collections |
-| `[Range]` | numbers and dates within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`) |
+| `[Range]` | numbers and dates within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`); `MinimumIsExclusive`/`MaximumIsExclusive` leave the limit out, and a decimal range narrower than 0.01 gets more decimals |
 | `[RegularExpression]` | a value matching the pattern |
 | `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | a value of that format, whatever the member is called |
 | `[AllowedValues]`, `[DeniedValues]` | one of / none of the listed values |
@@ -591,7 +591,7 @@ foreach (var c in Fake.For<Order>().Seed(1).BoundaryCases())                  //
 |---|---|---|
 | `[Required]` | `null`, and `""` for strings | strings: at least one character |
 | `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` | one character or element too few / too many | exactly the minimum / maximum |
-| `[Range]` on numbers and dates | one unit (a day for dates) below the minimum / above the maximum | the minimum / the maximum |
+| `[Range]` on numbers and dates | one unit (a day for dates) below the minimum / above the maximum, or the limit itself when it is exclusive | the minimum / the maximum, or the nearest value inside an exclusive limit |
 | `[RegularExpression]`, `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | text the real validator rejects | none: they define a value, not an edge |
 | `[AllowedValues]`, `[DeniedValues]` | a value that is not allowed / a denied one | none |
 
