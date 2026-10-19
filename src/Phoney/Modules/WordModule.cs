@@ -126,10 +126,12 @@ internal static class WordPicker
     /// <summary>Checks a length range before anything is drawn: lengths can't be negative, and the maximum can't be below the minimum.</summary>
     public static void ValidateLengths(int? minLength, int? maxLength)
     {
+#pragma warning disable S3236 // the values are unwrapped from nullables, and the exception must name the parameters
         if (minLength is { } min)
             ArgumentOutOfRangeException.ThrowIfNegative(min, nameof(minLength));
         if (maxLength is { } max)
             ArgumentOutOfRangeException.ThrowIfNegative(max, nameof(maxLength));
+#pragma warning restore S3236
         if (minLength > maxLength)
             throw new ArgumentException($"The maximum length {maxLength} must be greater than or equal to the minimum length {minLength}.", nameof(maxLength));
     }

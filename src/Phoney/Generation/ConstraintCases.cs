@@ -178,34 +178,22 @@ internal static class ConstraintCases
         try
         {
             if (shape == Shape.Date)
-            {
-                var bound = DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
-                var date = (outside, exclusive) switch
-                {
-                    (true, false) => bound.AddDays(-inward),
-                    (false, true) => type == typeof(DateOnly) ? bound.AddDays(inward) : bound.AddTicks(inward),
-                    _ => bound,
-                };
-                return type == typeof(DateTime) ? date.UtcDateTime : type == typeof(DateTimeOffset) ? date : DateOnly.FromDateTime(date.UtcDateTime);
-            }
-
+                return DateBound(type, text, outside, exclusive, inward);
             if (type == typeof(double) || type == typeof(float) || type == typeof(Half))
-            {
-                var limit = double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
-                if (exclusive && !outside)
-                    return NextInside(type, limit, inward);
-                var fractional = outside && !exclusive ? limit - inward : limit;
-                return type == typeof(Half) ? (Half)fractional : Convert.ChangeType(fractional, type, CultureInfo.InvariantCulture);
-            }
+                return FractionalBound(type, text, outside, exclusive, inward);
 
             var number = decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
             if (type == typeof(decimal)) // a whole unit outside an inclusive bound, the last digit a decimal holds inside an excluded one
                 return ToNumber(type, (outside, exclusive) switch { (true, false) => number - inward, (false, true) => number + (inward * LastDigit(number)), _ => number });
 
             // Whole-number types: the nearest whole number inside the range, and the one next to it outside.
-            var inside = side == Side.Min
-                ? (exclusive ? Math.Floor(number) + 1 : Math.Ceiling(number))
-                : (exclusive ? Math.Ceiling(number) - 1 : Math.Floor(number));
+            var inside = (side, exclusive) switch
+            {
+                (Side.Min, true) => Math.Floor(number) + 1,
+                (Side.Min, false) => Math.Ceiling(number),
+                (_, true) => Math.Ceiling(number) - 1,
+                _ => Math.Floor(number),
+            };
             return ToNumber(type, outside ? inside - inward : inside);
         }
         catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException or ArgumentOutOfRangeException)
@@ -223,19 +211,48 @@ internal static class ConstraintCases
         return new decimal(1, 0, 0, isNegative: false, scale: (byte)Math.Max(0, 28 - digits));
     }
 
+    /// <summary>A date bound of a <see cref="DateTime"/>, <see cref="DateTimeOffset"/> or <see cref="DateOnly"/> member: a day outside an inclusive bound, a day or a tick inside an excluded one.</summary>
+    private static object DateBound(Type type, string text, bool outside, bool exclusive, int inward)
+    {
+        var bound = DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+        var date = (outside, exclusive) switch
+        {
+            (true, false) => bound.AddDays(-inward),
+            (false, true) => type == typeof(DateOnly) ? bound.AddDays(inward) : bound.AddTicks(inward),
+            _ => bound,
+        };
+        if (type == typeof(DateTime))
+            return date.UtcDateTime;
+        return type == typeof(DateTimeOffset) ? date : DateOnly.FromDateTime(date.UtcDateTime);
+    }
+
+    /// <summary>A bound of a <see cref="double"/>, <see cref="float"/> or <see cref="Half"/> member: a whole unit outside an inclusive bound, the next value inside an excluded one.</summary>
+    private static object FractionalBound(Type type, string text, bool outside, bool exclusive, int inward)
+    {
+        var limit = double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
+        if (exclusive && !outside)
+            return NextInside(type, limit, inward);
+        var fractional = outside && !exclusive ? limit - inward : limit;
+        return type == typeof(Half) ? (Half)fractional : Convert.ChangeType(fractional, type, CultureInfo.InvariantCulture);
+    }
+
     /// <summary>The value of <paramref name="type"/> (<see cref="double"/>, <see cref="float"/> or <see cref="Half"/>) closest to <paramref name="limit"/> on its <paramref name="inward"/> side.</summary>
     private static object NextInside(Type type, double limit, int inward)
     {
         if (type == typeof(float))
         {
             var single = (float)limit;
-            return single == limit || (single < limit) == (inward > 0) ? (inward > 0 ? MathF.BitIncrement(single) : MathF.BitDecrement(single)) : single;
+            if (inward > 0)
+                return single > limit ? single : MathF.BitIncrement(single);
+            return single < limit ? single : MathF.BitDecrement(single);
         }
 
         if (type == typeof(Half))
         {
             var half = (Half)limit;
-            return (double)half == limit || ((double)half < limit) == (inward > 0) ? (inward > 0 ? Half.BitIncrement(half) : Half.BitDecrement(half)) : half;
+            if (inward > 0)
+                return (double)half > limit ? half : Half.BitIncrement(half);
+            return (double)half < limit ? half : Half.BitDecrement(half);
         }
 
         return inward > 0 ? Math.BitIncrement(limit) : Math.BitDecrement(limit);

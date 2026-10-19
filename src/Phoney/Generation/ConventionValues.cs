@@ -433,7 +433,7 @@ public static class ConventionValues
     {
         /// <summary>Whether <paramref name="value"/> lies outside the range.</summary>
         public bool Excludes(double value) =>
-            value < Min || value > Max || (MinExclusive && value == Min) || (MaxExclusive && value == Max);
+            (MinExclusive ? value <= Min : value < Min) || (MaxExclusive ? value >= Max : value > Max);
     }
 
     /// <summary>Parses a date <c>[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]</c>.</summary>
@@ -470,14 +470,7 @@ public static class ConventionValues
             return T.CreateSaturating(DecimalInRange(scope, (decimal)Math.Max(min, -7.9e28), (decimal)Math.Min(max, 7.9e28), range));
 
         if (typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half))
-        {
-            (min, max) = (Math.Max(min, double.MinValue), Math.Min(max, double.MaxValue)); // [Range] may say ±∞ for no limit
-            var drawn = scope.Faker.Random.Double(min, max);
-            var value = Math.Clamp(Math.Round(drawn, 2), min, max);
-            if (range.Excludes(value)) // rounding landed on an excluded limit: the drawn value is in [min, max)
-                value = range.MinExclusive && drawn <= min ? Math.BitIncrement(min) : drawn;
-            return T.CreateSaturating(value);
-        }
+            return T.CreateSaturating(FractionalInRange(scope, range));
 
         // Integers: whole numbers inside the range and inside the type (CreateSaturating maps ±∞ to the type's limits).
         var unbounded = typeof(T) == typeof(System.Numerics.BigInteger); // has no limits to saturate to
@@ -485,9 +478,9 @@ public static class ConventionValues
         var typeMax = unbounded ? double.PositiveInfinity : double.CreateSaturating(T.CreateSaturating(double.PositiveInfinity));
         var lowest = Math.Ceiling(min);
         var highest = Math.Floor(max);
-        if (range.MinExclusive && lowest == min)
+        if (range.MinExclusive && lowest <= min) // Ceiling(min) is never below min: this is a whole-number limit that is excluded
             lowest++;
-        if (range.MaxExclusive && highest == max)
+        if (range.MaxExclusive && highest >= max)
             highest--;
         var from = ToLong(Math.Max(lowest, typeMin));
         var to = ToLong(Math.Min(highest, typeMax));
@@ -495,6 +488,18 @@ public static class ConventionValues
 
         // Explicit clamping: casting an out-of-range double to long is undefined in C#.
         static long ToLong(double d) => d >= 9.2233720368547748E18 ? long.MaxValue : d <= -9.2233720368547758E18 ? long.MinValue : (long)d;
+    }
+
+    /// <summary>A double in <paramref name="range"/>, rounded to two decimals unless rounding lands on an excluded limit.</summary>
+    private static double FractionalInRange(FakeScope scope, NumericRange range)
+    {
+        var (min, max) = (Math.Max(range.Min, double.MinValue), Math.Min(range.Max, double.MaxValue)); // [Range] may say ±∞ for no limit
+        var drawn = scope.Faker.Random.Double(min, max);
+        var value = Math.Clamp(Math.Round(drawn, 2), min, max);
+        if (!range.Excludes(value))
+            return value;
+        // Rounding landed on an excluded limit: the drawn value is in [min, max), so only an excluded minimum needs a step inside.
+        return range.MinExclusive && drawn <= min ? Math.BitIncrement(min) : drawn;
     }
 
     /// <summary>
@@ -507,15 +512,21 @@ public static class ConventionValues
         if (Math.Abs(low) >= DecimalStepLimit || Math.Abs(high) >= DecimalStepLimit)
             return scope.Faker.Number.Decimal(low, high, Usual); // steps of 0.01 are far smaller than such a range
 
+        var places = Usual;
         var scale = 100m;
-        for (var places = Usual; ; places++, scale *= 10)
+        var (first, last) = Inside(scale);
+        while (decimal.Ceiling(first * scale) > decimal.Floor(last * scale) && places < MostDecimalPlaces)
         {
-            // The first and last values with these places inside: an excluded limit moves to the next step inside.
-            var first = range.MinExclusive ? (decimal.Floor(low * scale) + 1) / scale : low;
-            var last = range.MaxExclusive ? (decimal.Ceiling(high * scale) - 1) / scale : high;
-            if (decimal.Ceiling(first * scale) <= decimal.Floor(last * scale) || places == MostDecimalPlaces)
-                return scope.Faker.Number.Decimal(first, Math.Max(first, last), places);
+            places++;
+            scale *= 10;
+            (first, last) = Inside(scale);
         }
+
+        return scope.Faker.Number.Decimal(first, Math.Max(first, last), places);
+
+        // The first and last values inside with steps of 1/step: an excluded limit moves to the next step inside.
+        (decimal First, decimal Last) Inside(decimal step) =>
+            (range.MinExclusive ? (decimal.Floor(low * step) + 1) / step : low, range.MaxExclusive ? (decimal.Ceiling(high * step) - 1) / step : high);
     }
 
     /// <summary>Limits from which <see cref="DecimalInRange"/> keeps two places: below it, scaling by up to 10^<see cref="MostDecimalPlaces"/> fits a decimal.</summary>
