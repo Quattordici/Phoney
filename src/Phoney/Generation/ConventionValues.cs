@@ -515,11 +515,14 @@ public static class ConventionValues
             lowest++;
         if (range.MaxExclusive && highest >= high)
             highest--;
-        var from = ToLong(Math.Max(lowest, typeMin));
-        var to = ToLong(Math.Min(highest, typeMax));
+        var from = Math.Max(lowest, typeMin);
+        var to = Math.Min(highest, typeMax);
         if (to < from)
             throw range.Empty(typeof(T));
-        return T.CreateSaturating(scope.Faker.Random.Long(from, to));
+        // A range wholly beyond long (a ulong near its top) is drawn as a BigInteger; one that reaches into long keeps its long draw, so seeds don't move.
+        if (from > long.MaxValue || to < long.MinValue)
+            return T.CreateSaturating(scope.Faker.Number.BigInteger(new System.Numerics.BigInteger(from), new System.Numerics.BigInteger(to)));
+        return T.CreateSaturating(scope.Faker.Random.Long(ToLong(from), ToLong(to)));
 
         static long ToLong(decimal d) => (long)Math.Clamp(d, long.MinValue, long.MaxValue);
     }
@@ -562,22 +565,22 @@ public static class ConventionValues
     }
 
     /// <summary>
-    /// A decimal in <paramref name="range"/>, with two decimals, or with as many more as it takes to have a value inside
+    /// A decimal in <paramref name="range"/>, with two decimals (fewer when the limits are too large to hold them), or with as many more as it takes to have a value inside
     /// (<c>[Range(typeof(decimal), "0.001", "0.009")]</c> has none with two). The limits are read as decimals, not doubles, so no digit is lost.
     /// </summary>
     private static decimal DecimalInRange(FakeScope scope, NumericRange range)
     {
-        const int Usual = 2;
         var (low, high) = range.Decimals();
         var magnitude = Math.Max(Math.Abs(low), Math.Abs(high));
-        if (magnitude > decimal.MaxValue / 100) // limits this large can't be scaled to hundredths, and a decimal this size has few places anyway
+        // Two places, or as many as a decimal this large still holds (Number.Decimal keeps the same number, so the draw is unchanged).
+        var places = 2;
+        var scale = 100m;
+        while (places > 0 && magnitude > decimal.MaxValue / scale)
         {
-            var (from, to) = (range.MinExclusive ? low + 1 : low, range.MaxExclusive ? high - 1 : high);
-            return from <= to ? scope.Faker.Number.Decimal(from, to, Usual) : throw range.Empty(typeof(decimal));
+            places--;
+            scale /= 10;
         }
 
-        var places = Usual;
-        var scale = 100m;
         var (first, last) = Inside(scale);
         // More places while there is no value with these, as long as the limits scaled by ten more still fit a decimal.
         while (!HasStep(first, last, scale) && places < Modules.NumberModule.MaxDecimalPlaces && magnitude <= decimal.MaxValue / (scale * 10))
@@ -590,8 +593,15 @@ public static class ConventionValues
         return HasStep(first, last, scale) ? scope.Faker.Number.Decimal(first, last, places) : throw range.Empty(typeof(decimal));
 
         // The first and last values inside with steps of 1/step: an excluded limit moves to the next step inside.
+        // An excluded decimal.MaxValue (or MinValue) has no step beyond it, which leaves the range empty.
         (decimal First, decimal Last) Inside(decimal step) =>
-            (range.MinExclusive ? (decimal.Floor(low * step) + 1) / step : low, range.MaxExclusive ? (decimal.Ceiling(high * step) - 1) / step : high);
+            (range.MinExclusive ? Beside(decimal.Floor(low * step), 1) / step : low, range.MaxExclusive ? Beside(decimal.Ceiling(high * step), -1) / step : high);
+
+        decimal Beside(decimal value, int direction)
+        {
+            var room = direction > 0 ? value < decimal.MaxValue : value > decimal.MinValue;
+            return room ? value + direction : throw range.Empty(typeof(decimal));
+        }
 
         static bool HasStep(decimal first, decimal last, decimal step) => decimal.Ceiling(first * step) <= decimal.Floor(last * step);
     }

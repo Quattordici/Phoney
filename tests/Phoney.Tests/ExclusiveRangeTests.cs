@@ -40,6 +40,9 @@ public sealed class Narrow
     [Range(typeof(decimal), "0.1000000000000000001", "0.1000000000000000009")] public decimal Precise { get; set; }
     [Range(typeof(decimal), "1000000000.001", "1000000000.009")] public decimal Large { get; set; }
     [Range(typeof(long), "-9223372036854775808", "-9223372036854775806", MinimumIsExclusive = true, MaximumIsExclusive = true)] public long Edge { get; set; }
+    [Range(typeof(ulong), "18446744073709551610", "18446744073709551614", MinimumIsExclusive = true)] public ulong Top { get; set; }
+    [Range(typeof(decimal), "1000000000000000000000000000", "1000000000000000000000000001", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Huge { get; set; }
+    [Range(typeof(decimal), "1000000000000000000000000000.1", "1000000000000000000000000000.3", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal HugeTenth { get; set; }
 }
 
 /// <summary>Excluded limits that leave no value of the member's type.</summary>
@@ -72,6 +75,12 @@ public sealed class NoDecimal
     [Range(typeof(decimal), "1", "1", MinimumIsExclusive = true)] public decimal Amount { get; set; }
 }
 
+/// <summary>A <see cref="long"/> range entirely above <see cref="long.MaxValue"/>.</summary>
+public sealed class BeyondLong
+{
+    [Range(typeof(long), "9223372036854775808", "9223372036854775809")] public long Count { get; set; }
+}
+
 [FakeFor<OpenWindow>]
 [FakeFor<Narrow>]
 [FakeFor<FloatWindow>]
@@ -81,6 +90,7 @@ public sealed class NoDecimal
 [FakeFor<NoMoment>]
 [FakeFor<NoFraction>]
 [FakeFor<NoDecimal>]
+[FakeFor<BeyondLong>]
 public static partial class ExclusiveRangeFakes;
 
 public sealed class ExclusiveRangeTests
@@ -212,6 +222,9 @@ public sealed class ExclusiveRangeTests
         values.ShouldAllBe(n => n.Precise >= 0.1000000000000000001m && n.Precise <= 0.1000000000000000009m);
         values.ShouldAllBe(n => n.Large >= 1000000000.001m && n.Large <= 1000000000.009m);
         values.ShouldAllBe(n => n.Edge == long.MinValue + 1); // the limits are one apart in a double
+        values.ShouldAllBe(n => n.Top > 18446744073709551610UL && n.Top <= 18446744073709551614UL); // above long, so not clamped to long.MaxValue
+        values.ShouldAllBe(n => n.Huge > 1000000000000000000000000000m && n.Huge < 1000000000000000000000000001m); // tenths still fit a decimal this large
+        values.ShouldAllBe(n => n.HugeTenth == 1000000000000000000000000000.2m);
     }
 
     [Test]
@@ -226,6 +239,7 @@ public sealed class ExclusiveRangeTests
             () => (generated ? ExclusiveRangeFakes.NoMoment : new ObjectGenerator<NoMoment>(new ReflectionModel<NoMoment>())).Generate(1),
             () => (generated ? ExclusiveRangeFakes.NoFraction : new ObjectGenerator<NoFraction>(new ReflectionModel<NoFraction>())).Generate(1),
             () => (generated ? ExclusiveRangeFakes.NoDecimal : new ObjectGenerator<NoDecimal>(new ReflectionModel<NoDecimal>())).Generate(1),
+            () => (generated ? ExclusiveRangeFakes.BeyondLong : new ObjectGenerator<BeyondLong>(new ReflectionModel<BeyondLong>())).Generate(1),
         ];
 
         foreach (var run in runs)
