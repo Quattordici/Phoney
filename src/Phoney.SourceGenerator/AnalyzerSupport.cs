@@ -22,6 +22,9 @@ internal enum SelectorKind
     /// (<c>x =&gt; x.Address.City</c>, <c>x =&gt; x.Lines.Each().Sku</c>).
     /// </summary>
     Member,
+
+    /// <summary>An anonymous type of members of the parameter (<c>x =&gt; new { x.UserId, x.RoleId }</c>), which only <c>Unique</c> accepts.</summary>
+    Combination,
 }
 
 /// <summary>The member selector of a rule call, like <c>MemberName</c> in <c>ObjectGenerator&lt;T&gt;</c> reads it at runtime.</summary>
@@ -63,6 +66,9 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
             returned = cast.Operand;
 
         var parameter = lambda.Symbol.Parameters.FirstOrDefault();
+        if (returned is IAnonymousObjectCreationOperation combination)
+            return ReadCombination(combination, parameter, location);
+
         var names = new List<string>();
         var current = returned;
         while (!(current is IParameterReferenceOperation reference && SymbolEqualityComparer.Default.Equals(reference.Parameter, parameter)))
@@ -101,6 +107,31 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
             return new RuleSelector(SelectorKind.NotDirect, null, location);
         names.Reverse();
         return new RuleSelector(SelectorKind.Member, names[0], location, string.Join(".", names));
+    }
+
+    /// <summary><c>x =&gt; new { x.UserId, x.RoleId }</c>: a <see cref="SelectorKind.Combination"/> when every part is a member of the parameter, like <c>CombinationMembers</c> reads it at runtime.</summary>
+    private static RuleSelector ReadCombination(IAnonymousObjectCreationOperation creation, IParameterSymbol? parameter, Location location)
+    {
+        var names = new List<string>();
+        foreach (var initializer in creation.Initializers)
+        {
+            var value = initializer is ISimpleAssignmentOperation assignment ? assignment.Value : initializer;
+            while (value is IConversionOperation conversion)
+                value = conversion.Operand;
+            var (name, owner) = value switch
+            {
+                IPropertyReferenceOperation { Property.IsIndexer: false } property => (property.Property.Name, property.Instance),
+                IFieldReferenceOperation field => (field.Field.Name, field.Instance),
+                _ => (null, null),
+            };
+            if (name is null || !(owner is IParameterReferenceOperation reference && SymbolEqualityComparer.Default.Equals(reference.Parameter, parameter)))
+                return new RuleSelector(SelectorKind.NotDirect, null, location);
+            names.Add(name);
+        }
+
+        return names.Count == 0
+            ? new RuleSelector(SelectorKind.NotDirect, null, location)
+            : new RuleSelector(SelectorKind.Combination, null, location, string.Join(",", names));
     }
 
     /// <summary>The values of a dictionary and the value of a nullable are what <c>Each()</c> and the path continue through.</summary>

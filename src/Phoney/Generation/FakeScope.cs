@@ -87,6 +87,9 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     /// </summary>
     public bool RetriesObject { get; set; }
 
+    /// <summary>Whether the produced value is kept on the scope for a <see cref="UniqueCombination"/> (a constructor parameter, which can't be read back from the object).</summary>
+    public bool RecordsKeyPart { get; set; }
+
     /// <summary>Records <paramref name="value"/>; false when it was produced before.</summary>
     public bool TryClaim(object? value)
     {
@@ -313,11 +316,30 @@ public sealed class FakeScope
         var slot = _slots?[member];
         if (slot is null)
             return fallback(this);
-        if (!slot.Unique && slot.Filter is null)
+        if (!slot.Unique && slot.Filter is null && !slot.RecordsKeyPart)
             return Produce(slot, fallback);
-        if (slot.RetriesObject)
-            return ProduceForObjectRetry(slot, fallback);
 
+        var value = !slot.Unique && slot.Filter is null ? Produce(slot, fallback)
+            : slot.RetriesObject ? ProduceForObjectRetry(slot, fallback)
+            : ProduceChecked(slot, fallback);
+        if (slot.RecordsKeyPart)
+            (_keyParts ??= [])[member] = value;
+        return value;
+    }
+
+    // Values of constructor parameters that are part of a unique combination, by member index (see RuleSlot.RecordsKeyPart).
+    private Dictionary<int, object?>? _keyParts;
+
+    /// <summary>The value produced for <paramref name="member"/> when it is part of a unique combination.</summary>
+    internal bool TryGetKeyPart(int member, out object? value)
+    {
+        value = null;
+        return _keyParts is not null && _keyParts.TryGetValue(member, out value);
+    }
+
+    /// <summary>Produces a value that has to be unique or satisfy a condition, drawing the member again until it does.</summary>
+    private TValue ProduceChecked<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback)
+    {
         // A condition is checked first, so only accepted values use up the unique ones.
         var attempts = slot.Attempts;
         for (var attempt = 0; attempt < attempts; attempt++)
@@ -353,26 +375,37 @@ public sealed class FakeScope
         return value;
     }
 
-    /// <summary>Claims the unique identity values of an accepted object; false when another thread claimed one of them first (the object is then generated again).</summary>
-    internal bool TryClaimPending()
+    /// <summary>
+    /// Claims the unique identity values and <paramref name="combinations"/> of an accepted object; false when one was produced before or another thread
+    /// claimed one of them first (the object is then generated again).
+    /// </summary>
+    internal bool TryClaimPending(IReadOnlyList<(UniqueCombination Combination, object?[] Values)>? combinations = null)
     {
         if (HasDuplicate)
             return false;
-        if (_pendingClaims is null)
+        if (_pendingClaims is null && combinations is null)
             return true;
 
         // All or nothing, so an object that loses one value to another thread doesn't keep the others claimed. Only root scopes have such slots,
         // and they share the generator's slots array, so it serialises the claims of every object of the run.
         lock (_slots!)
         {
-            foreach (var (slot, value) in _pendingClaims)
+            foreach (var (slot, value) in _pendingClaims ?? [])
             {
                 if (slot.IsClaimed(value))
                     return false;
             }
 
-            foreach (var (slot, value) in _pendingClaims)
+            foreach (var (combination, values) in combinations ?? [])
+            {
+                if (combination.IsClaimed(values))
+                    return false;
+            }
+
+            foreach (var (slot, value) in _pendingClaims ?? [])
                 slot.TryClaim(value);
+            foreach (var (combination, values) in combinations ?? [])
+                combination.Claim(values);
         }
 
         return true;

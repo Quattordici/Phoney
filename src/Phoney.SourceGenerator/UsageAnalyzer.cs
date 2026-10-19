@@ -240,6 +240,13 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static void CheckRule(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
         var method = call.TargetMethod;
+        if (selector.Kind == SelectorKind.Combination)
+        {
+            if (method.Name != "Unique")
+                Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
+            return;
+        }
+
         if (selector.Kind == SelectorKind.NotDirect)
         {
             Report(context, selector, "The rule must select a member of the generated type (x => x.Name), of a nested object (x => x.Address.City) or of each element of a collection (x => x.Lines.Each().Sku). A member of a string, number or date has no members to give a rule to.");
