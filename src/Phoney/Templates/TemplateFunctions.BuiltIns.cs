@@ -148,15 +148,14 @@ public static partial class TemplateFunctions
         });
         f["number.float"] = (faker, a) =>
         {
-            var min = a.Double(0, "min") ?? 0;
-            var max = a.Double(0, "max") ?? (a.Count > 0 && a.Double(0) is { } single ? single : 1);
-            return faker.Number.Double(min, max, a.Int(0, "fractionDigits")).ToString(CultureInfo.InvariantCulture);
+            var (min, max) = a.DoubleRange();
+            return faker.Number.Double(min ?? 0, max ?? 1, a.IsOptions(0) ? a.Int(0, "fractionDigits") : null).ToString(CultureInfo.InvariantCulture);
         };
-        f["number.binary"] = (faker, a) => faker.Number.Binary(a.Int(0, "min") ?? 0, a.Int(0, "max") ?? a.Int(0) ?? 1);
-        f["number.octal"] = (faker, a) => faker.Number.Octal(a.Int(0, "min") ?? 0, a.Int(0, "max") ?? a.Int(0) ?? 7);
-        f["number.hex"] = (faker, a) => faker.Number.Hex(a.Int(0, "min") ?? 0, a.Int(0, "max") ?? a.Int(0) ?? 15);
-        f["number.romanNumeral"] = (faker, a) => faker.Number.RomanNumeral(a.Int(0, "min") ?? 1, a.Int(0, "max") ?? a.Int(0) ?? 3999);
-        f["number.long"] = (faker, a) => faker.Number.Long(a.Int(0, "min") ?? 0, a.Int(1) ?? a.Int(0, "max") ?? long.MaxValue).ToString(inv);
+        f["number.binary"] = (faker, a) => faker.Number.Binary(a.IntRange().Min ?? 0, a.IntRange().Max ?? 1);
+        f["number.octal"] = (faker, a) => faker.Number.Octal(a.IntRange().Min ?? 0, a.IntRange().Max ?? 7);
+        f["number.hex"] = (faker, a) => faker.Number.Hex(a.IntRange().Min ?? 0, a.IntRange().Max ?? 15);
+        f["number.romanNumeral"] = (faker, a) => faker.Number.RomanNumeral(a.IntRange().Min ?? 1, a.IntRange().Max ?? 3999);
+        f["number.long"] = (faker, a) => faker.Number.Long(a.IntRange().Min ?? 0, a.IntRange().Max ?? long.MaxValue).ToString(inv);
         f["number.double"] = f["number.float"];
         f["number.normal"] = (faker, a) => faker.Number.Normal(a.Double(0, "mean") ?? 0, a.Double(1, "standardDeviation") ?? 1, a.Double(2, "min"), a.Double(3, "max")).ToString(CultureInfo.InvariantCulture);
         f["number.decimal"] = (faker, a) => faker.Number.Decimal((decimal)(a.Double(0) ?? 0), (decimal)(a.Double(1) ?? 1), a.Int(2) ?? 2).ToString(inv);
@@ -313,8 +312,10 @@ public static partial class TemplateFunctions
         Add("commerce.upc", x => x.Commerce.Upc());
         Add("commerce.ean13", x => x.Commerce.Ean13());
         Add("commerce.ean8", x => x.Commerce.Ean8());
-        f["commerce.price"] = (faker, a) => faker.Commerce.PriceText(
-            a.OptionString(0, "symbol", "")!, (decimal)(a.Double(0, "min") ?? 1), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2);
+        // faker.js reads an options object; older versions took the plain values min, max, dec and symbol.
+        f["commerce.price"] = (faker, a) => a.IsOptions(0)
+            ? faker.Commerce.PriceText(a.OptionString(0, "symbol", "")!, (decimal)(a.Double(0, "min") ?? 1), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2)
+            : faker.Commerce.PriceText(a.String(3) ?? "", (decimal)(a.Double(0) ?? 1), (decimal)(a.Double(1) ?? 1000), a.Int(2) ?? 2);
         f["commerce.priceText"] = f["commerce.price"];
     }
 
@@ -325,8 +326,9 @@ public static partial class TemplateFunctions
         f["finance.accountNumber"] = (faker, a) => faker.Finance.AccountNumber(SizeOf(a, 8));
         Add("finance.accountName", x => x.Finance.AccountName());
         Add("finance.routingNumber", x => x.Finance.RoutingNumber());
-        f["finance.amount"] = (faker, a) => faker.Finance.AmountText(
-            (decimal)(a.Double(0, "min") ?? 0), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2, a.OptionString(0, "symbol", "")!);
+        f["finance.amount"] = (faker, a) => a.IsOptions(0)
+            ? faker.Finance.AmountText((decimal)(a.Double(0, "min") ?? 0), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2, a.OptionString(0, "symbol", "")!)
+            : faker.Finance.AmountText((decimal)(a.Double(0) ?? 0), (decimal)(a.Double(1) ?? 1000), a.Int(2) ?? 2, a.String(3) ?? "");
         Add("finance.transactionType", x => x.Finance.TransactionType());
         Add("finance.transactionDescription", x => x.Finance.TransactionDescription());
         Add("finance.currencyCode", x => x.Finance.CurrencyCode());

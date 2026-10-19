@@ -57,9 +57,8 @@ public static partial class TemplateFunctions
     /// <summary>faker.js <c>number.int</c> accepts either a max or a <c>{min, max, multipleOf}</c> object.</summary>
     private static long Number(Faker faker, TemplateArgs a, long defaultMin, long defaultMax)
     {
-        var min = a.Int(0, "min") ?? defaultMin;
-        var max = a.Int(0, "max") ?? a.Int(0) ?? defaultMax;
-        return faker.Number.Long(min, max, a.Int(0, "multipleOf") ?? 1);
+        var (min, max) = a.IntRange();
+        return faker.Number.Long(min ?? defaultMin, max ?? defaultMax, a.IsOptions(0) ? a.Int(0, "multipleOf") ?? 1 : 1);
     }
 }
 
