@@ -171,11 +171,13 @@ public sealed class StringModule : FakerModule
     {
         if (string.IsNullOrEmpty(exclude))
             return characters;
+#pragma warning disable S3267 // a plain loop: Where/FirstOrDefault would allocate a closure and an enumerator on every call
         foreach (var entry in _excluded)
         {
             if (ReferenceEquals(entry.Characters, characters) && string.Equals(entry.Exclude, exclude, StringComparison.Ordinal))
                 return entry.Result;
         }
+#pragma warning restore S3267
 
         Span<char> kept = characters.Length <= 256 ? stackalloc char[characters.Length] : new char[characters.Length];
         var count = 0;

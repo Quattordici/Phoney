@@ -119,7 +119,9 @@ public static partial class Fake
     {
         private sealed record Entry(FakeModel<T> Model, object AppConventions, object AppSubtypes, object AppGenerators, ObjectGenerator<T> Prototype);
 
-        private static Entry? s_entry; // one per T on purpose: each closed type keeps its own prototype
+#pragma warning disable S2743 // one per T on purpose: each closed type keeps its own prototype, read without a lookup
+        private static Entry? s_entry;
+#pragma warning restore S2743
 
         public static ObjectGenerator<T> Get(FakeModel<T> model)
         {

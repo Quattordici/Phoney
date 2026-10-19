@@ -105,6 +105,7 @@ public sealed partial class HelpersModule : FakerModule
     private static string SlugifyAscii(string text)
     {
         var keepsAll = true;
+#pragma warning disable S3267 // a plain loop: Any with a lambda allocates a delegate and is slower on this hot path
         foreach (var c in text)
         {
             if (!IsSlugChar(c))
@@ -113,6 +114,7 @@ public sealed partial class HelpersModule : FakerModule
                 break;
             }
         }
+#pragma warning restore S3267
 
         if (keepsAll)
             return text;
