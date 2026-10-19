@@ -16,7 +16,8 @@ internal sealed record GenerationSettings(
     ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
     NestedConventions? Conventions = null,
     ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null,
-    RuleUsage? Usage = null)
+    RuleUsage? Usage = null,
+    bool CausalTimelines = false)
 {
     public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
 }
@@ -152,14 +153,21 @@ public sealed class FakeScope
 
     /// <summary>
     /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
-    /// between it and the reference date, so <c>UpdatedAt</c> is never before <c>CreatedAt</c>.
+    /// between it and the reference date, so <c>UpdatedAt</c> is never before <c>CreatedAt</c>. With causal timelines a nested
+    /// object is created between its parent's creation and the reference date (still one draw).
     /// </summary>
     internal DateTimeOffset Created
     {
         get
         {
             if (!_hasCreated)
-                (_created, _hasCreated) = (Faker.Date.Past(), true);
+            {
+                _created = Settings.CausalTimelines && _parent is { } parent
+                    ? Faker.Date.Between(parent.Created, Faker.ReferenceDate)
+                    : Faker.Date.Past();
+                _hasCreated = true;
+            }
+
             return _created;
         }
     }

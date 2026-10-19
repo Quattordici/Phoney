@@ -330,6 +330,7 @@ Within one object, related members describe the same thing:
 - **One person**: `FirstName`, `LastName`, `Email`, `Username`, `Avatar` and `Gender`/`Sex` enums belong together, and `Age` matches `BirthDate`/`DateOfBirth`.
 - **One address**: `Street`, `City`, `ZipCode`, `State`, `Country` and `CountryCode` come from one address; for country locales (`de_AT`, `en_US`…) the country is the locale's own.
 - **One timeline**: the first "created" date (`CreatedAt`, `RegisteredAt`, `StartDate`…) is when the object was created, "updated" dates (`UpdatedAt`, `LastLogin`…) fall between it and the reference date, and future dates (`ExpiresAt`, `DueDate`) come after both.
+- **One timeline per graph**: `WithCausalTimelines()` creates each nested object between the creation of the object that contains it and the reference date, so an order is never older than its customer and a payment never older than its invoice. Each object still draws one creation date, only from a narrower range, so the other members keep their values.
 
 Across objects, `WithOneOf` links to data you generated already, optionally with weights, and `WithSubsetOf` gives a collection member its own random subset of values:
 

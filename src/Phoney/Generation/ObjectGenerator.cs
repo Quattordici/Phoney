@@ -517,6 +517,18 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>Turns name conventions off: members get values based on their type only.</summary>
     public ObjectGenerator<T> WithNameConventions(bool useConventions = true) => Derive(_config with { Settings = _config.Settings with { WithNameConventions = useConventions } });
 
+    /// <summary>
+    /// Makes the dates of a graph tell one story: a nested object (an order of a customer, a line of an order) is created between the creation of the object
+    /// that contains it and the reference date, so <c>order.CreatedAt</c> is never before <c>customer.CreatedAt</c>, and its "updated" and "recent" dates follow.
+    /// </summary>
+    /// <remarks>
+    /// It changes the range of the one creation date each object draws, not the number of draws, so the other members keep their values. The parent's creation
+    /// date is drawn when a child asks for it, so a parent without a "created"-style member draws it then, which moves the data after it.
+    /// Objects of a nested generator (<c>WithGeneratorFor</c>, <c>With</c>) follow that generator's setting.
+    /// </remarks>
+    /// <param name="enabled"><see langword="false"/> turns it off again.</param>
+    public ObjectGenerator<T> WithCausalTimelines(bool enabled = true) => Derive(_config with { Settings = _config.Settings with { CausalTimelines = enabled } });
+
     /// <summary>Probability (0–1) that nullable members (<c>int?</c>, <c>string?</c>…) are left <see langword="null"/>. Default 0.</summary>
     public ObjectGenerator<T> NullProbability(double probability)
     {
