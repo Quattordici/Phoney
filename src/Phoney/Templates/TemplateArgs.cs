@@ -102,16 +102,20 @@ public sealed class TemplateArgs
     /// A <c>min</c>/<c>max</c> range, as faker.js reads it: from an options object (<c>{"min": 1, "max": 6}</c>), from one plain value, which is the
     /// maximum (<c>number.int(6)</c>), or from two plain values, the minimum and the maximum.
     /// </summary>
-    internal (int? Min, int? Max) IntRange() =>
-        IsOptions(0) ? (Int(0, "min"), Int(0, "max"))
-        : Count > 1 ? (Int(0), Int(1))
-        : (null, Int(0));
+    internal (int? Min, int? Max) IntRange()
+    {
+        if (IsOptions(0))
+            return (Int(0, "min"), Int(0, "max"));
+        return Count > 1 ? (Int(0), Int(1)) : (null, Int(0));
+    }
 
     /// <summary>Like <see cref="IntRange"/> for fractional numbers.</summary>
-    internal (double? Min, double? Max) DoubleRange() =>
-        IsOptions(0) ? (Double(0, "min"), Double(0, "max"))
-        : Count > 1 ? (Double(0), Double(1))
-        : (null, Double(0));
+    internal (double? Min, double? Max) DoubleRange()
+    {
+        if (IsOptions(0))
+            return (Double(0, "min"), Double(0, "max"));
+        return Count > 1 ? (Double(0), Double(1)) : (null, Double(0));
+    }
 
     /// <summary>
     /// Argument <paramref name="index"/> as an integer; when the argument is an options object, reads
