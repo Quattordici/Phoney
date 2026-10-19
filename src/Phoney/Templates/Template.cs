@@ -198,7 +198,7 @@ internal sealed class Template
                     throw new FormatException($"Missing closing parenthesis in '{{{{{expression}}}}}'.");
                 var name = expression[..parenthesis];
                 segment._function = TemplateFunctions.Get(name)
-                    ?? throw new FormatException($"Unknown template function '{name}' in '{{{{{expression}}}}}'.");
+                    ?? throw new FormatException($"Unknown template function '{name}' in '{{{{{expression}}}}}'.{NameSuggestions.For(name, TemplateFunctions.Names)}");
                 segment._args = TemplateArgs.Parse(expression[(parenthesis + 1)..^1]);
                 segment._writer = WritingFunction.WriterOf(segment._function);
                 return segment;
@@ -286,7 +286,8 @@ internal sealed class Template
             }
 
             throw new PhoneyDataException(
-                $"Cannot resolve '{{{{{Expression}}}}}' in locale '{faker.Locale}': it is neither a template function nor available locale data.");
+                $"Cannot resolve '{{{{{Expression}}}}}' in locale '{faker.Locale}': it is neither a template function nor available locale data."
+                + NameSuggestions.For(Expression, [.. TemplateFunctions.Names, .. KeyRegistry.AllPaths()]));
         }
 
         /// <summary>

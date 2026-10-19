@@ -77,6 +77,9 @@ internal static class KeyRegistry
         throw new ArgumentOutOfRangeException(nameof(id));
     }
 
+    /// <summary>Every catalog and custom path, for "did you mean" suggestions on error paths (it enumerates the custom keys, so keep it off hot paths).</summary>
+    public static IEnumerable<string> AllPaths() => [.. DataKeys.Paths, .. CustomKeys.Keys.Order(StringComparer.Ordinal)];
+
     /// <summary>Returns the entry group of a key id; fallback is resolved per group.</summary>
     public static int GroupOf(int id)
     {

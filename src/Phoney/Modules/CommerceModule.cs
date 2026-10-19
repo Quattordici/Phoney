@@ -137,15 +137,30 @@ public sealed class CommerceModule : FakerModule
     }
 
     /// <summary>Returns a 12-digit UPC-A code with a valid check digit, optionally starting with <paramref name="prefix"/>.</summary>
-    public string Upc(string prefix = "")
+    public string Upc(string prefix = "") => Gtin(prefix, 12);
+
+    /// <summary>
+    /// Returns a 13-digit EAN-13 (GTIN-13) code with a valid check digit, optionally starting with <paramref name="prefix"/>,
+    /// e.g. a GS1 country prefix: <c>Ean13("40")</c> for Germany.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="prefix"/> is not at most 12 ASCII digits.</exception>
+    public string Ean13(string prefix = "") => Gtin(prefix, 13);
+
+    /// <summary>Returns an 8-digit EAN-8 (GTIN-8) code with a valid check digit, optionally starting with <paramref name="prefix"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="prefix"/> is not at most 7 ASCII digits.</exception>
+    public string Ean8(string prefix = "") => Gtin(prefix, 8);
+
+    /// <summary>A GS1 code of <paramref name="length"/> digits: the prefix, random digits, then the mod-10 check digit (weights 3 and 1 from the right).</summary>
+    private string Gtin(string prefix, int length)
     {
         ArgumentNullException.ThrowIfNull(prefix);
-        if (prefix.Length > 11 || !prefix.All(char.IsAsciiDigit))
-            throw new ArgumentException("The prefix must be at most 11 digits.", nameof(prefix));
-        var body = prefix + Faker.String.Numeric(11 - prefix.Length);
+        var bodyLength = length - 1;
+        if (prefix.Length > bodyLength || !prefix.All(char.IsAsciiDigit))
+            throw new ArgumentException($"The prefix must be at most {bodyLength} digits.", nameof(prefix));
+        var body = prefix + Faker.String.Numeric(bodyLength - prefix.Length);
         var sum = 0;
-        for (var i = 0; i < 11; i++)
-            sum += (body[i] - '0') * (i % 2 == 0 ? 3 : 1);
+        for (var i = 0; i < bodyLength; i++)
+            sum += (body[i] - '0') * ((bodyLength - i) % 2 == 1 ? 3 : 1);
         return body + ((10 - (sum % 10)) % 10).ToString(CultureInfo.InvariantCulture);
     }
 }
