@@ -703,6 +703,56 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public ObjectGenerator<T> WithBackReferences(bool enabled = true) => Derive(_config with { BackReferences = enabled });
 
     /// <summary>
+    /// Copies a key of the generated object to a foreign key in the objects below it, so a generated aggregate joins up:
+    /// <c>.WithParentKey(c =&gt; c.Orders.Each().CustomerId, c =&gt; c.Id)</c> gives every order its customer's id.
+    /// </summary>
+    /// <remarks>
+    /// The keys are set on the finished object, after rules that depend on the object and <see cref="WithBackReferences"/>, and before
+    /// <see cref="Where(Func{T, bool}, int)"/>, <see cref="Unique{TValue}"/> and <see cref="AfterCreate"/> see it, so a key that a rule gives the parent is the one copied.
+    /// Nothing is drawn: the rest of the data is the data of the same seed without it. <see cref="Populate(T, PopulateMode)"/> sets the keys of an existing graph the same way,
+    /// replacing what the foreign keys hold.
+    /// </remarks>
+    /// <param name="foreignKey">The foreign key, in a nested object or in each element of a collection: <c>c =&gt; c.Orders.Each().CustomerId</c>.</param>
+    /// <param name="key">Reads the key from the generated object.</param>
+    /// <exception cref="ArgumentException"><paramref name="foreignKey"/> is not a settable member of an object inside <typeparamref name="T"/>, or a value type is on the path.</exception>
+    public ObjectGenerator<T> WithParentKey<TKey>(Expression<Func<T, TKey>> foreignKey, Func<T, TKey> key) => WithParentKey<T, TKey>(foreignKey, key);
+
+    /// <summary>
+    /// Copies a key of the nearest <typeparamref name="TParent"/> above a foreign key to it, for keys deeper in the graph:
+    /// <c>.WithParentKey(c =&gt; c.Orders.Each().Lines.Each().OrderId, (Order o) =&gt; o.Id)</c> gives every line the id of its own order.
+    /// See <see cref="WithParentKey{TKey}(Expression{Func{T, TKey}}, Func{T, TKey})"/> for when the keys are set.
+    /// </summary>
+    /// <param name="foreignKey">The foreign key, in a nested object or in each element of a collection.</param>
+    /// <param name="key">Reads the key from the parent; write its parameter type (<c>(Order o) =&gt; o.Id</c>) to say which object is the parent.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="foreignKey"/> is not a settable member of an object inside <typeparamref name="T"/>, a value type is on the path, or no object on the path above it is a <typeparamref name="TParent"/>.
+    /// </exception>
+    public ObjectGenerator<T> WithParentKey<TParent, TKey>(Expression<Func<T, TKey>> foreignKey, Func<TParent, TKey> key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        var steps = PathSteps(foreignKey);
+        if (steps.Count < 2)
+        {
+            throw new ArgumentException(
+                $"'{foreignKey}' must select a member of an object inside {typeof(T).Name}, like c => c.Orders.Each().CustomerId. Give a member of {typeof(T).Name} itself its value with .With(x => x.Member, (f, x) => …).",
+                nameof(foreignKey));
+        }
+
+        if (steps[^1].Member is PropertyInfo { SetMethod: not { IsPublic: true } } or FieldInfo { IsInitOnly: true })
+            throw new ArgumentException($"'{foreignKey}' must select a settable member: {steps[^1].Member.Name} has no public setter.", nameof(foreignKey));
+
+        // The objects on the path are the owners of its members; the owner of the foreign key is not its own parent.
+        if (steps.Skip(1).Select(step => step.Owner).FirstOrDefault(owner => owner.IsValueType) is { } valueType)
+            throw new ArgumentException($"'{foreignKey}' goes through {valueType.Name}, and {valueType.Name} is a value type: a key set on a copy would be lost. Use a class for it.", nameof(foreignKey));
+
+        if (!steps.Take(steps.Count - 1).Any(step => typeof(TParent).IsAssignableFrom(step.Owner)))
+            throw new ArgumentException($"{typeof(TParent).Name} can't be the parent: no object on the path to {foreignKey.Body} is a {typeof(TParent).Name}.", nameof(key));
+
+        var parentKey = new ParentKey([.. steps.Select(s => s.Member.Name)], typeof(TParent), parent => key((TParent)parent));
+        return Derive(_config with { ParentKeys = _config.ParentKeys.RemoveAll(k => k.Name == parentKey.Name).Add(parentKey) });
+    }
+
+    /// <summary>
     /// Fills members from the rows of a CSV or JSON <see cref="DataFeed"/>: object <em>n</em> takes row <em>n</em> (the rows repeat), and each column fills the member of
     /// the same name, e.g. <c>.WithFeed(DataFeed.FromCsvFile("customers.csv"))</c> with columns <c>FirstName,LastName,City</c>.
     /// </summary>
@@ -1435,6 +1485,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 item = model.Set(item, member, rule(faker, item));
             if (config.BackReferences && item is not null)
                 Phoney.Generation.BackReferences.Apply(item);
+            if (!config.ParentKeys.IsEmpty && item is not null)
+                Phoney.Generation.ParentKeys.Apply(item, config.ParentKeys);
             foreach (var action in config.AfterCreate)
                 action(faker, item);
             return item;
@@ -1456,6 +1508,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
             if (config.BackReferences && item is not null)
                 Phoney.Generation.BackReferences.Apply(item);
+            if (!config.ParentKeys.IsEmpty && item is not null)
+                Phoney.Generation.ParentKeys.Apply(item, config.ParentKeys);
             foreach (var action in config.AfterCreate)
                 action(faker, item);
             return item;
@@ -1573,6 +1627,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         bool Strict,
         bool Verify,
         bool BackReferences,
+        ImmutableList<ParentKey> ParentKeys,
         FeedSettings? Feed,
         GenerationSettings Settings)
     {
@@ -1593,6 +1648,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             false,
             false,
             false,
+            [],
             null,
             GenerationSettings.Default);
     }
@@ -1635,10 +1691,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             nameof(member));
     }
 
-    private static string[] MemberPath<TValue>(Expression<Func<T, TValue>> expression)
+    private static string[] MemberPath<TValue>(Expression<Func<T, TValue>> expression) => [.. PathSteps(expression).Select(step => step.Member.Name)];
+
+    /// <summary>The members a path selects, from the root on, each with the type of the object it is read from (the element type after <c>Each()</c>).</summary>
+    private static List<(MemberInfo Member, Type Owner)> PathSteps<TValue>(Expression<Func<T, TValue>> expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
-        var names = new List<string>();
+        var steps = new List<(MemberInfo, Type)>();
         var node = expression.Body;
         while (node != expression.Parameters[0])
         {
@@ -1649,7 +1708,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                     break;
                 case MemberExpression { Member: PropertyInfo or FieldInfo, Expression: { } owner } access:
                     if (!IsTransparent(access.Member.Name, owner.Type))
-                        names.Add(access.Member.Name);
+                        steps.Add((access.Member, owner.Type));
                     node = owner;
                     break;
                 case MethodCallExpression { Method: { Name: nameof(FakePath.Each), DeclaringType: { } declaring }, Arguments: [var source] } when declaring == typeof(FakePath):
@@ -1662,10 +1721,10 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             }
         }
 
-        if (names.Count == 0)
+        if (steps.Count == 0)
             throw new ArgumentException($"'{expression}' must select a member of {typeof(T).Name}, like x => x.Name.", nameof(expression));
-        names.Reverse();
-        return [.. names];
+        steps.Reverse();
+        return steps;
 
         // The values of a dictionary are what Each() walks, and a nullable's value is the object itself.
         static bool IsTransparent(string member, Type owner) =>

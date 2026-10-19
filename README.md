@@ -316,7 +316,7 @@ var customers = Fake.For<Customer>()
 - **Supported shapes**: classes, records and structs (the constructor with most parameters is used), `init` and `required` members, public fields, nested objects (closed generic classes such as `Paged<Order>` too), interfaces and abstract classes (through [subtypes](#interfaces-and-subtypes)), arrays, lists, sets, dictionaries and [more collection types](#collection-types), enums, nullable types, `byte[]`, `Memory<byte>`, `T[,]`, tuples, `KeyValuePair<K,V>`, and `Guid`, the date and time types, `Uri`, `IPAddress`, `Version`, `Rune` and every numeric type (`Half`, `Int128`, `BigInteger` and `nint` included).
 - **Asked for directly**, a value type, a collection or an interface gets a value too: `Fake.One<Guid>()`, `Fake.Many<int>(10)`, `Fake.One<List<Customer>>()` (1–3 customers), `Fake.For<IShape>().Subtype<IShape, Circle, Square>().Generate()`. `Fake.One(type)` and `Fake.Many(type, count)` take a `Type` known only at runtime.
 - **What is left alone**: framework types without a generator keep their default (a struct such as `JsonElement` its zero value, a class such as `Stream`, `Task<T>` or `JsonNode` `null`), as do arrays of more than two dimensions. `CultureInfo` and `TimeZoneInfo` depend on the machine, which would break the promise that a seed gives the same data everywhere; set them with `.With(...)`.
-- **Cycles** (`Customer → Order → Customer`) stop with `null`, or point back at the containing object with [`WithBackReferences()`](#back-references). Elements that can't be created are left out of collections. `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
+- **Cycles** (`Customer → Order → Customer`) stop with `null`, or point back at the containing object with [`WithBackReferences()`](#back-references); [`WithParentKey`](#parent-keys) copies keys into foreign keys. Elements that can't be created are left out of collections. `MaxDepth(n)` (default 4) bounds nesting, `CollectionSize(min, max)` (default 1–3) sizes collections, `NullProbability(p)` (default 0) leaves nullable members null.
 - **Uniqueness**: `Unique(x => x.Email, maxAttempts)` keeps a member unique across everything the generator instance creates. A member that comes from the object's identity (names, email, address, birthdate…) is not drawn again on its own: on a duplicate the whole object is generated again, so the email still belongs to the name.
 - **Unique combinations**: `Unique(x => new { x.UserId, x.RoleId })` makes the combination unique while each member may repeat, for join tables and per-tenant keys such as `new { x.TenantId, x.Email }`. The combination is read from the finished object (after rules that depend on it), and an object whose combination was produced before is generated again as a whole, so objects without a duplicate are the ones you would get without the rule.
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
@@ -445,6 +445,21 @@ orders[0].Lines[0].Order;   // the very same order (ReferenceEquals), not null
 - Every member still `null` after creation, whose type an object above it satisfies, gets the **nearest** such object, through settable members, collections and dictionary values. Members that have a value are kept, and constructor-only members are left alone.
 - Nothing is drawn, so **the rest of the data is exactly that of the same seed without it**. `Where` and `AfterCreate` see the finished graph, and `Populate` fills the missing references of an existing graph.
 - The graph has real cycles afterwards: record `ToString`/`Equals` and serializers without cycle handling (`ReferenceHandler.Preserve`) may not cope.
+
+### Parent keys
+
+Foreign keys in nested objects are random by default, so `order.CustomerId` doesn't match `customer.Id`. `WithParentKey` copies the key down, so a generated aggregate joins up, ready for a database, `DataExport` or an API mock:
+
+```csharp
+var customers = Fake.For<Customer>()
+    .WithParentKey(c => c.Orders.Each().CustomerId, c => c.Id)
+    .WithParentKey(c => c.Orders.Each().Lines.Each().OrderId, (Order o) => o.Id)   // the nearest Order above each line
+    .Generate(100);
+```
+
+- The parent is the generated object, or with a typed parameter (`(Order o) => …`) the **nearest** object of that type above the foreign key. Paths go through nested objects, collections and dictionary values; objects on the path must be classes.
+- The keys are set on the finished object, after rules that depend on it and `WithBackReferences`, before `Where`, `Unique` and `AfterCreate` see it, so a key that a rule (`Sequence(c => c.Id, …)`) gives the parent is the one copied.
+- Nothing is drawn, so **the rest of the data is exactly that of the same seed without it**. `Populate` sets the keys of an existing graph.
 
 ### Conditions with `Where`
 
