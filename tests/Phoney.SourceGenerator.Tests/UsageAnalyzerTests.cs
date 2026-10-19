@@ -218,12 +218,14 @@ public sealed class UsageAnalyzerTests
             public static object B() => Fake.For<Product>().Unique(p => new { p.Name, Next = p.Id + 1 });
             public static object C() => Fake.For<Product>().Unique(p => new { p.Name, p.Address!.Street });
             public static object D() => Fake.For<Product>().Ignore(p => new { p.Name, p.Id });
+            public static object E() => Fake.For<Product>().Unique(p => new { p.Code, p.Id });
             """, cancellationToken);
 
-        diagnostics.Count.ShouldBe(3);
+        diagnostics.Count.ShouldBe(4);
         diagnostics[0].GetMessage().ShouldContain("must select a member");
         diagnostics[1].GetMessage().ShouldContain("must select a member");
         diagnostics[2].GetMessage().ShouldContain("only Unique accepts several members");
+        diagnostics[3].GetMessage().ShouldContain("'Product.Code' is not a public settable member");
     }
 
     [Test]

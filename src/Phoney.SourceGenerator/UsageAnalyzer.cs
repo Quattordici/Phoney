@@ -243,7 +243,19 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         if (selector.Kind == SelectorKind.Combination)
         {
             if (method.Name != "Unique")
+            {
                 Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
+                return;
+            }
+
+            if (GeneratedMembers(call, symbols) is not var (owner, described))
+                return;
+            foreach (var part in selector.Path!.Split(','))
+            {
+                if (!described.Any(m => m.Name == part))
+                    Report(context, selector, $"'{owner.Name}.{part}' is not a public settable member or constructor parameter, so it can't be part of a unique combination and the generator throws when it is first used.");
+            }
+
             return;
         }
 
@@ -280,9 +292,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             }
         }
 
-        if (method.ContainingType.TypeArguments.FirstOrDefault() is not INamedTypeSymbol type || StartsFromCustomModel(call, symbols))
-            return;
-        if (symbols.Describe(type) is not { } members)
+        if (GeneratedMembers(call, symbols) is not var (type, members))
             return;
 
         var member = members.FirstOrDefault(m => m.Name == selector.Name);
@@ -299,6 +309,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             Report(context, selector, $"'{type.Name}.{selector.Name}' is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
         }
     }
+
+    /// <summary>The generated type of the rule's generator and its members as the model describes them, or <see langword="null"/> when they can't be known (a custom model).</summary>
+    private static (INamedTypeSymbol Type, List<MemberModel> Members)? GeneratedMembers(IInvocationOperation call, Symbols symbols) =>
+        call.TargetMethod.ContainingType.TypeArguments.FirstOrDefault() is INamedTypeSymbol type && !StartsFromCustomModel(call, symbols) && symbols.Describe(type) is { } members
+            ? (type, members)
+            : null;
 
     /// <summary><c>Where(x =&gt; x.Member, condition)</c>: a condition on one member, unlike <c>Where(x =&gt; …)</c> on the whole object.</summary>
     private static bool IsMemberCondition(IMethodSymbol method) =>
