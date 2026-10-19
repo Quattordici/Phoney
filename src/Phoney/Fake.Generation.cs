@@ -117,9 +117,9 @@ public static partial class Fake
     /// <summary>A new unconfigured generator per call that reuses the rules compiled for the type while the model and the app-wide registrations stay the same.</summary>
     private static class Plain<T>
     {
-        private sealed record Entry(FakeModel<T> Model, object Conventions, object Subtypes, object Generators, ObjectGenerator<T> Prototype);
+        private sealed record Entry(FakeModel<T> Model, object AppConventions, object AppSubtypes, object AppGenerators, ObjectGenerator<T> Prototype);
 
-        private static Entry? s_entry;
+        private static Entry? s_entry; // one per T on purpose: each closed type keeps its own prototype
 
         public static ObjectGenerator<T> Get(FakeModel<T> model)
         {
@@ -127,8 +127,8 @@ public static partial class Fake
             var subtypes = FakeSubtypes.All;
             var generators = FakeGenerators.All;
             var entry = Volatile.Read(ref s_entry);
-            if (entry is null || !ReferenceEquals(entry.Model, model) || !ReferenceEquals(entry.Conventions, conventions)
-                || !ReferenceEquals(entry.Subtypes, subtypes) || !ReferenceEquals(entry.Generators, generators))
+            if (entry is null || !ReferenceEquals(entry.Model, model) || !ReferenceEquals(entry.AppConventions, conventions)
+                || !ReferenceEquals(entry.AppSubtypes, subtypes) || !ReferenceEquals(entry.AppGenerators, generators))
             {
                 entry = new Entry(model, conventions, subtypes, generators, new ObjectGenerator<T>(model));
                 Volatile.Write(ref s_entry, entry);

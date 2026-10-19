@@ -164,9 +164,12 @@ internal static class Decomposition
     public static bool PlatformNormalizes => Platform.Normalizes;
 
     /// <summary>The compatibility decomposition of <paramref name="text"/>.</summary>
-    public static string FormKD(string text) =>
-        Ascii.IsValid(text) ? text // no ASCII character has a decomposition
-        : Platform.Normalizes ? text.Normalize(NormalizationForm.FormKD) : WithTable(text);
+    public static string FormKD(string text)
+    {
+        if (Ascii.IsValid(text))
+            return text; // no ASCII character has a decomposition
+        return Platform.Normalizes ? text.Normalize(NormalizationForm.FormKD) : WithTable(text);
+    }
 
     /// <summary>The compatibility decomposition of <paramref name="text"/> from the table (and the Hangul formula), whatever the platform.</summary>
     public static string WithTable(string text)

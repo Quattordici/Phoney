@@ -274,29 +274,25 @@ public sealed class InternetModule : FakerModule
     private static bool TryParseCidr(ReadOnlySpan<char> text, Span<int> octets, out int prefix)
     {
         prefix = 0;
-        for (var part = 0; part < 5; part++)
+        for (var part = 0; part < 4; part++)
         {
-            var digits = 0;
-            var value = 0;
-            while (digits < text.Length && char.IsAsciiDigit(text[digits]))
-                value = (value * 10) + (text[digits++] - '0');
-            if (digits == 0 || digits > (part < 4 ? 3 : 2))
+            if (!TryReadNumber(ref text, 3, out octets[part]) || text.IsEmpty || text[0] != (part < 3 ? '.' : '/'))
                 return false;
-            text = text[digits..];
-            if (part < 4)
-            {
-                octets[part] = value;
-                if (text.IsEmpty || text[0] != (part < 3 ? '.' : '/'))
-                    return false;
-                text = text[1..];
-            }
-            else
-            {
-                prefix = value;
-            }
+            text = text[1..];
         }
 
-        return text.IsEmpty;
+        return TryReadNumber(ref text, 2, out prefix) && text.IsEmpty;
+    }
+
+    /// <summary>Reads one to <paramref name="maxDigits"/> ASCII digits from the start of <paramref name="text"/> and moves past them.</summary>
+    private static bool TryReadNumber(ref ReadOnlySpan<char> text, int maxDigits, out int value)
+    {
+        var digits = 0;
+        value = 0;
+        while (digits < text.Length && char.IsAsciiDigit(text[digits]))
+            value = (value * 10) + (text[digits++] - '0');
+        text = text[digits..];
+        return digits > 0 && digits <= maxDigits;
     }
 
     /// <summary>Returns a full (uncompressed) IPv6 address, e.g. <c>269f:1230:73e3:318d:842b:daab:326d:897b</c>.</summary>

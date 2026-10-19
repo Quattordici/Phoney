@@ -31,9 +31,12 @@ public sealed partial class HelpersModule : FakerModule
     {
         for (var i = 0; i < span.Length; i++)
         {
-            span[i] = pattern[i] == symbol ? random.Digit()
-                : pattern[i] == '!' ? (char)('0' + random.Int(2, 9))
-                : pattern[i];
+            if (pattern[i] == symbol)
+                span[i] = random.Digit();
+            else if (pattern[i] == '!')
+                span[i] = (char)('0' + random.Int(2, 9));
+            else
+                span[i] = pattern[i];
         }
     }
 

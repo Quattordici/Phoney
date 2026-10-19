@@ -44,7 +44,8 @@ public sealed class DateModule : FakerModule
             var from = (AddYears(reference, -maxYears) ?? DateTimeOffset.MinValue).ToUnixTimeMilliseconds();
             var to = (latest ?? throw NoDate(minYears, "years", "before", reference)).ToUnixTimeMilliseconds();
             // ValidateRange keeps minYears below maxYears, so from lies at least a year before to.
-            Volatile.Write(ref s_past, bounds = new PastBounds(reference, minYears, maxYears, from, to));
+            bounds = new PastBounds(reference, minYears, maxYears, from, to);
+            Volatile.Write(ref s_past, bounds);
         }
 
         return DateTimeOffset.FromUnixTimeMilliseconds(Random.Long(bounds.FromMs, bounds.ToMs));

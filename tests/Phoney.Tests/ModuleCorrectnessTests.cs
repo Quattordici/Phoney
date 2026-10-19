@@ -137,6 +137,21 @@ public sealed class ModuleCorrectnessTests
     }
 
     [Test]
+    [Arguments("")]
+    [Arguments("10.0.0.0")]
+    [Arguments("10.0.0/8")]
+    [Arguments("10.0.0.0/")]
+    [Arguments("10.0.0.0/8/")]
+    [Arguments("1000.0.0.0/8")]
+    [Arguments("10.0.0.0/100")]
+    [Arguments("10.a.0.0/8")]
+    [Arguments(" 10.0.0.0/8")]
+    [Arguments("10.0.0.0/33")]
+    [Arguments("256.0.0.0/8")]
+    public void Ipv4_rejects_malformed_cidr_blocks(string cidr) =>
+        Should.Throw<ArgumentException>(() => _faker.Internet.Ipv4(cidr)).ParamName.ShouldBe("cidrBlock");
+
+    [Test]
     public void Emails_are_well_formed()
     {
         var email = new Regex("^[A-Za-z0-9._+-]+@[a-z0-9.-]+$");
