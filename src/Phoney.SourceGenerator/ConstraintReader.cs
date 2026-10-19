@@ -73,6 +73,8 @@ internal static class ConstraintReader
                     {
                         Set("RangeMin", Literal(Invariant(bounds[0].Value)));
                         Set("RangeMax", Literal(Invariant(bounds[1].Value)));
+                        foreach (var named in attribute.NamedArguments.Where(n => n.Key is "MinimumIsExclusive" or "MaximumIsExclusive" && n.Value.Value is true))
+                            Set(named.Key == "MinimumIsExclusive" ? "RangeMinExclusive" : "RangeMaxExclusive", "true");
                     }
 
                     break;

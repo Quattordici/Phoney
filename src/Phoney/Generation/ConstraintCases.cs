@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using Produce = System.Func<Phoney.Generation.FakeScope, System.Func<Phoney.Generation.FakeScope, object?>, object?>;
 
@@ -97,9 +98,10 @@ internal static class ConstraintCases
             case var shape and (Shape.Number or Shape.Date):
                 foreach (var side in new[] { Side.Min, Side.Max })
                 {
-                    var text = side == Side.Min ? c.RangeMin : c.RangeMax;
-                    if (TryBound(type, shape, text, side, outside: false) is { } value)
-                        cases.Add(new($"the {(side == Side.Min ? "minimum" : "maximum")} ({text})", Replace(value)));
+                    var (text, exclusive) = side == Side.Min ? (c.RangeMin, c.RangeMinExclusive) : (c.RangeMax, c.RangeMaxExclusive);
+                    var name = side == Side.Min ? "minimum" : "maximum";
+                    if (TryBound(type, shape, text, side, outside: false, exclusive) is { } value)
+                        cases.Add(new(exclusive ? $"next to the excluded {name} ({text})" : $"the {name} ({text})", Replace(value)));
                 }
 
                 break;
@@ -159,41 +161,104 @@ internal static class ConstraintCases
     /// <summary>One unit below the minimum and above the maximum of a <c>[Range]</c>.</summary>
     private static void InvalidRange(List<ConstraintCase> cases, Type type, Shape shape, MemberConstraints c)
     {
-        if (TryBound(type, shape, c.RangeMin, Side.Min, outside: true) is { } below)
-            cases.Add(new($"below the minimum ({c.RangeMin})", Replace(below)));
-        if (TryBound(type, shape, c.RangeMax, Side.Max, outside: true) is { } above)
-            cases.Add(new($"above the maximum ({c.RangeMax})", Replace(above)));
+        if (TryBound(type, shape, c.RangeMin, Side.Min, outside: true, c.RangeMinExclusive) is { } below)
+            cases.Add(new(c.RangeMinExclusive ? $"the excluded minimum ({c.RangeMin})" : $"below the minimum ({c.RangeMin})", Replace(below)));
+        if (TryBound(type, shape, c.RangeMax, Side.Max, outside: true, c.RangeMaxExclusive) is { } above)
+            cases.Add(new(c.RangeMaxExclusive ? $"the excluded maximum ({c.RangeMax})" : $"above the maximum ({c.RangeMax})", Replace(above)));
     }
 
-    /// <summary>The bound of a range, or the value one unit (a whole number, a day) outside it; <see langword="null"/> when the member's type can't hold it.</summary>
-    private static object? TryBound(Type type, Shape shape, string? text, Side side, bool outside)
+    /// <summary>
+    /// The bound of a range, or the value one unit (a whole number, a day) outside it; <see langword="null"/> when the member's type can't hold it. An <paramref name="exclusive"/> bound is
+    /// itself the value outside, and the nearest value inside is one step away from it (a whole number, a day, a tick, the next double, the last digit of a decimal).
+    /// </summary>
+    private static object? TryBound(Type type, Shape shape, string? text, Side side, bool outside, bool exclusive)
     {
         if (text is null)
             return null;
-        var step = outside ? (side == Side.Min ? -1 : 1) : 0;
+        var inward = side == Side.Min ? 1 : -1; // the direction of the inside of the range
         try
         {
             if (shape == Shape.Date)
-            {
-                var date = DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).AddDays(step);
-                return type == typeof(DateTime) ? date.UtcDateTime : type == typeof(DateTimeOffset) ? date : DateOnly.FromDateTime(date.UtcDateTime);
-            }
-
+                return DateBound(type, text, outside, exclusive, inward);
             if (type == typeof(double) || type == typeof(float) || type == typeof(Half))
-            {
-                var fractional = double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture) + step;
-                return type == typeof(Half) ? (Half)fractional : Convert.ChangeType(fractional, type, CultureInfo.InvariantCulture);
-            }
+                return FractionalBound(type, text, outside, exclusive, inward);
 
             var number = decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
-            if (type != typeof(decimal)) // whole-number types: the nearest whole number inside the range
-                number = side == Side.Min ? Math.Ceiling(number) : Math.Floor(number);
-            return ToNumber(type, number + step);
+            if (type == typeof(decimal)) // a whole unit outside an inclusive bound, the nearest decimal inside an excluded one
+                return ToNumber(type, (outside, exclusive) switch { (true, false) => number - inward, (false, true) => NextDecimal(number, inward), _ => number });
+
+            // Whole-number types: the nearest whole number inside the range, and the one next to it outside.
+            var inside = (side, exclusive) switch
+            {
+                (Side.Min, true) => Math.Floor(number) + 1,
+                (Side.Min, false) => Math.Ceiling(number),
+                (_, true) => Math.Ceiling(number) - 1,
+                _ => Math.Floor(number),
+            };
+            return ToNumber(type, outside ? inside - inward : inside);
         }
         catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException or ArgumentOutOfRangeException)
         {
             return null; // e.g. one below zero for a byte
         }
+    }
+
+    /// <summary>The decimal nearest to <paramref name="value"/> in the <paramref name="direction"/>: the smallest power of ten (down to 1e-28) that a sum still holds exactly.</summary>
+    private static decimal NextDecimal(decimal value, int direction)
+    {
+        for (var scale = (byte)28; scale > 0; scale--)
+        {
+            var step = new decimal(1, 0, 0, isNegative: direction < 0, scale);
+            var next = value + step;
+            if (next - value == step) // a sum with more digits than a decimal holds is rounded
+                return next;
+        }
+
+        return value + direction;
+    }
+
+    /// <summary>A date bound of a <see cref="DateTime"/>, <see cref="DateTimeOffset"/> or <see cref="DateOnly"/> member: a day outside an inclusive bound, a day or a tick inside an excluded one.</summary>
+    private static object DateBound(Type type, string text, bool outside, bool exclusive, int inward)
+    {
+        var bound = DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+        var date = (outside, exclusive) switch
+        {
+            (true, false) => bound.AddDays(-inward),
+            (false, true) => type == typeof(DateOnly) ? bound.AddDays(inward) : bound.AddTicks(inward),
+            _ => bound,
+        };
+        if (type == typeof(DateTime))
+            return date.UtcDateTime;
+        return type == typeof(DateTimeOffset) ? date : DateOnly.FromDateTime(date.UtcDateTime);
+    }
+
+    /// <summary>A bound of a <see cref="double"/>, <see cref="float"/> or <see cref="Half"/> member: a whole unit outside an inclusive bound, else the value at the limit.</summary>
+    private static object FractionalBound(Type type, string text, bool outside, bool exclusive, int inward)
+    {
+        var limit = double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
+        if (outside && !exclusive)
+            return type == typeof(Half) ? (Half)(limit - inward) : Convert.ChangeType(limit - inward, type, CultureInfo.InvariantCulture);
+        // Inside an excluded limit strictly; the inclusive bound itself and the excluded limit (the invalid case) may sit on it.
+        var direction = outside ? -inward : inward;
+        if (type == typeof(float))
+            return AtLimit<float>(limit, direction, strict: exclusive && !outside);
+        if (type == typeof(Half))
+            return AtLimit<Half>(limit, direction, strict: exclusive && !outside);
+        return AtLimit<double>(limit, direction, strict: exclusive && !outside);
+    }
+
+    /// <summary>
+    /// The <typeparamref name="TFloat"/> nearest to <paramref name="limit"/> on its <paramref name="direction"/> side (beyond it when <paramref name="strict"/>), on that side whether
+    /// the validator compares as a <see cref="double"/> or, with a float operand, as a <typeparamref name="TFloat"/> with the limit converted too.
+    /// </summary>
+    private static TFloat AtLimit<TFloat>(double limit, int direction, bool strict)
+        where TFloat : IFloatingPointIeee754<TFloat>
+    {
+        var converted = TFloat.CreateSaturating(limit);
+        var side = double.CreateSaturating(converted).CompareTo(limit) * direction; // below zero: the conversion moved it to the other side
+        if (!strict && side >= 0)
+            return converted;
+        return direction > 0 ? TFloat.BitIncrement(converted) : TFloat.BitDecrement(converted);
     }
 
     /// <summary>A decimal as a number of <paramref name="type"/>, which may be one <see cref="Convert"/> does not support; throws <see cref="OverflowException"/> when it does not fit.</summary>

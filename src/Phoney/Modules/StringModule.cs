@@ -7,8 +7,8 @@ public sealed class StringModule : FakerModule
     private const string Upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private const string Lower = "abcdefghijklmnopqrstuvwxyz";
     private const string HexMixed = "0123456789abcdefABCDEF";
-    internal const string HexLower = "0123456789abcdefabcdef";
-    private const string HexUpper = "0123456789ABCDEFABCDEF";
+    internal const string HexLower = "0123456789abcdef";
+    private const string HexUpper = "0123456789ABCDEF";
     private const string Symbols = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
     private const string CrockfordBase32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
     private const string NanoIdAlphabet = Digits + Upper + Lower + "_-";
@@ -48,15 +48,26 @@ public sealed class StringModule : FakerModule
     /// <param name="length">Number of characters.</param>
     /// <param name="casing">Letter casing.</param>
     /// <param name="exclude">Characters that must not appear.</param>
+    /// <exception cref="ArgumentException"><paramref name="exclude"/> leaves no letter.</exception>
     public string Alpha(int length = 1, Casing casing = Casing.Mixed, string? exclude = null) =>
-        FromCharacters(Exclude(LettersFor(casing), exclude), length);
+        FromCharacters(Allowed(LettersFor(casing), exclude, length), length);
 
     /// <summary>Returns letters and digits.</summary>
     /// <param name="length">Number of characters.</param>
     /// <param name="casing">Letter casing.</param>
     /// <param name="exclude">Characters that must not appear.</param>
+    /// <exception cref="ArgumentException"><paramref name="exclude"/> leaves no character.</exception>
     public string AlphaNumeric(int length = 1, Casing casing = Casing.Mixed, string? exclude = null) =>
-        FromCharacters(Exclude(DigitsAndLettersFor(casing), exclude), length);
+        FromCharacters(Allowed(DigitsAndLettersFor(casing), exclude, length), length);
+
+    /// <summary><see cref="Exclude"/>, failing under the name of <paramref name="exclude"/> when it leaves nothing to pick for a non-empty result.</summary>
+    private string Allowed(string characters, string? exclude, int length)
+    {
+        var allowed = Exclude(characters, exclude);
+        if (allowed.Length == 0 && length > 0)
+            throw new ArgumentException("Every possible character is excluded.", nameof(exclude));
+        return allowed;
+    }
 
     /// <summary>Returns a string of digits.</summary>
     /// <param name="length">Number of digits.</param>
@@ -89,7 +100,7 @@ public sealed class StringModule : FakerModule
     /// <summary>Returns <c>0x</c> followed by <paramref name="length"/> hexadecimal digits.</summary>
     public string Hexadecimal(int length = 1, Casing casing = Casing.Mixed, string prefix = "0x")
     {
-        // The cased alphabets keep the 22 positions of the mixed one, so a casing changes the letters' case, never the draws.
+        // One draw per digit in every casing; a single-case alphabet holds each digit once, so all sixteen are equally likely.
         return Prefixed(casing switch { Casing.Upper => HexUpper, Casing.Lower => HexLower, _ => HexMixed }, length, prefix);
     }
 
@@ -118,21 +129,21 @@ public sealed class StringModule : FakerModule
     public string Uuid() => Random.Guid().ToString();
 
     /// <summary>Returns a version 7 (time-ordered) UUID string for <paramref name="timestamp"/> (default: the faker's reference date).</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The timestamp is before 1970, which the 48-bit Unix time of a UUID can't hold.</exception>
     public string UuidV7(DateTimeOffset? timestamp = null)
     {
-        var ms = Math.Max(0, (timestamp ?? Faker.ReferenceDate).ToUnixTimeMilliseconds());
-        var hex = (ms & 0xFFFF_FFFF_FFFF).ToString("x12", System.Globalization.CultureInfo.InvariantCulture);
+        var ms = UnixMilliseconds48(timestamp, "UUIDv7");
+        var hex = ms.ToString("x12", System.Globalization.CultureInfo.InvariantCulture);
         var random = Uuid();
         // xxxxxxxx-xxxx-7xxx-yxxx-xxxxxxxxxxxx: time in the first 48 bits, version 7, random rest.
         return $"{hex[..8]}-{hex[8..]}-7{random.AsSpan(15, 3)}-{random.AsSpan(19)}";
     }
 
     /// <summary>Returns a ULID for <paramref name="timestamp"/> (default: the faker's reference date).</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The timestamp is before 1970, which the 48-bit Unix time of a ULID can't hold.</exception>
     public string Ulid(DateTimeOffset? timestamp = null)
     {
-        var ms = (timestamp ?? Faker.ReferenceDate).ToUnixTimeMilliseconds();
-        if (ms is < 0 or > (1L << 48) - 1)
-            throw new ArgumentOutOfRangeException(nameof(timestamp), "ULID timestamps must be between 1970 and 10889.");
+        var ms = UnixMilliseconds48(timestamp, "ULID");
         Span<char> time = stackalloc char[10];
         for (var i = 9; i >= 0; i--)
         {
@@ -141,6 +152,15 @@ public sealed class StringModule : FakerModule
         }
 
         return string.Concat(time, FromCharacters(CrockfordBase32, 16));
+    }
+
+    /// <summary>The Unix time in milliseconds of <paramref name="timestamp"/> (default: the reference date) for the 48 bits time-ordered ids keep: 1970 to 10889.</summary>
+    private long UnixMilliseconds48(DateTimeOffset? timestamp, string id)
+    {
+        var ms = (timestamp ?? Faker.ReferenceDate).ToUnixTimeMilliseconds();
+        if (ms is < 0 or > (1L << 48) - 1)
+            throw new ArgumentOutOfRangeException(nameof(timestamp), timestamp ?? Faker.ReferenceDate, $"{id} timestamps must be between 1970 and 10889.");
+        return ms;
     }
 
     /// <summary>Returns a URL-friendly unique id of <paramref name="length"/> characters (nanoid alphabet).</summary>

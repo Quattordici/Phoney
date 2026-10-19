@@ -74,7 +74,7 @@ Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 | `de_CH` | de → en → base | 24 | 4263 |
 | `dv` | en → base | 32 | 4268 |
 | `el` | en → base | 60 | 9848 |
-| `en` | base | 148 | 133946 |
+| `en` | base | 148 | 134019 |
 | `en_AU` | en → base | 17 | 3058 |
 | `en_AU_ocker` | en_AU → en → base | 18 | 1326 |
 | `en_BORK` | en → base | 2 | 618 |
@@ -91,9 +91,9 @@ Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 | `eo` | en → base | 50 | 8235 |
 | `es` | en → base | 50 | 10923 |
 | `es_MX` | es → en → base | 48 | 14154 |
-| `fa` | en → base | 76 | 17358 |
+| `fa` | en → base | 76 | 17409 |
 | `fi` | en → base | 20 | 1480 |
-| `fr` | en → base | 81 | 46330 |
+| `fr` | en → base | 81 | 46131 |
 | `fr_BE` | fr → en → base | 31 | 18807 |
 | `fr_CA` | fr → en → base | 13 | 551 |
 | `fr_CH` | fr → en → base | 37 | 12637 |
@@ -101,7 +101,7 @@ Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 | `fr_SN` | fr → en → base | 19 | 2547 |
 | `he` | en → base | 53 | 32408 |
 | `hr` | en → base | 36 | 14056 |
-| `hu` | en → base | 53 | 61743 |
+| `hu` | en → base | 53 | 61476 |
 | `hy` | en → base | 31 | 4829 |
 | `id_ID` | en → base | 60 | 32598 |
 | `it` | en → base | 35 | 27598 |
@@ -123,8 +123,8 @@ Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 | `ro` | en → base | 33 | 8851 |
 | `ro_MD` | ro → en → base | 35 | 6980 |
 | `ru` | en → base | 62 | 20519 |
-| `sk` | en → base | 33 | 15856 |
-| `sl_SI` | en → base | 37 | 5877 |
+| `sk` | en → base | 33 | 16023 |
+| `sl_SI` | en → base | 37 | 5860 |
 | `sr_RS_latin` | en → base | 25 | 12914 |
 | `sv` | en → base | 46 | 6667 |
 | `ta_IN` | en → base | 4 | 278 |

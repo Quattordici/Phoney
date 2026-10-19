@@ -147,8 +147,8 @@ public static class ConventionValues
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
                 return T.CreateSaturating(Convert.ToDecimal(scope.Faker.Random.Element(allowed), CultureInfo.InvariantCulture));
-            if (TryRange(constraints, out double min, out double max))
-                return InRange<T>(scope, min, max);
+            if (TryRange(constraints, out var range))
+                return InRange<T>(scope, range);
             return NumberCore<T>(scope, kind);
         });
     }
@@ -186,7 +186,7 @@ public static class ConventionValues
     public static DateTimeOffset DateTimeOffset(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null)
     {
         var date = scope.Faker.Date;
-        if (constraints is not null && TryDateRange(constraints, out var from, out var to))
+        if (constraints is not null && TryOpenDateRange(constraints, out var from, out var to))
             return date.Between(from, to);
 
         var reference = scope.Faker.ReferenceDate;
@@ -216,8 +216,20 @@ public static class ConventionValues
         DateTimeOffset(scope, kind, constraints).UtcDateTime;
 
     /// <summary>Like <see cref="DateTimeOffset"/> without time of day.</summary>
-    public static DateOnly DateOnly(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) =>
-        global::System.DateOnly.FromDateTime(DateTimeOffset(scope, kind, constraints).UtcDateTime);
+    public static DateOnly DateOnly(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null)
+    {
+        // An excluded limit removes a whole day: a moment just after midnight still has the excluded date.
+        if (constraints is { RangeMinExclusive: true } or { RangeMaxExclusive: true } && TryDateRange(constraints, out var from, out var to))
+        {
+            var first = global::System.DateOnly.FromDateTime(from.UtcDateTime).AddDays(constraints.RangeMinExclusive ? 1 : 0);
+            var last = global::System.DateOnly.FromDateTime(to.UtcDateTime).AddDays(constraints.RangeMaxExclusive ? -1 : 0);
+            if (first > last)
+                throw NoValueInRange(constraints, typeof(DateOnly));
+            return scope.Faker.Date.Between(first, last);
+        }
+
+        return global::System.DateOnly.FromDateTime(DateTimeOffset(scope, kind, constraints).UtcDateTime);
+    }
 
     /// <summary>Returns a random time of day.</summary>
     public static TimeOnly TimeOnly(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) => scope.Faker.Date.TimeOfDay();
@@ -407,12 +419,50 @@ public static class ConventionValues
     }
 
     /// <summary>Parses a numeric <c>[Range]</c>.</summary>
-    private static bool TryRange(MemberConstraints c, out double min, out double max)
+    private static bool TryRange(MemberConstraints c, out NumericRange range)
     {
-        min = max = 0;
-        return c.RangeMin is { } a && c.RangeMax is { } b
-            && double.TryParse(a, NumberStyles.Float, CultureInfo.InvariantCulture, out min)
-            && double.TryParse(b, NumberStyles.Float, CultureInfo.InvariantCulture, out max);
+        range = default;
+        if (c.RangeMin is not { } a || c.RangeMax is not { } b
+            || !double.TryParse(a, NumberStyles.Float, CultureInfo.InvariantCulture, out var min)
+            || !double.TryParse(b, NumberStyles.Float, CultureInfo.InvariantCulture, out var max))
+            return false;
+        range = new NumericRange(min, max, c);
+        return true;
+    }
+
+    /// <summary>A numeric <c>[Range]</c> read from <paramref name="Source"/>; an exclusive limit is itself outside it.</summary>
+    private readonly record struct NumericRange(double Min, double Max, MemberConstraints Source)
+    {
+        public bool MinExclusive => Source.RangeMinExclusive;
+
+        public bool MaxExclusive => Source.RangeMaxExclusive;
+
+        /// <summary>Whether <paramref name="value"/> lies outside the range.</summary>
+        public bool Excludes(double value) =>
+            (MinExclusive ? value <= Min : value < Min) || (MaxExclusive ? value >= Max : value > Max);
+
+        /// <summary>The limits as decimals, digit for digit as written (a double keeps about 15), within what a decimal holds.</summary>
+        public (decimal Low, decimal High) Decimals() => (Exact(Source.RangeMin, Min), Exact(Source.RangeMax, Max));
+
+        private static decimal Exact(string? text, double parsed) =>
+            decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) ? exact : (decimal)Math.Clamp(parsed, -7.9e28, 7.9e28);
+
+        /// <summary>The error for a range in which <paramref name="type"/> has no value.</summary>
+        public InvalidOperationException Empty(Type type) => NoValueInRange(Source, type);
+    }
+
+    /// <summary>The error for a <c>[Range]</c> with no value of <paramref name="type"/> inside, e.g. <c>[Range(1, 2)]</c> with both limits excluded for an <see cref="int"/>.</summary>
+    private static InvalidOperationException NoValueInRange(MemberConstraints c, Type type)
+    {
+        var excluded = (c.RangeMinExclusive, c.RangeMaxExclusive) switch
+        {
+            (true, true) => ", MinimumIsExclusive = true, MaximumIsExclusive = true",
+            (true, false) => ", MinimumIsExclusive = true",
+            (false, true) => ", MaximumIsExclusive = true",
+            _ => "",
+        };
+        return new InvalidOperationException(
+            $"Phoney cannot generate values for [Range({c.RangeMin}, {c.RangeMax}{excluded})]: no {type.Name} lies inside it. Widen the range, include a limit, or add a rule with .With(...) for this member.");
     }
 
     /// <summary>Parses a date <c>[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]</c>.</summary>
@@ -425,34 +475,135 @@ public static class ConventionValues
             && from <= to;
     }
 
-    /// <summary>A uniform value of <typeparamref name="T"/> in [<paramref name="min"/>, <paramref name="max"/>], clamped to the type's range.</summary>
-    private static T InRange<T>(FakeScope scope, double min, double max)
+    /// <summary>
+    /// Like <see cref="TryDateRange"/> with the excluded limits moved one tick inside, which <c>DateModule.Between</c>
+    /// rounds to the nearest millisecond inside; throws when nothing is left.
+    /// </summary>
+    private static bool TryOpenDateRange(MemberConstraints c, out DateTimeOffset from, out DateTimeOffset to)
+    {
+        if (!TryDateRange(c, out from, out to))
+            return false;
+        if (c.RangeMinExclusive)
+            from = from.AddTicks(1);
+        if (c.RangeMaxExclusive)
+            to = to.AddTicks(-1);
+        return from <= to ? true : throw NoValueInRange(c, typeof(DateTimeOffset));
+    }
+
+    /// <summary>A uniform value of <typeparamref name="T"/> in <paramref name="range"/>, clamped to the type's range.</summary>
+    private static T InRange<T>(FakeScope scope, NumericRange range)
         where T : INumber<T>
     {
         if (typeof(T) == typeof(decimal))
-        {
-            var low = (decimal)Math.Max(min, -7.9e28);
-            var high = (decimal)Math.Min(max, 7.9e28);
-            return T.CreateSaturating(scope.Faker.Number.Decimal(low, high, 2));
-        }
+            return T.CreateSaturating(DecimalInRange(scope, range));
 
-        if (typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half))
-        {
-            (min, max) = (Math.Max(min, double.MinValue), Math.Min(max, double.MaxValue)); // [Range] may say ±∞ for no limit
-            var value = Math.Clamp(Math.Round(scope.Faker.Random.Double(min, max), 2), min, max);
-            return T.CreateSaturating(value);
-        }
+        if (typeof(T) == typeof(float))
+            return T.CreateSaturating(Narrow<float>(FractionalInRange(scope, range), range));
+        if (typeof(T) == typeof(Half))
+            return T.CreateSaturating(Narrow<Half>(FractionalInRange(scope, range), range));
+        if (typeof(T) == typeof(double))
+            return T.CreateSaturating(FractionalInRange(scope, range));
 
-        // Integers: whole numbers inside the range and inside the type (CreateSaturating maps ±∞ to the type's limits).
+        // Integers: whole numbers inside the range and inside the type, from the limits as written (a double can't tell long.MinValue from the next one).
+        var (low, high) = range.Decimals();
         var unbounded = typeof(T) == typeof(System.Numerics.BigInteger); // has no limits to saturate to
-        var typeMin = unbounded ? double.NegativeInfinity : double.CreateSaturating(T.CreateSaturating(double.NegativeInfinity));
-        var typeMax = unbounded ? double.PositiveInfinity : double.CreateSaturating(T.CreateSaturating(double.PositiveInfinity));
-        var from = ToLong(Math.Max(Math.Ceiling(min), typeMin));
-        var to = ToLong(Math.Min(Math.Floor(max), typeMax));
-        return T.CreateSaturating(to < from ? from : scope.Faker.Random.Long(from, to));
+        var typeMin = unbounded ? decimal.MinValue : decimal.CreateSaturating(T.CreateSaturating(decimal.MinValue));
+        var typeMax = unbounded ? decimal.MaxValue : decimal.CreateSaturating(T.CreateSaturating(decimal.MaxValue));
+        var lowest = decimal.Ceiling(low);
+        var highest = decimal.Floor(high);
+        if (range.MinExclusive && lowest <= low) // Ceiling(low) is never below low: this is a whole-number limit that is excluded
+            lowest++;
+        if (range.MaxExclusive && highest >= high)
+            highest--;
+        var from = Math.Max(lowest, typeMin);
+        var to = Math.Min(highest, typeMax);
+        if (to < from)
+            throw range.Empty(typeof(T));
+        // A range wholly beyond long (a ulong near its top) is drawn as a BigInteger; one that reaches into long keeps its long draw, so seeds don't move.
+        if (from > long.MaxValue || to < long.MinValue)
+            return T.CreateSaturating(scope.Faker.Number.BigInteger(new System.Numerics.BigInteger(from), new System.Numerics.BigInteger(to)));
+        return T.CreateSaturating(scope.Faker.Random.Long(ToLong(from), ToLong(to)));
 
-        // Explicit clamping: casting an out-of-range double to long is undefined in C#.
-        static long ToLong(double d) => d >= 9.2233720368547748E18 ? long.MaxValue : d <= -9.2233720368547758E18 ? long.MinValue : (long)d;
+        static long ToLong(decimal d) => (long)Math.Clamp(d, long.MinValue, long.MaxValue);
+    }
+
+    /// <summary>A double in <paramref name="range"/>, rounded to two decimals unless rounding lands on an excluded limit.</summary>
+    private static double FractionalInRange(FakeScope scope, NumericRange range)
+    {
+        var (min, max) = (Math.Max(range.Min, double.MinValue), Math.Min(range.Max, double.MaxValue)); // [Range] may say ±∞ for no limit
+        var drawn = scope.Faker.Random.Double(min, max);
+        var value = Math.Clamp(Math.Round(drawn, 2), min, max);
+        if (!range.Excludes(value))
+            return value;
+        // Rounding landed on an excluded limit: the drawn value is in [min, max), so only an excluded minimum needs a step inside.
+        value = range.MinExclusive && drawn <= min ? Math.BitIncrement(min) : drawn;
+        return range.Excludes(value) ? throw range.Empty(typeof(double)) : value;
+    }
+
+    /// <summary>
+    /// <paramref name="value"/> (inside <paramref name="range"/>) as a <typeparamref name="TFloat"/>, moved one representable step inside when the conversion rounds it onto or
+    /// past a limit, compared as a <see cref="double"/> and as a <typeparamref name="TFloat"/> (a <c>[Range]</c> with a float operand converts its limits too). Draws nothing.
+    /// </summary>
+    private static TFloat Narrow<TFloat>(double value, NumericRange range)
+        where TFloat : IFloatingPointIeee754<TFloat>
+    {
+        var narrowed = TFloat.CreateSaturating(value);
+        // Conversion is monotonic, so the value is at most at the converted limit, and one step is enough when the range holds a TFloat at all.
+        if (Below(narrowed))
+            narrowed = TFloat.BitIncrement(narrowed);
+        else if (Above(narrowed))
+            narrowed = TFloat.BitDecrement(narrowed);
+        return Below(narrowed) || Above(narrowed) ? throw range.Empty(typeof(TFloat)) : narrowed;
+
+        bool Below(TFloat v) => range.MinExclusive
+            ? v <= TFloat.CreateSaturating(range.Min) || double.CreateSaturating(v) <= range.Min
+            : v < TFloat.CreateSaturating(range.Min) || double.CreateSaturating(v) < range.Min;
+
+        bool Above(TFloat v) => range.MaxExclusive
+            ? v >= TFloat.CreateSaturating(range.Max) || double.CreateSaturating(v) >= range.Max
+            : v > TFloat.CreateSaturating(range.Max) || double.CreateSaturating(v) > range.Max;
+    }
+
+    /// <summary>
+    /// A decimal in <paramref name="range"/>, with two decimals (fewer when the limits are too large to hold them), or with as many more as it takes to have a value inside
+    /// (<c>[Range(typeof(decimal), "0.001", "0.009")]</c> has none with two). The limits are read as decimals, not doubles, so no digit is lost.
+    /// </summary>
+    private static decimal DecimalInRange(FakeScope scope, NumericRange range)
+    {
+        var (low, high) = range.Decimals();
+        var magnitude = Math.Max(Math.Abs(low), Math.Abs(high));
+        // Two places, or as many as a decimal this large still holds (Number.Decimal keeps the same number, so the draw is unchanged).
+        var places = 2;
+        var scale = 100m;
+        while (places > 0 && magnitude > decimal.MaxValue / scale)
+        {
+            places--;
+            scale /= 10;
+        }
+
+        var (first, last) = Inside(scale);
+        // More places while there is no value with these, as long as the limits scaled by ten more still fit a decimal.
+        while (!HasStep(first, last, scale) && places < Modules.NumberModule.MaxDecimalPlaces && magnitude <= decimal.MaxValue / (scale * 10))
+        {
+            places++;
+            scale *= 10;
+            (first, last) = Inside(scale);
+        }
+
+        return HasStep(first, last, scale) ? scope.Faker.Number.Decimal(first, last, places) : throw range.Empty(typeof(decimal));
+
+        // The first and last values inside with steps of 1/step: an excluded limit moves to the next step inside.
+        // An excluded decimal.MaxValue (or MinValue) has no step beyond it, which leaves the range empty.
+        (decimal First, decimal Last) Inside(decimal step) =>
+            (range.MinExclusive ? Beside(decimal.Floor(low * step), 1) / step : low, range.MaxExclusive ? Beside(decimal.Ceiling(high * step), -1) / step : high);
+
+        decimal Beside(decimal value, int direction)
+        {
+            var room = direction > 0 ? value < decimal.MaxValue : value > decimal.MinValue;
+            return room ? value + direction : throw range.Empty(typeof(decimal));
+        }
+
+        static bool HasStep(decimal first, decimal last, decimal step) => decimal.Ceiling(first * step) <= decimal.Floor(last * step);
     }
 
     /// <summary>An allowed value as invariant text.</summary>

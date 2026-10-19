@@ -232,11 +232,14 @@ public sealed class SeededRandom
     /// <summary>Returns a random value of the enum <typeparamref name="TEnum"/>.</summary>
     public TEnum Enum<TEnum>() where TEnum : struct, Enum => Element<TEnum>(EnumValues<TEnum>.All);
 
-    /// <summary>Returns <paramref name="count"/> distinct random elements of <paramref name="items"/> in random order.</summary>
+    /// <summary>Returns <paramref name="count"/> distinct random elements of <paramref name="items"/> in random order (all of them, shuffled, when there are fewer).</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
     public T[] Elements<T>(IReadOnlyList<T> items, int count)
     {
         ArgumentNullException.ThrowIfNull(items);
-        count = Math.Clamp(count, 0, items.Count);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        count = Math.Min(count, items.Count);
         var copy = items.ToArray();
         // Partial Fisher-Yates: only the first `count` slots need shuffling.
         for (var i = 0; i < count; i++)

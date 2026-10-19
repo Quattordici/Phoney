@@ -166,7 +166,8 @@ public sealed partial class HelpersModule : FakerModule
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         var set = new HashSet<T>();
         var result = new List<T>(count);
-        for (var attempts = 0; result.Count < count && attempts < 1000 * count; attempts++)
+        var limit = 1000L * count; // a long: 1000 × count passes int.MaxValue from about two million values on
+        for (var attempts = 0L; result.Count < count && attempts < limit; attempts++)
         {
             var value = factory();
             if (set.Add(value))

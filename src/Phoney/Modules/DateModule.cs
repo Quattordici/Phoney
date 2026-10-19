@@ -98,14 +98,17 @@ public sealed class DateModule : FakerModule
         return Between(AddSeconds(reference, 1) ?? throw NoDate(0, "days", "after", reference), AddDays(reference, days) ?? DateTimeOffset.MaxValue);
     }
 
-    /// <summary>Returns a date between <paramref name="from"/> and <paramref name="to"/> (inclusive).</summary>
+    /// <summary>Returns a date between <paramref name="from"/> and <paramref name="to"/> (inclusive), on a whole millisecond (<paramref name="from"/> itself when no whole millisecond lies between them).</summary>
+    /// <exception cref="ArgumentException"><paramref name="from"/> is after <paramref name="to"/>.</exception>
     public DateTimeOffset Between(DateTimeOffset from, DateTimeOffset to)
     {
-        var fromMs = from.ToUnixTimeMilliseconds();
-        var toMs = to.ToUnixTimeMilliseconds();
-        if (fromMs > toMs)
+        if (from > to)
             throw new ArgumentException("'from' must be before 'to'.", nameof(from));
-        return DateTimeOffset.FromUnixTimeMilliseconds(Random.Long(fromMs, toMs));
+        var fromMs = from.ToUnixTimeMilliseconds(); // rounds down, so a 'from' within a millisecond starts at the next one
+        if (from.UtcTicks % TimeSpan.TicksPerMillisecond != 0)
+            fromMs++;
+        var toMs = to.ToUnixTimeMilliseconds();
+        return fromMs > toMs ? from : DateTimeOffset.FromUnixTimeMilliseconds(Random.Long(fromMs, toMs));
     }
 
     /// <summary>Returns <paramref name="count"/> sorted dates between <paramref name="from"/> and <paramref name="to"/>.</summary>
@@ -161,7 +164,7 @@ public sealed class DateModule : FakerModule
         ArgumentOutOfRangeException.ThrowIfGreaterThan(maxYear, 9999);
         if (maxYear < minYear)
             throw new ArgumentException($"Max year {maxYear} must be greater than or equal to min year {minYear}.", nameof(maxYear));
-        return Between(new DateOnly(minYear, 1, 2), new DateOnly(maxYear, 12, 30));
+        return Between(new DateOnly(minYear, 1, 1), new DateOnly(maxYear, 12, 31));
     }
 
     /// <summary>Returns a month name in the locale's language, e.g. <c>January</c>.</summary>

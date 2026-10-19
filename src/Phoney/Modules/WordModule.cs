@@ -60,6 +60,7 @@ public sealed class WordModule : FakerModule
     /// <inheritdoc cref="Adjective" path="/param"/>
     public string Sample(int? minLength = null, int? maxLength = null, WordLengthStrategy strategy = WordLengthStrategy.Fail)
     {
+        WordPicker.ValidateLengths(minLength, maxLength);
         Span<int> order = stackalloc int[PartsOfSpeech.Length];
         PartsOfSpeech.CopyTo(order);
         Random.Shuffle(order);
@@ -69,7 +70,9 @@ public sealed class WordModule : FakerModule
                 return word;
         }
 
-        throw new PhoneyDataException($"No matching word data available for locale '{Faker.Locale}'.");
+        throw new PhoneyDataException(minLength is null && maxLength is null
+            ? $"No matching word data available for locale '{Faker.Locale}'."
+            : $"No words {WordPicker.DescribeLengths(minLength, maxLength)} in locale '{Faker.Locale}'.");
     }
 
     /// <summary>Returns <paramref name="count"/> space-separated words (1–3 when not given).</summary>
@@ -87,10 +90,11 @@ public sealed class WordModule : FakerModule
     /// <summary>Picks a word with the length constraint or throws a descriptive exception.</summary>
     private string Pick(int key, int? minLength, int? maxLength, WordLengthStrategy strategy)
     {
+        WordPicker.ValidateLengths(minLength, maxLength);
         var entry = Faker.Data.Strings(key);
         if (WordPicker.TryPick(entry, Random, minLength, maxLength, strategy, out var word))
             return word;
-        throw new PhoneyDataException($"No words of length {minLength}-{maxLength} found in '{KeyRegistry.PathOf(key)}' for locale '{Faker.Locale}'.");
+        throw new PhoneyDataException($"No words {WordPicker.DescribeLengths(minLength, maxLength)} found in '{KeyRegistry.PathOf(key)}' for locale '{Faker.Locale}'.");
     }
 }
 
@@ -119,6 +123,29 @@ public enum WordLengthStrategy
 /// </summary>
 internal static class WordPicker
 {
+    /// <summary>Checks a length range before anything is drawn: lengths can't be negative, and the maximum can't be below the minimum.</summary>
+    public static void ValidateLengths(int? minLength, int? maxLength)
+    {
+#pragma warning disable S3236 // the values are unwrapped from nullables, and the exception must name the parameters
+        if (minLength is { } min)
+            ArgumentOutOfRangeException.ThrowIfNegative(min, nameof(minLength));
+        if (maxLength is { } max)
+            ArgumentOutOfRangeException.ThrowIfNegative(max, nameof(maxLength));
+#pragma warning restore S3236
+        if (minLength > maxLength)
+            throw new ArgumentException($"The maximum length {maxLength} must be greater than or equal to the minimum length {minLength}.", nameof(maxLength));
+    }
+
+    /// <summary>The length range for a message, e.g. <c>of 3 to 5 characters</c> or <c>of at most 4 characters</c>.</summary>
+    public static string DescribeLengths(int? minLength, int? maxLength) => (minLength, maxLength) switch
+    {
+        ({ } min, { } max) when min == max => $"of {min} characters",
+        ({ } min, { } max) => $"of {min} to {max} characters",
+        ({ } min, null) => $"of at least {min} characters",
+        (null, { } max) => $"of at most {max} characters",
+        _ => "of any length",
+    };
+
     /// <summary>Picks a word from <paramref name="entry"/> honouring the length range and fallback strategy.</summary>
     public static bool TryPick(StringsEntry entry, SeededRandom random, int? minLength, int? maxLength, WordLengthStrategy strategy, out string word)
     {

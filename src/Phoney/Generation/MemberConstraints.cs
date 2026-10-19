@@ -26,6 +26,12 @@ public sealed class MemberConstraints
     /// <summary>Upper bound from <c>[Range]</c>, as invariant text (a number or a date).</summary>
     public string? RangeMax { get; init; }
 
+    /// <summary>From <c>[Range(MinimumIsExclusive = true)]</c>: <see cref="RangeMin"/> itself is outside the range.</summary>
+    public bool RangeMinExclusive { get; init; }
+
+    /// <summary>From <c>[Range(MaximumIsExclusive = true)]</c>: <see cref="RangeMax"/> itself is outside the range.</summary>
+    public bool RangeMaxExclusive { get; init; }
+
     /// <summary>Pattern from <c>[RegularExpression]</c>; values are generated to match it.</summary>
     public string? Pattern { get; init; }
 
@@ -53,6 +59,7 @@ public sealed class MemberConstraints
     {
         int? min = null, max = null;
         string? rangeMin = null, rangeMax = null, pattern = null;
+        bool rangeMinExclusive = false, rangeMaxExclusive = false;
         ConventionKind? format = null;
         bool base64 = false, required = false;
         object?[]? allowed = null, denied = null;
@@ -78,6 +85,7 @@ public sealed class MemberConstraints
                 case RangeAttribute a:
                     rangeMin = Invariant(a.Minimum);
                     rangeMax = Invariant(a.Maximum);
+                    (rangeMinExclusive, rangeMaxExclusive) = (a.MinimumIsExclusive, a.MaximumIsExclusive);
                     break;
                 case RegularExpressionAttribute a:
                     pattern = a.Pattern;
@@ -118,6 +126,8 @@ public sealed class MemberConstraints
                 MaxLength = max,
                 RangeMin = rangeMin,
                 RangeMax = rangeMax,
+                RangeMinExclusive = rangeMinExclusive,
+                RangeMaxExclusive = rangeMaxExclusive,
                 Pattern = pattern,
                 Format = format,
                 Base64 = base64,
