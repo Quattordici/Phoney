@@ -206,6 +206,46 @@ public sealed class PopulateTests
     }
 
     [Test]
+    public void A_collection_that_can_be_enumerated_only_once_is_populated()
+    {
+        var customers = Customers.Populate(new OnceOnly<Customer>([new Customer(), new Customer()]));
+
+        customers.Count.ShouldBe(2);
+        customers.ShouldAllBe(c => !string.IsNullOrEmpty(c.FirstName));
+    }
+
+    /// <summary>A collection whose elements can be read once, like a stream of rows.</summary>
+    private sealed class OnceOnly<T>(IReadOnlyList<T> items) : IReadOnlyCollection<T>
+    {
+        private bool _read;
+
+        public int Count => items.Count;
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            if (_read)
+                yield break;
+            _read = true;
+            foreach (var item in items)
+                yield return item;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    [Test]
+    public void A_null_element_is_rejected_before_any_object_is_changed_or_the_sequence_moves()
+    {
+        var generator = Customers;
+        var first = new Customer();
+
+        Should.Throw<ArgumentException>(() => generator.Populate(new List<Customer> { first, null! }));
+
+        Json(first).ShouldBe(Json(new Customer()));
+        Json(generator.Populate(new Customer())).ShouldBe(Json(Customers.Populate(new Customer())));
+    }
+
+    [Test]
     public void Members_without_a_convention_are_filled_by_type()
     {
         var unconventional = Fake.For<Unconventional>().Seed(1).Populate(new Unconventional { Foo = "x" });

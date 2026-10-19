@@ -31,9 +31,7 @@ internal static class FeedValues
         try
         {
             if (target.IsEnum)
-            {
-                return Enum.TryParse(target, text, ignoreCase: true, out var named) ? named : throw new FormatException($"not one of {string.Join(", ", Enum.GetNames(target))}");
-            }
+                return EnumValue(text, target);
 
             return Type.GetTypeCode(target) switch
             {
@@ -51,7 +49,7 @@ internal static class FeedValues
                 TypeCode.Single => float.Parse(text, NumberStyles.Float, culture),
                 TypeCode.Double => double.Parse(text, NumberStyles.Float, culture),
                 TypeCode.Decimal => decimal.Parse(text, NumberStyles.Number | NumberStyles.AllowExponent, culture),
-                TypeCode.DateTime => DateTime.Parse(text, culture, DateTimeStyles.RoundtripKind),
+                TypeCode.DateTime => DateTimeValue(text, culture),
                 _ => Other(text, target, culture),
             };
         }
@@ -61,7 +59,42 @@ internal static class FeedValues
         }
     }
 
-    private static bool Bool(string text) => text.ToUpperInvariant() switch
+    /// <summary>A value of the enum by name (any case) or number; a number that names no value (or, for flags, no combination of values) is not one.</summary>
+    private static object EnumValue(string text, Type target)
+    {
+        if (Enum.TryParse(target, text, ignoreCase: true, out var value) && IsDefined(target, value!))
+            return value!;
+        throw new FormatException($"not one of {string.Join(", ", Enum.GetNames(target))}");
+
+        static bool IsDefined(Type target, object value)
+        {
+            if (Enum.IsDefined(target, value))
+                return true;
+            if (!target.IsDefined(typeof(FlagsAttribute), inherit: false))
+                return false;
+            // A combination of flags is defined when every bit belongs to a named value.
+            var bits = Bits(value);
+            foreach (var named in Enum.GetValuesAsUnderlyingType(target))
+                bits &= ~Bits(named);
+            return bits == 0;
+        }
+
+        static ulong Bits(object value) => System.Convert.GetTypeCode(value) is TypeCode.SByte or TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64
+            ? unchecked((ulong)System.Convert.ToInt64(value, CultureInfo.InvariantCulture))
+            : System.Convert.ToUInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// A <see cref="DateTime"/> that is the same on every machine: text with an offset (<c>Z</c> or <c>+02:00</c>) becomes UTC rather than the machine's local time,
+    /// text without one keeps <see cref="DateTimeKind.Unspecified"/>.
+    /// </summary>
+    private static DateTime DateTimeValue(string text, CultureInfo culture)
+    {
+        var value = DateTime.Parse(text, culture, DateTimeStyles.RoundtripKind);
+        return value.Kind == DateTimeKind.Local ? DateTime.Parse(text, culture, DateTimeStyles.AdjustToUniversal) : value;
+    }
+
+    private static bool Bool(string text) => text.Trim().ToUpperInvariant() switch
     {
         "TRUE" or "1" or "YES" or "Y" => true,
         "FALSE" or "0" or "NO" or "N" => false,
@@ -73,7 +106,7 @@ internal static class FeedValues
         if (target == typeof(Guid))
             return Guid.Parse(text);
         if (target == typeof(DateTimeOffset))
-            return DateTimeOffset.Parse(text, culture, DateTimeStyles.RoundtripKind);
+            return DateTimeOffset.Parse(text, culture, DateTimeStyles.AssumeUniversal); // without an offset: UTC, never the machine's own
         if (target == typeof(DateOnly))
             return DateOnly.Parse(text, culture);
         if (target == typeof(TimeOnly))
@@ -82,6 +115,26 @@ internal static class FeedValues
             return TimeSpan.Parse(text, culture);
         if (target == typeof(Uri))
             return new Uri(text, UriKind.RelativeOrAbsolute);
-        throw new FormatException($"{target.Name} can't be read from text; a feed fills strings, numbers, booleans, enums, dates, times, Guid and Uri members");
+
+        // The other scalars the writers write (DataExport), so whatever a generator writes reads back.
+        if (target == typeof(Half))
+            return Half.Parse(text, NumberStyles.Float, culture);
+        if (target == typeof(Int128))
+            return Int128.Parse(text, NumberStyles.Integer, culture);
+        if (target == typeof(UInt128))
+            return UInt128.Parse(text, NumberStyles.Integer, culture);
+        if (target == typeof(System.Numerics.BigInteger))
+            return System.Numerics.BigInteger.Parse(text, NumberStyles.Integer, culture);
+        if (target == typeof(nint))
+            return nint.Parse(text, NumberStyles.Integer, culture);
+        if (target == typeof(nuint))
+            return nuint.Parse(text, NumberStyles.Integer, culture);
+        if (target == typeof(System.Text.Rune))
+            return System.Text.Rune.DecodeFromUtf16(text, out var rune, out var length) == System.Buffers.OperationStatus.Done && length == text.Length ? rune : throw new FormatException("not one character");
+        if (target == typeof(System.Net.IPAddress))
+            return System.Net.IPAddress.Parse(text);
+        if (target == typeof(Version))
+            return Version.Parse(text);
+        throw new FormatException($"{target.Name} can't be read from text; a feed fills strings, numbers, booleans, enums, dates, times, Guid, Uri, IPAddress and Version members");
     }
 }

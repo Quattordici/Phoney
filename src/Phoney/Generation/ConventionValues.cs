@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using Phoney.Modules;
 
 namespace Phoney.Generation;
 
@@ -20,7 +23,7 @@ public static class ConventionValues
     public static string String(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null)
     {
         // The lambdas live in their own method: a lambda here would allocate its closure on every call, constrained or not.
-        return constraints is null ? StringCore(scope, kind) : ConstrainedString(scope, kind, constraints);
+        return constraints is null ? StringCore(scope, Effective(scope, kind)) : ConstrainedString(scope, kind, constraints);
     }
 
     private static string ConstrainedString(FakeScope scope, ConventionKind kind, MemberConstraints constraints)
@@ -38,17 +41,28 @@ public static class ConventionValues
                 return Convert.ToBase64String(bytes);
             }
 
-            return FitLength(scope, constraints, () => StringCore(scope, constraints.Format ?? kind));
+            if (TryRange(constraints, out var range))
+                return NumberText(scope, range);
+
+            // A format annotation is a validation rule, not a name convention: it holds also when the conventions are off.
+            var format = constraints.Format ?? Effective(scope, kind);
+            return FitLength(scope, constraints, format, () => StringCore(scope, format));
         });
     }
 
-    /// <summary>The convention value itself, before constraints.</summary>
+    /// <summary>A number inside a numeric <c>[Range]</c> on a string member, as invariant text: whole numbers when both limits are, else two decimals.</summary>
+    private static string NumberText(FakeScope scope, NumericRange range) =>
+        double.IsInteger(range.Min) && double.IsInteger(range.Max)
+            ? InRange<long>(scope, range).ToString(CultureInfo.InvariantCulture)
+            : InRange<decimal>(scope, range).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The convention value itself, before constraints; <paramref name="kind"/> has the generator's conventions switch applied.</summary>
     private static string StringCore(FakeScope scope, ConventionKind kind)
     {
         var f = scope.Faker;
         try
         {
-            return Effective(scope, kind) switch
+            return kind switch
             {
                 ConventionKind.FirstName => scope.Identity.FirstName,
                 ConventionKind.LastName => scope.Identity.LastName,
@@ -131,7 +145,7 @@ public static class ConventionValues
     }
 
     /// <summary>
-    /// Returns a number for <paramref name="kind"/> (1–1000, two decimals for non-integers, when there is no convention),
+    /// Returns a number for <paramref name="kind"/> (1–1000, or up to the largest value of a smaller type, two decimals for non-integers, when there is no convention),
     /// or uniformly within <c>[Range]</c> / one of <c>[AllowedValues]</c> when <paramref name="constraints"/> say so.
     /// </summary>
     public static T Number<T>(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null)
@@ -174,7 +188,7 @@ public static class ConventionValues
             ConventionKind.Longitude => T.CreateSaturating(f.Location.Longitude()),
             _ => typeof(T) == typeof(decimal)
                 ? T.CreateSaturating(f.Number.Decimal(1, 1000, 2))
-                : fractional ? T.CreateSaturating(f.Number.Double(1, 1000, 2)) : T.CreateSaturating(f.Random.Int(1, 1000)),
+                : fractional ? T.CreateSaturating(f.Number.Double(1, 1000, 2)) : T.CreateSaturating(f.Random.Int(1, int.CreateSaturating(T.CreateSaturating(1000)))), // 1 to 255 for a byte, not mostly 255
         };
     }
 
@@ -231,18 +245,63 @@ public static class ConventionValues
         return global::System.DateOnly.FromDateTime(DateTimeOffset(scope, kind, constraints).UtcDateTime);
     }
 
-    /// <summary>Returns a random time of day.</summary>
-    public static TimeOnly TimeOnly(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) => scope.Faker.Date.TimeOfDay();
+    /// <summary>Returns a random time of day, within <c>[Range(typeof(TimeOnly), "09:00", "17:00")]</c> when <paramref name="constraints"/> has one.</summary>
+    public static TimeOnly TimeOnly(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) =>
+        constraints is not null && TryDurationRange(constraints, typeof(TimeOnly), out var from, out var to)
+            ? new TimeOnly(DurationBetween(scope, from, to).Ticks)
+            : scope.Faker.Date.TimeOfDay();
 
-    /// <summary>Returns a duration between 0 and 24 hours, in whole seconds.</summary>
+    /// <summary>Returns a duration between 0 and 24 hours, in whole seconds, or within <c>[Range(typeof(TimeSpan), …)]</c> when <paramref name="constraints"/> has one.</summary>
     public static TimeSpan TimeSpan(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) =>
-        global::System.TimeSpan.FromSeconds(scope.Faker.Random.Int(0, 24 * 60 * 60));
+        constraints is not null && TryDurationRange(constraints, typeof(TimeSpan), out var from, out var to)
+            ? DurationBetween(scope, from, to)
+            : global::System.TimeSpan.FromSeconds(scope.Faker.Random.Int(0, 24 * 60 * 60));
+
+    /// <summary>
+    /// Parses a <c>[Range]</c> of durations or times of day, with the excluded limits moved one tick inside; throws when nothing is left.
+    /// A time of day is read as the time since midnight.
+    /// </summary>
+    private static bool TryDurationRange(MemberConstraints c, Type type, out TimeSpan from, out TimeSpan to)
+    {
+        from = to = default;
+        if (c.RangeMin is not { } a || c.RangeMax is not { } b || !TryParse(a, out from) || !TryParse(b, out to))
+            return false;
+        if (c.RangeMinExclusive)
+            from += global::System.TimeSpan.FromTicks(1);
+        if (c.RangeMaxExclusive)
+            to -= global::System.TimeSpan.FromTicks(1);
+        return from <= to ? true : throw NoValueInRange(c, type);
+
+        bool TryParse(string text, out TimeSpan value)
+        {
+            if (type == typeof(TimeOnly))
+            {
+                var parsed = global::System.TimeOnly.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var time);
+                value = time.ToTimeSpan();
+                return parsed;
+            }
+
+            return global::System.TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out value);
+        }
+    }
+
+    /// <summary>A uniform duration in [<paramref name="from"/>, <paramref name="to"/>] in whole milliseconds, or in ticks when no whole millisecond lies inside.</summary>
+    private static TimeSpan DurationBetween(FakeScope scope, TimeSpan from, TimeSpan to)
+    {
+        const long Millisecond = global::System.TimeSpan.TicksPerMillisecond;
+        var first = from.Ticks >= 0 ? (from.Ticks + Millisecond - 1) / Millisecond : from.Ticks / Millisecond;
+        var last = to.Ticks >= 0 ? to.Ticks / Millisecond : (to.Ticks - Millisecond + 1) / Millisecond;
+        return first <= last
+            ? global::System.TimeSpan.FromTicks(scope.Faker.Random.Long(first, last) * Millisecond)
+            : global::System.TimeSpan.FromTicks(scope.Faker.Random.Long(from.Ticks, to.Ticks));
+    }
 
     /// <summary>Returns a random boolean.</summary>
     public static bool Bool(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) => scope.Faker.Random.Bool();
 
-    /// <summary>Returns a random letter.</summary>
-    public static char Char(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) => scope.Faker.Random.Letter();
+    /// <summary>Returns a random letter, or a character inside a numeric <c>[Range('a', 'f')]</c> when <paramref name="constraints"/> has one.</summary>
+    public static char Char(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) =>
+        constraints is not null && TryRange(constraints, out var range) ? InRange<char>(scope, range) : scope.Faker.Random.Letter();
 
     /// <summary>Returns a random version 4 GUID.</summary>
     public static Guid Guid(FakeScope scope, ConventionKind kind, MemberConstraints? constraints = null) => scope.Faker.Random.Guid();
@@ -285,14 +344,35 @@ public static class ConventionValues
             return default;
         if (EnumCache<TEnum>.Female is { } female && EnumCache<TEnum>.Male is { } male &&
             (kind is ConventionKind.Sex or ConventionKind.Gender || EnumCache<TEnum>.IsSexEnum))
-            return scope.Identity.Sex == Modules.Sex.Female ? female : male;
-        return values[scope.Faker.Random.Index(values.Length)];
+        {
+            var matching = scope.Identity.Sex == Modules.Sex.Female ? female : male;
+            if (constraints is null || !IsDenied(constraints, matching))
+                return matching;
+        }
+
+        return constraints is { DeniedValues.Length: > 0 }
+            ? Avoiding(scope, constraints, () => values[scope.Faker.Random.Index(values.Length)])
+            : values[scope.Faker.Random.Index(values.Length)];
     }
 
     /// <summary>One of the <c>[AllowedValues]</c> of an enum member, avoiding <c>[DeniedValues]</c>.</summary>
     private static TEnum AllowedEnum<TEnum>(FakeScope scope, MemberConstraints constraints)
         where TEnum : struct, Enum =>
-        Avoiding(scope, constraints, () => (TEnum)global::System.Enum.ToObject(typeof(TEnum), scope.Faker.Random.Element(constraints.AllowedValues!)!));
+        Avoiding(scope, constraints, () => (TEnum)AllowedEnumValue(typeof(TEnum), scope.Faker.Random.Element(constraints.AllowedValues!)));
+
+    /// <summary>
+    /// An allowed value as a value of the enum <paramref name="type"/>: a value of the enum, its number, or its name (any case).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The value is none of these.</exception>
+    private static object AllowedEnumValue(Type type, object? value) => value switch
+    {
+        _ when value?.GetType() == type => value,
+        string name when global::System.Enum.TryParse(type, name, ignoreCase: true, out var parsed) => parsed!,
+        sbyte or byte or short or ushort or int or uint or long or ulong => global::System.Enum.ToObject(type, value),
+        _ => throw new InvalidOperationException(
+            $"Phoney cannot generate values for [AllowedValues] of a {type.Name} member: '{value ?? "null"}' is not one of {string.Join(", ", global::System.Enum.GetNames(type))}. " +
+            "List the enum's values or names, or add a rule with .With(...) for this member."),
+    };
 
     /// <summary>Dispatches to the typed entry points for the reflection model.</summary>
     [RequiresDynamicCode("Generates enum values for types only known at runtime.")]
@@ -328,18 +408,18 @@ public static class ConventionValues
         TypeCategory.Rune => Rune(scope, kind, c),
         TypeCategory.IPAddress => IPAddress(scope, kind, c),
         TypeCategory.Version => Version(scope, kind, c),
-        TypeCategory.Enum => c is { AllowedValues.Length: > 0 } ? AllowedBoxedEnum(scope, type, c) : BoxedEnum(scope, type, kind),
+        TypeCategory.Enum => c is { AllowedValues.Length: > 0 } ? AllowedBoxedEnum(scope, type, c) : BoxedEnum(scope, type, kind, c),
         _ => null,
     };
 
     /// <summary>One of the <c>[AllowedValues]</c> of an enum member of a runtime type, avoiding <c>[DeniedValues]</c>.</summary>
     [RequiresDynamicCode("Generates enum values for types only known at runtime.")]
     private static object AllowedBoxedEnum(FakeScope scope, Type type, MemberConstraints c) =>
-        Avoiding(scope, c, () => global::System.Enum.ToObject(type, scope.Faker.Random.Element(c.AllowedValues!)!));
+        Avoiding(scope, c, () => AllowedEnumValue(type, scope.Faker.Random.Element(c.AllowedValues!)));
 
     /// <summary>Random enum value for a runtime type, matching the identity for sex/gender enums.</summary>
     [RequiresDynamicCode("Reads enum values for types only known at runtime.")]
-    private static object? BoxedEnum(FakeScope scope, Type type, ConventionKind kind)
+    private static object? BoxedEnum(FakeScope scope, Type type, ConventionKind kind, MemberConstraints? constraints)
     {
         var values = global::System.Enum.GetValues(type);
         if (values.Length == 0)
@@ -348,36 +428,66 @@ public static class ConventionValues
         var female = System.Array.FindIndex(names, n => n.Equals("Female", StringComparison.OrdinalIgnoreCase));
         var male = System.Array.FindIndex(names, n => n.Equals("Male", StringComparison.OrdinalIgnoreCase));
         if (female >= 0 && male >= 0 && (kind is ConventionKind.Sex or ConventionKind.Gender || IsSexEnumName(type.Name)))
-            return global::System.Enum.Parse(type, names[scope.Identity.Sex == Modules.Sex.Female ? female : male]);
-        return values.GetValue(scope.Faker.Random.Index(values.Length));
+        {
+            var matching = global::System.Enum.Parse(type, names[scope.Identity.Sex == Modules.Sex.Female ? female : male]);
+            if (constraints is null || !IsDenied(constraints, matching))
+                return matching;
+        }
+
+        return constraints is { DeniedValues.Length: > 0 }
+            ? Avoiding(scope, constraints, () => values.GetValue(scope.Faker.Random.Index(values.Length)))
+            : values.GetValue(scope.Faker.Random.Index(values.Length));
     }
 
     /// <summary>Retries <paramref name="produce"/> while it returns a <c>[DeniedValues]</c> value (up to 100 attempts).</summary>
+    /// <exception cref="InvalidOperationException">Every attempt gave a denied value: the annotations leave (almost) nothing to generate.</exception>
     private static T Avoiding<T>(FakeScope scope, MemberConstraints constraints, Func<T> produce)
     {
         if (constraints.DeniedValues is not { Length: > 0 } denied)
             return produce();
-        for (var attempt = 0; ; attempt++)
+        for (var attempt = 0; attempt <= 100; attempt++)
         {
             var value = produce();
-            if (attempt >= 100 || !Array.Exists(denied, d => Equals(Normalize(d), Normalize(value))))
+            if (!IsDenied(constraints, value))
                 return value;
         }
 
-        static object? Normalize(object? v) => v is IConvertible c && v is not string ? c.ToDecimal(CultureInfo.InvariantCulture) : v;
+        throw new InvalidOperationException(
+            $"Phoney cannot generate a value that is not one of the [DeniedValues({string.Join(", ", denied.Select(Text))})]: 101 values in a row were denied. " +
+            "Allow more values, or add a rule with .With(...) for this member.");
+    }
+
+    /// <summary>Whether <paramref name="value"/> is one of the <c>[DeniedValues]</c> (numbers and enum values compare by value, whatever their type).</summary>
+    private static bool IsDenied(MemberConstraints constraints, object? value)
+    {
+        if (constraints.DeniedValues is not { Length: > 0 } denied)
+            return false;
+        var normalized = Normalize(value);
+        return Array.Exists(denied, d => Equals(Normalize(d), normalized));
+
+        // Numbers (and enum values) as decimals, so 1, 1L and 1.0 are the same value; text, characters and dates compare as they are.
+        static object? Normalize(object? v) => v switch
+        {
+            global::System.Enum or sbyte or byte or short or ushort or int or uint or long or ulong or decimal => Convert.ToDecimal(v, CultureInfo.InvariantCulture),
+            float or double when Convert.ToDouble(v, CultureInfo.InvariantCulture) is var d && double.IsFinite(d) && Math.Abs(d) < 7.9e28 => (decimal)d,
+            _ => v,
+        };
     }
 
     /// <summary>
     /// Produces a string within the length limits: retries the convention a few times, then shortens (at a word
     /// boundary when possible) or pads with letters. Required strings are never empty.
     /// </summary>
-    private static string FitLength(FakeScope scope, MemberConstraints c, Func<string> produce)
+    private static string FitLength(FakeScope scope, MemberConstraints c, ConventionKind kind, Func<string> produce)
     {
         var min = Math.Max(c.MinLength ?? 0, c.Required ? 1 : 0);
         var max = c.MaxLength ?? int.MaxValue;
         var value = produce();
         for (var attempt = 0; attempt < 10 && (value.Length < min || value.Length > max); attempt++)
             value = produce();
+
+        if (kind == ConventionKind.Email && max >= 3 && value.IndexOf('@') is > 0 and var at && at < value.Length - 1)
+            return FitEmail(scope, value, at, min, max);
 
         if (value.Length > max)
         {
@@ -396,6 +506,34 @@ public static class ConventionValues
         return value;
     }
 
+    /// <summary>
+    /// Fits an email into the length limits and keeps it an email: a long one loses letters from the end of its name (and, when the domain alone is too long,
+    /// from the end of the domain), a short one gains letters at the end of its name.
+    /// </summary>
+    private static string FitEmail(FakeScope scope, string email, int at, int min, int max)
+    {
+        var name = email[..at];
+        var domain = email[(at + 1)..];
+        if (email.Length > max)
+        {
+            if (domain.Length > max - 2)
+                domain = domain[..(max - 2)].TrimEnd('.', '-');
+            name = name[..Math.Min(name.Length, max - 1 - domain.Length)].TrimEnd('.', '-', '_');
+            if (name.Length == 0)
+                name = email[..1];
+        }
+
+        if (name.Length + 1 + domain.Length < min)
+        {
+            var sb = new StringBuilder(name);
+            while (sb.Length + 1 + domain.Length < min)
+                sb.Append(scope.Faker.Random.Letter());
+            name = sb.ToString();
+        }
+
+        return name + "@" + domain;
+    }
+
     /// <summary>Byte count whose base64 text fits the length limits (base64 uses 4 characters per 3 bytes).</summary>
     private static int FitByteCount(MemberConstraints c)
     {
@@ -404,19 +542,40 @@ public static class ConventionValues
         return Math.Clamp(24, minBytes, Math.Max(minBytes, maxBytes));
     }
 
-    /// <summary>Generates a string for a <c>[RegularExpression]</c> pattern (implicitly anchored, as the attribute is).</summary>
+    /// <summary>
+    /// Generates a string for a <c>[RegularExpression]</c> pattern (implicitly anchored, as the attribute is). A pattern with lookarounds, which generate no text,
+    /// is checked with the attribute itself and generated again until it matches.
+    /// </summary>
     private static string FromPattern(FakeScope scope, string pattern)
     {
+        PatternGenerator generator;
         try
         {
-            return scope.Faker.Helpers.FromRegExp(pattern);
+            generator = PatternGenerator.Get(pattern);
         }
         catch (FormatException ex)
         {
             throw new InvalidOperationException(
                 $"Phoney cannot generate values for [RegularExpression(\"{pattern}\")]: {ex.Message} Add a rule with .With(...) for this member.", ex);
         }
+
+        if (generator.IsExact)
+            return generator.Generate(scope.Faker.Random);
+
+        var validator = PatternValidators.GetOrAdd(pattern, static p => new RegularExpressionAttribute(p));
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var value = generator.Generate(scope.Faker.Random);
+            if (validator.IsValid(value))
+                return value;
+        }
+
+        throw new InvalidOperationException(
+            $"Phoney cannot generate values for [RegularExpression(\"{pattern}\")]: 100 texts in a row did not satisfy its lookarounds. Add a rule with .With(...) for this member.");
     }
+
+    /// <summary>Validators of the patterns with lookarounds, made once each.</summary>
+    private static readonly ConcurrentDictionary<string, RegularExpressionAttribute> PatternValidators = new(StringComparer.Ordinal);
 
     /// <summary>Parses a numeric <c>[Range]</c>.</summary>
     private static bool TryRange(MemberConstraints c, out NumericRange range)

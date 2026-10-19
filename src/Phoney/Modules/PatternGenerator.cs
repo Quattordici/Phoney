@@ -9,10 +9,14 @@ namespace Phoney.Modules;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Supported: literals, escapes (<c>\d \w \s \D \W \S \t \n \r \xHH \uHHHH</c>), <c>.</c>, character classes
-/// with ranges and negation, groups (<c>(...)</c>, <c>(?:...)</c>), alternation <c>|</c>, quantifiers
-/// <c>? * + {n} {n,} {n,m}</c> (also lazy forms), anchors (ignored), JavaScript-style <c>/pattern/i</c>
+/// Supported: literals, escapes (<c>\d \w \s \D \W \S \t \n \r \f \v \0 \xHH \uHHHH</c>, and <c>\p{L} \p{Lu} \p{Ll} \p{N} \p{Nd}</c> as their ASCII
+/// characters), <c>.</c>, character classes with ranges and negation, groups (<c>(...)</c>, <c>(?:...)</c>, named <c>(?&lt;name&gt;...)</c>), alternation <c>|</c>,
+/// quantifiers <c>? * + {n} {n,} {n,m}</c> (also lazy forms), anchors (<c>^ $ \A \z \Z \b</c>, ignored), JavaScript-style <c>/pattern/i</c>
 /// and the inline <c>(?i)</c> flag for case-insensitive output.
+/// </para>
+/// <para>
+/// Lookarounds (<c>(?=…) (?!…) (?&lt;=…) (?&lt;!…)</c>) produce nothing, so the text may not satisfy them; <see cref="IsExact"/> says so, and callers that must
+/// match check the text. Escapes that can't be generated (backreferences, other letters) are a <see cref="FormatException"/> rather than literal letters.
 /// </para>
 /// <para>
 /// Unlike faker.js' string-rewriting <c>fromRegExp</c>, the pattern is parsed once into a tree and cached,
@@ -31,14 +35,23 @@ internal sealed class PatternGenerator
 
     private readonly Node _root;
 
-    private PatternGenerator(Node root) => _root = root;
+    private PatternGenerator(Node root, bool exact)
+    {
+        _root = root;
+        IsExact = exact;
+    }
+
+    /// <summary>Whether every generated text matches the pattern; <see langword="false"/> when it has lookarounds, which generate nothing.</summary>
+    public bool IsExact { get; }
 
     /// <summary>Returns the cached generator for <paramref name="pattern"/>, parsing it on first use.</summary>
     public static PatternGenerator Get(string pattern)
     {
         if (Cache.TryGetValue(pattern, out var generator))
             return generator;
-        generator = new PatternGenerator(new Parser(pattern).ParsePattern());
+        var parser = new Parser(pattern);
+        var root = parser.ParsePattern();
+        generator = new PatternGenerator(root, parser.IsExact);
         if (Cache.Count < MaxCached)
             Cache.TryAdd(pattern, generator);
         return generator;
@@ -127,6 +140,7 @@ internal sealed class PatternGenerator
         private readonly string _pattern;
         private int _pos;
         private bool _ignoreCase;
+        private bool _hasZeroWidth; // a lookaround or an anchor inside the pattern, which generation cannot guarantee
 
         public Parser(string pattern)
         {
@@ -151,6 +165,9 @@ internal sealed class PatternGenerator
             _pattern = pattern;
             _pos = 0;
         }
+
+        /// <summary>Whether the parsed pattern has no lookarounds, so its text always matches.</summary>
+        public readonly bool IsExact => !_hasZeroWidth;
 
         /// <summary>Parses the whole pattern.</summary>
         public Node ParsePattern()
@@ -214,22 +231,21 @@ internal sealed class PatternGenerator
             switch (c)
             {
                 case '^' or '$':
-                    return null; // anchors produce no output
+                    // Anchors produce no output; only those at the very start or end are sure to hold.
+                    if (!(c == '^' && _pos == 1 || c == '$' && _pos == _pattern.Length))
+                        _hasZeroWidth = true;
+                    return null;
                 case '.':
                     return new SetNode(Alphanumeric);
                 case '(':
                 {
-                    if (Peek() == '?')
-                    {
-                        if (_pos + 1 < _pattern.Length && _pattern[_pos + 1] is ':' or '=' or '!')
-                            _pos += 2;
-                        else
-                            throw Error("unsupported group syntax");
-                    }
-
+                    var zeroWidth = Peek() == '?' && ParseGroupPrefix();
                     var inner = ParseAlternation();
                     Expect(')');
-                    return inner;
+                    if (!zeroWidth)
+                        return inner;
+                    _hasZeroWidth = true;
+                    return null; // a lookaround matches no text of its own
                 }
 
                 case '[':
@@ -239,6 +255,35 @@ internal sealed class PatternGenerator
                 default:
                     return Letter(c);
             }
+        }
+
+        /// <summary>Reads what follows <c>(?</c>: non-capturing and named groups, or a lookaround (returns <see langword="true"/>).</summary>
+        private bool ParseGroupPrefix()
+        {
+            var rest = _pattern.AsSpan(_pos + 1);
+            switch (rest)
+            {
+                case [':', ..]:
+                    _pos += 2;
+                    return false;
+                case ['=' or '!', ..]:
+                    _pos += 2;
+                    return true;
+                case ['<', '=' or '!', ..]:
+                    _pos += 3;
+                    return true;
+                case ['<' or '\'', ..]:
+                    var close = rest[1..].IndexOf(rest[0] == '<' ? '>' : '\'') + 1;
+                    if (close > 1)
+                    {
+                        _pos += close + 2; // a named group generates like any other
+                        return false;
+                    }
+
+                    break;
+            }
+
+            throw Error("unsupported group syntax");
         }
 
         /// <summary>Wraps <paramref name="atom"/> in a repetition when a quantifier follows.</summary>
@@ -393,10 +438,46 @@ internal sealed class PatternGenerator
                 't' => new LiteralNode("\t"),
                 'n' => new LiteralNode("\n"),
                 'r' => new LiteralNode("\r"),
+                'f' => new LiteralNode("\f"),
+                'v' => new LiteralNode("\v"),
+                '0' => new LiteralNode("\0"),
                 'x' => new LiteralNode(((char)ReadHex(2)).ToString()),
                 'u' => new LiteralNode(((char)ReadHex(4)).ToString()),
-                'b' or 'B' when !inClass => new LiteralNode(""),
+                'p' => new SetNode(ReadCategory()),
+                'P' => new SetNode(Outside(ReadCategory())),
+                'b' when inClass => new LiteralNode("\b"),
+                'b' or 'B' or 'A' or 'z' or 'Z' or 'G' when !inClass => Anchor(), // anchors produce no output and may not hold
+                >= '1' and <= '9' or 'k' => throw Error("backreferences are not supported"),
+                _ when char.IsAsciiLetter(c) => throw Error($"the escape \\{c} is not supported"),
                 _ => new LiteralNode(c.ToString()),
+            };
+        }
+
+        /// <summary>An anchor inside the pattern: no output, and generated values must be checked because it may not hold.</summary>
+        private LiteralNode Anchor()
+        {
+            _hasZeroWidth = true;
+            return new LiteralNode("");
+        }
+
+        /// <summary>The alphanumeric characters that are not in <paramref name="characters"/>, as negated classes are taken.</summary>
+        private static string Outside(string characters) => new([.. Alphanumeric.Where(ch => !characters.Contains(ch))]);
+
+        /// <summary>Reads <c>{Name}</c> after <c>\p</c>: the ASCII characters of a Unicode category.</summary>
+        private string ReadCategory()
+        {
+            var close = _pattern.IndexOf('}', _pos);
+            if (Peek() != '{' || close < 0)
+                throw Error("expected a category name in braces after \\p");
+            var name = _pattern[(_pos + 1)..close];
+            _pos = close + 1;
+            return name switch
+            {
+                "L" => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+                "Lu" => "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                "Ll" => "abcdefghijklmnopqrstuvwxyz",
+                "N" or "Nd" => "0123456789",
+                _ => throw Error($"the Unicode category {name} is not supported (L, Lu, Ll, N and Nd are)"),
             };
         }
 

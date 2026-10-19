@@ -69,18 +69,18 @@ public sealed class MemberConstraints
             switch (attribute)
             {
                 case StringLengthAttribute a:
-                    max = a.MaximumLength;
+                    max = Stricter(max, a.MaximumLength, Math.Min);
                     if (a.MinimumLength > 0)
-                        min = a.MinimumLength;
+                        min = Stricter(min, a.MinimumLength, Math.Max);
                     break;
                 case MaxLengthAttribute { Length: > 0 } a:
-                    max = a.Length;
+                    max = Stricter(max, a.Length, Math.Min);
                     break;
                 case MinLengthAttribute a:
-                    min = a.Length;
+                    min = Stricter(min, a.Length, Math.Max);
                     break;
                 case LengthAttribute a:
-                    (min, max) = (a.MinimumLength, a.MaximumLength);
+                    (min, max) = (Stricter(min, a.MinimumLength, Math.Max), Stricter(max, a.MaximumLength, Math.Min));
                     break;
                 case RangeAttribute a:
                     rangeMin = Invariant(a.Minimum);
@@ -147,6 +147,9 @@ public sealed class MemberConstraints
             attributes = attributes.Concat(matchingProperty.GetCustomAttributes(inherit: true).OfType<Attribute>());
         return From(attributes);
     }
+
+    /// <summary>Several length annotations all apply, so the strictest limit wins, whatever order the attributes come in.</summary>
+    private static int Stricter(int? current, int value, Func<int, int, int> pick) => current is { } c ? pick(c, value) : value;
 
     private static string? Invariant(object? value) => value switch
     {

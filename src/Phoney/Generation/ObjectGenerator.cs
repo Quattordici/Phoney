@@ -818,17 +818,20 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public List<T> Populate(IEnumerable<T> instances, PopulateMode mode = PopulateMode.MissingOnly)
     {
         ArgumentNullException.ThrowIfNull(instances);
-        var items = instances as IReadOnlyCollection<T> ?? [.. instances];
-        var run = Start();
-        var first = _state.NextIndex(items.Count);
-        var result = new List<T>(items.Count);
-        var index = 0;
+        // Checked before anything is filled in: a null element must not leave the elements before it changed and the sequence moved.
+        T[] items = [.. instances]; // one snapshot, so a sequence that can be read only once is still filled
         foreach (var item in items)
         {
             if (item is null)
                 throw new ArgumentException("The collection contains a null element.", nameof(instances));
-            result.Add(run.Populate(item, first + index++, mode));
         }
+
+        var run = Start();
+        var first = _state.NextIndex(items.Length);
+        var result = new List<T>(items.Length);
+        var index = 0;
+        foreach (var item in items)
+            result.Add(run.Populate(item, first + index++, mode));
 
         if (result.Count > 0)
             VerifyUsage();
