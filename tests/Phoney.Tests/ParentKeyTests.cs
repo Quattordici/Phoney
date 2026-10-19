@@ -24,6 +24,7 @@ public sealed class ShopOrderLine
     public int OrderId { get; set; }
     public int ShopperId { get; set; }
     public string Sku { get; set; } = "";
+    public int AuditId { get; private set; }
 }
 
 public readonly record struct Waypoint(int X, int Y);
@@ -150,4 +151,9 @@ public sealed class ParentKeyTests
     public void Objects_on_the_path_must_be_reference_types() =>
         Should.Throw<ArgumentException>(() => Fake.For<Route>().WithParentKey(r => r.Points.Each().X, r => r.Id))
             .Message.ShouldContain("Waypoint is a value type");
+
+    [Test]
+    public void The_foreign_key_needs_a_public_setter() =>
+        Should.Throw<ArgumentException>(() => Fake.For<Shopper>().WithParentKey(s => s.Orders.Each().Lines.Each().AuditId, (ShopOrder o) => o.Id))
+            .Message.ShouldContain("AuditId has no public setter");
 }

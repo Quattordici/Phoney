@@ -738,8 +738,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 nameof(foreignKey));
         }
 
-        if (steps[^1].Member is PropertyInfo { CanWrite: false } or FieldInfo { IsInitOnly: true })
-            throw new ArgumentException($"'{foreignKey}' must select a settable member: {steps[^1].Member.Name} has no setter.", nameof(foreignKey));
+        if (steps[^1].Member is PropertyInfo { SetMethod: not { IsPublic: true } } or FieldInfo { IsInitOnly: true })
+            throw new ArgumentException($"'{foreignKey}' must select a settable member: {steps[^1].Member.Name} has no public setter.", nameof(foreignKey));
 
         // The objects on the path are the owners of its members; the owner of the foreign key is not its own parent.
         if (steps.Skip(1).Select(step => step.Owner).FirstOrDefault(owner => owner.IsValueType) is { } valueType)
