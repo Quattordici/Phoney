@@ -521,7 +521,7 @@ public static class ConventionValues
             throw range.Empty(typeof(T));
         return T.CreateSaturating(scope.Faker.Random.Long(from, to));
 
-        static long ToLong(decimal d) => d >= long.MaxValue ? long.MaxValue : d <= long.MinValue ? long.MinValue : (long)d;
+        static long ToLong(decimal d) => (long)Math.Clamp(d, long.MinValue, long.MaxValue);
     }
 
     /// <summary>A double in <paramref name="range"/>, rounded to two decimals unless rounding lands on an excluded limit.</summary>
