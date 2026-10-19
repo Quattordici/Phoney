@@ -79,6 +79,52 @@ public sealed class LocaleDataTests
         }
     }
 
+    // faker.js has a few values with a space at an end by mistake (" بابل", "রংপুর ", " و زمان"), and hy street suffixes start with one that the pattern adds again
+    // ("Մարգարյան  պողոտա"). Only values joined straight to the word before them keep a leading space: city suffixes such as " aan de Rijn" and es building numbers (", 12").
+    [Test]
+    [MethodDataSource(typeof(TestLocales), nameof(TestLocales.All))]
+    public void Locale_values_have_no_space_at_their_ends_unless_they_are_joined_to_a_word(string locale)
+    {
+        string[] joined = ["location.city_suffix", "location.building_number"];
+        var data = new Faker(locale).Data;
+        for (var key = 0; key < DataKeys.Count; key++)
+        {
+            var path = DataKeys.Paths[key];
+            IEnumerable<string?> values = data.Get(path) switch
+            {
+                StringsEntry strings => strings.Values,
+                RecordsEntry records => Enumerable.Range(0, records.Count).SelectMany(row => Enumerable.Range(0, records.Fields.Count).Select(field => records.Get(row, field))),
+                _ => [],
+            };
+            foreach (var value in values.OfType<string>())
+            {
+                value.ShouldBe(value.TrimEnd(), $"{locale}: '{path}'");
+                if (!joined.Contains(path))
+                    value.ShouldBe(value.TrimStart(), $"{locale}: '{path}'");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("hy")]
+    [Arguments("fa")]
+    [Arguments("ar")]
+    [Arguments("bn_BD")]
+    [Arguments("hu")]
+    [Arguments("cy")]
+    public void Composed_values_have_single_spaces_and_no_space_at_their_ends(string locale)
+    {
+        var faker = new Faker(locale, seed: 1);
+        for (var i = 0; i < 300; i++)
+        {
+            foreach (var value in new[] { faker.Location.StreetAddress(true), faker.Location.State(), faker.Location.City(), faker.Lorem.Sentence(), faker.Book.Format() })
+            {
+                value.ShouldBe(value.Trim(), locale);
+                value.ShouldNotContain("  ", customMessage: locale);
+            }
+        }
+    }
+
     [Test]
     public void Fallback_is_resolved_per_entry_group_like_faker_js()
     {

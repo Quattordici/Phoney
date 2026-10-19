@@ -28,6 +28,20 @@ public sealed class GitImageAndColorTests
         new Faker("en", seed: 5).Git.CommitEntry().ShouldBe(entry);
     }
 
+    // faker.js builds the author's name and email from the same person; they used to be two different people ("Girija Mishra <Mohan_Iyengar@…>").
+    [Test]
+    public void Git_commit_entry_author_name_and_email_belong_to_one_person()
+    {
+        for (var seed = 0; seed < 50; seed++)
+        {
+            var author = new Faker("en", seed).Git.CommitEntry().Split('\n')[1];
+            var match = System.Text.RegularExpressions.Regex.Match(author, "^Author: (?<first>\\S+) .+ <(?<email>.+)@");
+            Letters(match.Groups["email"].Value).ShouldContain(Letters(match.Groups["first"].Value), customMessage: author);
+        }
+
+        static string Letters(string text) => new([.. text.Where(char.IsAsciiLetter).Select(char.ToLowerInvariant)]);
+    }
+
     [Test]
     public void Git_commit_entry_can_use_windows_line_endings()
     {

@@ -295,7 +295,7 @@ TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-##
 ```
 
 - **faker.js templates work unchanged**: names are case-insensitive (`{{person.firstName}}`), and locale data paths and record fields (`{{airline.airport.iataCode}}`) work too.
-- **Options** are an options object or the plain value: `{{number.int({"min":1,"max":9})}}`, `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.mac("-")}}`. A wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters or a count above its limit.
+- **Options** are an options object or the plain value: `{{number.int({"min":1,"max":9})}}`, `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.mac("-")}}`. JavaScript literals, which need no escaping in a C# string, work as well: `{{number.int({min: 1, max: 9})}}`, `{{location.zipCode('#####')}}`. A wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters or a count above its limit.
 - Typed results (`airline.airport`, `finance.currency`, `color.hsl`…) are written in their usual text form. `TemplateFunctions.Names` lists every function.
 
 ## Objects

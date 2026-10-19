@@ -8,7 +8,8 @@ namespace Phoney.Templates;
 /// </summary>
 /// <remarks>
 /// Parsed like faker.js: the text between the parentheses is first read as a JSON array of parameters;
-/// if that fails, the whole text is one unquoted string (<c>{{helpers.fromRegExp([A-Z]{3})}}</c>).
+/// if that fails, the whole text is one unquoted string (<c>{{helpers.fromRegExp([A-Z]{3})}}</c>). JavaScript literals, which are easier to write
+/// inside a C# string, are read like their JSON: single-quoted strings and unquoted keys (<c>{{string.alpha({length: 3, casing: 'upper'})}}</c>).
 /// </remarks>
 public sealed class TemplateArgs
 {
@@ -26,6 +27,18 @@ public sealed class TemplateArgs
     {
         if (string.IsNullOrWhiteSpace(text))
             return Empty;
+        var arguments = TryParseJson(text) ?? (JavaScriptLiterals.ToJson(text) is { } json ? TryParseJson(json) : null);
+        if (arguments is not null)
+            return arguments;
+
+        // Neither JSON nor JavaScript literals: faker.js passes the raw text as a single string argument.
+        using var document = JsonDocument.Parse("\"" + JsonEncodedText.Encode(text).ToString() + "\"");
+        return new TemplateArgs([document.RootElement.Clone()]);
+    }
+
+    /// <summary>The arguments when <paramref name="text"/> is a JSON list of values, otherwise <see langword="null"/>.</summary>
+    private static TemplateArgs? TryParseJson(string text)
+    {
         try
         {
             using var document = JsonDocument.Parse("[" + text + "]");
@@ -33,9 +46,7 @@ public sealed class TemplateArgs
         }
         catch (JsonException)
         {
-            // Not JSON: faker.js passes the raw text as a single string argument.
-            using var document = JsonDocument.Parse("\"" + JsonEncodedText.Encode(text).ToString() + "\"");
-            return new TemplateArgs([document.RootElement.Clone()]);
+            return null;
         }
     }
 

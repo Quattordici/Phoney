@@ -62,12 +62,12 @@ Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 | Locale | Fallback | Entries | Size (bytes) |
 |---|---|---:|---:|
 | `af_ZA` | en → base | 16 | 2554 |
-| `ar` | en → base | 39 | 11070 |
+| `ar` | en → base | 39 | 11115 |
 | `az` | en → base | 44 | 6527 |
 | `base` |  | 28 | 14951 |
-| `bn_BD` | en → base | 10 | 6515 |
+| `bn_BD` | en → base | 10 | 6533 |
 | `cs_CZ` | en → base | 36 | 64314 |
-| `cy` | en → base | 29 | 2039 |
+| `cy` | en → base | 29 | 2038 |
 | `da` | en → base | 56 | 15669 |
 | `de` | en → base | 53 | 45580 |
 | `de_AT` | de → en → base | 31 | 19168 |
@@ -91,7 +91,7 @@ Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 | `eo` | en → base | 50 | 8235 |
 | `es` | en → base | 50 | 10923 |
 | `es_MX` | es → en → base | 48 | 14154 |
-| `fa` | en → base | 76 | 17409 |
+| `fa` | en → base | 76 | 17377 |
 | `fi` | en → base | 20 | 1480 |
 | `fr` | en → base | 81 | 46131 |
 | `fr_BE` | fr → en → base | 31 | 18807 |
@@ -101,8 +101,8 @@ Generated from `@faker-js/faker` **10.6.0** by `tools/Phoney.DataCompiler`.
 | `fr_SN` | fr → en → base | 19 | 2547 |
 | `he` | en → base | 53 | 32408 |
 | `hr` | en → base | 36 | 14056 |
-| `hu` | en → base | 53 | 61476 |
-| `hy` | en → base | 31 | 4829 |
+| `hu` | en → base | 53 | 61785 |
+| `hy` | en → base | 31 | 4825 |
 | `id_ID` | en → base | 60 | 32598 |
 | `it` | en → base | 35 | 27598 |
 | `ja` | en → base | 68 | 20416 |

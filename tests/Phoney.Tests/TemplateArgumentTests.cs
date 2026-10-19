@@ -242,4 +242,30 @@ public sealed class TemplateArgumentTests
         Parse("{{internet.url(x)}}").ShouldStartWith("https://");
         Parse("{{commerce.price(x)}}").ShouldMatch(@"^\d+\.\d{2}$");
     }
+
+    // C# templates are easier to write with JavaScript literals than with escaped JSON. They used to fall back to one raw string, so the options were silently ignored:
+    // {{string.alpha({length: 3})}} gave one letter and {{location.zipCode('###')}} kept the quotes.
+    [Test]
+    [Arguments("{{string.alpha({length: 3, casing: 'upper'})}}", "{{string.alpha({\"length\": 3, \"casing\": \"upper\"})}}")]
+    [Arguments("{{number.int({min: 5, max: 9})}}", "{{number.int({\"min\": 5, \"max\": 9})}}")]
+    [Arguments("{{number.float({ min : 1, max: 2, fractionDigits: 1 })}}", "{{number.float({\"min\": 1, \"max\": 2, \"fractionDigits\": 1})}}")]
+    [Arguments("{{location.zipCode('###')}}", "{{location.zipCode(\"###\")}}")]
+    [Arguments("{{helpers.fromRegExp('[a-c]{3}')}}", "{{helpers.fromRegExp(\"[a-c]{3}\")}}")]
+    [Arguments("{{helpers.arrayElement(['a', 'b,c', \"d\"])}}", "{{helpers.arrayElement([\"a\", \"b,c\", \"d\"])}}")]
+    [Arguments("{{person.firstName('female')}}", "{{person.firstName(\"female\")}}")]
+    [Arguments("{{internet.email({firstName: 'Jo', lastName: 'Do'})}}", "{{internet.email({\"firstName\": \"Jo\", \"lastName\": \"Do\"})}}")]
+    [Arguments("{{helpers.arrayElement(['it\\'s', 'say \"hi\"'])}}", "{{helpers.arrayElement([\"it's\", \"say \\\"hi\\\"\"])}}")]
+    public void JavaScript_literals_are_read_like_json(string javaScript, string json)
+    {
+        for (var seed = 0; seed < 20; seed++)
+            Parse(javaScript, seed).ShouldBe(Parse(json, seed));
+    }
+
+    [Test]
+    public void Text_that_is_no_literal_stays_one_raw_argument()
+    {
+        Parse("{{helpers.fromRegExp([A-Z]{3})}}").ShouldMatch("^[A-Z]{3}$");
+        Parse("{{helpers.fromRegExp(it's)}}").ShouldBe("it's");
+        Parse("{{helpers.fromRegExp(a:b)}}").ShouldBe("a:b");
+    }
 }
