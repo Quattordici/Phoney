@@ -74,9 +74,9 @@ public sealed class FakeDataTests
 [TestClass]
 public sealed class FakeDataRowTests
 {
-    private static MethodInfo Method(string name) => typeof(FakeDataRowTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private static MethodInfo Method(string name) => typeof(FakeDataRowTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!;
 
-    private void Sample(string email, [Range(1, 3)] int quantity) { }
+    private static void Sample(string email, [Range(1, 3)] int quantity) { }
 
     [TestMethod]
     public void Count_gives_that_many_distinct_rows_with_one_value_per_parameter()

@@ -133,7 +133,13 @@ public sealed class FakeDataOptions
     {
         if (type.HasElementType)
         {
-            var suffix = type.IsArray ? (type.IsSZArray ? "[]" : "[" + new string(',', type.GetArrayRank() - 1) + "]") : type.IsPointer ? "*" : "&";
+            var suffix = type switch
+            {
+                { IsSZArray: true } => "[]",
+                { IsArray: true } => "[" + new string(',', type.GetArrayRank() - 1) + "]",
+                { IsPointer: true } => "*",
+                _ => "&",
+            };
             return StableName(type.GetElementType()!) + suffix;
         }
 

@@ -12,6 +12,11 @@ public static partial class TemplateFunctions
 {
     private delegate void ModuleRegistration(ConcurrentDictionary<string, TemplateFunction> f);
 
+    // Option names faker.js uses for several functions.
+    private const string LengthOption = "length";
+    private const string CountOption = "count";
+    private const string PrefixOption = "prefix";
+
     private static readonly object ModuleGate = new();
     private static readonly HashSet<string> LoadedModules = new(StringComparer.OrdinalIgnoreCase);
 
@@ -93,7 +98,7 @@ public static partial class TemplateFunctions
 
     /// <summary>A length or count argument (<paramref name="name"/> in an options object, or the plain number), <paramref name="fallback"/> when absent, kept to <paramref name="limit"/>.</summary>
     /// <exception cref="FormatException">The value is larger than <paramref name="limit"/>.</exception>
-    private static int SizeOf(TemplateArgs a, int fallback, string name = "length", int limit = MaxTemplateSize) => Limited(a.Int(0, name) ?? fallback, name, limit);
+    private static int SizeOf(TemplateArgs a, int fallback, string name = LengthOption, int limit = MaxTemplateSize) => Limited(a.Int(0, name) ?? fallback, name, limit);
 
     /// <summary>Like <see cref="SizeOf"/> for an argument that has no default (the module chooses one).</summary>
     /// <exception cref="FormatException">The value is larger than <paramref name="limit"/>.</exception>
@@ -189,9 +194,9 @@ public static partial class TemplateFunctions
         f["string.numeric"] = (faker, a) => faker.String.Numeric(SizeOf(a, 1), a.Bool(0, "allowLeadingZeros") ?? a.Bool(1, "allowLeadingZeros") ?? true, a.OptionCharacters(0, "exclude"));
         f["string.alpha"] = (faker, a) => faker.String.Alpha(SizeOf(a, 1), CasingOf(a), a.OptionCharacters(0, "exclude"));
         f["string.alphanumeric"] = (faker, a) => faker.String.AlphaNumeric(SizeOf(a, 1), CasingOf(a), a.OptionCharacters(0, "exclude"));
-        f["string.hexadecimal"] = (faker, a) => faker.String.Hexadecimal(SizeOf(a, 1), CasingOf(a), a.OptionString(0, "prefix", "0x")!);
-        f["string.binary"] = (faker, a) => faker.String.Binary(SizeOf(a, 1), a.OptionString(0, "prefix", "0b")!);
-        f["string.octal"] = (faker, a) => faker.String.Octal(SizeOf(a, 1), a.OptionString(0, "prefix", "0o")!);
+        f["string.hexadecimal"] = (faker, a) => faker.String.Hexadecimal(SizeOf(a, 1), CasingOf(a), a.OptionString(0, PrefixOption, "0x")!);
+        f["string.binary"] = (faker, a) => faker.String.Binary(SizeOf(a, 1), a.OptionString(0, PrefixOption, "0b")!);
+        f["string.octal"] = (faker, a) => faker.String.Octal(SizeOf(a, 1), a.OptionString(0, PrefixOption, "0o")!);
         f["string.sample"] = (faker, a) => faker.String.Sample(SizeOf(a, 10));
         f["string.symbol"] = (faker, a) => faker.String.Symbol(SizeOf(a, 1));
         f["string.nanoid"] = (faker, a) => faker.String.NanoId(SizeOf(a, 21));
@@ -302,7 +307,7 @@ public static partial class TemplateFunctions
         Add("internet.port", x => x.Internet.Port().ToString(inv));
         Add("internet.userAgent", x => x.Internet.UserAgent());
         f["internet.mac"] = (faker, a) => faker.Internet.Mac(a.String(0, "separator", ":")!);
-        f["internet.password"] = (faker, a) => faker.Internet.Password(SizeOf(a, 15), a.Bool(0, "memorable") ?? false, PasswordPattern(a), a.OptionString(0, "prefix", "")!);
+        f["internet.password"] = (faker, a) => faker.Internet.Password(SizeOf(a, 15), a.Bool(0, "memorable") ?? false, PasswordPattern(a), a.OptionString(0, PrefixOption, "")!);
         f["internet.color"] = (faker, a) => faker.Internet.Color(a.Int(0, "redBase") ?? 0, a.Int(0, "greenBase") ?? 0, a.Int(0, "blueBase") ?? 0);
         Add("internet.emoji", x => x.Internet.Emoji());
         Add("internet.jwtAlgorithm", x => x.Internet.JwtAlgorithm());
@@ -375,9 +380,12 @@ public static partial class TemplateFunctions
         Add("finance.currencySymbol", x => x.Finance.CurrencySymbol());
         Add("finance.currencyNumericCode", x => x.Finance.CurrencyNumericCode());
         Add("finance.creditCardIssuer", x => x.Finance.CreditCardIssuer().ToString());
-        f["finance.creditCardNumber"] = (faker, a) => a.String(0, "issuer", null) is { Length: > 0 } issuer
-            ? issuer.Contains('#') ? faker.Finance.CreditCardNumber(issuer) : faker.Finance.CreditCardNumber(ParseIssuer(issuer))
-            : faker.Finance.CreditCardNumber();
+        f["finance.creditCardNumber"] = (faker, a) => a.String(0, "issuer", null) switch
+        {
+            { Length: > 0 } pattern when pattern.Contains('#') => faker.Finance.CreditCardNumber(pattern),
+            { Length: > 0 } issuer => faker.Finance.CreditCardNumber(ParseIssuer(issuer)),
+            _ => faker.Finance.CreditCardNumber(),
+        };
         Add("finance.creditCardCVV", x => x.Finance.CreditCardCvv());
         f["finance.pin"] = (faker, a) => faker.Finance.Pin(SizeOf(a, 4));
         Add("finance.ethereumAddress", x => x.Finance.EthereumAddress());
@@ -416,29 +424,29 @@ public static partial class TemplateFunctions
     private static void RegisterLorem(ConcurrentDictionary<string, TemplateFunction> f)
     {
         void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
-        f["lorem.word"] = (faker, a) => faker.Lorem.Word(a.Int(0, "length"), a.Int(0, "length"));
-        f["lorem.words"] = (faker, a) => faker.Lorem.Words(SizeOf(a, 3, "count", MaxTemplateWords));
-        f["lorem.sentence"] = (faker, a) => faker.Lorem.Sentence(OptionalSizeOf(a, "count", MaxTemplateWords));
-        f["lorem.sentences"] = (faker, a) => faker.Lorem.Sentences(OptionalSizeOf(a, "count", MaxTemplateSentences));
-        f["lorem.paragraph"] = (faker, a) => faker.Lorem.Paragraph(SizeOf(a, 3, "count", MaxTemplateSentences));
-        f["lorem.paragraphs"] = (faker, a) => faker.Lorem.Paragraphs(SizeOf(a, 3, "count", MaxTemplateParagraphs));
-        f["lorem.lines"] = (faker, a) => faker.Lorem.Lines(OptionalSizeOf(a, "count", MaxTemplateSentences));
-        f["lorem.slug"] = (faker, a) => faker.Lorem.Slug(SizeOf(a, 3, "count", MaxTemplateWords));
+        f["lorem.word"] = (faker, a) => faker.Lorem.Word(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["lorem.words"] = (faker, a) => faker.Lorem.Words(SizeOf(a, 3, CountOption, MaxTemplateWords));
+        f["lorem.sentence"] = (faker, a) => faker.Lorem.Sentence(OptionalSizeOf(a, CountOption, MaxTemplateWords));
+        f["lorem.sentences"] = (faker, a) => faker.Lorem.Sentences(OptionalSizeOf(a, CountOption, MaxTemplateSentences));
+        f["lorem.paragraph"] = (faker, a) => faker.Lorem.Paragraph(SizeOf(a, 3, CountOption, MaxTemplateSentences));
+        f["lorem.paragraphs"] = (faker, a) => faker.Lorem.Paragraphs(SizeOf(a, 3, CountOption, MaxTemplateParagraphs));
+        f["lorem.lines"] = (faker, a) => faker.Lorem.Lines(OptionalSizeOf(a, CountOption, MaxTemplateSentences));
+        f["lorem.slug"] = (faker, a) => faker.Lorem.Slug(SizeOf(a, 3, CountOption, MaxTemplateWords));
         Add("lorem.text", x => x.Lorem.Text());
     }
 
     /// <summary>Registers word template functions, including length filters and an optional bounded word count.</summary>
     private static void RegisterWord(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        f["word.adjective"] = (faker, a) => faker.Word.Adjective(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.adverb"] = (faker, a) => faker.Word.Adverb(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.conjunction"] = (faker, a) => faker.Word.Conjunction(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.interjection"] = (faker, a) => faker.Word.Interjection(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.noun"] = (faker, a) => faker.Word.Noun(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.preposition"] = (faker, a) => faker.Word.Preposition(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.verb"] = (faker, a) => faker.Word.Verb(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.sample"] = (faker, a) => faker.Word.Sample(a.Int(0, "length"), a.Int(0, "length"));
-        f["word.words"] = (faker, a) => faker.Word.Words(OptionalSizeOf(a, "count", MaxTemplateWords));
+        f["word.adjective"] = (faker, a) => faker.Word.Adjective(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.adverb"] = (faker, a) => faker.Word.Adverb(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.conjunction"] = (faker, a) => faker.Word.Conjunction(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.interjection"] = (faker, a) => faker.Word.Interjection(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.noun"] = (faker, a) => faker.Word.Noun(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.preposition"] = (faker, a) => faker.Word.Preposition(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.verb"] = (faker, a) => faker.Word.Verb(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.sample"] = (faker, a) => faker.Word.Sample(a.Int(0, LengthOption), a.Int(0, LengthOption));
+        f["word.words"] = (faker, a) => faker.Word.Words(OptionalSizeOf(a, CountOption, MaxTemplateWords));
     }
 
     /// <summary>Registers color template functions, including hex options and CSS representations of color values.</summary>
@@ -449,11 +457,11 @@ public static partial class TemplateFunctions
         Add("color.space", x => x.Color.Space());
         f["color.rgb"] = (faker, a) => a.OptionString(0, "format", "hex")?.ToUpperInvariant() switch
         {
-            "HEX" => faker.Color.Hex(a.OptionString(0, "prefix", "#")!, CasingOf(a, Casing.Lower), a.Bool(0, "includeAlpha") ?? false),
+            "HEX" => faker.Color.Hex(a.OptionString(0, PrefixOption, "#")!, CasingOf(a, Casing.Lower), a.Bool(0, "includeAlpha") ?? false),
             "CSS" => faker.Color.Rgb(a.Bool(0, "includeAlpha") ?? false).ToCss(),
             var other => throw new FormatException($"color.rgb formats a color as 'hex' or 'css' in a template, not '{other}'; Faker.Color.Rgb() returns the numbers."),
         };
-        f["color.hex"] = (faker, a) => faker.Color.Hex(a.OptionString(0, "prefix", "#")!, CasingOf(a, Casing.Lower), a.Bool(0, "includeAlpha") ?? false);
+        f["color.hex"] = (faker, a) => faker.Color.Hex(a.OptionString(0, PrefixOption, "#")!, CasingOf(a, Casing.Lower), a.Bool(0, "includeAlpha") ?? false);
         Add("color.cmyk", x => x.Color.Cmyk().ToCss());
         Add("color.hsl", x => x.Color.Hsl().ToCss());
         Add("color.hwb", x => x.Color.Hwb().ToCss());
@@ -550,7 +558,7 @@ public static partial class TemplateFunctions
         void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("airline.recordLocator", x => x.Airline.RecordLocator());
         Add("airline.seat", x => x.Airline.Seat());
-        f["airline.flightNumber"] = (faker, a) => faker.Airline.FlightNumber(OptionalSizeOf(a, "length", MaxTemplateSize), a.Bool(0, "addLeadingZeros") ?? false);
+        f["airline.flightNumber"] = (faker, a) => faker.Airline.FlightNumber(OptionalSizeOf(a, LengthOption, MaxTemplateSize), a.Bool(0, "addLeadingZeros") ?? false);
         Add("airline.airline", x => x.Airline.Airline().ToString());
         Add("airline.airplane", x => x.Airline.Airplane().ToString());
         Add("airline.airport", x => x.Airline.Airport().ToString());

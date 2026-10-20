@@ -77,7 +77,12 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     public string? MemberName { get; set; }
 
     /// <summary>How many values may be produced for one result: the smallest limit of the checks that apply (uniqueness, condition).</summary>
-    public int Attempts => Unique ? (Filter is null ? MaxAttempts : Math.Min(MaxAttempts, FilterAttempts)) : FilterAttempts;
+    public int Attempts => (Unique, Filter) switch
+    {
+        (false, _) => FilterAttempts,
+        (true, null) => MaxAttempts,
+        _ => Math.Min(MaxAttempts, FilterAttempts),
+    };
 
     /// <summary>Attempts per value before uniqueness gives up.</summary>
     public int MaxAttempts { get; } = maxAttempts;
@@ -363,10 +368,11 @@ public sealed class FakeScope
                 return value;
         }
 
-        throw slot.Filter is null
-            ? new InvalidOperationException($"Could not generate a unique value for {_type.Name}.{slot.MemberName} after {attempts} attempts. Give the member a source with more distinct values, or raise maxAttempts.")
-            : new InvalidOperationException(
-                $"Could not generate {_type.Name}.{slot.MemberName} {(slot.Unique ? "unique and " : "")}satisfying its Where condition after {attempts} attempts. "
+        if (slot.Filter is null)
+            throw new InvalidOperationException($"Could not generate a unique value for {_type.Name}.{slot.MemberName} after {attempts} attempts. Give the member a source with more distinct values, or raise maxAttempts.");
+        var unique = slot.Unique ? "unique and " : "";
+        throw new InvalidOperationException(
+                $"Could not generate {_type.Name}.{slot.MemberName} {unique}satisfying its Where condition after {attempts} attempts. "
                 + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");
     }
 
@@ -604,13 +610,9 @@ public sealed class FakeScope
             return CreateWith(declared, type);
 
         var declaredType = type;
-        var registered = Settings.Subtypes.TryGetValue(type, out var subtypes);
-        if (registered)
-            Settings.Usage?.Subtype(type);
-        if (registered || (subtypes = Subtypes.DefaultsOf(type)).Length > 0)
-            type = subtypes.Length == 1 ? subtypes[0] : subtypes[Faker.Random.Index(subtypes.Length)];
-        else if (type.IsInterface || type.IsAbstract)
+        if (ConcreteType(type) is not { } concrete)
             return CutOff();
+        type = concrete;
 
         // The subtype that was picked may have a generator of its own.
         if (type != declaredType && FindGenerator(type) is { } picked)
@@ -622,16 +624,40 @@ public sealed class FakeScope
         var model = ModelRegistry.Get(type);
         if (model is null)
             return CutOff();
-        // Custom conventions and path rules reach nested members through slots, so both kinds of model apply them in FakeScope.Get.
-        var slots = Settings.Conventions?.SlotsFor(type, model);
-        PathNode?[]? children = null;
+        var (slots, children) = RulesFor(type, model);
+        return model.CreateObject(new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children));
+    }
+
+    /// <summary>
+    /// The type to create for a member declared as <paramref name="type"/>: one of its subtypes when it has any (the generator's and <c>Fake.Subtypes</c>,
+    /// else <c>[JsonDerivedType]</c>; a draw only when there are several), the type itself when it is concrete, <see langword="null"/> for an interface or
+    /// abstract class without subtypes.
+    /// </summary>
+    private Type? ConcreteType(Type type)
+    {
+        var registered = Settings.Subtypes.TryGetValue(type, out var listed);
+        if (registered)
+            Settings.Usage?.Subtype(type);
+        var subtypes = registered ? listed : Subtypes.DefaultsOf(type);
+        if (registered || subtypes.Length > 0)
+            return subtypes.Length == 1 ? subtypes[0] : subtypes[Faker.Random.Index(subtypes.Length)];
+        return type.IsInterface || type.IsAbstract ? null : type;
+    }
+
+    /// <summary>
+    /// The rules for the members of a nested <paramref name="type"/>: custom conventions and path rules reach them through slots, so both kinds of model
+    /// apply them in <see cref="Get{TValue}"/>; a path rule position also gives the positions below it.
+    /// </summary>
+    private (RuleSlot?[]? Slots, PathNode?[]? Children) RulesFor(Type type, IFakeModel model)
+    {
+        var slots = Settings.Conventions?.SlotsFor(type, model); // also when a path rule position replaces them: binding the conventions marks them as used
         if (_children is not null && (uint)_member < (uint)_children.Length && _children[_member] is { } position)
         {
             var bound = position.Bind(type, model, Settings.Conventions);
-            (slots, children) = (bound.Slots, bound.Children);
+            return (bound.Slots, bound.Children);
         }
 
-        return model.CreateObject(new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children));
+        return (slots, null);
     }
 
     /// <summary>Returns <see langword="null"/> for an object that can't be created here, and marks it so a collection leaves the element out.</summary>

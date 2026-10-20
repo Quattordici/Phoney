@@ -36,22 +36,8 @@ internal static class JavaScriptLiterals
             }
             else if (IsKeyStart(c))
             {
-                var end = i + 1;
-                while (end < text.Length && IsKeyPart(text[end]))
-                    end++;
-                var next = end;
-                while (next < text.Length && char.IsWhiteSpace(text[next]))
-                    next++;
-                if (next < text.Length && text[next] == ':')
-                {
-                    json.Append('"').Append(text, i, end - i).Append('"');
-                    rewritten = true;
-                }
-                else
-                {
-                    json.Append(text, i, end - i); // true, false, null or no literal at all
-                }
-
+                var end = AppendWord(json, text, i, out var quoted);
+                rewritten |= quoted;
                 i = end;
             }
             else
@@ -64,16 +50,35 @@ internal static class JavaScriptLiterals
         return rewritten ? json.ToString() : null;
     }
 
+    /// <summary>
+    /// Appends the word that starts at <paramref name="start"/>, quoted when it is an object key (a colon follows), and returns the index after it.
+    /// </summary>
+    private static int AppendWord(StringBuilder json, string text, int start, out bool quoted)
+    {
+        var end = start + 1;
+        while (end < text.Length && IsKeyPart(text[end]))
+            end++;
+        var next = end;
+        while (next < text.Length && char.IsWhiteSpace(text[next]))
+            next++;
+        quoted = next < text.Length && text[next] == ':';
+        if (quoted)
+            json.Append('"').Append(text, start, end - start).Append('"');
+        else
+            json.Append(text, start, end - start); // true, false, null or no literal at all
+        return end;
+    }
+
     /// <summary>The index of the quote that closes the string opened at <paramref name="start"/>, skipping escaped characters, or -1.</summary>
     private static int ClosingQuote(string text, int start)
     {
         var quote = text[start];
-        for (var i = start + 1; i < text.Length; i++)
+        var i = start + 1;
+        while (i < text.Length)
         {
-            if (text[i] == '\\')
-                i++;
-            else if (text[i] == quote)
+            if (text[i] == quote)
                 return i;
+            i += text[i] == '\\' ? 2 : 1;
         }
 
         return -1;
@@ -83,15 +88,15 @@ internal static class JavaScriptLiterals
     private static void AppendDoubleQuoted(StringBuilder json, ReadOnlySpan<char> body)
     {
         json.Append('"');
-        for (var i = 0; i < body.Length; i++)
+        var i = 0;
+        while (i < body.Length)
         {
-            var c = body[i];
-            if (c == '\\' && i + 1 < body.Length)
+            var c = body[i++];
+            if (c == '\\' && i < body.Length)
             {
-                i++;
                 if (body[i] != '\'')
                     json.Append('\\');
-                json.Append(body[i]);
+                json.Append(body[i++]);
             }
             else if (c == '"')
             {

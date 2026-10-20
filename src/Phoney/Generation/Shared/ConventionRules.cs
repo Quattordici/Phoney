@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Phoney.Generation;
 
@@ -141,11 +142,13 @@ static class ConventionRules
     {
         var chars = new char[name.Length];
         var length = 0;
+#pragma warning disable S3267 // on the first call of a process (every member name of the first type): a LINQ pipeline costs more JIT than the loop
         foreach (var c in name)
         {
             if (c != '_' && c != '-' && c != ' ' && c != '@')
                 chars[length++] = char.ToLowerInvariant(c);
         }
+#pragma warning restore S3267
 
         return new string(chars, 0, length);
     }
@@ -230,16 +233,7 @@ static class ConventionRules
     /// <summary><c>Name</c> and <c>Title</c> depend on what the type represents.</summary>
     private static ConventionKind ContextualName(string name, string typeName)
     {
-        bool Is(params string[] words)
-        {
-            foreach (var w in words)
-            {
-                if (typeName.EndsWith(w, StringComparison.Ordinal))
-                    return true;
-            }
-
-            return false;
-        }
+        bool Is(params string[] words) => words.Any(w => typeName.EndsWith(w, StringComparison.Ordinal));
 
         if (name == "title")
         {

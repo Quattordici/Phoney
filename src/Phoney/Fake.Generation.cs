@@ -25,6 +25,16 @@ public static partial class Fake
     [RequiresDynamicCode(ReflectionMessage)]
     public static T One<T>() => For<T>().Generate();
 
+    /// <summary>
+    /// Creates one object of a type that is only known at runtime, like <see cref="One{T}"/>: <c>Fake.One(typeof(Customer))</c>. Useful for tools, test helpers
+    /// and code that works from <see cref="Type"/> values. Prefer the generic overload when the type is known at compile time.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is an open generic type.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static object One(Type type) => Invoke(nameof(One), type, null)!;
+
     /// <summary>Generates <paramref name="count"/> populated <typeparamref name="T"/> objects.</summary>
     /// <example><code>List&lt;Customer&gt; customers = Fake.Many&lt;Customer&gt;(100);</code></example>
     [RequiresUnreferencedCode(ReflectionMessage)]
@@ -38,16 +48,6 @@ public static partial class Fake
     [RequiresDynamicCode(ReflectionMessage)]
     public static List<T> Many<T>(int min, int max) => For<T>().Generate(min, max);
 
-    /// <summary>
-    /// Creates one object of a type that is only known at runtime, like <see cref="One{T}"/>: <c>Fake.One(typeof(Customer))</c>. Useful for tools, test helpers
-    /// and code that works from <see cref="Type"/> values. Prefer the generic overload when the type is known at compile time.
-    /// </summary>
-    /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="type"/> is an open generic type.</exception>
-    [RequiresUnreferencedCode(ReflectionMessage)]
-    [RequiresDynamicCode(ReflectionMessage)]
-    public static object One(Type type) => Invoke(nameof(One), type, null)!;
-
     /// <summary>Creates <paramref name="count"/> objects of a type that is only known at runtime, like <see cref="Many{T}(int)"/>.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="type"/> is an open generic type.</exception>
@@ -60,7 +60,7 @@ public static partial class Fake
         var list = (System.Collections.IList)Invoke(nameof(Many), type, [count])!;
         var result = new List<object>(list.Count);
         foreach (var item in list)
-            result.Add(item!);
+            result.Add(item);
         return result;
     }
 

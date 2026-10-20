@@ -98,11 +98,8 @@ public sealed class ModelSuggestionAnalyzer : DiagnosticAnalyzer
             if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly &&
                 assembly.Modules.Any(m => m.ReferencedAssemblies.Any(r => r.Name == phoneyAssembly)))
             {
-                foreach (var type in AllTypes(assembly.GlobalNamespace))
-                {
-                    if (type.GetAttributes().Any(a => a.AttributeClass is { Name: "FakeForAttribute" or "FakeSubtypeAttribute" }))
-                        yield return type;
-                }
+                foreach (var type in AllTypes(assembly.GlobalNamespace).Where(t => t.GetAttributes().Any(a => a.AttributeClass is { Name: "FakeForAttribute" or "FakeSubtypeAttribute" })))
+                    yield return type;
             }
         }
     }

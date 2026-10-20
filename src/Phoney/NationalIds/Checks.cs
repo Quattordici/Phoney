@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using Phoney.Modules;
 
 namespace Phoney.Schemes;
@@ -21,28 +20,13 @@ internal static class Checks
     /// <summary>Removes the characters in <paramref name="separators"/> and surrounding spaces.</summary>
     public static string Compact(string value, string separators = " -.")
     {
-        var sb = new StringBuilder(value.Length);
-        foreach (var c in value.Trim())
-        {
-            if (separators.IndexOf(c, StringComparison.Ordinal) < 0)
-                sb.Append(c);
-        }
-
-        return sb.ToString();
+        return string.Concat(value.Trim().Where(c => separators.IndexOf(c, StringComparison.Ordinal) < 0));
     }
 
     /// <summary>Whether <paramref name="text"/> is non-empty and consists of ASCII digits only.</summary>
     public static bool AllDigits(string text)
     {
-        if (text.Length == 0)
-            return false;
-        foreach (var c in text)
-        {
-            if (c is < '0' or > '9')
-                return false;
-        }
-
-        return true;
+        return text.Length > 0 && text.All(char.IsAsciiDigit);
     }
 
     /// <summary>Whether <paramref name="text"/> is a number of exactly <paramref name="length"/> digits.</summary>

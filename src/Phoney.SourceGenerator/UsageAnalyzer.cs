@@ -23,6 +23,9 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class UsageAnalyzer : DiagnosticAnalyzer
 {
+    /// <summary>What a count, size or depth that may not be negative must be.</summary>
+    private const string AtLeastZero = "at least 0";
+
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
     private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "WithGeneratorFor", "Subtype" };
 
@@ -123,16 +126,16 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 Check(context, call, "probability", v => v is >= 0 and <= 1, "between 0 and 1");
                 break;
             case "CollectionSize":
-                Check(context, call, "min", v => v >= 0, "at least 0");
+                Check(context, call, "min", v => v >= 0, AtLeastZero);
                 if (Constant(call, "min") is { } min)
                     Check(context, call, "max", v => v >= min, $"at least {min.ToString(CultureInfo.InvariantCulture)} (the minimum)");
                 break;
             case "MaxDepth":
-                Check(context, call, "depth", v => v >= 0, "at least 0");
+                Check(context, call, "depth", v => v >= 0, AtLeastZero);
                 break;
             case "Generate" or "GenerateParallel" or "Many":
-                Check(context, call, "count", v => v >= 0, "at least 0");
-                Check(context, call, "min", v => v >= 0, "at least 0");
+                Check(context, call, "count", v => v >= 0, AtLeastZero);
+                Check(context, call, "min", v => v >= 0, AtLeastZero);
                 if (Constant(call, "min") is { } low)
                     Check(context, call, "max", v => v >= low, $"at least {low.ToString(CultureInfo.InvariantCulture)} (the minimum)");
                 break;
@@ -260,23 +263,9 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>PHONEY007: what <c>ObjectGenerator&lt;T&gt;.Compile</c> and <c>MemberName</c> reject at runtime.</summary>
     private static void CheckRule(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
-        var method = call.TargetMethod;
         if (selector.Kind == SelectorKind.Combination)
         {
-            if (method.Name != UniqueMethod)
-            {
-                Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
-                return;
-            }
-
-            if (GeneratedMembers(call, symbols) is not var (owner, described))
-                return;
-            foreach (var part in selector.Path!.Split(','))
-            {
-                if (!described.Any(m => m.Name == part))
-                    Report(context, selector, $"'{owner.Name}.{part}' is not a public settable member or constructor parameter, so it can't be part of a unique combination and the generator throws when it is first used.");
-            }
-
+            CheckCombination(context, call, selector, symbols);
             return;
         }
 
@@ -286,37 +275,48 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (selector.IsNested)
+        if ((selector.IsNested ? NestedRuleProblem(call.TargetMethod, selector) : null) is { } problem)
         {
-            if (method.Name == UniqueMethod)
-            {
-                Report(context, selector, $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.");
-                return;
-            }
-
-            if (method.Name is "Sequence" or "Cycle")
-            {
-                Report(context, selector, $"{method.Name} must select a member of the generated type directly, like x => x.Name: it numbers the generated objects, so it can't give a value to '{selector.Path}' in a nested object.");
-                return;
-            }
-
-            if (method.Name == "Where")
-            {
-                Report(context, selector, $"Where must select a member of the generated type directly, like x => x.Name: a condition on a member applies to the generated object's own members, not to '{selector.Path}' in a nested object.");
-                return;
-            }
-
-            if (IsDependentRule(method))
-            {
-                Report(context, selector, $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.");
-                return;
-            }
+            Report(context, selector, problem);
+            return;
         }
 
-        if (GeneratedMembers(call, symbols) is not var (type, members))
-            return;
+        if (GeneratedMembers(call, symbols) is var (type, members))
+            CheckMember(context, call.TargetMethod, selector, type, members);
+    }
 
-        var member = members.FirstOrDefault(m => m.Name == selector.Name);
+    /// <summary>PHONEY007 for <c>Unique(x =&gt; new { … })</c>: only Unique takes a combination, and every part must be a member that is generated.</summary>
+    private static void CheckCombination(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
+    {
+        var method = call.TargetMethod;
+        if (method.Name != UniqueMethod)
+        {
+            Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
+            return;
+        }
+
+        if (GeneratedMembers(call, symbols) is not var (owner, described))
+            return;
+        foreach (var part in selector.Path!.Split(',').Where(p => !described.Exists(m => m.Name == p)))
+        {
+            Report(context, selector, $"'{owner.Name}.{part}' is not a public settable member or constructor parameter, so it can't be part of a unique combination and the generator throws when it is first used.");
+        }
+    }
+
+    /// <summary>Why a rule can't be given to a member of a nested object, or <see langword="null"/> when it can.</summary>
+    private static string? NestedRuleProblem(IMethodSymbol method, RuleSelector selector) => method.Name switch
+    {
+        UniqueMethod => $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.",
+        "Sequence" or "Cycle" => $"{method.Name} must select a member of the generated type directly, like x => x.Name: it numbers the generated objects, so it can't give a value to '{selector.Path}' in a nested object.",
+        "Where" => $"Where must select a member of the generated type directly, like x => x.Name: a condition on a member applies to the generated object's own members, not to '{selector.Path}' in a nested object.",
+        _ when IsDependentRule(method) => $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.",
+        _ => null,
+    };
+
+    /// <summary>PHONEY007 for a rule on a member of the generated type: the member must exist, and a rule that reads the object can't be given to what is set before it exists.</summary>
+    private static void CheckMember(OperationAnalysisContext context, IMethodSymbol method, RuleSelector selector, INamedTypeSymbol type, List<MemberModel> members)
+    {
+        var member = members.Find(m => m.Name == selector.Name);
         if (member is null)
         {
             Report(context, selector, $"'{type.Name}.{selector.Name}' is not a public settable member or constructor parameter, so it can't be generated and the generator throws when it is first used.");

@@ -30,6 +30,7 @@ public static partial class SubsetFakes;
 public sealed class SubsetOfTests
 {
     private static readonly string[] Pool = ["admin", "editor", "viewer", "billing", "support", "auditor", "owner", "guest", "bot", "ops"];
+    private static readonly int[] Numbers = [10, 20, 30, 40, 50];
 
     private static ObjectGenerator<Roster> Generated() => SubsetFakes.Roster.Seed(6);
 
@@ -52,7 +53,7 @@ public sealed class SubsetOfTests
         var accounts = (generated ? Generated() : Reflected())
             .WithSubsetOf(a => a.Roles, Pool, 3)
             .WithSubsetOf(a => a.Tags, Pool, 2)
-            .WithSubsetOf(a => a.Numbers, new[] { 10, 20, 30, 40, 50 }, 4)
+            .WithSubsetOf(a => a.Numbers, Numbers, 4)
             .WithSubsetOf(a => a.Groups, Pool, 3)
             .WithSubsetOf(a => a.Permissions, Pool, 5)
             .WithSubsetOf(a => a.Favorites, Pool, 1)

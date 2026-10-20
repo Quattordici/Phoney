@@ -95,14 +95,23 @@ internal sealed class Template
         return new Template(text, [.. segments]);
     }
 
-    /// <summary>Evaluates the template with <paramref name="faker"/>.</summary>
-    public string Evaluate(Faker faker)
+    /// <summary>Counts one more nested evaluation on this thread, and stops a template that (through its data) evaluates itself without end.</summary>
+    private static void Enter(string text)
     {
         if (++t_depth > MaxDepth)
         {
             t_depth--; // the frames above unwind through their finally blocks and bring the depth back to 0
-            throw new PhoneyDataException($"Template recursion is too deep while evaluating '{Text}'. Does the data reference itself?");
+            throw new PhoneyDataException($"Template recursion is too deep while evaluating '{text}'. Does the data reference itself?");
         }
+    }
+
+    /// <summary>Ends a nested evaluation started with <see cref="Enter"/>.</summary>
+    private static void Leave() => t_depth--;
+
+    /// <summary>Evaluates the template with <paramref name="faker"/>.</summary>
+    public string Evaluate(Faker faker)
+    {
+        Enter(Text);
 
         try
         {
@@ -117,18 +126,14 @@ internal sealed class Template
         }
         finally
         {
-            t_depth--;
+            Leave();
         }
     }
 
     /// <summary>Evaluates the template into <paramref name="text"/>, drawing exactly what <see cref="Evaluate"/> draws.</summary>
     public void AppendTo(ref TextBuilder text, Faker faker)
     {
-        if (++t_depth > MaxDepth)
-        {
-            t_depth--; // the frames above unwind through their finally blocks and bring the depth back to 0
-            throw new PhoneyDataException($"Template recursion is too deep while evaluating '{Text}'. Does the data reference itself?");
-        }
+        Enter(Text);
 
         try
         {
@@ -137,7 +142,7 @@ internal sealed class Template
         }
         finally
         {
-            t_depth--;
+            Leave();
         }
     }
 
@@ -251,18 +256,7 @@ internal sealed class Template
             if (Literal is not null)
                 return Literal;
             if (_function is not null)
-            {
-                try
-                {
-                    return _function(faker, _args);
-                }
-                catch (PhoneyDataUnavailableException)
-                {
-                    // A pattern inherited from a fallback locale may use data that is not applicable here
-                    // (e.g. en's postal address uses states, which az doesn't have): leave that part empty.
-                    return "";
-                }
-            }
+                return Call(_function, faker);
             if (_key < 0 && _recordKey < 0)
                 ResolveDataPath(); // data may have been registered after parsing
 
@@ -288,6 +282,21 @@ internal sealed class Template
             throw new PhoneyDataException(
                 $"Cannot resolve '{{{{{Expression}}}}}' in locale '{faker.Locale}': it is neither a template function nor available locale data."
                 + NameSuggestions.For(Expression, [.. TemplateFunctions.Names, .. KeyRegistry.AllPaths()]));
+        }
+
+        /// <summary>Calls the segment's template function.</summary>
+        private string Call(TemplateFunction function, Faker faker)
+        {
+            try
+            {
+                return function(faker, _args);
+            }
+            catch (PhoneyDataUnavailableException)
+            {
+                // A pattern inherited from a fallback locale may use data that is not applicable here
+                // (e.g. en's postal address uses states, which az doesn't have): leave that part empty.
+                return "";
+            }
         }
 
         /// <summary>

@@ -80,12 +80,14 @@ internal abstract class ReflectionCollections
             return s => s.Dictionary(typedKey, typedValue, constraints);
         }
 
-        public override Func<FakeScope, object?> Array(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw new InvalidOperationException("Not a collection builder.");
+        public override Func<FakeScope, object?> Array(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw NotAnElementBuilder();
 
-        public override Func<FakeScope, object?> Array2(Func<FakeScope, object?> element) => throw new InvalidOperationException("Not a collection builder.");
+        public override Func<FakeScope, object?> Array2(Func<FakeScope, object?> element) => throw NotAnElementBuilder();
 
-        public override Func<FakeScope, object?> Set(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw new InvalidOperationException("Not a collection builder.");
+        public override Func<FakeScope, object?> Set(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw NotAnElementBuilder();
 
-        public override Func<FakeScope, object?> List(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw new InvalidOperationException("Not a collection builder.");
+        public override Func<FakeScope, object?> List(Func<FakeScope, object?> element, MemberConstraints? constraints) => throw NotAnElementBuilder();
+
+        private static InvalidOperationException NotAnElementBuilder() => new("Not a collection builder.");
     }
 }

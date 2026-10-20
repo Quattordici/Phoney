@@ -159,14 +159,23 @@ public sealed class PersonModule : FakerModule
                 parts.Add((NamePart.Literal, literal.ToString()));
             return new NamePattern([.. parts]);
 
-            static (NamePart Part, int Length)? PartAt(ReadOnlySpan<char> text) =>
-                text.StartsWith(PrefixTag, StringComparison.Ordinal) ? (NamePart.Prefix, PrefixTag.Length)
-                : text.StartsWith(FirstNameTag, StringComparison.Ordinal) ? (NamePart.FirstName, FirstNameTag.Length)
-                : text.StartsWith(MiddleNameTag, StringComparison.Ordinal) ? (NamePart.MiddleName, MiddleNameTag.Length)
-                : text.StartsWith(LastNameTag, StringComparison.Ordinal) ? (NamePart.LastName, LastNameTag.Length)
-                : text.StartsWith(SuffixTag, StringComparison.Ordinal) ? (NamePart.Suffix, SuffixTag.Length)
-                : null;
+            static (NamePart Part, int Length)? PartAt(ReadOnlySpan<char> text)
+            {
+                foreach (var (tag, part) in Tags)
+                {
+                    if (text.StartsWith(tag, StringComparison.Ordinal))
+                        return (part, tag.Length);
+                }
+
+                return null;
+            }
         }
+
+        private static readonly (string Tag, NamePart Part)[] Tags =
+        [
+            (PrefixTag, NamePart.Prefix), (FirstNameTag, NamePart.FirstName), (MiddleNameTag, NamePart.MiddleName),
+            (LastNameTag, NamePart.LastName), (SuffixTag, NamePart.Suffix),
+        ];
     }
 
     private const string TagStart = "{{person.";

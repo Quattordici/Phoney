@@ -111,6 +111,14 @@ public sealed class DateModule : FakerModule
         return fromMs > toMs ? from : DateTimeOffset.FromUnixTimeMilliseconds(Random.Long(fromMs, toMs));
     }
 
+    /// <summary>Returns a date between <paramref name="from"/> and <paramref name="to"/> (inclusive), without time of day.</summary>
+    public DateOnly Between(DateOnly from, DateOnly to)
+    {
+        if (from > to)
+            throw new ArgumentException("'from' must be before 'to'.", nameof(from));
+        return DateOnly.FromDayNumber(Random.Int(from.DayNumber, to.DayNumber));
+    }
+
     /// <summary>Returns <paramref name="count"/> sorted dates between <paramref name="from"/> and <paramref name="to"/>.</summary>
     public DateTimeOffset[] Betweens(DateTimeOffset from, DateTimeOffset to, int count = 3)
     {
@@ -120,14 +128,6 @@ public sealed class DateModule : FakerModule
             dates[i] = Between(from, to);
         Array.Sort(dates);
         return dates;
-    }
-
-    /// <summary>Returns a date between <paramref name="from"/> and <paramref name="to"/> (inclusive), without time of day.</summary>
-    public DateOnly Between(DateOnly from, DateOnly to)
-    {
-        if (from > to)
-            throw new ArgumentException("'from' must be before 'to'.", nameof(from));
-        return DateOnly.FromDayNumber(Random.Int(from.DayNumber, to.DayNumber));
     }
 
     /// <summary>Returns a random time of day with second precision.</summary>

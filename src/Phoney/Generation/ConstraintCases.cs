@@ -96,18 +96,20 @@ internal static class ConstraintCases
                 BoundaryLength(cases, c, min: c.MinLength ?? 0, "the minimum element count", "the maximum element count", Count);
                 break;
             case var shape and (Shape.Number or Shape.Date):
-                foreach (var side in new[] { Side.Min, Side.Max })
-                {
-                    var (text, exclusive) = side == Side.Min ? (c.RangeMin, c.RangeMinExclusive) : (c.RangeMax, c.RangeMaxExclusive);
-                    var name = side == Side.Min ? "minimum" : "maximum";
-                    if (TryBound(type, shape, text, side, outside: false, exclusive) is { } value)
-                        cases.Add(new(exclusive ? $"next to the excluded {name} ({text})" : $"the {name} ({text})", Replace(value)));
-                }
-
+                BoundaryRange(cases, type, shape, Side.Min, c.RangeMin, c.RangeMinExclusive);
+                BoundaryRange(cases, type, shape, Side.Max, c.RangeMax, c.RangeMaxExclusive);
                 break;
         }
 
         return cases;
+    }
+
+    /// <summary>The value on one end of a <c>[Range]</c>: the bound itself, or the nearest value inside an excluded one.</summary>
+    private static void BoundaryRange(List<ConstraintCase> cases, Type type, Shape shape, Side side, string? text, bool exclusive)
+    {
+        var name = side == Side.Min ? "minimum" : "maximum";
+        if (TryBound(type, shape, text, side, outside: false, exclusive) is { } value)
+            cases.Add(new(exclusive ? $"next to the excluded {name} ({text})" : $"the {name} ({text})", Replace(value)));
     }
 
     private static void Required(List<ConstraintCase> cases, Type memberType, Shape shape)
@@ -152,8 +154,9 @@ internal static class ConstraintCases
         {
             var taken = allowed.Select(a => a?.ToString()).ToHashSet(StringComparer.Ordinal);
             var other = "not allowed";
+            var underscores = 0;
             while (taken.Contains(other))
-                other += "_";
+                other = "not allowed" + new string('_', ++underscores);
             cases.Add(new("not one of the allowed values", Replace(other)));
         }
     }

@@ -94,7 +94,11 @@ public class StringsEntry : Entry
         where T : class
     {
         var parsed = _parsed ??= new object?[Count]; // benign races: parsing is idempotent
-        return parsed[index] as T ?? (T)(parsed[index] = parse(this[index]));
+        if (parsed[index] is T done)
+            return done;
+        var value = parse(this[index]);
+        parsed[index] = value;
+        return value;
     }
 
     private object?[]? _parsed;

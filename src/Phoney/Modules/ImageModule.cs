@@ -69,10 +69,8 @@ public sealed class ImageModule : FakerModule
 
     private static void RequirePositive(int? width, int? height)
     {
-        if (width is { } w)
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(w, nameof(width));
-        if (height is { } h)
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(h, nameof(height));
+        OptionalArgument.ThrowIfNegativeOrZero(width);
+        OptionalArgument.ThrowIfNegativeOrZero(height);
     }
 }
 

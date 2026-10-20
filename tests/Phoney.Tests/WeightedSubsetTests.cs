@@ -25,6 +25,10 @@ public sealed class WeightedSubsetTests
 {
     private static readonly string[] Pool = ["common", "usual", "rare", "unique"];
     private static readonly double[] Weights = [8, 4, 2, 1];
+    private static readonly int[] Numbers = [1, 2, 3, 4];
+    private static readonly double[] TwoWeights = [1.0, 2.0];
+    private static readonly string[] A = ["a"];
+    private static readonly string[] ABC = ["a", "b", "c"];
 
     private static ObjectGenerator<Crew> Generated() => WeightedSubsetFakes.Crew.Seed(8);
 
@@ -68,7 +72,7 @@ public sealed class WeightedSubsetTests
         var crews = (generated ? Generated() : Reflected())
             .WithSubsetOf(c => c.Roles, Pool, Weights, 3)
             .WithSubsetOf(c => c.Tags, Pool, Weights, (1, 3))
-            .WithSubsetOf(c => c.Numbers, new[] { 1, 2, 3, 4 }, Weights, 2)
+            .WithSubsetOf(c => c.Numbers, Numbers, Weights, 2)
             .WithSubsetOf(c => c.Groups, Pool, Weights, 2)
             .WithSubsetOf(c => c.Permissions, Pool, Weights, 4)
             .WithSubsetOf(c => c.Squad.Members, Pool, Weights, 2)
@@ -95,7 +99,7 @@ public sealed class WeightedSubsetTests
 
         var crews = Reflected().WithSubsetOf(c => c.Roles, pool, weights, 3).Generate(500);
 
-        crews.ShouldAllBe(c => c.Roles.SequenceEqual(new[] { "a", "b", "c" })); // all three that can be, in the order of the list
+        crews.ShouldAllBe(c => c.Roles.SequenceEqual(ABC)); // all three that can be, in the order of the list
     }
 
     [Test]
@@ -113,7 +117,7 @@ public sealed class WeightedSubsetTests
     [Test]
     public void It_draws_the_size_when_it_is_a_range_and_then_one_number_per_value()
     {
-        var picker = SubsetPicker<string>.Create(Pool, Weights, (2, 2), "values");
+        var picker = SubsetPicker<string>.Create(Pool, Weights, (2, 2));
         var random = new SeededRandom(5);
         var expected = new SeededRandom(5);
 
@@ -123,7 +127,7 @@ public sealed class WeightedSubsetTests
 
         random.Long(0, long.MaxValue).ShouldBe(expected.Long(0, long.MaxValue));
 
-        var ranged = SubsetPicker<string>.Create(Pool, Weights, (1, 3), "values");
+        var ranged = SubsetPicker<string>.Create(Pool, Weights, (1, 3));
         var other = new SeededRandom(5);
         var otherExpected = new SeededRandom(5);
         var size = ranged.List(other).Count;
@@ -158,13 +162,13 @@ public sealed class WeightedSubsetTests
         weights[1] = 1;
         pool[0] = "changed";
 
-        generator.Generate(50).ShouldAllBe(c => c.Roles.SequenceEqual(new[] { "a" }));
+        generator.Generate(50).ShouldAllBe(c => c.Roles.SequenceEqual(A));
     }
 
     [Test]
     public void Arguments_are_checked_when_the_rule_is_added()
     {
-        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, 2.0 }, 1)).Message.ShouldContain("4 values and 2 weights");
+        Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, TwoWeights, 1)).Message.ShouldContain("4 values and 2 weights");
         Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, -2.0, 1, 1 }, 1)).Message.ShouldContain("negative");
         Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, double.NaN, 1, 1 }, 1));
         Should.Throw<ArgumentException>(() => Reflected().WithSubsetOf(c => c.Roles, Pool, new[] { 1.0, double.PositiveInfinity, 1, 1 }, 1));

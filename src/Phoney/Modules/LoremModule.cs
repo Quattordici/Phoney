@@ -34,8 +34,7 @@ public sealed class LoremModule : FakerModule
     /// <summary>Returns a sentence of <paramref name="wordCount"/> words (3–10 when not given), capitalized and ending with a period.</summary>
     public string Sentence(int? wordCount = null)
     {
-        if (wordCount is { } words)
-            ArgumentOutOfRangeException.ThrowIfNegative(words, nameof(wordCount));
+        OptionalArgument.ThrowIfNegative(wordCount);
         var text = new TextBuilder(stackalloc char[256]);
         AppendSentence(ref text, wordCount ?? Random.Int(3, 10));
         return text.ToStringAndDispose();
@@ -54,8 +53,7 @@ public sealed class LoremModule : FakerModule
     /// <summary>Returns <paramref name="sentenceCount"/> sentences (2–6 when not given) joined by <paramref name="separator"/>.</summary>
     public string Sentences(int? sentenceCount = null, string separator = " ")
     {
-        if (sentenceCount is { } sentences)
-            ArgumentOutOfRangeException.ThrowIfNegative(sentences, nameof(sentenceCount));
+        OptionalArgument.ThrowIfNegative(sentenceCount);
         var text = new TextBuilder(stackalloc char[512]);
         AppendSentences(ref text, sentenceCount ?? Random.Int(2, 6), separator);
         return text.ToStringAndDispose();
@@ -86,8 +84,7 @@ public sealed class LoremModule : FakerModule
     /// <summary>Returns <paramref name="lineCount"/> sentences (1–5 when not given), one per line.</summary>
     public string Lines(int? lineCount = null)
     {
-        if (lineCount is { } lines)
-            ArgumentOutOfRangeException.ThrowIfNegative(lines, nameof(lineCount));
+        OptionalArgument.ThrowIfNegative(lineCount);
         return Sentences(lineCount ?? Random.Int(1, 5), "\n");
     }
 

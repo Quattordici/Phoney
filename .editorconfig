@@ -263,3 +263,5 @@ dotnet_diagnostic.CA1311.severity = warning
 [tests/**.cs]
 # Underscores in test method names
 dotnet_diagnostic.CA1707.severity = none
+# Tests use the reflection model on purpose (parity with generated models, reflection-only features), so suggesting [FakeFor<T>] is noise
+dotnet_diagnostic.PHONEY012.severity = none

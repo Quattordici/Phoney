@@ -204,36 +204,53 @@ public static class DataExport
     {
         var members = model.Members;
         if (columns is null)
-        {
-            var readable = new List<(int, FakeMember)>();
-            for (var i = 0; i < members.Count; i++)
-            {
-                if (members[i] is { IsScalar: true, IsSettable: true, FillsExisting: false } member)
-                    readable.Add((i, member));
-            }
-
-            return readable.Count > 0
-                ? [.. readable]
-                : throw new InvalidOperationException($"{typeof(T).Name} has no scalar member that can be written: CSV and JSON files hold strings, numbers, booleans, enums, dates, times and the like, not nested objects or collections.");
-        }
+            return AllWritable<T>(members);
 
         var chosen = new List<(int, FakeMember)>();
         foreach (var name in columns)
         {
-            var index = IndexOf(members, name ?? throw new ArgumentException("A column name is null.", nameof(columns)));
-            if (index < 0)
-                throw new ArgumentException($"{typeof(T).Name} has no member '{name}'. Members that can be written: {string.Join(", ", WritableNames(members))}.", nameof(columns));
-            var member = members[index];
-            if (!member.IsScalar)
-                throw new ArgumentException($"'{member.Name}' of {typeof(T).Name} is not a scalar member (it is a {member.Type.Name}); a CSV or JSON file holds flat values. Members that can be written: {string.Join(", ", WritableNames(members))}.", nameof(columns));
-            if (!member.IsSettable || member.FillsExisting)
-                throw new ArgumentException($"'{member.Name}' of {typeof(T).Name} can't be read from a generated object (it is only set by the constructor). Members that can be written: {string.Join(", ", WritableNames(members))}.", nameof(columns));
+            var index = WritableIndex<T>(members, name ?? throw new ArgumentException("A column name is null.", nameof(columns)), out var problem);
+            if (problem is not null)
+                throw new ArgumentException(problem, nameof(columns));
             if (chosen.Exists(c => c.Item1 == index))
-                throw new ArgumentException($"The column '{member.Name}' is listed twice.", nameof(columns));
-            chosen.Add((index, member));
+                throw new ArgumentException($"The column '{members[index].Name}' is listed twice.", nameof(columns));
+            chosen.Add((index, members[index]));
         }
 
         return chosen.Count > 0 ? [.. chosen] : throw new ArgumentException("Name at least one column, or pass null for all of them.", nameof(columns));
+    }
+
+    /// <summary>Every scalar member that can be read, in model order.</summary>
+    private static (int Index, FakeMember Member)[] AllWritable<T>(IReadOnlyList<FakeMember> members)
+    {
+        var readable = new List<(int, FakeMember)>();
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (members[i] is { IsScalar: true, IsSettable: true, FillsExisting: false } member)
+                readable.Add((i, member));
+        }
+
+        return readable.Count > 0
+            ? [.. readable]
+            : throw new InvalidOperationException($"{typeof(T).Name} has no scalar member that can be written: CSV and JSON files hold strings, numbers, booleans, enums, dates, times and the like, not nested objects or collections.");
+    }
+
+    /// <summary>The index of the member a column names, checked to be a scalar that can be read from a generated object.</summary>
+    /// <param name="members">The members of the model.</param>
+    /// <param name="name">The column name.</param>
+    /// <param name="problem">Why the column can't be written, or <see langword="null"/> when it can.</param>
+    private static int WritableIndex<T>(IReadOnlyList<FakeMember> members, string name, out string? problem)
+    {
+        var index = IndexOf(members, name);
+        problem = index < 0 ? $"{typeof(T).Name} has no member '{name}'." : members[index] switch
+        {
+            { IsScalar: false } member => $"'{member.Name}' of {typeof(T).Name} is not a scalar member (it is a {member.Type.Name}); a CSV or JSON file holds flat values.",
+            { IsSettable: false } or { FillsExisting: true } => $"'{members[index].Name}' of {typeof(T).Name} can't be read from a generated object (it is only set by the constructor).",
+            _ => null,
+        };
+        if (problem is not null)
+            problem += $" Members that can be written: {string.Join(", ", WritableNames(members))}.";
+        return index;
     }
 
     /// <summary>Returns the index of the first member whose name matches ignoring case, or -1 when none matches.</summary>

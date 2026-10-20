@@ -173,59 +173,77 @@ internal sealed class ModelBuilder
 
         var members = new List<MemberModel>();
         foreach (var parameter in constructor?.Parameters ?? ImmutableEmpty())
-        {
-            var match = writable.FirstOrDefault(m => string.Equals(m.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-                writable.Remove(match);
-            var name = match?.Name ?? Capitalize(parameter.Name);
-            // Annotations may sit on the parameter or (with [property: …]) on the generated property.
-            var attributes = parameter.GetAttributes().Concat(match is null ? Enumerable.Empty<AttributeData>() : AttributesOf(match));
-            var parameterMember = Member(type, name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), isConstructorParameter: true, isInitOnly: false, inInitializer: false, declaringType: type, isField: false, attributes, members.Count);
-            // A record's positional property behind the parameter can be set on an existing object.
-            if (match is IPropertySymbol parameterProperty)
-            {
-                parameterMember.Settable = true;
-                parameterMember.SetterInitOnly = parameterProperty.SetMethod!.IsInitOnly;
-                parameterMember.SetterDeclaringType = Fq(parameterProperty.ContainingType);
-            }
-            else if (match is IFieldSymbol parameterField)
-            {
-                parameterMember.Settable = true;
-                parameterMember.SetterDeclaringType = Fq(parameterField.ContainingType);
-            }
-
-            members.Add(parameterMember);
-        }
+            members.Add(ParameterMember(type, parameter, writable, members.Count));
 
         foreach (var member in writable)
         {
-            if (member is IPropertySymbol p)
-            {
-                var initOnly = p.SetMethod!.IsInitOnly;
-                members.Add(Member(type, p.Name, p.Type, IsNullableReference(p.Type, p.NullableAnnotation), false, initOnly, initOnly || p.IsRequired, p.ContainingType, isField: false, AttributesOf(p), members.Count));
-            }
-            else if (member is IFieldSymbol f)
-            {
-                members.Add(Member(type, f.Name, f.Type, IsNullableReference(f.Type, f.NullableAnnotation), false, false, f.IsRequired, f.ContainingType, isField: true, f.GetAttributes(), members.Count));
-            }
+            if (WritableMember(type, member, members.Count) is { } writableMember)
+                members.Add(writableMember);
         }
 
         // Read-only collections come last (their elements are drawn after everything else), as in the reflection model.
         var taken = new HashSet<string>(members.Select(m => m.Name), StringComparer.OrdinalIgnoreCase);
-        foreach (var member in FilledMembers(type))
-        {
-            if (!taken.Add(member.Name))
-                continue;
-            var (memberType, annotation) = member is IPropertySymbol property ? (property.Type, property.NullableAnnotation) : (((IFieldSymbol)member).Type, ((IFieldSymbol)member).NullableAnnotation);
-            var filled = Member(type, member.Name, memberType, IsNullableReference(memberType, annotation), false, false, false, member.ContainingType, isField: member is IFieldSymbol, AttributesOf(member), members.Count);
-            filled.Settable = false;
-            filled.FillsExisting = true;
-            filled.FillTypeArguments = string.Join(", ", ((INamedTypeSymbol)memberType).TypeArguments.Select(Fq));
-            members.Add(filled);
-        }
+        foreach (var member in FilledMembers(type).Where(m => taken.Add(m.Name)))
+            members.Add(FilledMember(type, member, members.Count));
 
         var key = FakeForGenerator.Sanitize(type.ToDisplayString());
         return new TypeModel(fullName, key, type.IsValueType, constructor is not null, members);
+    }
+
+    /// <summary>Describes a constructor parameter and takes the writable member it initializes out of <paramref name="writable"/>.</summary>
+    private MemberModel ParameterMember(INamedTypeSymbol type, IParameterSymbol parameter, List<ISymbol> writable, int index)
+    {
+        var match = writable.FirstOrDefault(m => string.Equals(m.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+            writable.Remove(match);
+        var name = match?.Name ?? Capitalize(parameter.Name);
+        // Annotations may sit on the parameter or (with [property: …]) on the generated property.
+        var attributes = parameter.GetAttributes().Concat(match is null ? Enumerable.Empty<AttributeData>() : AttributesOf(match));
+        var member = Member(type, new MemberSource(name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), type, IsField: false), MemberRole.ConstructorParameter, attributes, index);
+        // A record's positional property behind the parameter can be set on an existing object.
+        if (match is IPropertySymbol property)
+        {
+            member.Settable = true;
+            member.SetterInitOnly = property.SetMethod!.IsInitOnly;
+            member.SetterDeclaringType = Fq(property.ContainingType);
+        }
+        else if (match is IFieldSymbol field)
+        {
+            member.Settable = true;
+            member.SetterDeclaringType = Fq(field.ContainingType);
+        }
+
+        return member;
+    }
+
+    /// <summary>Describes a settable or init-only property or field.</summary>
+    private MemberModel? WritableMember(INamedTypeSymbol type, ISymbol member, int index)
+    {
+        if (member is IPropertySymbol p)
+        {
+            var initOnly = p.SetMethod!.IsInitOnly;
+            var role = MemberRole.None;
+            if (initOnly)
+                role |= MemberRole.InitOnly;
+            if (initOnly || p.IsRequired)
+                role |= MemberRole.InInitializer;
+            return Member(type, new MemberSource(p.Name, p.Type, IsNullableReference(p.Type, p.NullableAnnotation), p.ContainingType, IsField: false), role, AttributesOf(p), index);
+        }
+
+        return member is IFieldSymbol f
+            ? Member(type, new MemberSource(f.Name, f.Type, IsNullableReference(f.Type, f.NullableAnnotation), f.ContainingType, IsField: true), f.IsRequired ? MemberRole.InInitializer : MemberRole.None, f.GetAttributes(), index)
+            : null;
+    }
+
+    /// <summary>Describes a read-only collection that is filled in place.</summary>
+    private MemberModel FilledMember(INamedTypeSymbol type, ISymbol member, int index)
+    {
+        var (memberType, annotation) = member is IPropertySymbol property ? (property.Type, property.NullableAnnotation) : (((IFieldSymbol)member).Type, ((IFieldSymbol)member).NullableAnnotation);
+        var filled = Member(type, new MemberSource(member.Name, memberType, IsNullableReference(memberType, annotation), member.ContainingType, member is IFieldSymbol), MemberRole.None, AttributesOf(member), index);
+        filled.Settable = false;
+        filled.FillsExisting = true;
+        filled.FillTypeArguments = string.Join(", ", ((INamedTypeSymbol)memberType).TypeArguments.Select(Fq));
+        return filled;
     }
 
     /// <summary>No constructor parameters.</summary>
@@ -238,9 +256,33 @@ internal sealed class ModelBuilder
         return null;
     }
 
-    /// <summary>Describes a member and computes its value expression.</summary>
-    private MemberModel Member(INamedTypeSymbol owner, string name, ITypeSymbol type, bool nullableReference, bool isConstructorParameter, bool isInitOnly, bool inInitializer, INamedTypeSymbol declaringType, bool isField, IEnumerable<AttributeData> attributes, int index)
+    /// <summary>What a member is: its name, type and nullability, and where it is declared.</summary>
+    private readonly record struct MemberSource(string Name, ITypeSymbol Type, bool NullableReference, INamedTypeSymbol DeclaringType, bool IsField);
+
+    /// <summary>How a member is set.</summary>
+    [Flags]
+    private enum MemberRole
     {
+        /// <summary>A settable member, set after construction.</summary>
+        None = 0,
+
+        /// <summary>A constructor parameter.</summary>
+        ConstructorParameter = 1,
+
+        /// <summary>An init-only property.</summary>
+        InitOnly = 2,
+
+        /// <summary>Set in the object initializer (init-only or <c>required</c>).</summary>
+        InInitializer = 4,
+    }
+
+    /// <summary>Describes a member and computes its value expression.</summary>
+    private MemberModel Member(INamedTypeSymbol owner, MemberSource source, MemberRole role, IEnumerable<AttributeData> attributes, int index)
+    {
+        var (name, type, nullableReference, declaringType, isField) = source;
+        var isConstructorParameter = (role & MemberRole.ConstructorParameter) != 0;
+        var isInitOnly = (role & MemberRole.InitOnly) != 0;
+        var inInitializer = (role & MemberRole.InInitializer) != 0;
         // Same rules as the reflection model: a format annotation overrides the name convention, [Required] is never null.
         var constraints = ConstraintReader.Read(attributes);
         var convention = constraints.Format is { } format
@@ -273,6 +315,9 @@ internal sealed class ModelBuilder
     private const string Immutable = "global::System.Collections.Immutable.";
     private const string Frozen = "global::System.Collections.Frozen.";
 
+    /// <summary>A collection made by passing the built one to its constructor.</summary>
+    private const string ByConstructor = "new {type}({p})";
+
     /// <summary>
     /// The collections that are built like a list ('L'), set ('S') or dictionary ('D') and converted: how to make one from the built collection <c>{p}</c>.
     /// Mirrors <c>CollectionTypes</c> and <c>CollectionConverters</c> in the runtime; <c>{type}</c> is the member's type, <c>{T}</c>/<c>{K}</c> and <c>{V}</c> its type arguments.
@@ -282,31 +327,31 @@ internal sealed class ModelBuilder
         ["System.Collections.Immutable.ImmutableArray<T>"] = ('L', Immutable + "ImmutableArray.CreateRange<{T}>({p})"),
         ["System.Collections.Immutable.ImmutableList<T>"] = ('L', Immutable + "ImmutableList.CreateRange<{T}>({p})"),
         ["System.Collections.Immutable.IImmutableList<T>"] = ('L', Immutable + "ImmutableList.CreateRange<{T}>({p})"),
-        ["System.Collections.ObjectModel.ReadOnlyCollection<T>"] = ('L', "new {type}({p})"),
-        ["System.Collections.ObjectModel.Collection<T>"] = ('L', "new {type}({p})"),
-        ["System.Collections.ObjectModel.ObservableCollection<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.ObjectModel.ReadOnlyCollection<T>"] = ('L', ByConstructor),
+        ["System.Collections.ObjectModel.Collection<T>"] = ('L', ByConstructor),
+        ["System.Collections.ObjectModel.ObservableCollection<T>"] = ('L', ByConstructor),
         ["System.Collections.Immutable.ImmutableQueue<T>"] = ('L', Immutable + "ImmutableQueue.CreateRange<{T}>({p})"),
         ["System.Collections.Immutable.IImmutableQueue<T>"] = ('L', Immutable + "ImmutableQueue.CreateRange<{T}>({p})"),
         ["System.Collections.Immutable.ImmutableStack<T>"] = ('L', Immutable + "ImmutableStack.CreateRange<{T}>({p})"),
         ["System.Collections.Immutable.IImmutableStack<T>"] = ('L', Immutable + "ImmutableStack.CreateRange<{T}>({p})"),
-        ["System.Collections.Generic.Queue<T>"] = ('L', "new {type}({p})"),
-        ["System.Collections.Generic.Stack<T>"] = ('L', "new {type}({p})"),
-        ["System.Collections.Generic.LinkedList<T>"] = ('L', "new {type}({p})"),
-        ["System.Collections.Concurrent.ConcurrentBag<T>"] = ('L', "new {type}({p})"),
-        ["System.Collections.Concurrent.ConcurrentQueue<T>"] = ('L', "new {type}({p})"),
-        ["System.Collections.Concurrent.ConcurrentStack<T>"] = ('L', "new {type}({p})"),
+        ["System.Collections.Generic.Queue<T>"] = ('L', ByConstructor),
+        ["System.Collections.Generic.Stack<T>"] = ('L', ByConstructor),
+        ["System.Collections.Generic.LinkedList<T>"] = ('L', ByConstructor),
+        ["System.Collections.Concurrent.ConcurrentBag<T>"] = ('L', ByConstructor),
+        ["System.Collections.Concurrent.ConcurrentQueue<T>"] = ('L', ByConstructor),
+        ["System.Collections.Concurrent.ConcurrentStack<T>"] = ('L', ByConstructor),
         ["System.Collections.Immutable.ImmutableHashSet<T>"] = ('S', Immutable + "ImmutableHashSet.CreateRange<{T}>({p})"),
         ["System.Collections.Immutable.IImmutableSet<T>"] = ('S', Immutable + "ImmutableHashSet.CreateRange<{T}>({p})"),
         ["System.Collections.Immutable.ImmutableSortedSet<T>"] = ('S', Immutable + "ImmutableSortedSet.CreateRange<{T}>({p})"),
-        ["System.Collections.Generic.SortedSet<T>"] = ('S', "new {type}({p})"),
+        ["System.Collections.Generic.SortedSet<T>"] = ('S', ByConstructor),
         ["System.Collections.Frozen.FrozenSet<T>"] = ('S', Frozen + "FrozenSet.ToFrozenSet<{T}>({p})"),
         ["System.Collections.Immutable.ImmutableDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableDictionary.CreateRange<{K}, {V}>({p})"),
         ["System.Collections.Immutable.IImmutableDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableDictionary.CreateRange<{K}, {V}>({p})"),
         ["System.Collections.Immutable.ImmutableSortedDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableSortedDictionary.CreateRange<{K}, {V}>({p})"),
-        ["System.Collections.ObjectModel.ReadOnlyDictionary<TKey, TValue>"] = ('D', "new {type}({p})"),
-        ["System.Collections.Generic.SortedDictionary<TKey, TValue>"] = ('D', "new {type}({p})"),
-        ["System.Collections.Generic.SortedList<TKey, TValue>"] = ('D', "new {type}({p})"),
-        ["System.Collections.Concurrent.ConcurrentDictionary<TKey, TValue>"] = ('D', "new {type}({p})"),
+        ["System.Collections.ObjectModel.ReadOnlyDictionary<TKey, TValue>"] = ('D', ByConstructor),
+        ["System.Collections.Generic.SortedDictionary<TKey, TValue>"] = ('D', ByConstructor),
+        ["System.Collections.Generic.SortedList<TKey, TValue>"] = ('D', ByConstructor),
+        ["System.Collections.Concurrent.ConcurrentDictionary<TKey, TValue>"] = ('D', ByConstructor),
         ["System.Collections.Frozen.FrozenDictionary<TKey, TValue>"] = ('D', Frozen + "FrozenDictionary.ToFrozenDictionary<{K}, {V}>({p})"),
     };
 
@@ -337,34 +382,11 @@ internal sealed class ModelBuilder
         var s = "s" + depth;
         var fq = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var k = "global::Phoney.Generation.ConventionKind." + kind;
-        const string Values = "global::Phoney.Generation.ConventionValues.";
-        var category = Category(type);
-        switch (category)
-        {
-            case TypeCategory.String: return $"{Values}String({s}, {k}{extra})";
-            case TypeCategory.Char: return $"{Values}Char({s}, {k}{extra})";
-            case TypeCategory.Bool: return $"{Values}Bool({s}, {k}{extra})";
-            case TypeCategory.Guid: return $"{Values}Guid({s}, {k}{extra})";
-            case TypeCategory.DateTime: return $"{Values}DateTime({s}, {k}{extra})";
-            case TypeCategory.DateTimeOffset: return $"{Values}DateTimeOffset({s}, {k}{extra})";
-            case TypeCategory.DateOnly: return $"{Values}DateOnly({s}, {k}{extra})";
-            case TypeCategory.TimeOnly: return $"{Values}TimeOnly({s}, {k}{extra})";
-            case TypeCategory.TimeSpan: return $"{Values}TimeSpan({s}, {k}{extra})";
-            case TypeCategory.Uri: return $"{Values}Uri({s}, {k}{extra})";
-            case TypeCategory.Rune: return $"{Values}Rune({s}, {k}{extra})";
-            case TypeCategory.IPAddress: return $"{Values}IPAddress({s}, {k}{extra})";
-            case TypeCategory.Version: return $"{Values}Version({s}, {k}{extra})";
-            case TypeCategory.Enum: return $"{Values}Enum<{fq}>({s}, {k}{extra})";
-            case var c when ConventionRules.IsNumber(c): return $"{Values}Number<{fq}>({s}, {k}{extra})";
-        }
+        if (ScalarValue(Category(type), fq, $"({s}, {k}{extra})") is { } scalar)
+            return scalar;
 
-        if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, Rank: 1 })
-            return constraints is null ? $"{s}.Bytes()" : $"{s}.Bytes({constraints})";
-        if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } memory && memory.TypeArguments[0].SpecialType == SpecialType.System_Byte &&
-            memory.OriginalDefinition.ToDisplayString() is "System.Memory<T>" or "System.ReadOnlyMemory<T>")
-        {
-            return $"new {fq}({s}.Bytes())";
-        }
+        if (BytesValue(type, fq, s, constraints) is { } bytes)
+            return bytes;
 
         // Tuples and key/value pairs: every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
         if (type is INamedTypeSymbol composite && CompositeParts(composite) is { } parts)
@@ -381,51 +403,35 @@ internal sealed class ModelBuilder
 
         // Collections: elements use the singular member name for conventions ("Emails" → email addresses).
         var singular = memberName.EndsWith("s", StringComparison.Ordinal) ? memberName.Substring(0, memberName.Length - 1) : memberName;
-        string Element(ITypeSymbol element) =>
-            Value(element, singular, ConventionRules.Match(singular, ConventionCategory(element), ""), false, depth + 1);
         var next = "s" + (depth + 1);
 
         if (type is IArrayTypeSymbol { Rank: 1 } array)
-            return $"{s}.Array<{Fq(array.ElementType)}>(static {next} => {Element(array.ElementType)}{extra})";
+            return $"{s}.Array<{Fq(array.ElementType)}>(static {next} => {Element(array.ElementType, singular, depth)}{extra})";
 
         // Two-dimensional arrays are filled row by row; more dimensions are not generated (left default, like other types without a generator).
         if (type is IArrayTypeSymbol { Rank: 2 } grid)
-            return $"{s}.Array2<{Fq(grid.ElementType)}>(static {next} => {Element(grid.ElementType)})";
+            return $"{s}.Array2<{Fq(grid.ElementType)}>(static {next} => {Element(grid.ElementType, singular, depth)})";
 
-        if (type is INamedTypeSymbol { IsGenericType: true } generic)
-        {
-            var definition = generic.OriginalDefinition.ToDisplayString();
-            var args = generic.TypeArguments;
-            // Other collections are built like a list, set or dictionary and converted, as the reflection model does (see CollectionTypes).
-            if (OtherCollections.TryGetValue(definition, out var other))
-            {
-                var convert = "l" + depth;
-                var body = other.Convert.Replace("{type}", fq).Replace("{T}", Fq(args[0])).Replace("{K}", Fq(args[0])).Replace("{V}", args.Length > 1 ? Fq(args[1]) : "").Replace("{p}", convert);
-                switch (other.Kind)
-                {
-                    case 'L':
-                        return $"{s}.ListAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0])}{extra})";
-                    case 'S':
-                        return $"{s}.SetAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0])}{extra})";
-                    default:
-                        var otherKey = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
-                        return $"{s}.DictionaryAs<{fq}, {Fq(args[0])}, {Fq(args[1])}>(static {convert} => {body}, static {next} => {otherKey}, static {next} => {Element(args[1])}{extra})";
-                }
-            }
+        if (type is INamedTypeSymbol { IsGenericType: true } generic && CollectionValue(generic, fq, singular, depth, extra) is { } collection)
+            return collection;
 
-            switch (definition)
-            {
-                case "System.Collections.Generic.List<T>" or "System.Collections.Generic.IList<T>" or "System.Collections.Generic.ICollection<T>"
-                    or "System.Collections.Generic.IEnumerable<T>" or "System.Collections.Generic.IReadOnlyList<T>" or "System.Collections.Generic.IReadOnlyCollection<T>":
-                    return $"{s}.List<{Fq(args[0])}>(static {next} => {Element(args[0])}{extra})";
-                case "System.Collections.Generic.HashSet<T>" or "System.Collections.Generic.ISet<T>" or "System.Collections.Generic.IReadOnlySet<T>":
-                    return $"{s}.Set<{Fq(args[0])}>(static {next} => {Element(args[0])}{extra})";
-                case "System.Collections.Generic.Dictionary<TKey, TValue>" or "System.Collections.Generic.IDictionary<TKey, TValue>" or "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>":
-                    var key = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
-                    return $"{s}.Dictionary<{Fq(args[0])}, {Fq(args[1])}>(static {next} => {key}, static {next} => {Element(args[1])}{extra})";
-            }
-        }
+        return ObjectValue(type, fq, s);
+    }
 
+    /// <summary>The value expression of <c>byte[]</c>, <c>Memory&lt;byte&gt;</c> and <c>ReadOnlyMemory&lt;byte&gt;</c>, or <see langword="null"/> for other types.</summary>
+    private static string? BytesValue(ITypeSymbol type, string fq, string s, string? constraints)
+    {
+        if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, Rank: 1 })
+            return constraints is null ? $"{s}.Bytes()" : $"{s}.Bytes({constraints})";
+        return type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } memory && memory.TypeArguments[0].SpecialType == SpecialType.System_Byte &&
+            memory.OriginalDefinition.ToDisplayString() is "System.Memory<T>" or "System.ReadOnlyMemory<T>"
+            ? $"new {fq}({s}.Bytes())"
+            : null;
+    }
+
+    /// <summary>The value expression of a type that is not a scalar or collection: a nested object, one of its subtypes, or its default.</summary>
+    private string ObjectValue(ITypeSymbol type, string fq, string s)
+    {
         // An adapted date type without its add-on is created like any other object, as before the add-on existed.
         if (IsNestable(type) || (type is INamedTypeSymbol { IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct } && ConventionRules.AdaptedCategoryOf(FullName(type)) != TypeCategory.Other))
         {
@@ -441,6 +447,74 @@ internal sealed class ModelBuilder
         }
 
         return $"default({fq})";
+    }
+
+    /// <summary>The call that produces a scalar of <paramref name="category"/> with <paramref name="arguments"/>, or <see langword="null"/> for other types.</summary>
+    private static string? ScalarValue(TypeCategory category, string fq, string arguments)
+    {
+        const string Values = "global::Phoney.Generation.ConventionValues.";
+        return category switch
+        {
+            TypeCategory.String => $"{Values}String{arguments}",
+            TypeCategory.Char => $"{Values}Char{arguments}",
+            TypeCategory.Bool => $"{Values}Bool{arguments}",
+            TypeCategory.Guid => $"{Values}Guid{arguments}",
+            TypeCategory.DateTime => $"{Values}DateTime{arguments}",
+            TypeCategory.DateTimeOffset => $"{Values}DateTimeOffset{arguments}",
+            TypeCategory.DateOnly => $"{Values}DateOnly{arguments}",
+            TypeCategory.TimeOnly => $"{Values}TimeOnly{arguments}",
+            TypeCategory.TimeSpan => $"{Values}TimeSpan{arguments}",
+            TypeCategory.Uri => $"{Values}Uri{arguments}",
+            TypeCategory.Rune => $"{Values}Rune{arguments}",
+            TypeCategory.IPAddress => $"{Values}IPAddress{arguments}",
+            TypeCategory.Version => $"{Values}Version{arguments}",
+            TypeCategory.Enum => $"{Values}Enum<{fq}>{arguments}",
+            var c when ConventionRules.IsNumber(c) => $"{Values}Number<{fq}>{arguments}",
+            _ => null,
+        };
+    }
+
+    /// <summary>The value expression of a collection element, whose conventions use the singular member name.</summary>
+    private string Element(ITypeSymbol element, string singular, int depth) =>
+        Value(element, singular, ConventionRules.Match(singular, ConventionCategory(element), ""), false, depth + 1);
+
+    /// <summary>The value expression of a generic collection, or <see langword="null"/> when <paramref name="generic"/> is not one.</summary>
+    private string? CollectionValue(INamedTypeSymbol generic, string fq, string singular, int depth, string extra)
+    {
+        var s = "s" + depth;
+        var next = "s" + (depth + 1);
+        var definition = generic.OriginalDefinition.ToDisplayString();
+        var args = generic.TypeArguments;
+        // Other collections are built like a list, set or dictionary and converted, as the reflection model does (see CollectionTypes).
+        if (OtherCollections.TryGetValue(definition, out var other))
+        {
+            var convert = "l" + depth;
+            var body = other.Convert.Replace("{type}", fq).Replace("{T}", Fq(args[0])).Replace("{K}", Fq(args[0])).Replace("{V}", args.Length > 1 ? Fq(args[1]) : "").Replace("{p}", convert);
+            switch (other.Kind)
+            {
+                case 'L':
+                    return $"{s}.ListAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0], singular, depth)}{extra})";
+                case 'S':
+                    return $"{s}.SetAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0], singular, depth)}{extra})";
+                default:
+                    var otherKey = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
+                    return $"{s}.DictionaryAs<{fq}, {Fq(args[0])}, {Fq(args[1])}>(static {convert} => {body}, static {next} => {otherKey}, static {next} => {Element(args[1], singular, depth)}{extra})";
+            }
+        }
+
+        switch (definition)
+        {
+            case "System.Collections.Generic.List<T>" or "System.Collections.Generic.IList<T>" or "System.Collections.Generic.ICollection<T>"
+                or "System.Collections.Generic.IEnumerable<T>" or "System.Collections.Generic.IReadOnlyList<T>" or "System.Collections.Generic.IReadOnlyCollection<T>":
+                return $"{s}.List<{Fq(args[0])}>(static {next} => {Element(args[0], singular, depth)}{extra})";
+            case "System.Collections.Generic.HashSet<T>" or "System.Collections.Generic.ISet<T>" or "System.Collections.Generic.IReadOnlySet<T>":
+                return $"{s}.Set<{Fq(args[0])}>(static {next} => {Element(args[0], singular, depth)}{extra})";
+            case "System.Collections.Generic.Dictionary<TKey, TValue>" or "System.Collections.Generic.IDictionary<TKey, TValue>" or "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>":
+                var key = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
+                return $"{s}.Dictionary<{Fq(args[0])}, {Fq(args[1])}>(static {next} => {key}, static {next} => {Element(args[1], singular, depth)}{extra})";
+            default:
+                return null;
+        }
     }
 
     /// <summary>

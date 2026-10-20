@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq.Expressions;
 using Phoney.Generation;
+using System.Text.RegularExpressions;
 
 namespace Phoney.Tests;
 
@@ -29,8 +30,11 @@ public sealed class Booking
 public static partial class ConstraintFakes;
 
 /// <summary>Invalid values and values on the edge of the limits, derived from data annotations, in both models.</summary>
-public sealed class ConstraintCaseTests
+public sealed partial class ConstraintCaseTests
 {
+    [GeneratedRegex("^[A-Z]{3}-[0-9]{4}$")]
+    private static partial Regex CodePattern();
+
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
     private static ObjectGenerator<Booking> Make(bool generated) =>
@@ -113,7 +117,7 @@ public sealed class ConstraintCaseTests
         Values(cases, "Reference", b => b.Reference).ShouldBe([null, ""], ignoreOrder: true);
         Values(cases, "Title", b => b.Title).ShouldBe([null, ""], ignoreOrder: true);
         new EmailAddressAttribute().IsValid(Values(cases, "Email", b => b.Email).Single()).ShouldBeFalse();
-        System.Text.RegularExpressions.Regex.IsMatch(Values(cases, "Code", b => b.Code).Single()!, "^[A-Z]{3}-[0-9]{4}$").ShouldBeFalse();
+        CodePattern().IsMatch(Values(cases, "Code", b => b.Code).Single()!).ShouldBeFalse();
     }
 
     [Test]

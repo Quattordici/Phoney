@@ -44,23 +44,7 @@ public sealed class InternetModule : FakerModule
         {
             // The common case, built in one buffer: the steps below on an ASCII username (dropping what isn't allowed covers ToAscii's quotes and spaces).
             var chars = text.Written;
-            var length = 0;
-            foreach (var c in chars)
-            {
-                if (IsEmailLocalChar(c))
-                    chars[length++] = c;
-            }
-
-            length = Math.Min(length, 50);
-            var collapsed = 0;
-            for (var i = 0; i < length; i++)
-            {
-                if (chars[i] != '.' || collapsed == 0 || chars[collapsed - 1] != '.')
-                    chars[collapsed++] = chars[i];
-            }
-
-            var localPart = chars[..collapsed].Trim('.');
-            var email = string.Concat(localPart, "@", provider);
+            var email = string.Concat(chars[..AsciiLocalPart(chars)].Trim('.'), "@", provider);
             text.Dispose();
             return email;
         }
@@ -69,16 +53,42 @@ public sealed class InternetModule : FakerModule
         if (local.Length > 50)
             local = local[..50];
         if (allowSpecialCharacters)
-        {
-            var from = "._-"[Random.Index(3)];
-            const string special = ".!#$%&'*+-/=?^_`{|}~";
-            var index = local.IndexOf(from);
-            if (index >= 0)
-                local = string.Concat(local.AsSpan(0, index), special[Random.Index(special.Length)].ToString(), local.AsSpan(index + 1));
-        }
+            local = WithSpecialCharacter(local);
 
         local = CollapseDots(local).Trim('.');
         return $"{local}@{provider}";
+    }
+
+    /// <summary>
+    /// Makes an ASCII username a local part in place: drops the characters an address can't hold, keeps the first 50 and collapses runs of dots. Returns its length.
+    /// </summary>
+    private static int AsciiLocalPart(Span<char> chars)
+    {
+        var length = 0;
+        foreach (var c in chars)
+        {
+            if (IsEmailLocalChar(c))
+                chars[length++] = c;
+        }
+
+        length = Math.Min(length, 50);
+        var collapsed = 0;
+        for (var i = 0; i < length; i++)
+        {
+            if (chars[i] != '.' || collapsed == 0 || chars[collapsed - 1] != '.')
+                chars[collapsed++] = chars[i];
+        }
+
+        return collapsed;
+    }
+
+    /// <summary>Replaces the first of a randomly chosen separator (<c>.</c>, <c>_</c> or <c>-</c>) with an RFC 5322 special character.</summary>
+    private string WithSpecialCharacter(string local)
+    {
+        var from = "._-"[Random.Index(3)];
+        const string special = ".!#$%&'*+-/=?^_`{|}~";
+        var index = local.IndexOf(from);
+        return index < 0 ? local : string.Concat(local.AsSpan(0, index), special[Random.Index(special.Length)].ToString(), local.AsSpan(index + 1));
     }
 
     /// <summary>Returns an email at a reserved example domain (<c>example.com</c>…), safe to use in tests and demos.</summary>
@@ -255,7 +265,12 @@ public sealed class InternetModule : FakerModule
     /// <summary>A random address in <paramref name="network"/>/<paramref name="prefix"/>: one draw for the host part, written in one allocation.</summary>
     private string Ipv4(uint network, int prefix)
     {
-        var hostMask = prefix == 0 ? uint.MaxValue : prefix == 32 ? 0u : uint.MaxValue >> prefix;
+        var hostMask = prefix switch
+        {
+            0 => uint.MaxValue,
+            32 => 0u,
+            _ => uint.MaxValue >> prefix,
+        };
         var address = (network & ~hostMask) | (uint)Random.Long(0, hostMask);
         Span<char> text = stackalloc char[15];
         var length = 0;
@@ -540,11 +555,13 @@ public sealed class InternetModule : FakerModule
     internal static string RemoveInvalidEmailChars(string text)
     {
         var kept = 0;
+#pragma warning disable S3267 // runs for every email; Count(...) would allocate an enumerator, and LINQ adds JIT to the first call (see the summary)
         foreach (var c in text)
         {
             if (IsEmailLocalChar(c))
                 kept++;
         }
+#pragma warning restore S3267
 
         if (kept == text.Length)
             return text;

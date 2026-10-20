@@ -116,7 +116,7 @@ public interface IFakeModel
 /// <see cref="Set"/> and <see cref="Fallback"/>, so reflection and generated models fill an object identically.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public abstract class FakeModel<T> : IFakeModel
+public abstract class FakeModel<T> : IFakeModel, IPopulateTarget<T>
 {
     /// <summary>The members, indexed as used by <see cref="FakeScope.Get{TValue}"/>.</summary>
     public abstract IReadOnlyList<FakeMember> Members { get; }
@@ -155,8 +155,7 @@ public abstract class FakeModel<T> : IFakeModel
     /// <c>FirstName</c> shapes the generated email).
     /// </summary>
     /// <returns>The instance; a populated copy for value types.</returns>
-    public virtual T Populate(T instance, FakeScope scope, PopulateMode mode) =>
-        Populator.Populate(Members, instance, scope, mode, IsUnset, Get, Set, Fallback, Fill);
+    public virtual T Populate(T instance, FakeScope scope, PopulateMode mode) => Populator.Populate(this, instance, scope, mode);
 
     /// <inheritdoc />
     object? IFakeModel.CreateObject(FakeScope scope) => Create(scope);
@@ -169,55 +168,89 @@ public abstract class FakeModel<T> : IFakeModel
 
     /// <inheritdoc />
     object IFakeModel.SetMember(object instance, int member, object? value) => Set((T)instance, member, value)!;
+
+    bool IPopulateTarget<T>.IsUnsetAt(T instance, int member) => IsUnset(instance, member);
+
+    object? IPopulateTarget<T>.ValueAt(T instance, int member) => Get(instance, member);
+
+    T IPopulateTarget<T>.WithValueAt(T instance, int member, object? value) => Set(instance, member, value);
+
+    Func<FakeScope, object?> IPopulateTarget<T>.ProducerOf(int member) => Fallback(member);
+
+    void IPopulateTarget<T>.FillAt(T instance, int member, object? values, bool replace) => Fill(instance, member, values, replace);
+}
+
+/// <summary>What <see cref="Populator"/> needs from a model, so typed models and the untyped reflection model fill objects with one algorithm.</summary>
+internal interface IPopulateTarget<T>
+{
+    /// <summary>The members, by index.</summary>
+    IReadOnlyList<FakeMember> Members { get; }
+
+    /// <summary>Whether a member of <paramref name="instance"/> still holds its default value.</summary>
+    bool IsUnsetAt(T instance, int member);
+
+    /// <summary>A member's value (boxed).</summary>
+    object? ValueAt(T instance, int member);
+
+    /// <summary>Sets a member; returns the instance (a copy for value types).</summary>
+    T WithValueAt(T instance, int member, object? value);
+
+    /// <summary>The producer of a member's value from its convention, type and annotations.</summary>
+    Func<FakeScope, object?> ProducerOf(int member);
+
+    /// <summary>Adds generated elements to the collection a read-only member holds; <paramref name="replace"/> empties it first.</summary>
+    void FillAt(T instance, int member, object? values, bool replace);
 }
 
 /// <summary>The populate algorithm, shared by typed models and the untyped reflection model.</summary>
 internal static class Populator
 {
-    public static T Populate<T>(
-        IReadOnlyList<FakeMember> members,
-        T instance,
-        FakeScope scope,
-        PopulateMode mode,
-        Func<T, int, bool> isUnset,
-        Func<T, int, object?> get,
-        Func<T, int, object?, T> set,
-        Func<int, Func<FakeScope, object?>> fallback,
-        Action<T, int, object?, bool> fill)
+    public static T Populate<T>(IPopulateTarget<T> target, T instance, FakeScope scope, PopulateMode mode)
     {
-        var generate = new bool[members.Count];
-        var current = new object?[members.Count];
-
-        // Decide first, so that kept members shape the identity before any value is generated.
-        for (var i = 0; i < members.Count; i++)
-        {
-            if (!members[i].IsSettable)
-                continue;
-            var unset = isUnset(instance, i);
-            generate[i] = scope.Include(i) && (mode == PopulateMode.All || unset);
-            if (!generate[i] && !unset)
-            {
-                current[i] = get(instance, i);
-                scope.Adopt(members[i], current[i]);
-            }
-        }
+        var members = target.Members;
+        var (generate, current) = Decide(target, instance, scope, mode);
 
         // Members are produced in declaration order, as when creating an object, so a seed gives the same values.
         for (var i = 0; i < members.Count; i++)
         {
             if (generate[i])
-                instance = set(instance, i, scope.GetObject(i, fallback(i)));
+                instance = target.WithValueAt(instance, i, scope.GetObject(i, target.ProducerOf(i)));
             else if (members[i].IsNested && current[i] is { } existing && scope.Include(i))
-                instance = set(instance, i, scope.PopulateNested(members[i].Type, existing, mode));
+                instance = target.WithValueAt(instance, i, scope.PopulateNested(members[i].Type, existing, mode));
         }
 
         // Read-only collections are filled last, in place: an empty one gets elements, and PopulateMode.All replaces what it holds.
         for (var i = 0; i < members.Count; i++)
         {
-            if (members[i].FillsExisting && scope.Include(i) && (mode == PopulateMode.All || isUnset(instance, i)))
-                fill(instance, i, scope.GetObject(i, fallback(i)), mode == PopulateMode.All);
+            if (members[i].FillsExisting && scope.Include(i) && (mode == PopulateMode.All || target.IsUnsetAt(instance, i)))
+                target.FillAt(instance, i, scope.GetObject(i, target.ProducerOf(i)), mode == PopulateMode.All);
         }
 
         return instance;
+    }
+
+    /// <summary>
+    /// Decides first which members are generated, so that kept members shape the identity before any value is generated; returns that decision and the
+    /// values that are kept.
+    /// </summary>
+    private static (bool[] Generate, object?[] Current) Decide<T>(IPopulateTarget<T> target, T instance, FakeScope scope, PopulateMode mode)
+    {
+        var members = target.Members;
+        var generate = new bool[members.Count];
+        var current = new object?[members.Count];
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (!members[i].IsSettable)
+                continue;
+            var unset = target.IsUnsetAt(instance, i);
+            generate[i] = scope.Include(i) && (mode == PopulateMode.All || unset);
+            if (!generate[i] && !unset)
+            {
+                current[i] = target.ValueAt(instance, i);
+                scope.Adopt(members[i], current[i]);
+            }
+        }
+
+        return (generate, current);
     }
 }

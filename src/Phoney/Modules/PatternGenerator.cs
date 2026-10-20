@@ -33,9 +33,9 @@ internal sealed class PatternGenerator
 
     private static readonly ConcurrentDictionary<string, PatternGenerator> Cache = new(StringComparer.Ordinal);
 
-    private readonly Node _root;
+    private readonly INode _root;
 
-    private PatternGenerator(Node root, bool exact)
+    private PatternGenerator(INode root, bool exact)
     {
         _root = root;
         IsExact = exact;
@@ -66,37 +66,37 @@ internal sealed class PatternGenerator
     }
 
     /// <summary>A node of the parsed pattern tree.</summary>
-    private abstract class Node
+    private interface INode
     {
         /// <summary>Appends generated text.</summary>
-        public abstract void Append(StringBuilder sb, SeededRandom random);
+        void Append(StringBuilder sb, SeededRandom random);
     }
 
     /// <summary>Fixed text.</summary>
-    private sealed class LiteralNode(string text) : Node
+    private sealed class LiteralNode(string text) : INode
     {
         /// <summary>The text.</summary>
         public string Text { get; } = text;
 
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, SeededRandom random) => sb.Append(Text);
+        public void Append(StringBuilder sb, SeededRandom random) => sb.Append(Text);
     }
 
     /// <summary>One character out of a set (character class, <c>\d</c>, <c>.</c>, or a case-insensitive letter).</summary>
-    private sealed class SetNode(string characters) : Node
+    private sealed class SetNode(string characters) : INode
     {
         /// <summary>Characters to choose from.</summary>
         public string Characters { get; } = characters;
 
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, SeededRandom random) => sb.Append(Characters[random.Index(Characters.Length)]);
+        public void Append(StringBuilder sb, SeededRandom random) => sb.Append(Characters[random.Index(Characters.Length)]);
     }
 
     /// <summary>Nodes generated one after another.</summary>
-    private sealed class SequenceNode(Node[] items) : Node
+    private sealed class SequenceNode(INode[] items) : INode
     {
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, SeededRandom random)
+        public void Append(StringBuilder sb, SeededRandom random)
         {
             foreach (var item in items)
                 item.Append(sb, random);
@@ -104,17 +104,17 @@ internal sealed class PatternGenerator
     }
 
     /// <summary>One of several alternatives (<c>a|b</c>).</summary>
-    private sealed class AlternationNode(Node[] options) : Node
+    private sealed class AlternationNode(INode[] options) : INode
     {
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, SeededRandom random) => options[random.Index(options.Length)].Append(sb, random);
+        public void Append(StringBuilder sb, SeededRandom random) => options[random.Index(options.Length)].Append(sb, random);
     }
 
     /// <summary>Repeats a node; <c>Max == -1</c> means unbounded (faker.js doubling distribution).</summary>
-    private sealed class RepeatNode(Node node, int min, int max) : Node
+    private sealed class RepeatNode(INode node, int min, int max) : INode
     {
         /// <inheritdoc />
-        public override void Append(StringBuilder sb, SeededRandom random)
+        public void Append(StringBuilder sb, SeededRandom random)
         {
             int count;
             if (max >= 0)
@@ -139,7 +139,7 @@ internal sealed class PatternGenerator
     {
         private readonly string _pattern;
         private int _pos;
-        private bool _ignoreCase;
+        private readonly bool _ignoreCase;
         private bool _hasZeroWidth; // a lookaround or an anchor inside the pattern, which generation cannot guarantee
 
         public Parser(string pattern)
@@ -170,7 +170,7 @@ internal sealed class PatternGenerator
         public readonly bool IsExact => !_hasZeroWidth;
 
         /// <summary>Parses the whole pattern.</summary>
-        public Node ParsePattern()
+        public INode ParsePattern()
         {
             var node = ParseAlternation();
             if (_pos < _pattern.Length)
@@ -179,9 +179,9 @@ internal sealed class PatternGenerator
         }
 
         /// <summary>Parses <c>a|b|c</c>.</summary>
-        private Node ParseAlternation()
+        private INode ParseAlternation()
         {
-            var options = new List<Node> { ParseSequence() };
+            var options = new List<INode> { ParseSequence() };
             while (Peek() == '|')
             {
                 _pos++;
@@ -192,9 +192,9 @@ internal sealed class PatternGenerator
         }
 
         /// <summary>Parses atoms up to <c>|</c> or <c>)</c>, merging adjacent literals.</summary>
-        private Node ParseSequence()
+        private INode ParseSequence()
         {
-            var items = new List<Node>();
+            var items = new List<INode>();
             var literal = new StringBuilder();
             while (_pos < _pattern.Length && Peek() is not ('|' or ')'))
             {
@@ -225,7 +225,7 @@ internal sealed class PatternGenerator
         }
 
         /// <summary>Parses one literal, class, escape, group or <c>.</c>; anchors return <see langword="null"/>.</summary>
-        private Node? ParseAtom()
+        private INode? ParseAtom()
         {
             var c = _pattern[_pos++];
             switch (c)
@@ -287,7 +287,7 @@ internal sealed class PatternGenerator
         }
 
         /// <summary>Wraps <paramref name="atom"/> in a repetition when a quantifier follows.</summary>
-        private Node ParseQuantifier(Node atom)
+        private INode ParseQuantifier(INode atom)
         {
             if (_pos >= _pattern.Length)
                 return atom;
@@ -360,52 +360,59 @@ internal sealed class PatternGenerator
             while (_pos < _pattern.Length && (_pattern[_pos] != ']' || first))
             {
                 first = false;
-                char start;
-                if (_pattern[_pos] == '\\')
-                {
-                    _pos++;
-                    var escaped = ParseEscape(inClass: true);
-                    if (escaped is SetNode set)
-                    {
-                        chars.UnionWith(set.Characters);
-                        continue;
-                    }
-
-                    start = ((LiteralNode)escaped).Text[0];
-                }
-                else
-                {
-                    start = _pattern[_pos++];
-                }
-
-                if (Peek() == '-' && _pos + 1 < _pattern.Length && _pattern[_pos + 1] != ']')
-                {
-                    _pos++;
-                    var end = _pattern[_pos] == '\\' ? Unescape(++_pos) : _pattern[_pos++];
-                    if (end < start)
-                        throw Error($"character range {start}-{end} is out of order");
-                    for (var ch = start; ch <= end; ch++)
-                        AddCased(chars, ch);
-                }
-                else
-                {
-                    AddCased(chars, start);
-                }
+                ParseClassItem(chars);
             }
 
             Expect(']');
             if (negate)
-            {
-                // Like faker.js, negation is taken against the alphanumeric characters.
-                var remaining = Alphanumeric.Where(ch => !chars.Contains(ch)).ToArray();
-                if (remaining.Length == 0)
-                    throw Error("negated character class excludes every alphanumeric character");
-                return new string(remaining);
-            }
-
+                return Negated(chars);
             if (chars.Count == 0)
                 throw Error("empty character class");
             return new string([.. chars]);
+        }
+
+        /// <summary>Parses one item of a character class (a character, an escape or a range) and adds what it allows.</summary>
+        private void ParseClassItem(SortedSet<char> chars)
+        {
+            char start;
+            if (_pattern[_pos] == '\\')
+            {
+                _pos++;
+                var escaped = ParseEscape(inClass: true);
+                if (escaped is SetNode set)
+                {
+                    chars.UnionWith(set.Characters);
+                    return;
+                }
+
+                start = ((LiteralNode)escaped).Text[0];
+            }
+            else
+            {
+                start = _pattern[_pos++];
+            }
+
+            if (Peek() != '-' || _pos + 1 >= _pattern.Length || _pattern[_pos + 1] == ']')
+            {
+                AddCased(chars, start);
+                return;
+            }
+
+            _pos++;
+            var end = _pattern[_pos] == '\\' ? Unescape(++_pos) : _pattern[_pos++];
+            if (end < start)
+                throw Error($"character range {start}-{end} is out of order");
+            for (var ch = start; ch <= end; ch++)
+                AddCased(chars, ch);
+        }
+
+        /// <summary>The alphanumeric characters a class leaves out; like faker.js, negation is taken against those.</summary>
+        private string Negated(SortedSet<char> chars)
+        {
+            var remaining = Alphanumeric.Where(ch => !chars.Contains(ch)).ToArray();
+            if (remaining.Length == 0)
+                throw Error("negated character class excludes every alphanumeric character");
+            return new string(remaining);
         }
 
         /// <summary>Reads an escaped character used as a range bound.</summary>
@@ -422,7 +429,7 @@ internal sealed class PatternGenerator
         }
 
         /// <summary>Parses an escape after <c>\</c>.</summary>
-        private Node ParseEscape(bool inClass)
+        private INode ParseEscape(bool inClass)
         {
             if (_pos >= _pattern.Length)
                 throw Error("pattern ends with a backslash");
@@ -492,7 +499,7 @@ internal sealed class PatternGenerator
         }
 
         /// <summary>A literal character, or both cases when ignoring case.</summary>
-        private readonly Node Letter(char c) =>
+        private readonly INode Letter(char c) =>
             _ignoreCase && char.IsAsciiLetter(c)
                 ? new SetNode(new string([char.ToLowerInvariant(c), char.ToUpperInvariant(c)]))
                 : new LiteralNode(c.ToString());

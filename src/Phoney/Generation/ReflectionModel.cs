@@ -50,7 +50,7 @@ internal sealed class ReflectionModel<T> : FakeModel<T>
 /// </summary>
 [RequiresUnreferencedCode("Populates types with reflection.")]
 [RequiresDynamicCode("Populates types with reflection.")]
-internal sealed class ReflectionTypeModel : IFakeModel
+internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
 {
     private static readonly ConcurrentDictionary<Type, ReflectionTypeModel> Cache = new();
 
@@ -65,76 +65,118 @@ internal sealed class ReflectionTypeModel : IFakeModel
     private ReflectionTypeModel(Type type)
     {
         Type = type;
-        var nullability = new NullabilityInfoContext();
-        var members = new List<FakeMember>();
-        var setters = new List<Action<object, object?>?>();
-        var fillers = new List<Action<object?, object?, bool>?>();
-        var getters = new List<Func<object, object?>?>();
-        var defaults = new List<object?>();
-        var fallbacks = new List<Func<FakeScope, object?>>();
+        var table = new MemberTable(type);
         var writable = WritableMembers(type);
 
         // Constructor parameters come first; properties they initialize are not set again.
         var constructor = ChooseConstructor(type);
         var parameters = constructor?.GetParameters() ?? [];
         foreach (var parameter in parameters)
+            table.AddParameter(parameter, writable);
+        _constructorParameterCount = parameters.Length;
+
+        foreach (var member in writable)
+            table.AddWritable(member);
+
+        // Read-only collections come last, so their elements are drawn after everything else (existing seeded data does not move).
+        var taken = parameters.Select(p => p.Name ?? "").Concat(table.Members.Select(m => m.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var member in FilledMembers(type).Where(m => taken.Add(m.Name)))
+            table.AddFilled(member);
+
+        Members = [.. table.Members];
+        _fillers = [.. table.Fillers];
+        _setters = [.. table.Setters];
+        _getters = [.. table.Getters];
+        _defaults = [.. table.Defaults];
+        _fallbacks = [.. table.Fallbacks];
+        _construct = CreateConstructor(type, constructor);
+    }
+
+    /// <summary>How a member is given its value.</summary>
+    private enum MemberRole
+    {
+        /// <summary>A constructor parameter (settable afterwards too when a property of the same name is).</summary>
+        Parameter,
+
+        /// <summary>A settable property or field.</summary>
+        Settable,
+
+        /// <summary>An init-only property.</summary>
+        InitOnly,
+
+        /// <summary>A read-only collection that is filled in place.</summary>
+        Filled,
+    }
+
+    /// <summary>The members of a type with the delegates that create, read and set them, collected in model order.</summary>
+    [RequiresUnreferencedCode("Populates types with reflection.")]
+    [RequiresDynamicCode("Populates types with reflection.")]
+    private sealed class MemberTable(Type type)
+    {
+        private readonly NullabilityInfoContext _nullability = new();
+
+        public List<FakeMember> Members { get; } = [];
+
+        public List<Action<object, object?>?> Setters { get; } = [];
+
+        public List<Action<object?, object?, bool>?> Fillers { get; } = [];
+
+        public List<Func<object, object?>?> Getters { get; } = [];
+
+        public List<object?> Defaults { get; } = [];
+
+        public List<Func<FakeScope, object?>> Fallbacks { get; } = [];
+
+        /// <summary>Adds a constructor parameter and takes the writable member it initializes out of <paramref name="writable"/>.</summary>
+        public void AddParameter(ParameterInfo parameter, List<MemberInfo> writable)
         {
-            var match = writable.FirstOrDefault(m => string.Equals(m.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
+            var match = writable.Find(m => string.Equals(m.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
             if (match is not null)
                 writable.Remove(match);
             var name = match?.Name ?? Capitalize(parameter.Name ?? "Arg");
-            var nullable = nullability.Create(parameter).ReadState == NullabilityState.Nullable;
-            var constraints = MemberConstraints.Read(parameter, match);
-            AddMember(name, parameter.ParameterType, nullable, isConstructorParameter: true, isInitOnly: false, accessor: match, constraints);
+            var nullable = _nullability.Create(parameter).ReadState == NullabilityState.Nullable;
+            Add(name, parameter.ParameterType, nullable, MemberRole.Parameter, match, MemberConstraints.Read(parameter, match));
         }
 
-        _constructorParameterCount = parameters.Length;
-        foreach (var member in writable)
+        /// <summary>Adds a settable or init-only property or field.</summary>
+        public void AddWritable(MemberInfo member)
         {
-            var (memberType, nullable, initOnly) = member switch
+            var (memberType, nullable, role) = member switch
             {
-                PropertyInfo p => (p.PropertyType, nullability.Create(p).WriteState == NullabilityState.Nullable, IsInitOnly(p)),
-                FieldInfo f => (f.FieldType, nullability.Create(f).WriteState == NullabilityState.Nullable, false),
+                PropertyInfo p => (p.PropertyType, _nullability.Create(p).WriteState == NullabilityState.Nullable, IsInitOnly(p) ? MemberRole.InitOnly : MemberRole.Settable),
+                FieldInfo f => (f.FieldType, _nullability.Create(f).WriteState == NullabilityState.Nullable, MemberRole.Settable),
                 _ => throw new InvalidOperationException(),
             };
-            AddMember(member.Name, memberType, nullable, isConstructorParameter: false, initOnly, member, MemberConstraints.Read(member));
+            Add(member.Name, memberType, nullable, role, member, MemberConstraints.Read(member));
         }
 
-        // Read-only collections come last, so their elements are drawn after everything else (existing seeded data does not move).
-        var taken = parameters.Select(p => p.Name ?? "").Concat(members.Select(m => m.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var member in FilledMembers(type))
+        /// <summary>Adds a read-only collection member that is filled in place.</summary>
+        public void AddFilled(MemberInfo member)
         {
-            if (!taken.Add(member.Name))
-                continue;
             var (memberType, nullable) = member switch
             {
-                PropertyInfo p => (p.PropertyType, nullability.Create(p).ReadState == NullabilityState.Nullable),
-                FieldInfo f => (f.FieldType, nullability.Create(f).ReadState == NullabilityState.Nullable),
+                PropertyInfo p => (p.PropertyType, _nullability.Create(p).ReadState == NullabilityState.Nullable),
+                FieldInfo f => (f.FieldType, _nullability.Create(f).ReadState == NullabilityState.Nullable),
                 _ => throw new InvalidOperationException(),
             };
-            AddMember(member.Name, memberType, nullable, isConstructorParameter: false, isInitOnly: false, member, MemberConstraints.Read(member), fillsExisting: true);
+            Add(member.Name, memberType, nullable, MemberRole.Filled, member, MemberConstraints.Read(member));
         }
 
-        Members = [.. members];
-        _fillers = [.. fillers];
-        _setters = [.. setters];
-        _getters = [.. getters];
-        _defaults = [.. defaults];
-        _fallbacks = [.. fallbacks];
-        _construct = CreateConstructor(type, constructor);
-
-        void AddMember(string name, Type memberType, bool nullable, bool isConstructorParameter, bool isInitOnly, MemberInfo? accessor, MemberConstraints? constraints, bool fillsExisting = false)
+        private void Add(string name, Type memberType, bool nullable, MemberRole role, MemberInfo? accessor, MemberConstraints? constraints)
         {
             // A format annotation ([EmailAddress]…) says more than the member name; [Required] members are never null.
             var category = FakeMember.ConventionCategory(memberType);
             var convention = constraints?.Format ?? ConventionRules.Match(name, category, type.Name);
+            var fillsExisting = role == MemberRole.Filled;
             // Constructor parameters behind a settable property (a record's positional properties) can be set on an existing object too.
-            members.Add(new FakeMember(name, memberType, convention, isConstructorParameter, isInitOnly, constraints, isSettable: accessor is not null && !fillsExisting, isNested: IsNestedType(memberType), fillsExisting));
-            setters.Add(accessor is null || fillsExisting ? null : CreateSetter(type, accessor));
-            fillers.Add(fillsExisting ? CollectionFillers.Create(memberType) : null);
-            getters.Add(accessor is null ? null : CreateGetter(type, accessor));
-            defaults.Add(memberType.IsValueType ? Activator.CreateInstance(memberType) : null);
-            fallbacks.Add(Producer(memberType, name, convention, nullable && constraints?.Required != true, constraints));
+            Members.Add(new FakeMember(
+                name, memberType, convention, role == MemberRole.Parameter, role == MemberRole.InitOnly, constraints,
+                isSettable: accessor is not null && !fillsExisting, isNested: IsNestedType(memberType), fillsExisting));
+            Setters.Add(accessor is null || fillsExisting ? null : CreateSetter(type, accessor));
+            Fillers.Add(fillsExisting ? CollectionFillers.Create(memberType) : null);
+            Getters.Add(accessor is null ? null : CreateGetter(type, accessor));
+            Defaults.Add(memberType.IsValueType ? Activator.CreateInstance(memberType) : null);
+            Fallbacks.Add(Producer(memberType, name, convention, nullable && constraints?.Required != true, constraints));
         }
     }
 
@@ -200,7 +242,17 @@ internal sealed class ReflectionTypeModel : IFakeModel
 
     /// <summary>Populates an existing instance; the untyped twin of <see cref="FakeModel{T}.Populate"/>.</summary>
     public object PopulateObject(object instance, FakeScope scope, PopulateMode mode) =>
-        Populator.Populate(Members, instance, scope, mode, IsUnsetObject, GetObject, SetObject, FallbackOf, FillObject);
+        Populator.Populate(this, instance, scope, mode);
+
+    bool IPopulateTarget<object>.IsUnsetAt(object instance, int member) => IsUnsetObject(instance, member);
+
+    object? IPopulateTarget<object>.ValueAt(object instance, int member) => GetObject(instance, member);
+
+    object IPopulateTarget<object>.WithValueAt(object instance, int member, object? value) => SetObject(instance, member, value);
+
+    Func<FakeScope, object?> IPopulateTarget<object>.ProducerOf(int member) => FallbackOf(member);
+
+    void IPopulateTarget<object>.FillAt(object instance, int member, object? values, bool replace) => FillObject(instance, member, values, replace);
 
     /// <summary>Whether a member of this type is created and populated recursively; mirrors the last branch of <see cref="NonNullProducer"/>.</summary>
     private static bool IsNestedType(Type type)
@@ -309,83 +361,24 @@ internal sealed class ReflectionTypeModel : IFakeModel
         if (category != TypeCategory.Other)
             return s => ConventionValues.Boxed(s, type, category, convention, constraints);
 
-        if (type == typeof(byte[]))
-            return constraints is null ? static s => s.Bytes() : s => s.Bytes(constraints);
-        if (type == typeof(Memory<byte>))
-            return static s => new Memory<byte>(s.Bytes());
-        if (type == typeof(ReadOnlyMemory<byte>))
-            return static s => new ReadOnlyMemory<byte>(s.Bytes());
+        if (BytesProducer(type, constraints) is { } bytes)
+            return bytes;
 
         // Tuples and key/value pairs: every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
         if (CompositeParts(type) is { } composite)
-        {
-            var producers = new Func<FakeScope, object?>[composite.Types.Length];
-            var unset = new object?[producers.Length];
-            for (var i = 0; i < producers.Length; i++)
-            {
-                producers[i] = Producer(composite.Types[i], composite.Names[i], ConventionRules.Match(composite.Names[i], FakeMember.ConventionCategory(composite.Types[i]), ""), false);
-                unset[i] = composite.Types[i].IsValueType ? Activator.CreateInstance(composite.Types[i]) : null;
-            }
-
-            var construct = CompileConstructor(composite.Constructor);
-            return s =>
-            {
-                var values = new object?[producers.Length];
-                for (var i = 0; i < values.Length; i++)
-                    values[i] = producers[i](s) ?? unset[i]; // missing: depth limit or cycle
-                return construct(values);
-            };
-        }
+            return CompositeProducer(composite);
 
         // Two-dimensional arrays are filled row by row; more dimensions are not generated (the member stays null, as for other types without a generator).
         if (type.IsArray && type.GetArrayRank() > 1)
-        {
-            if (type.GetArrayRank() != 2)
-                return static _ => null;
-            var cell = type.GetElementType()!;
-            var singularName = memberName.EndsWith('s') ? memberName[..^1] : memberName;
-            var cellProducer = Producer(cell, singularName, ConventionRules.Match(singularName, FakeMember.ConventionCategory(cell), ""), false);
-            return ReflectionCollections.Of(cell).Array2(cellProducer);
-        }
+            return type.GetArrayRank() == 2 ? Array2Producer(type.GetElementType()!, memberName) : static _ => null;
 
         // Date and time types of add-on packages (NodaTime) are produced from the built-in type their category names.
         if (ScalarAdapters.TryGet(type, out var adapter))
             return s => adapter(s, convention, constraints);
 
-        // Collections: elements use the singular member name for conventions ("Emails" → email addresses). They are built by
-        // the typed FakeScope helpers the generated models call, so both models share one algorithm and nothing is reflected per element.
         var element = CollectionTypes.ElementType(type, out var key);
         if (element is not null)
-        {
-            var singular = memberName.EndsWith('s') ? memberName[..^1] : memberName;
-            var elementProducer = Producer(element, singular, ConventionRules.Match(singular, FakeMember.ConventionCategory(element), ""), false);
-            // Built like List<T>, HashSet<T> or Dictionary<TKey, TValue> whatever the member's type is, then converted to it, as generated models do.
-            Func<FakeScope, object?> producer;
-            Type built;
-            if (key is not null)
-            {
-                var keyProducer = Producer(key, singular + "Key", ConventionKind.None, false);
-                producer = ReflectionCollections.DictionaryOf(key, element, keyProducer, elementProducer, constraints);
-                built = typeof(Dictionary<,>).MakeGenericType(key, element);
-            }
-            else if (type.IsArray)
-            {
-                return ReflectionCollections.Of(element).Array(elementProducer, constraints);
-            }
-            else if (CollectionTypes.KindOf(type) == CollectionKind.Set)
-            {
-                producer = ReflectionCollections.Of(element).Set(elementProducer, constraints);
-                built = typeof(HashSet<>).MakeGenericType(element);
-            }
-            else
-            {
-                producer = ReflectionCollections.Of(element).List(elementProducer, constraints);
-                built = typeof(List<>).MakeGenericType(element);
-            }
-
-            var convert = CollectionConverters.Create(type, built);
-            return convert is null ? producer : s => producer(s) is { } value ? convert(value) : null;
-        }
+            return CollectionProducer(type, element, key, memberName, constraints);
 
         // Framework types are not populated recursively (a struct among them keeps its default value, which is what a generated model leaves too);
         // other classes, closed generic ones (Envelope<Order>) included, are created as nested objects, and interfaces and abstract classes go through their subtypes.
@@ -398,6 +391,83 @@ internal sealed class ReflectionTypeModel : IFakeModel
         }
 
         return s => s.NestedObject(type);
+    }
+
+    /// <summary>Producer for <c>byte[]</c>, <c>Memory&lt;byte&gt;</c> and <c>ReadOnlyMemory&lt;byte&gt;</c>, or <see langword="null"/> for other types.</summary>
+    private static Func<FakeScope, object?>? BytesProducer(Type type, MemberConstraints? constraints)
+    {
+        if (type == typeof(byte[]))
+            return constraints is null ? static s => s.Bytes() : s => s.Bytes(constraints);
+        if (type == typeof(Memory<byte>))
+            return static s => new Memory<byte>(s.Bytes());
+        return type == typeof(ReadOnlyMemory<byte>) ? static s => new ReadOnlyMemory<byte>(s.Bytes()) : null;
+    }
+
+    /// <summary>The singular of a collection member's name, which its elements use for conventions ("Emails" → email addresses).</summary>
+    private static string Singular(string memberName) => memberName.EndsWith('s') ? memberName[..^1] : memberName;
+
+    /// <summary>Producer for a tuple or key/value pair: its parts in order, then the constructor.</summary>
+    private static Func<FakeScope, object?> CompositeProducer((Type[] Types, string[] Names, ConstructorInfo Constructor) composite)
+    {
+        var producers = new Func<FakeScope, object?>[composite.Types.Length];
+        var unset = new object?[producers.Length];
+        for (var i = 0; i < producers.Length; i++)
+        {
+            producers[i] = Producer(composite.Types[i], composite.Names[i], ConventionRules.Match(composite.Names[i], FakeMember.ConventionCategory(composite.Types[i]), ""), false);
+            unset[i] = composite.Types[i].IsValueType ? Activator.CreateInstance(composite.Types[i]) : null;
+        }
+
+        var construct = CompileConstructor(composite.Constructor);
+        return s =>
+        {
+            var values = new object?[producers.Length];
+            for (var i = 0; i < values.Length; i++)
+                values[i] = producers[i](s) ?? unset[i]; // missing: depth limit or cycle
+            return construct(values);
+        };
+    }
+
+    /// <summary>Producer for a two-dimensional array, filled row by row.</summary>
+    private static Func<FakeScope, object?> Array2Producer(Type cell, string memberName)
+    {
+        var singular = Singular(memberName);
+        var cellProducer = Producer(cell, singular, ConventionRules.Match(singular, FakeMember.ConventionCategory(cell), ""), false);
+        return ReflectionCollections.Of(cell).Array2(cellProducer);
+    }
+
+    /// <summary>
+    /// Producer for a collection. It is built by the typed FakeScope helpers the generated models call, so both models share one algorithm and nothing is reflected per element:
+    /// like List&lt;T&gt;, HashSet&lt;T&gt; or Dictionary&lt;TKey, TValue&gt; whatever the member's type is, then converted to it, as generated models do.
+    /// </summary>
+    private static Func<FakeScope, object?> CollectionProducer(Type type, Type element, Type? key, string memberName, MemberConstraints? constraints)
+    {
+        var singular = Singular(memberName);
+        var elementProducer = Producer(element, singular, ConventionRules.Match(singular, FakeMember.ConventionCategory(element), ""), false);
+        Func<FakeScope, object?> producer;
+        Type built;
+        if (key is not null)
+        {
+            var keyProducer = Producer(key, singular + "Key", ConventionKind.None, false);
+            producer = ReflectionCollections.DictionaryOf(key, element, keyProducer, elementProducer, constraints);
+            built = typeof(Dictionary<,>).MakeGenericType(key, element);
+        }
+        else if (type.IsArray)
+        {
+            return ReflectionCollections.Of(element).Array(elementProducer, constraints);
+        }
+        else if (CollectionTypes.KindOf(type) == CollectionKind.Set)
+        {
+            producer = ReflectionCollections.Of(element).Set(elementProducer, constraints);
+            built = typeof(HashSet<>).MakeGenericType(element);
+        }
+        else
+        {
+            producer = ReflectionCollections.Of(element).List(elementProducer, constraints);
+            built = typeof(List<>).MakeGenericType(element);
+        }
+
+        var convert = CollectionConverters.Create(type, built);
+        return convert is null ? producer : s => producer(s) is { } value ? convert(value) : null;
     }
 
     /// <summary>

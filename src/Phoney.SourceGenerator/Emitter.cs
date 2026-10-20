@@ -30,20 +30,45 @@ internal static class Emitter
         var containers = new List<INamedTypeSymbol>();
         for (var t = owner; t is not null; t = t.ContainingType)
             containers.Insert(0, t);
-        var indent = "";
-        foreach (var container in containers)
+        for (var depth = 0; depth < containers.Count; depth++)
         {
-            sb.Append(indent).Append(container.IsStatic ? "static " : "").Append("partial ")
-              .Append(container.IsRecord ? "record " : container.TypeKind == TypeKind.Struct ? "struct " : "class ")
-              .AppendLine(container.Name);
-            sb.Append(indent).AppendLine("{");
-            indent += "    ";
+            var container = containers[depth];
+            sb.Append(Indent(depth)).Append(container.IsStatic ? "static " : "").Append("partial ").Append(Keyword(container)).AppendLine(container.Name);
+            sb.Append(Indent(depth)).AppendLine("{");
         }
 
+        var indent = Indent(containers.Count);
+        EmitGeneratorProperties(sb, indent, owner, roots, models);
+        foreach (var key in models.Select(m => m.Key))
+            sb.Append(indent).AppendLine($"private static readonly __PhoneyModel_{key} __phoneyModel_{key} = new();");
+        sb.AppendLine();
+
+        // Registration makes Fake.For<T>() and nested objects use the generated models as well.
+        if (CanRegister(owner))
+            EmitRegistration(sb, indent, models, derivedTypes, subtypes);
+
+        foreach (var model in models)
+            EmitModel(sb, indent, model);
+
+        for (var depth = containers.Count - 1; depth >= 0; depth--)
+            sb.Append(Indent(depth)).AppendLine("}");
+
+        return sb.ToString();
+    }
+
+    /// <summary>The keyword that re-opens <paramref name="container"/>.</summary>
+    private static string Keyword(INamedTypeSymbol container)
+    {
+        if (container.IsRecord)
+            return "record ";
+        return container.TypeKind == TypeKind.Struct ? "struct " : "class ";
+    }
+
+    /// <summary>One generator property per requested type, named after it unless the owner already has a member of that name.</summary>
+    private static void EmitGeneratorProperties(StringBuilder sb, string indent, INamedTypeSymbol owner, List<INamedTypeSymbol> roots, List<TypeModel> models)
+    {
         var byFullName = models.ToDictionary(m => m.FullName);
         var usedNames = new HashSet<string>(owner.GetMembers().Select(m => m.Name));
-
-        // One generator property per requested type.
         foreach (var root in roots)
         {
             var fullName = root.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -54,41 +79,26 @@ internal static class Emitter
             sb.Append(indent).AppendLine($"public static global::Phoney.ObjectGenerator<{fullName}> {name} => new(__phoneyModel_{model.Key});");
             sb.AppendLine();
         }
+    }
 
+    /// <summary>The module initializer that registers the models, the <c>[JsonDerivedType]</c> defaults and the <c>[FakeSubtype]</c> registrations.</summary>
+    private static void EmitRegistration(StringBuilder sb, string indent, List<TypeModel> models, SortedDictionary<string, List<string>> derivedTypes, List<(string Base, string Subtype)> subtypes)
+    {
+        sb.Append(indent).AppendLine("[global::System.Runtime.CompilerServices.ModuleInitializer]");
+        sb.Append(indent).AppendLine("internal static void __PhoneyRegisterModels()");
+        sb.Append(indent).AppendLine("{");
         foreach (var model in models)
-            sb.Append(indent).AppendLine($"private static readonly __PhoneyModel_{model.Key} __phoneyModel_{model.Key} = new();");
+            sb.Append(indent).AppendLine($"    global::Phoney.Generation.ModelRegistry.Register(__phoneyModel_{model.Key});");
+        foreach (var pair in derivedTypes)
+        {
+            var types = string.Join(", ", pair.Value.Select(t => $"typeof({t})"));
+            sb.Append(indent).AppendLine($"    global::Phoney.Generation.ModelRegistry.RegisterDerivedTypes(typeof({pair.Key}), {types});");
+        }
+
+        foreach (var (baseType, subtype) in subtypes)
+            sb.Append(indent).AppendLine($"    global::Phoney.Fake.Subtypes.Add<{baseType}, {subtype}>();");
+        sb.Append(indent).AppendLine("}");
         sb.AppendLine();
-
-        // Registration makes Fake.For<T>() and nested objects use the generated models as well.
-        if (CanRegister(owner))
-        {
-            sb.Append(indent).AppendLine("[global::System.Runtime.CompilerServices.ModuleInitializer]");
-            sb.Append(indent).AppendLine("internal static void __PhoneyRegisterModels()");
-            sb.Append(indent).AppendLine("{");
-            foreach (var model in models)
-                sb.Append(indent).AppendLine($"    global::Phoney.Generation.ModelRegistry.Register(__phoneyModel_{model.Key});");
-            foreach (var pair in derivedTypes)
-            {
-                var types = string.Join(", ", pair.Value.Select(t => $"typeof({t})"));
-                sb.Append(indent).AppendLine($"    global::Phoney.Generation.ModelRegistry.RegisterDerivedTypes(typeof({pair.Key}), {types});");
-            }
-
-            foreach (var (baseType, subtype) in subtypes)
-                sb.Append(indent).AppendLine($"    global::Phoney.Fake.Subtypes.Add<{baseType}, {subtype}>();");
-            sb.Append(indent).AppendLine("}");
-            sb.AppendLine();
-        }
-
-        foreach (var model in models)
-            EmitModel(sb, indent, model);
-
-        for (var i = containers.Count - 1; i >= 0; i--)
-        {
-            indent = indent.Substring(4);
-            sb.Append(indent).AppendLine("}");
-        }
-
-        return sb.ToString();
     }
 
     /// <summary>Module initializers must be reachable from the module: no private or protected containers.</summary>
@@ -106,182 +116,166 @@ internal static class Emitter
     /// <summary>Writes one <c>FakeModel&lt;T&gt;</c> implementation: member table, <c>Create</c>, <c>Set</c> and init-only accessors.</summary>
     private static void EmitModel(StringBuilder sb, string indent, TypeModel model)
     {
-        var i1 = indent + "    ";
-        var i2 = i1 + "    ";
-        var i3 = i2 + "    ";
+        var i1 = indent + Step;
         var t = model.FullName;
+        var members = model.Members;
         sb.Append(indent).AppendLine($"private sealed class __PhoneyModel_{model.Key} : global::Phoney.Generation.FakeModel<{t}>");
         sb.Append(indent).AppendLine("{");
 
-        // Validation rules from data annotations, one field per annotated member (declared before __members uses them).
-        foreach (var m in model.Members.Where(m => m.Constraints is not null))
+        EmitMemberTable(sb, i1, members);
+        EmitCreate(sb, i1, t, members);
+
+        // Set: used for rules that depend on the created object.
+        var byRef = model.IsValueType ? "ref " : "";
+        EmitSwitch(sb, i1, $"public override {t} Set({t} instance, int member, object value)",
+            Cases(members, m => m.Settable, (m, index) => m.SetterInitOnly
+                ? $"case {index}: __set_{index}({byRef}instance, ({m.TypeName})value); return instance;"
+                : $"case {index}: instance.{Identifier(m.Name)} = ({m.TypeName})value; return instance;"),
+            "default: throw new global::System.InvalidOperationException(__members[member].Name + \" is a constructor parameter and cannot be set after creation.\");");
+        sb.AppendLine();
+
+        // Get, IsUnset: read access for populating an existing object.
+        const string unreadable = "default: throw new global::System.InvalidOperationException(__members[member].Name + \" cannot be read from an existing object.\");";
+        EmitSwitch(sb, i1, $"public override object Get({t} instance, int member)",
+            Cases(members, Readable, (m, index) => $"case {index}: return (object)instance.{Identifier(m.Name)};"), unreadable);
+        sb.AppendLine();
+        EmitSwitch(sb, i1, $"public override bool IsUnset({t} instance, int member)",
+            Cases(members, Readable, (m, index) => $"case {index}: return global::Phoney.Generation.FakeScope.IsUnset(instance.{Identifier(m.Name)});"), unreadable);
+        sb.AppendLine();
+
+        // Fill: adds generated elements to the collection a read-only member holds (populating and objects made by CreateWith).
+        if (members.Any(m => m.FillsExisting))
+        {
+            EmitSwitch(sb, i1, $"public override void Fill({t} instance, int member, object value, bool replace)",
+                Cases(members, m => m.FillsExisting, (m, index) =>
+                    $"case {index}: global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(instance.{Identifier(m.Name)}, ({m.TypeName})value, replace); return;"),
+                "default: throw new global::System.InvalidOperationException(__members[member].Name + \" is not a collection that is filled in place.\");");
+            sb.AppendLine();
+        }
+
+        // Fallback: the value producers of Create, as delegates for populating.
+        EmitSwitch(sb, i1, $"public override global::System.Func<{Scope}, object> Fallback(int member)",
+            Cases(members, _ => true, (m, index) => $"case {index}: return static s0 => (object)({m.Value});"),
+            "default: throw new global::System.ArgumentOutOfRangeException(nameof(member));");
+
+        // init-only setters are reachable after construction only through UnsafeAccessor (.NET 8+, AOT-safe).
+        for (var index = 0; index < members.Count; index++)
+        {
+            var m = members[index];
+            if (!m.Settable || !m.SetterInitOnly)
+                continue;
+            sb.AppendLine();
+            sb.Append(i1).AppendLine($"[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"set_{m.Name}\")]");
+            sb.Append(i1).AppendLine($"private static extern void __set_{index}({byRef}{m.SetterDeclaringType} target, {m.TypeName} value);");
+        }
+
+        sb.Append(indent).AppendLine("}");
+        sb.AppendLine();
+    }
+
+    /// <summary>The validation rules from data annotations, one field per annotated member, and the member descriptions (index = position).</summary>
+    private static void EmitMemberTable(StringBuilder sb, string i1, List<MemberModel> members)
+    {
+        var i2 = i1 + Step;
+        // Declared before __members uses them.
+        foreach (var m in members.Where(m => m.Constraints is not null))
             sb.Append(i1).AppendLine($"private static readonly global::Phoney.Generation.MemberConstraints {m.ConstraintsField} = new() {{ {m.Constraints} }};");
-        if (model.Members.Any(m => m.Constraints is not null))
+        if (members.Any(m => m.Constraints is not null))
             sb.AppendLine();
 
-        // Member descriptions (index = position).
         sb.Append(i1).AppendLine("private static readonly global::Phoney.Generation.FakeMember[] __members =");
         sb.Append(i1).AppendLine("{");
-        foreach (var m in model.Members)
+        foreach (var m in members)
         {
+            var fills = m.FillsExisting ? ", fillsExisting: true" : "";
             sb.Append(i2).AppendLine(
-                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}, {Bool(m.Settable)}, {Bool(m.IsNested)}{(m.FillsExisting ? ", fillsExisting: true" : "")}),");
+                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}, {Bool(m.Settable)}, {Bool(m.IsNested)}{fills}),");
         }
 
         sb.Append(i1).AppendLine("};");
         sb.AppendLine();
         sb.Append(i1).AppendLine("public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;");
         sb.AppendLine();
+    }
 
-        // Create: values are produced in member order (constructor parameters, then members in declaration
-        // order) exactly like the reflection model, so both consume randomness identically; then the object is
-        // built with init/required members in its initializer and the rest assigned afterwards.
+    /// <summary>
+    /// Create: values are produced in member order (constructor parameters, then members in declaration order) exactly like the reflection model, so both
+    /// consume randomness identically; then the object is built with init/required members in its initializer and the rest assigned afterwards.
+    /// </summary>
+    private static void EmitCreate(StringBuilder sb, string i1, string t, List<MemberModel> members)
+    {
+        var i2 = i1 + Step;
+        var i3 = i2 + Step;
         sb.Append(i1).AppendLine($"public override {t} Create({Scope} scope)");
         sb.Append(i1).AppendLine("{");
-        for (var index = 0; index < model.Members.Count; index++)
+        for (var index = 0; index < members.Count; index++)
         {
-            var m = model.Members[index];
+            var m = members[index];
             var value = m.IsConstructorParameter
                 ? Get(index, m)
                 : $"scope.Include({index}) ? {Get(index, m)} : default({m.TypeName})";
             sb.Append(i2).AppendLine($"var v{index} = {value};");
         }
 
-        var arguments = model.Members
-            .Select((m, index) => (m, index))
-            .Where(x => x.m.IsConstructorParameter)
-            .Select(x => "v" + x.index)
-            .ToList();
-        var initializers = model.Members
-            .Select((m, index) => (m, index))
-            .Where(x => !x.m.IsConstructorParameter && x.m.InInitializer)
-            .ToList();
+        var arguments = Cases(members, m => m.IsConstructorParameter, (_, index) => "v" + index);
+        var initializers = Cases(members, m => !m.IsConstructorParameter && m.InInitializer, (m, index) => $"{Identifier(m.Name)} = v{index},").ToList();
         sb.Append(i2).Append($"var o = new {t}(").Append(string.Join(", ", arguments)).Append(')');
         if (initializers.Count > 0)
         {
             sb.AppendLine();
             sb.Append(i2).AppendLine("{");
-            foreach (var (m, index) in initializers)
-                sb.Append(i3).AppendLine($"{Identifier(m.Name)} = v{index},");
+            foreach (var initializer in initializers)
+                sb.Append(i3).AppendLine(initializer);
             sb.Append(i2).Append('}');
         }
 
         sb.AppendLine(";");
-        for (var index = 0; index < model.Members.Count; index++)
-        {
-            var m = model.Members[index];
-            if (m.IsConstructorParameter || m.InInitializer)
-                continue;
-            if (m.FillsExisting)
-            {
-                // A read-only collection: the generated elements are added to the one the object holds.
-                sb.Append(i2).AppendLine($"if (scope.Include({index})) global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(o.{Identifier(m.Name)}, v{index});");
-                continue;
-            }
-
-            sb.Append(i2).AppendLine($"if (scope.Include({index})) o.{Identifier(m.Name)} = v{index};");
-        }
+        var assigned = Cases(members, m => !m.IsConstructorParameter && !m.InInitializer, (m, index) => m.FillsExisting
+            // A read-only collection: the generated elements are added to the one the object holds.
+            ? $"if (scope.Include({index})) global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(o.{Identifier(m.Name)}, v{index});"
+            : $"if (scope.Include({index})) o.{Identifier(m.Name)} = v{index};");
+        foreach (var statement in assigned)
+            sb.Append(i2).AppendLine(statement);
 
         sb.Append(i2).AppendLine("return o;");
         sb.Append(i1).AppendLine("}");
         sb.AppendLine();
-
-        // Set: used for rules that depend on the created object.
-        sb.Append(i1).AppendLine($"public override {t} Set({t} instance, int member, object value)");
-        sb.Append(i1).AppendLine("{");
-        sb.Append(i2).AppendLine("switch (member)");
-        sb.Append(i2).AppendLine("{");
-        for (var index = 0; index < model.Members.Count; index++)
-        {
-            var m = model.Members[index];
-            if (!m.Settable)
-                continue;
-            var assignment = m.SetterInitOnly
-                ? $"__set_{index}({(model.IsValueType ? "ref " : "")}instance, ({m.TypeName})value)"
-                : $"instance.{Identifier(m.Name)} = ({m.TypeName})value";
-            sb.Append(i3).AppendLine($"case {index}: {assignment}; return instance;");
-        }
-
-        sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" is a constructor parameter and cannot be set after creation.\");");
-        sb.Append(i2).AppendLine("}");
-        sb.Append(i1).AppendLine("}");
-        sb.AppendLine();
-
-        // Get, IsUnset: read access for populating an existing object.
-        sb.Append(i1).AppendLine($"public override object Get({t} instance, int member)");
-        sb.Append(i1).AppendLine("{");
-        sb.Append(i2).AppendLine("switch (member)");
-        sb.Append(i2).AppendLine("{");
-        for (var index = 0; index < model.Members.Count; index++)
-        {
-            if (model.Members[index].Settable || model.Members[index].FillsExisting)
-                sb.Append(i3).AppendLine($"case {index}: return (object)instance.{Identifier(model.Members[index].Name)};");
-        }
-
-        sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" cannot be read from an existing object.\");");
-        sb.Append(i2).AppendLine("}");
-        sb.Append(i1).AppendLine("}");
-        sb.AppendLine();
-        sb.Append(i1).AppendLine($"public override bool IsUnset({t} instance, int member)");
-        sb.Append(i1).AppendLine("{");
-        sb.Append(i2).AppendLine("switch (member)");
-        sb.Append(i2).AppendLine("{");
-        for (var index = 0; index < model.Members.Count; index++)
-        {
-            if (model.Members[index].Settable || model.Members[index].FillsExisting)
-                sb.Append(i3).AppendLine($"case {index}: return global::Phoney.Generation.FakeScope.IsUnset(instance.{Identifier(model.Members[index].Name)});");
-        }
-
-        sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" cannot be read from an existing object.\");");
-        sb.Append(i2).AppendLine("}");
-        sb.Append(i1).AppendLine("}");
-        sb.AppendLine();
-
-        // Fill: adds generated elements to the collection a read-only member holds (populating and objects made by CreateWith).
-        if (model.Members.Any(m => m.FillsExisting))
-        {
-            sb.Append(i1).AppendLine($"public override void Fill({t} instance, int member, object value, bool replace)");
-            sb.Append(i1).AppendLine("{");
-            sb.Append(i2).AppendLine("switch (member)");
-            sb.Append(i2).AppendLine("{");
-            for (var index = 0; index < model.Members.Count; index++)
-            {
-                var m = model.Members[index];
-                if (m.FillsExisting)
-                    sb.Append(i3).AppendLine($"case {index}: global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(instance.{Identifier(m.Name)}, ({m.TypeName})value, replace); return;");
-            }
-
-            sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" is not a collection that is filled in place.\");");
-            sb.Append(i2).AppendLine("}");
-            sb.Append(i1).AppendLine("}");
-            sb.AppendLine();
-        }
-
-        // Fallback: the value producers of Create, as delegates for populating.
-        sb.Append(i1).AppendLine($"public override global::System.Func<{Scope}, object> Fallback(int member)");
-        sb.Append(i1).AppendLine("{");
-        sb.Append(i2).AppendLine("switch (member)");
-        sb.Append(i2).AppendLine("{");
-        for (var index = 0; index < model.Members.Count; index++)
-            sb.Append(i3).AppendLine($"case {index}: return static s0 => (object)({model.Members[index].Value});");
-        sb.Append(i3).AppendLine("default: throw new global::System.ArgumentOutOfRangeException(nameof(member));");
-        sb.Append(i2).AppendLine("}");
-        sb.Append(i1).AppendLine("}");
-
-        // init-only setters are reachable after construction only through UnsafeAccessor (.NET 8+, AOT-safe).
-        for (var index = 0; index < model.Members.Count; index++)
-        {
-            var m = model.Members[index];
-            if (!m.Settable || !m.SetterInitOnly)
-                continue;
-            sb.AppendLine();
-            sb.Append(i1).AppendLine($"[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"set_{m.Name}\")]");
-            sb.Append(i1).AppendLine($"private static extern void __set_{index}({(model.IsValueType ? "ref " : "")}{m.SetterDeclaringType} target, {m.TypeName} value);");
-        }
-
-        sb.Append(indent).AppendLine("}");
-        sb.AppendLine();
     }
+
+    /// <summary>A method that switches on the member index: one line per case, then the default.</summary>
+    private static void EmitSwitch(StringBuilder sb, string i1, string signature, IEnumerable<string> cases, string defaultCase)
+    {
+        var i2 = i1 + Step;
+        var i3 = i2 + Step;
+        sb.Append(i1).AppendLine(signature);
+        sb.Append(i1).AppendLine("{");
+        sb.Append(i2).AppendLine("switch (member)");
+        sb.Append(i2).AppendLine("{");
+        foreach (var line in cases)
+            sb.Append(i3).AppendLine(line);
+        sb.Append(i3).AppendLine(defaultCase);
+        sb.Append(i2).AppendLine("}");
+        sb.Append(i1).AppendLine("}");
+    }
+
+    /// <summary>One line per member that <paramref name="include"/> accepts, in member order, with the member's index.</summary>
+    private static IEnumerable<string> Cases(List<MemberModel> members, System.Func<MemberModel, bool> include, System.Func<MemberModel, int, string> line)
+    {
+        for (var index = 0; index < members.Count; index++)
+        {
+            if (include(members[index]))
+                yield return line(members[index], index);
+        }
+    }
+
+    /// <summary>Members an existing object can be read through: settable ones and read-only collections.</summary>
+    private static bool Readable(MemberModel m) => m.Settable || m.FillsExisting;
+
+    /// <summary>One level of indentation.</summary>
+    private const string Step = "    ";
+
+    /// <summary>The indentation of <paramref name="depth"/> levels.</summary>
+    private static string Indent(int depth) => new(' ', 4 * depth);
 
     /// <summary>The <c>scope.Get</c> call that reads member <paramref name="index"/> through the generator's rules.</summary>
     private static string Get(int index, MemberModel m) => $"scope.Get({index}, static s0 => {m.Value})";

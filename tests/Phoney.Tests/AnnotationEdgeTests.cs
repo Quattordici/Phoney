@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Phoney.Generation;
+using System.Text.RegularExpressions;
 
 namespace Phoney.Tests;
 
@@ -70,8 +71,14 @@ public sealed class BackReference
 [FakeFor<BackReference>]
 public static partial class AnnotationFakes;
 
-public sealed class AnnotationEdgeTests
+public sealed partial class AnnotationEdgeTests
 {
+    [GeneratedRegex("^\\d{3}-\\d{4}$")]
+    private static partial Regex PhonePattern();
+
+    [GeneratedRegex("^[A-Z][a-z]{3}[0-9]$")]
+    private static partial Regex WordPattern();
+
     private static ObjectGenerator<Annotated> Make(bool generated) =>
         (generated ? AnnotationFakes.Annotated : new ObjectGenerator<Annotated>(new ReflectionModel<Annotated>())).Seed(11);
 
@@ -177,9 +184,9 @@ public sealed class AnnotationEdgeTests
     {
         var values = Make(generated).Generate(200);
 
-        values.ShouldAllBe(v => System.Text.RegularExpressions.Regex.IsMatch(v.Phone, "^\\d{3}-\\d{4}$"));
+        values.ShouldAllBe(v => PhonePattern().IsMatch(v.Phone));
         values.ShouldAllBe(v => v.Password.Any(char.IsAsciiDigit));
-        values.ShouldAllBe(v => System.Text.RegularExpressions.Regex.IsMatch(v.Word, "^[A-Z][a-z]{3}[0-9]$"));
+        values.ShouldAllBe(v => WordPattern().IsMatch(v.Word));
     }
 
     [Test]

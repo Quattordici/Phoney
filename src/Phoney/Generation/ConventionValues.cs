@@ -17,6 +17,14 @@ namespace Phoney.Generation;
 public static class ConventionValues
 {
     /// <summary>
+    /// Whether the value of <paramref name="kind"/> is read from the object's <see cref="Identity"/>, which is generated once per object (drawing such a
+    /// member again gives the same value).
+    /// </summary>
+    internal static bool IsIdentityBound(ConventionKind kind) => kind is ConventionKind.FirstName or ConventionKind.LastName or ConventionKind.Username
+        or ConventionKind.Email or ConventionKind.StreetAddress or ConventionKind.City or ConventionKind.ZipCode or ConventionKind.State or ConventionKind.Country
+        or ConventionKind.CountryCode or ConventionKind.NationalId or ConventionKind.Age or ConventionKind.BirthDate or ConventionKind.Gender or ConventionKind.Sex;
+
+    /// <summary>
     /// Returns a string for <paramref name="kind"/> (a single word when there is no convention) that satisfies
     /// <paramref name="constraints"/>: allowed values, pattern, format, base64, length and required.
     /// </summary>
@@ -28,7 +36,7 @@ public static class ConventionValues
 
     private static string ConstrainedString(FakeScope scope, ConventionKind kind, MemberConstraints constraints)
     {
-        return Avoiding(scope, constraints, () =>
+        return Avoiding(constraints, () =>
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
                 return Text(scope.Faker.Random.Element(allowed));
@@ -157,7 +165,7 @@ public static class ConventionValues
     private static T ConstrainedNumber<T>(FakeScope scope, ConventionKind kind, MemberConstraints constraints)
         where T : INumber<T>
     {
-        return Avoiding(scope, constraints, () =>
+        return Avoiding(constraints, () =>
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
                 return T.CreateSaturating(Convert.ToDecimal(scope.Faker.Random.Element(allowed), CultureInfo.InvariantCulture));
@@ -186,9 +194,9 @@ public static class ConventionValues
             ConventionKind.Port => T.CreateSaturating(f.Internet.Port()),
             ConventionKind.Latitude => T.CreateSaturating(f.Location.Latitude()),
             ConventionKind.Longitude => T.CreateSaturating(f.Location.Longitude()),
-            _ => typeof(T) == typeof(decimal)
-                ? T.CreateSaturating(f.Number.Decimal(1, 1000, 2))
-                : fractional ? T.CreateSaturating(f.Number.Double(1, 1000, 2)) : T.CreateSaturating(f.Random.Int(1, int.CreateSaturating(T.CreateSaturating(1000)))), // 1 to 255 for a byte, not mostly 255
+            _ when typeof(T) == typeof(decimal) => T.CreateSaturating(f.Number.Decimal(1, 1000, 2)),
+            _ when fractional => T.CreateSaturating(f.Number.Double(1, 1000, 2)),
+            _ => T.CreateSaturating(f.Random.Int(1, int.CreateSaturating(T.CreateSaturating(1000)))), // 1 to 255 for a byte, not mostly 255
         };
     }
 
@@ -351,14 +359,14 @@ public static class ConventionValues
         }
 
         return constraints is { DeniedValues.Length: > 0 }
-            ? Avoiding(scope, constraints, () => values[scope.Faker.Random.Index(values.Length)])
+            ? Avoiding(constraints, () => values[scope.Faker.Random.Index(values.Length)])
             : values[scope.Faker.Random.Index(values.Length)];
     }
 
     /// <summary>One of the <c>[AllowedValues]</c> of an enum member, avoiding <c>[DeniedValues]</c>.</summary>
     private static TEnum AllowedEnum<TEnum>(FakeScope scope, MemberConstraints constraints)
         where TEnum : struct, Enum =>
-        Avoiding(scope, constraints, () => (TEnum)AllowedEnumValue(typeof(TEnum), scope.Faker.Random.Element(constraints.AllowedValues!)));
+        Avoiding(constraints, () => (TEnum)AllowedEnumValue(typeof(TEnum), scope.Faker.Random.Element(constraints.AllowedValues!)));
 
     /// <summary>
     /// An allowed value as a value of the enum <paramref name="type"/>: a value of the enum, its number, or its name (any case).
@@ -367,7 +375,7 @@ public static class ConventionValues
     private static object AllowedEnumValue(Type type, object? value) => value switch
     {
         _ when value?.GetType() == type => value,
-        string name when global::System.Enum.TryParse(type, name, ignoreCase: true, out var parsed) => parsed!,
+        string name when global::System.Enum.TryParse(type, name, ignoreCase: true, out var parsed) => parsed,
         sbyte or byte or short or ushort or int or uint or long or ulong => global::System.Enum.ToObject(type, value),
         _ => throw new InvalidOperationException(
             $"Phoney cannot generate values for [AllowedValues] of a {type.Name} member: '{value ?? "null"}' is not one of {string.Join(", ", global::System.Enum.GetNames(type))}. " +
@@ -415,7 +423,7 @@ public static class ConventionValues
     /// <summary>One of the <c>[AllowedValues]</c> of an enum member of a runtime type, avoiding <c>[DeniedValues]</c>.</summary>
     [RequiresDynamicCode("Generates enum values for types only known at runtime.")]
     private static object AllowedBoxedEnum(FakeScope scope, Type type, MemberConstraints c) =>
-        Avoiding(scope, c, () => AllowedEnumValue(type, scope.Faker.Random.Element(c.AllowedValues!)));
+        Avoiding(c, () => AllowedEnumValue(type, scope.Faker.Random.Element(c.AllowedValues!)));
 
     /// <summary>Random enum value for a runtime type, matching the identity for sex/gender enums.</summary>
     [RequiresDynamicCode("Reads enum values for types only known at runtime.")]
@@ -435,13 +443,13 @@ public static class ConventionValues
         }
 
         return constraints is { DeniedValues.Length: > 0 }
-            ? Avoiding(scope, constraints, () => values.GetValue(scope.Faker.Random.Index(values.Length)))
+            ? Avoiding(constraints, () => values.GetValue(scope.Faker.Random.Index(values.Length)))
             : values.GetValue(scope.Faker.Random.Index(values.Length));
     }
 
     /// <summary>Retries <paramref name="produce"/> while it returns a <c>[DeniedValues]</c> value (up to 100 attempts).</summary>
     /// <exception cref="InvalidOperationException">Every attempt gave a denied value: the annotations leave (almost) nothing to generate.</exception>
-    private static T Avoiding<T>(FakeScope scope, MemberConstraints constraints, Func<T> produce)
+    private static T Avoiding<T>(MemberConstraints constraints, Func<T> produce)
     {
         if (constraints.DeniedValues is not { Length: > 0 } denied)
             return produce();

@@ -86,7 +86,9 @@ public sealed class ExtendedMemberTypeTests
 {
     private static ObjectGenerator<T> Reflected<T>() where T : class => new ObjectGenerator<T>(new ReflectionModel<T>()).Seed(17);
 
-    private static string Json<T>(IEnumerable<T> items) => JsonSerializer.Serialize(items, new JsonSerializerOptions { IncludeFields = true });
+    private static readonly JsonSerializerOptions WithFields = new() { IncludeFields = true };
+
+    private static string Json<T>(IEnumerable<T> items) => JsonSerializer.Serialize(items, WithFields);
 
     [Test]
     [Arguments(true)]
@@ -128,7 +130,7 @@ public sealed class ExtendedMemberTypeTests
         generator.Invalid(x => x.LimitedNative).Generate(10).All(i => i.LimitedNative < 10 || i.LimitedNative > 20).ShouldBeTrue();
         generator.Boundary(x => x.Limited).Generate(10).All(i => i.Limited == 10 || i.Limited == 20).ShouldBeTrue();
         generator.Boundary(x => x.LimitedHalf).Generate(10).All(i => (double)i.LimitedHalf is 10 or 20).ShouldBeTrue();
-        generator.InvalidCases().Count().ShouldBeGreaterThanOrEqualTo(8);
+        generator.InvalidCases().Count.ShouldBeGreaterThanOrEqualTo(8);
     }
 
     [Test]

@@ -14,6 +14,9 @@ namespace Phoney.Data;
 /// </remarks>
 internal static class CultureMatcher
 {
+    /// <summary>The separators of the parts of a culture name (<c>pt-BR</c>, <c>pt_BR</c>).</summary>
+    private static readonly char[] Separators = ['-', '_'];
+
     /// <summary>Language codes .NET/CLDR use for languages faker.js files under another language code.</summary>
     private static readonly Dictionary<string, (string Language, string Script)> LanguageAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -44,22 +47,10 @@ internal static class CultureMatcher
         var bestScore = -1;
         foreach (var locale in locales)
         {
-            if (!string.Equals(locale.Language, language, StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (script is not null && !string.Equals(locale.Script, script, StringComparison.OrdinalIgnoreCase))
+            if (!Matches(locale, language, script))
                 continue;
 
-            var score = 0;
-            if (region is not null && string.Equals(locale.Country, region, StringComparison.OrdinalIgnoreCase))
-                score += 8;
-            if (script is null && DefaultScripts.TryGetValue(language, out var defaultScript)
-                && string.Equals(locale.Script, defaultScript, StringComparison.OrdinalIgnoreCase))
-                score += 4;
-            if (locale.Country is null)
-                score += 2;
-            if (!IsVariant(locale))
-                score += 1;
-
+            var score = Score(locale, language, script, region);
             if (score > bestScore || (score == bestScore && string.CompareOrdinal(locale.Code, best) < 0))
             {
                 best = locale.Code;
@@ -70,6 +61,27 @@ internal static class CultureMatcher
         return best;
     }
 
+    /// <summary>Whether <paramref name="locale"/> has the language and, when one is asked for, the script.</summary>
+    private static bool Matches(LocaleInfo locale, string language, string? script) =>
+        string.Equals(locale.Language, language, StringComparison.OrdinalIgnoreCase)
+        && (script is null || string.Equals(locale.Script, script, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>How well a matching locale fits: the region counts most, then the language's usual script, then a locale without a country, then a regular one.</summary>
+    private static int Score(LocaleInfo locale, string language, string? script, string? region)
+    {
+        var score = 0;
+        if (region is not null && string.Equals(locale.Country, region, StringComparison.OrdinalIgnoreCase))
+            score += 8;
+        if (script is null && DefaultScripts.TryGetValue(language, out var defaultScript)
+            && string.Equals(locale.Script, defaultScript, StringComparison.OrdinalIgnoreCase))
+            score += 4;
+        if (locale.Country is null)
+            score += 2;
+        if (!IsVariant(locale))
+            score += 1;
+        return score;
+    }
+
     /// <summary>
     /// Splits a culture name into language, optional script (4 letters, title case) and optional region (2 letters
     /// or 3 digits). Variant subtags are ignored and parsing stops at extensions (<c>-u-…</c>, <c>-x-…</c>).
@@ -78,7 +90,7 @@ internal static class CultureMatcher
     {
         script = null;
         region = null;
-        var parts = cultureName.Trim().Split('-', '_');
+        var parts = cultureName.Trim().Split(Separators);
         language = parts[0].ToLowerInvariant();
         if (language.Length is < 2 or > 3 || !language.All(char.IsAsciiLetter))
             return false;

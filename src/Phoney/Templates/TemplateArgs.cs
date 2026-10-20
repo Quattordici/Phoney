@@ -51,8 +51,13 @@ public sealed class TemplateArgs
     }
 
     /// <summary>Argument <paramref name="index"/> as a string, or <paramref name="fallback"/> when absent.</summary>
-    public string? String(int index, string? fallback = null) =>
-        index < _json.Length ? (_json[index].ValueKind == JsonValueKind.String ? _json[index].GetString() : _json[index].GetRawText()) : fallback;
+    public string? String(int index, string? fallback = null)
+    {
+        if (index >= _json.Length)
+            return fallback;
+        var value = _json[index];
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+    }
 
     /// <summary>
     /// Argument <paramref name="index"/> as text: the value itself when it is a plain value (<c>{{internet.mac("-")}}</c>), or the <paramref name="option"/> of an options object
@@ -171,11 +176,8 @@ public sealed class TemplateArgs
         if (index >= _json.Length)
             return null;
         var value = _json[index];
-        if (value.ValueKind == JsonValueKind.Object)
-        {
-            if (option is null || !value.TryGetProperty(option, out value))
-                return null;
-        }
+        if (value.ValueKind == JsonValueKind.Object && (option is null || !value.TryGetProperty(option, out value)))
+            return null;
 
         return value.ValueKind switch
         {

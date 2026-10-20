@@ -23,96 +23,65 @@ internal static class ConstraintReader
 
     public static Result Read(IEnumerable<AttributeData> attributes)
     {
-        var parts = new Dictionary<string, string>();
-        var order = new List<string>(); // the order the initializer is written in: first set, first written
-        void Set(string key, string value)
-        {
-            if (!parts.ContainsKey(key))
-                order.Add(key);
-            parts[key] = value;
-        }
+        var builder = new Builder();
+        foreach (var attribute in attributes)
+            builder.Add(attribute);
+        return builder.Build();
+    }
+
+    /// <summary>Collects the parts of the initializer, annotation by annotation.</summary>
+    private sealed class Builder
+    {
+        private readonly Dictionary<string, string> _parts = new();
+        private readonly List<string> _order = []; // the order the initializer is written in: first set, first written
 
         // Several length annotations all apply, so the strictest limits win, whatever order they are written in.
-        int? minLength = null, maxLength = null;
-        void Min(int value)
-        {
-            minLength = minLength is { } current && current > value ? current : value;
-            Set("MinLength", Int(minLength.Value));
-        }
+        private int? _minLength;
+        private int? _maxLength;
+        private string? _format;
+        private bool _required;
 
-        void Max(int value)
-        {
-            maxLength = maxLength is { } current && current < value ? current : value;
-            Set("MaxLength", Int(maxLength.Value));
-        }
-
-        string? format = null;
-        var required = false;
-
-        foreach (var attribute in attributes)
+        public void Add(AttributeData attribute)
         {
             var args = attribute.ConstructorArguments;
             switch (attribute.AttributeClass?.ToDisplayString())
             {
                 case Ns + "StringLengthAttribute":
-                    if (args.Length == 1 && args[0].Value is int max)
-                        Max(max);
-                    foreach (var named in attribute.NamedArguments)
-                    {
-                        if (named.Key == "MinimumLength" && named.Value.Value is int min && min > 0)
-                            Min(min);
-                    }
-
+                    AddStringLength(attribute);
                     break;
-                case Ns + "MaxLengthAttribute":
-                    if (args.Length == 1 && args[0].Value is int maxLengthValue && maxLengthValue > 0)
-                        Max(maxLengthValue);
+                case Ns + "MaxLengthAttribute" when args.Length == 1 && args[0].Value is int max && max > 0:
+                    Max(max);
                     break;
-                case Ns + "MinLengthAttribute":
-                    if (args.Length == 1 && args[0].Value is int minLengthValue)
-                        Min(minLengthValue);
+                case Ns + "MinLengthAttribute" when args.Length == 1 && args[0].Value is int min:
+                    Min(min);
                     break;
-                case Ns + "LengthAttribute":
-                    if (args.Length == 2 && args[0].Value is int lower && args[1].Value is int upper)
-                    {
-                        Min(lower);
-                        Max(upper);
-                    }
-
+                case Ns + "LengthAttribute" when args.Length == 2 && args[0].Value is int lower && args[1].Value is int upper:
+                    Min(lower);
+                    Max(upper);
                     break;
                 case Ns + "RangeAttribute":
-                    // Range(int, int), Range(double, double) or Range(Type, string, string)
-                    var bounds = args.Length == 3 ? args.Skip(1).ToArray() : args.ToArray();
-                    if (bounds.Length == 2)
-                    {
-                        Set("RangeMin", Literal(Invariant(bounds[0].Value)));
-                        Set("RangeMax", Literal(Invariant(bounds[1].Value)));
-                        foreach (var named in attribute.NamedArguments.Where(n => n.Key is "MinimumIsExclusive" or "MaximumIsExclusive" && n.Value.Value is true))
-                            Set(named.Key == "MinimumIsExclusive" ? "RangeMinExclusive" : "RangeMaxExclusive", "true");
-                    }
-
+                    AddRange(attribute);
                     break;
-                case Ns + "RegularExpressionAttribute":
-                    if (args.Length == 1 && args[0].Value is string pattern)
-                        Set("Pattern", Literal(pattern));
+                case Ns + "RegularExpressionAttribute" when args.Length == 1 && args[0].Value is string pattern:
+                    Set("Pattern", Literal(pattern));
                     break;
                 case Ns + "EmailAddressAttribute":
-                    format = "Email";
+                    _format = "Email";
                     break;
                 case Ns + "PhoneAttribute":
-                    format = "Phone";
+                    _format = "Phone";
                     break;
                 case Ns + "UrlAttribute":
-                    format = "Url";
+                    _format = "Url";
                     break;
                 case Ns + "CreditCardAttribute":
-                    format = "CreditCardNumber";
+                    _format = "CreditCardNumber";
                     break;
                 case Ns + "Base64StringAttribute":
                     Set("Base64", "true");
                     break;
                 case Ns + "RequiredAttribute":
-                    required = true;
+                    _required = true;
                     Set("Required", "true");
                     break;
                 case Ns + "AllowedValuesAttribute":
@@ -124,11 +93,55 @@ internal static class ConstraintReader
             }
         }
 
-        if (format is not null)
-            Set("Format", "global::Phoney.Generation.ConventionKind." + format);
-        var initializer = parts.Count == 0 ? null : string.Join(", ", order.Select(key => $"{key} = {parts[key]}"));
-        var definesValue = format is not null || parts.ContainsKey("Pattern") || parts.ContainsKey("RangeMin") || parts.ContainsKey("AllowedValues") || parts.ContainsKey("Base64");
-        return new Result(initializer, format, required, definesValue);
+        public Result Build()
+        {
+            if (_format is not null)
+                Set("Format", "global::Phoney.Generation.ConventionKind." + _format);
+            var initializer = _parts.Count == 0 ? null : string.Join(", ", _order.Select(key => $"{key} = {_parts[key]}"));
+            var definesValue = _format is not null || _parts.ContainsKey("Pattern") || _parts.ContainsKey("RangeMin") || _parts.ContainsKey("AllowedValues") || _parts.ContainsKey("Base64");
+            return new Result(initializer, _format, _required, definesValue);
+        }
+
+        private void AddStringLength(AttributeData attribute)
+        {
+            var args = attribute.ConstructorArguments;
+            if (args.Length == 1 && args[0].Value is int max)
+                Max(max);
+            foreach (var named in attribute.NamedArguments.Where(n => n.Key == "MinimumLength" && n.Value.Value is int and > 0))
+                Min((int)named.Value.Value!);
+        }
+
+        private void AddRange(AttributeData attribute)
+        {
+            // Two ints, two doubles, or a type and two strings: the bounds are the last two arguments.
+            var args = attribute.ConstructorArguments;
+            var bounds = args.Length == 3 ? args.Skip(1).ToArray() : args.ToArray();
+            if (bounds.Length != 2)
+                return;
+            Set("RangeMin", Literal(Invariant(bounds[0].Value)));
+            Set("RangeMax", Literal(Invariant(bounds[1].Value)));
+            foreach (var named in attribute.NamedArguments.Where(n => n.Key is "MinimumIsExclusive" or "MaximumIsExclusive" && n.Value.Value is true))
+                Set(named.Key == "MinimumIsExclusive" ? "RangeMinExclusive" : "RangeMaxExclusive", "true");
+        }
+
+        private void Set(string key, string value)
+        {
+            if (!_parts.ContainsKey(key))
+                _order.Add(key);
+            _parts[key] = value;
+        }
+
+        private void Min(int value)
+        {
+            _minLength = _minLength is { } current && current > value ? current : value;
+            Set("MinLength", Int(_minLength.Value));
+        }
+
+        private void Max(int value)
+        {
+            _maxLength = _maxLength is { } current && current < value ? current : value;
+            Set("MaxLength", Int(_maxLength.Value));
+        }
     }
 
     /// <summary><c>params object?[]</c> arguments as an <c>object[]</c> expression.</summary>

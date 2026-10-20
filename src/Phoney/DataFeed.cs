@@ -154,11 +154,8 @@ public sealed class DataFeed
     internal static string Normalize(string name)
     {
         var builder = new StringBuilder(name.Length);
-        foreach (var c in name)
-        {
-            if (char.IsLetterOrDigit(c))
-                builder.Append(char.ToLowerInvariant(c));
-        }
+        foreach (var c in name.Where(char.IsLetterOrDigit))
+            builder.Append(char.ToLowerInvariant(c));
 
         return builder.ToString();
     }
@@ -174,89 +171,110 @@ public sealed class DataFeed
     };
 
     /// <summary>Splits CSV text into records of fields, each with the line it starts on.</summary>
-    private static List<(int Line, List<string> Fields)> ReadCsv(string text, char delimiter)
+    private static List<(int Line, List<string> Fields)> ReadCsv(string text, char delimiter) => new CsvReader(text, delimiter).Read();
+
+    /// <summary>A single pass over CSV text (RFC 4180: quoted fields, doubled quotes, line breaks inside quotes, CRLF or LF).</summary>
+    private sealed class CsvReader(string text, char delimiter)
     {
-        var records = new List<(int, List<string>)>();
-        var fields = new List<string>();
-        var field = new StringBuilder();
-        var line = 1;
-        var recordLine = 1;
-        var quoteLine = 0;
-        var inQuotes = false;
-        var atFieldStart = true;
-        var quoted = false;
+        private readonly List<(int Line, List<string> Fields)> _records = [];
+        private readonly StringBuilder _field = new();
+        private List<string> _fields = [];
+        private int _position;
+        private int _line = 1;
+        private int _recordLine = 1;
+        private int _quoteLine;
+        private bool _inQuotes;
+        private bool _atFieldStart = true;
+        private bool _quoted;
 
-        for (var i = text.Length > 0 && text[0] == '﻿' ? 1 : 0; i < text.Length; i++)
+        public List<(int Line, List<string> Fields)> Read()
         {
-            var c = text[i];
-            if (inQuotes)
+            _position = text.Length > 0 && text[0] == '\uFEFF' ? 1 : 0; // a byte order mark is not data
+            while (_position < text.Length)
             {
-                if (c == '"')
-                {
-                    if (i + 1 < text.Length && text[i + 1] == '"')
-                    {
-                        field.Append('"');
-                        i++;
-                    }
-                    else
-                    {
-                        inQuotes = false;
-                    }
-                }
+                var c = text[_position++];
+                if (_inQuotes)
+                    Quoted(c);
                 else
-                {
-                    if (c == '\n')
-                        line++;
-                    field.Append(c);
-                }
-
-                continue;
+                    Plain(c);
             }
 
-            if (c == '"' && atFieldStart)
+            if (_inQuotes)
+                throw new InvalidOperationException($"The quote that opens a value on CSV line {_quoteLine} is never closed.");
+            EndRecord();
+            return _records;
+        }
+
+        /// <summary>A character inside quotes: a doubled quote is one quote, a single one closes the value.</summary>
+        private void Quoted(char c)
+        {
+            if (c != '"')
             {
-                inQuotes = quoted = true;
-                quoteLine = line;
-                atFieldStart = false;
+                if (c == '\n')
+                    _line++;
+                _field.Append(c);
             }
-            else if (c == delimiter)
+            else if (Next('"'))
             {
-                fields.Add(field.ToString());
-                field.Clear();
-                atFieldStart = true;
-                quoted = false;
-            }
-            else if (c is '\r' or '\n')
-            {
-                if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n')
-                    i++;
-                EndRecord();
-                line++;
-                recordLine = line;
+                _field.Append('"');
             }
             else
             {
-                field.Append(c);
-                atFieldStart = false;
+                _inQuotes = false;
             }
         }
 
-        if (inQuotes)
-            throw new InvalidOperationException($"The quote that opens a value on CSV line {quoteLine} is never closed.");
-        EndRecord();
-        return records;
+        /// <summary>A character outside quotes: a quote opening a value, a delimiter, a line break ending the record, or text.</summary>
+        private void Plain(char c)
+        {
+            if (c == '"' && _atFieldStart)
+            {
+                _inQuotes = _quoted = true;
+                _quoteLine = _line;
+                _atFieldStart = false;
+            }
+            else if (c == delimiter)
+            {
+                _fields.Add(_field.ToString());
+                _field.Clear();
+                _atFieldStart = true;
+                _quoted = false;
+            }
+            else if (c is '\r' or '\n')
+            {
+                if (c == '\r')
+                    Next('\n');
+                EndRecord();
+                _line++;
+                _recordLine = _line;
+            }
+            else
+            {
+                _field.Append(c);
+                _atFieldStart = false;
+            }
+        }
 
-        void EndRecord()
+        /// <summary>Consumes the next character when it is <paramref name="expected"/>.</summary>
+        private bool Next(char expected)
+        {
+            if (_position >= text.Length || text[_position] != expected)
+                return false;
+            _position++;
+            return true;
+        }
+
+        private void EndRecord()
         {
             // A line with nothing on it is not a record.
-            if (fields.Count == 0 && field.Length == 0 && !quoted)
+            if (_fields.Count == 0 && _field.Length == 0 && !_quoted)
                 return;
-            fields.Add(field.ToString());
-            records.Add((recordLine, fields));
-            fields = [];
-            field.Clear();
-            atFieldStart = true;
-            quoted = false;
+            _fields.Add(_field.ToString());
+            _records.Add((_recordLine, _fields));
+            _fields = [];
+            _field.Clear();
+            _atFieldStart = true;
+            _quoted = false;
         }
     }
 }

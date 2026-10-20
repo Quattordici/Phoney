@@ -267,7 +267,12 @@ internal static class NordicSchemes
     {
         var b = q.BirthDate;
         RequireYear(b, 1800, 2099, "Finnish henkilötunnus");
-        var sign = b.Year < 1900 ? '+' : b.Year < 2000 ? '-' : 'A';
+        var sign = b.Year switch
+        {
+            < 1900 => '+',
+            < 2000 => '-',
+            _ => 'A',
+        };
         var serial = (r.Int(1, 449) * 2) + (q.Sex == Sex.Male ? 1 : 0);
         var digits = Pad(b.Day, 2) + Pad(b.Month, 2) + Pad(b.Year % 100, 2) + Pad(serial, 3);
         return digits[..6] + sign + digits[6..] + FinnishCheckCharacters[int.Parse(digits, System.Globalization.CultureInfo.InvariantCulture) % 31];

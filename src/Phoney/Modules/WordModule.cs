@@ -78,8 +78,7 @@ public sealed class WordModule : FakerModule
     /// <summary>Returns <paramref name="count"/> space-separated words (1–3 when not given).</summary>
     public string Words(int? count = null)
     {
-        if (count is { } requested)
-            ArgumentOutOfRangeException.ThrowIfNegative(requested, nameof(count));
+        OptionalArgument.ThrowIfNegative(count);
         var n = count ?? Random.Int(1, 3);
         var words = new string[n];
         for (var i = 0; i < words.Length; i++)
@@ -127,10 +126,8 @@ internal static class WordPicker
     public static void ValidateLengths(int? minLength, int? maxLength)
     {
 #pragma warning disable S3236 // the values are unwrapped from nullables, and the exception must name the parameters
-        if (minLength is { } min)
-            ArgumentOutOfRangeException.ThrowIfNegative(min, nameof(minLength));
-        if (maxLength is { } max)
-            ArgumentOutOfRangeException.ThrowIfNegative(max, nameof(maxLength));
+        OptionalArgument.ThrowIfNegative(minLength);
+        OptionalArgument.ThrowIfNegative(maxLength);
 #pragma warning restore S3236
         if (minLength > maxLength)
             throw new ArgumentException($"The maximum length {maxLength} must be greater than or equal to the minimum length {minLength}.", nameof(maxLength));
@@ -174,31 +171,39 @@ internal static class WordPicker
             case WordLengthStrategy.Longest:
                 return PickByLength(values, random, MaxLength(values), out word);
             case WordLengthStrategy.Closest:
-            {
-                // Distance of the nearest length outside [min, max]; words at that distance on either side qualify.
-                var best = int.MaxValue;
-                foreach (var v in values)
-                    best = Math.Min(best, v.Length < min ? min - v.Length : v.Length - max);
-                var count = 0;
-                foreach (var v in values)
-                    if (Distance(v.Length, min, max) == best)
-                        count++;
-                var target = random.Index(count);
-                foreach (var v in values)
-                {
-                    if (Distance(v.Length, min, max) == best && target-- == 0)
-                    {
-                        word = v;
-                        return true;
-                    }
-                }
-
-                return false;
-            }
-
+                return PickClosest(values, random, min, max, out word);
             default:
                 return false;
         }
+    }
+
+    /// <summary>Picks uniformly among the words nearest to the length range: the distance of the nearest length outside [min, max], on either side.</summary>
+    private static bool PickClosest(string[] values, SeededRandom random, int min, int max, out string word)
+    {
+        word = "";
+#pragma warning disable S3267 // generates words: LINQ would allocate an enumerator and a closure per pass, these loops allocate nothing
+        var best = int.MaxValue;
+        foreach (var v in values)
+            best = Math.Min(best, Distance(v.Length, min, max));
+        var count = 0;
+        foreach (var v in values)
+        {
+            if (Distance(v.Length, min, max) == best)
+                count++;
+        }
+#pragma warning restore S3267
+
+        var target = random.Index(count);
+        foreach (var v in values)
+        {
+            if (Distance(v.Length, min, max) == best && target-- == 0)
+            {
+                word = v;
+                return true;
+            }
+        }
+
+        return false;
 
         static int Distance(int length, int min, int max) => length < min ? min - length : length - max;
     }
@@ -207,9 +212,14 @@ internal static class WordPicker
     private static bool PickInRange(string[] values, SeededRandom random, int min, int max, out string word)
     {
         var count = 0;
+#pragma warning disable S3267 // generates words: Count(...) would allocate an enumerator and a closure, this loop allocates nothing
         foreach (var v in values)
+        {
             if (v.Length >= min && v.Length <= max)
                 count++;
+        }
+#pragma warning restore S3267
+
         word = "";
         if (count == 0)
             return false;
