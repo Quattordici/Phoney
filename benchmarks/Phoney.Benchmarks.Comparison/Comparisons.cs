@@ -53,7 +53,7 @@ internal static class Verify
     public static string Text(string value) => string.IsNullOrWhiteSpace(value) ? throw new InvalidOperationException("The library returned an empty value.") : value;
 }
 
-// The categories are the rows of the comparison, the descriptions its columns; the "summarize" command (see Program.cs) turns the CSV reports into the README table.
+// The categories are the rows of the comparison, the descriptions its columns; the "summarize" command (Summary.cs) turns the CSV reports into the README table.
 
 /// <summary>Single values. Only libraries with a value API take part: AutoFixture, AutoBogus and NBuilder make whole objects.</summary>
 [MemoryDiagnoser]
