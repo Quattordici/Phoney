@@ -185,7 +185,7 @@ public static class PhoneyEntityTypeBuilderExtensions
             {
                 if (foreignKey.Properties.Count != 1 || foreignKey.PrincipalKey.Properties.Count != 1 || !TryMember(foreignKey.Properties[0].Name, out var index))
                     continue;
-                if (foreignKey.PrincipalEntityType.IsAssignableFrom(entityType))
+                if (foreignKey.PrincipalEntityType == entityType) // a key to a base type keeps the base's seeded rows
                 {
                     ownTable.Add((foreignKey, index));
                     continue;
@@ -213,20 +213,31 @@ public static class PhoneyEntityTypeBuilderExtensions
                 LinkToEarlierRows(foreignKey, index, random);
         }
 
+        /// <summary>
+        /// Links a key to the entity's own table to an earlier row, drawn at random. A one-to-one key (unique index) points at the row just before instead,
+        /// so no two rows share a target; when such a key is required every row points at itself.
+        /// </summary>
         private void LinkToEarlierRows(IMutableForeignKey foreignKey, int index, SeededRandom random)
         {
             if (!TryMember(foreignKey.PrincipalKey.Properties[0].Name, out var keyIndex))
                 return;
+            var nullable = foreignKey.Properties[0].IsNullable;
             var earlier = new HashSet<object>();
+            var used = new HashSet<object>();
             for (var j = 0; j < items.Count; j++)
             {
                 var value = model.Get(items[j], index);
-                if (value is not null && !earlier.Contains(value))
+                var linked = value is not null && earlier.Contains(value) && !(foreignKey.IsUnique && used.Contains(value));
+                if (value is not null && !linked)
                 {
-                    var target = j > 0 ? random.Index(j) : foreignKey.Properties[0].IsNullable ? -1 : 0;
+                    var target = foreignKey.IsUnique
+                        ? nullable ? j - 1 : j
+                        : j > 0 ? random.Index(j) : nullable ? -1 : 0;
                     items[j] = model.Set(items[j], index, target < 0 ? null : model.Get(items[target], keyIndex));
                 }
 
+                if (model.Get(items[j], index) is { } link)
+                    used.Add(link);
                 if (model.Get(items[j], keyIndex) is { } key)
                     earlier.Add(key);
             }

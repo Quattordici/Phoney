@@ -72,6 +72,14 @@ public sealed class Employee
     public Employee? Manager { get; set; }
 }
 
+/// <summary>An entity with a one-to-one link to another row of its own table, so its foreign key has a unique index.</summary>
+public sealed class Apprentice
+{
+    public int Id { get; set; }
+    public int? MentorId { get; set; }
+    public Apprentice? Mentor { get; set; }
+}
+
 public sealed class ShopContext(DbContextOptions<ShopContext> options, Action<ModelBuilder> seed) : DbContext(options)
 {
     public DbSet<Customer> Customers => Set<Customer>();
@@ -245,5 +253,24 @@ public sealed class HasFakeDataTests
         _ = context.Model;
 
         customers[0].Email.ShouldBe("abcdefghijk");
+    }
+
+    [Test]
+    public void One_to_one_foreign_keys_to_the_same_table_stay_unique()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Apprentice> apprentices = [];
+        using var context = Context(connection, mb =>
+        {
+            mb.Entity<Apprentice>().HasOne(a => a.Mentor).WithOne().HasForeignKey<Apprentice>(a => a.MentorId);
+            apprentices = mb.Entity<Apprentice>().HasFakeData(10);
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue(); // the unique index rejects two rows with the same mentor
+
+        var mentors = apprentices.Where(a => a.MentorId != null).Select(a => a.MentorId).ToList();
+        mentors.ShouldBeUnique();
+        mentors.ShouldNotBeEmpty();
     }
 }
