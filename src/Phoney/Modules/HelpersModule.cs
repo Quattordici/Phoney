@@ -59,11 +59,16 @@ public sealed partial class HelpersModule : FakerModule
         });
     }
 
-    /// <summary>Computes the Luhn check digit for <paramref name="digits"/> (an optional trailing <c>L</c> is the placeholder).</summary>
+    /// <summary>Computes the Luhn check digit for <paramref name="digits"/> (an optional trailing <c>L</c> is the placeholder; spaces and dashes are ignored).</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="digits"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="digits"/> has no digit, or a character other than a digit, space or dash.</exception>
     public static int LuhnCheckDigit(string digits)
     {
         ArgumentNullException.ThrowIfNull(digits);
-        return LuhnCheckDigit(digits.EndsWith('L') ? digits.AsSpan(0, digits.Length - 1) : digits);
+        var body = digits.EndsWith('L') ? digits.AsSpan(0, digits.Length - 1) : digits;
+        if (!IsLuhnText(body))
+            throw new ArgumentException($"A Luhn check digit is computed over digits (spaces and dashes are ignored), but got \"{digits}\".", nameof(digits));
+        return LuhnCheckDigit(body);
     }
 
     /// <summary>The digit that makes <paramref name="body"/> followed by it pass the Luhn check.</summary>
@@ -73,12 +78,18 @@ public sealed partial class HelpersModule : FakerModule
         return sum == 0 ? 0 : 10 - sum;
     }
 
-    /// <summary>Whether <paramref name="digits"/> (spaces and dashes ignored) passes the Luhn check.</summary>
+    /// <summary>Whether <paramref name="digits"/> (spaces and dashes ignored) passes the Luhn check; text without digits or with other characters doesn't.</summary>
     public static bool LuhnCheck(string digits)
     {
         ArgumentNullException.ThrowIfNull(digits);
-        return LuhnSum(digits, alternate: false) == 0;
+        return IsLuhnText(digits) && LuhnSum(digits, alternate: false) == 0;
     }
+
+    /// <summary>Whether <paramref name="text"/> has at least one digit and nothing but digits, spaces and dashes.</summary>
+    private static bool IsLuhnText(ReadOnlySpan<char> text) =>
+        text.IndexOfAnyInRange('0', '9') >= 0 && text.IndexOfAnyExcept(LuhnChars) < 0;
+
+    private static readonly System.Buffers.SearchValues<char> LuhnChars = System.Buffers.SearchValues.Create("0123456789 -");
 
     /// <summary>Turns text into a URL-friendly slug: removes diacritics, replaces spaces with dashes and drops other symbols.</summary>
     public static string Slugify(string text)

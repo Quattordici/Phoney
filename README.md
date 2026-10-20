@@ -578,7 +578,7 @@ string csv = Fake.For<Customer>().ToCsv(100, delimiter: ';', columns: ["Id", "Em
 
 ### Validation attributes
 
-Generated objects satisfy their data annotations, so they pass `Validator.TryValidateObject`, EF Core and ASP.NET Core validation. Annotations work on properties, fields and record parameters (`[property: Range(1, 5)]`).
+Generated objects satisfy their data annotations, so they pass `Validator.TryValidateObject`, EF Core and ASP.NET Core validation. Annotations work on properties, fields and record parameters (`[property: Range(1, 5)]`), and an override keeps those of the member it overrides, as the validator does (unless the attribute says `Inherited = false`; an override's own `[Range]` and other single-use annotations replace the inherited one).
 
 | Annotation | Effect |
 |---|---|
