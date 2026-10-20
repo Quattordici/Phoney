@@ -1,6 +1,8 @@
 using Phoney;
 using Phoney.Generation;
 
+namespace Phoney.Benchmarks.Comparison;
+
 /// <summary>An object with scalar members only, the kind a name convention can fill without any configuration.</summary>
 public sealed class FlatCustomer
 {

@@ -9,6 +9,8 @@ using BenchmarkDotNet.Toolchains.NativeAot;
 using Phoney;
 using Phoney.Generation;
 
+namespace Phoney.Benchmarks.Comparison;
+
 /// <summary>
 /// The job of every comparison: the same settings for each library. With the environment variable <c>PHONEY_BENCH_AOT=1</c> the job is built and run
 /// with Native AOT instead of the JIT; the instruction set is pinned because the compiler's detection of the host's (<c>native</c>) fails on CPUs with AVX-512.
@@ -72,49 +74,49 @@ public class ValueComparison
     [GlobalSetup(Targets = [nameof(FakerNetFirstName), nameof(FakerNetFullName), nameof(FakerNetEmail), nameof(FakerNetStreet), nameof(FakerNetSentence)])]
     public void SetupFakerNet() => Verify.Text(global::Faker.Name.FullName());
 
-    [BenchmarkCategory("First name"), Benchmark(Description = "Phoney")]
+    [BenchmarkCategory("First name"), Benchmark(Description = LibraryNames.Phoney)]
     public string PhoneyFirstName() => _phoney.Person.FirstName();
 
-    [BenchmarkCategory("First name"), Benchmark(Description = "Bogus")]
+    [BenchmarkCategory("First name"), Benchmark(Description = LibraryNames.Bogus)]
     public string BogusFirstName() => _bogus.Name.FirstName();
 
-    [BenchmarkCategory("First name"), Benchmark(Description = "Faker.Net")]
+    [BenchmarkCategory("First name"), Benchmark(Description = LibraryNames.FakerNet)]
     public string FakerNetFirstName() => global::Faker.Name.First();
 
-    [BenchmarkCategory("Full name"), Benchmark(Description = "Phoney")]
+    [BenchmarkCategory("Full name"), Benchmark(Description = LibraryNames.Phoney)]
     public string PhoneyFullName() => _phoney.Person.FullName();
 
-    [BenchmarkCategory("Full name"), Benchmark(Description = "Bogus")]
+    [BenchmarkCategory("Full name"), Benchmark(Description = LibraryNames.Bogus)]
     public string BogusFullName() => _bogus.Name.FullName();
 
-    [BenchmarkCategory("Full name"), Benchmark(Description = "Faker.Net")]
+    [BenchmarkCategory("Full name"), Benchmark(Description = LibraryNames.FakerNet)]
     public string FakerNetFullName() => global::Faker.Name.FullName();
 
-    [BenchmarkCategory("Email"), Benchmark(Description = "Phoney")]
+    [BenchmarkCategory("Email"), Benchmark(Description = LibraryNames.Phoney)]
     public string PhoneyEmail() => _phoney.Internet.Email();
 
-    [BenchmarkCategory("Email"), Benchmark(Description = "Bogus")]
+    [BenchmarkCategory("Email"), Benchmark(Description = LibraryNames.Bogus)]
     public string BogusEmail() => _bogus.Internet.Email();
 
-    [BenchmarkCategory("Email"), Benchmark(Description = "Faker.Net")]
+    [BenchmarkCategory("Email"), Benchmark(Description = LibraryNames.FakerNet)]
     public string FakerNetEmail() => global::Faker.Internet.Email();
 
-    [BenchmarkCategory("Street address"), Benchmark(Description = "Phoney")]
+    [BenchmarkCategory("Street address"), Benchmark(Description = LibraryNames.Phoney)]
     public string PhoneyStreet() => _phoney.Location.StreetAddress();
 
-    [BenchmarkCategory("Street address"), Benchmark(Description = "Bogus")]
+    [BenchmarkCategory("Street address"), Benchmark(Description = LibraryNames.Bogus)]
     public string BogusStreet() => _bogus.Address.StreetAddress();
 
-    [BenchmarkCategory("Street address"), Benchmark(Description = "Faker.Net")]
+    [BenchmarkCategory("Street address"), Benchmark(Description = LibraryNames.FakerNet)]
     public string FakerNetStreet() => global::Faker.Address.StreetAddress();
 
-    [BenchmarkCategory("Sentence"), Benchmark(Description = "Phoney")]
+    [BenchmarkCategory("Sentence"), Benchmark(Description = LibraryNames.Phoney)]
     public string PhoneySentence() => _phoney.Lorem.Sentence();
 
-    [BenchmarkCategory("Sentence"), Benchmark(Description = "Bogus")]
+    [BenchmarkCategory("Sentence"), Benchmark(Description = LibraryNames.Bogus)]
     public string BogusSentence() => _bogus.Lorem.Sentence();
 
-    [BenchmarkCategory("Sentence"), Benchmark(Description = "Faker.Net")]
+    [BenchmarkCategory("Sentence"), Benchmark(Description = LibraryNames.FakerNet)]
     public string FakerNetSentence() => global::Faker.Lorem.Sentence();
 }
 
@@ -173,22 +175,22 @@ public class FlatComparison
     [GlobalSetup(Target = nameof(NBuilder))]
     public void SetupNBuilder() => Verify.Flat(Libraries.NBuilderFlat(10));
 
-    [BenchmarkCategory("Flat objects"), Benchmark(Description = "Phoney (reflection)")]
+    [BenchmarkCategory("Flat objects"), Benchmark(Description = LibraryNames.PhoneyReflection)]
     public List<FlatCustomer> PhoneyReflection() => _reflection.Generate(Count);
 
-    [BenchmarkCategory("Flat objects"), Benchmark(Description = "Phoney (source generated)")]
+    [BenchmarkCategory("Flat objects"), Benchmark(Description = LibraryNames.PhoneyGenerated)]
     public List<FlatCustomer> PhoneyGenerated() => _generated.Generate(Count);
 
-    [BenchmarkCategory("Flat objects"), Benchmark(Description = "Bogus")]
+    [BenchmarkCategory("Flat objects"), Benchmark(Description = LibraryNames.Bogus)]
     public List<FlatCustomer> Bogus() => _bogus.Generate(Count);
 
-    [BenchmarkCategory("Flat objects"), Benchmark(Description = "AutoBogus")]
+    [BenchmarkCategory("Flat objects"), Benchmark(Description = LibraryNames.AutoBogus)]
     public List<FlatCustomer> AutoBogus() => _autoBogus.Generate(Count);
 
-    [BenchmarkCategory("Flat objects"), Benchmark(Description = "AutoFixture")]
+    [BenchmarkCategory("Flat objects"), Benchmark(Description = LibraryNames.AutoFixture)]
     public List<FlatCustomer> AutoFixture() => _fixture.CreateMany<FlatCustomer>(Count).ToList();
 
-    [BenchmarkCategory("Flat objects"), Benchmark(Description = "NBuilder")]
+    [BenchmarkCategory("Flat objects"), Benchmark(Description = LibraryNames.NBuilder)]
     public IList<FlatCustomer> NBuilder() => Libraries.NBuilderFlat(Count);
 }
 
@@ -247,21 +249,21 @@ public class GraphComparison
     [GlobalSetup(Target = nameof(NBuilder))]
     public void SetupNBuilder() => Verify.Graph(Libraries.NBuilderGraph(10));
 
-    [BenchmarkCategory("Object graphs"), Benchmark(Description = "Phoney (reflection)")]
+    [BenchmarkCategory("Object graphs"), Benchmark(Description = LibraryNames.PhoneyReflection)]
     public List<Shopper> PhoneyReflection() => _reflection.Generate(Count);
 
-    [BenchmarkCategory("Object graphs"), Benchmark(Description = "Phoney (source generated)")]
+    [BenchmarkCategory("Object graphs"), Benchmark(Description = LibraryNames.PhoneyGenerated)]
     public List<Shopper> PhoneyGenerated() => _generated.Generate(Count);
 
-    [BenchmarkCategory("Object graphs"), Benchmark(Description = "Bogus")]
+    [BenchmarkCategory("Object graphs"), Benchmark(Description = LibraryNames.Bogus)]
     public List<Shopper> Bogus() => _bogus.Generate(Count);
 
-    [BenchmarkCategory("Object graphs"), Benchmark(Description = "AutoBogus")]
+    [BenchmarkCategory("Object graphs"), Benchmark(Description = LibraryNames.AutoBogus)]
     public List<Shopper> AutoBogus() => _autoBogus.Generate(Count);
 
-    [BenchmarkCategory("Object graphs"), Benchmark(Description = "AutoFixture")]
+    [BenchmarkCategory("Object graphs"), Benchmark(Description = LibraryNames.AutoFixture)]
     public List<Shopper> AutoFixture() => _fixture.CreateMany<Shopper>(Count).ToList();
 
-    [BenchmarkCategory("Object graphs"), Benchmark(Description = "NBuilder (composed by hand)")]
+    [BenchmarkCategory("Object graphs"), Benchmark(Description = LibraryNames.NBuilderByHand)]
     public IList<Shopper> NBuilder() => Libraries.NBuilderGraph(Count);
 }
