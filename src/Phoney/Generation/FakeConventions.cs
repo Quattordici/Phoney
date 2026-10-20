@@ -93,6 +93,8 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
             slots[i] = new RuleSlot(RuleKind.Convention, match.Factory, unique: false, maxAttempts: 0);
         }
 
+        if (slots is not null)
+            RuleSlot.MarkCreationTimes(members, slots);
         return slots;
     }
 }

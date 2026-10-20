@@ -96,6 +96,25 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     /// <summary>Whether the produced value is kept on the scope for a <see cref="UniqueCombination"/> (a constructor parameter, which can't be read back from the object).</summary>
     public bool RecordsKeyPart { get; set; }
 
+    /// <summary>
+    /// Whether the produced value is the object's creation time (<see cref="FakeScope.Created"/>): a rule, feed or custom convention gives a "created"-style date
+    /// member its value, so the "updated" and later dates of the object are built around that value instead of a creation time drawn apart from it.
+    /// </summary>
+    public bool GivesCreated { get; private set; }
+
+    /// <summary>
+    /// Marks the slots of "created"-style date members whose values come from a rule, feed or custom convention (see <see cref="GivesCreated"/>).
+    /// Called while slots are bound, before they are shared.
+    /// </summary>
+    internal static void MarkCreationTimes(IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
+    {
+        for (var i = 0; i < slots.Length; i++)
+        {
+            if (slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Convention } slot && members[i].Convention == ConventionKind.PastDate)
+                slot.GivesCreated = true;
+        }
+    }
+
     /// <summary>Records <paramref name="value"/>; false when it was produced before.</summary>
     public bool TryClaim(object? value)
     {
@@ -159,7 +178,8 @@ public sealed class FakeScope
     /// <summary>
     /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
     /// between it and the reference date, so <c>UpdatedAt</c> is never before <c>CreatedAt</c>. With causal timelines a nested
-    /// object is created between its parent's creation and the reference date (still one draw).
+    /// object is created between its parent's creation and the reference date (still one draw). A creation time the object is
+    /// given (<see cref="GiveCreated"/>) replaces the drawn one, which is still drawn so that the values after it stay the same.
     /// </summary>
     internal DateTimeOffset Created
     {
@@ -167,9 +187,11 @@ public sealed class FakeScope
         {
             if (!_hasCreated)
             {
-                _created = Settings.CausalTimelines && _parent is { } parent
-                    ? Faker.Date.Between(parent.Created, Faker.ReferenceDate)
+                var drawn = Settings.CausalTimelines && _parent is { } parent
+                    ? Faker.Date.Between(parent.Created, Later(parent.Created, Faker.ReferenceDate))
                     : Faker.Date.Past();
+                if (!_createdGiven)
+                    _created = drawn;
                 _hasCreated = true;
             }
 
@@ -177,12 +199,43 @@ public sealed class FakeScope
         }
     }
 
+    /// <summary>The creation time the object was given (see <see cref="GiveCreated"/>), or <see langword="null"/> when it is drawn.</summary>
+    internal DateTimeOffset? GivenCreated => _createdGiven ? _created : null;
+
+    /// <summary>
+    /// Makes <paramref name="value"/> (a <see cref="DateTimeOffset"/>, <see cref="DateTime"/> or <see cref="DateOnly"/>; anything else is ignored) the object's
+    /// creation time: the value a rule gives a "created"-style member, or the one an object being populated keeps. The first one counts, and only while no
+    /// date of the object has been built around a drawn creation time yet. A <see cref="DateTime"/> that isn't local is read as UTC.
+    /// </summary>
+    private void GiveCreated<TValue>(TValue value)
+    {
+        if (_createdGiven || _hasCreated)
+            return;
+        DateTimeOffset? given = value switch
+        {
+            DateTimeOffset moment => moment,
+            DateTime { Kind: DateTimeKind.Local } local => new DateTimeOffset(local),
+            DateTime time => new DateTimeOffset(DateTime.SpecifyKind(time, DateTimeKind.Utc)),
+            DateOnly day => new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+            _ => null,
+        };
+        if (given is { } created)
+        {
+            _created = created;
+            _createdGiven = true;
+        }
+    }
+
+    /// <summary>The later of two moments.</summary>
+    internal static DateTimeOffset Later(DateTimeOffset first, DateTimeOffset second) => first > second ? first : second;
+
     /// <summary>Whether a "created"-style member already received <see cref="Created"/>.</summary>
     internal bool CreatedClaimed { get; set; }
 
     // A scope is allocated for every object, so its state is kept compact: no nullable structs, -1 for "no forced count".
     private DateTimeOffset _created;
     private bool _hasCreated;
+    private bool _createdGiven;
     private int _forcedCount = -1;
 
     /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
@@ -268,6 +321,9 @@ public sealed class FakeScope
             case ConventionKind.LastName when value is string last:
                 hints.LastName = last;
                 break;
+            case ConventionKind.PastDate:
+                GiveCreated(value); // the object's own creation time: its updated and later dates are generated after it
+                break;
             case ConventionKind.BirthDate:
                 hints.BirthDate = value switch
                 {
@@ -331,7 +387,7 @@ public sealed class FakeScope
         var slot = _slots?[member];
         if (slot is null)
             return fallback(this);
-        if (!slot.Unique && slot.Filter is null && !slot.RecordsKeyPart)
+        if (!slot.Unique && slot.Filter is null && !slot.RecordsKeyPart && !slot.GivesCreated)
             return Produce(slot, fallback);
 
         TValue value;
@@ -343,6 +399,8 @@ public sealed class FakeScope
             value = ProduceChecked(slot, fallback);
         if (slot.RecordsKeyPart)
             (_keyParts ??= [])[member] = value;
+        if (slot.GivesCreated)
+            GiveCreated(value);
         return value;
     }
 

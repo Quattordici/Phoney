@@ -218,13 +218,14 @@ public static class ConventionValues
                 return new DateTimeOffset(scope.Identity.BirthDate.ToDateTime(global::System.TimeOnly.MinValue), global::System.TimeSpan.Zero);
             case ConventionKind.RecentDate:
             {
-                // Recently, but never before the object was created.
-                var earliest = scope.Created > reference.AddDays(-30) ? scope.Created : reference.AddDays(-30);
-                return date.Between(earliest, reference);
+                // Recently, but never before the object was created (a creation time it was given may lie after the reference date).
+                var earliest = FakeScope.Later(scope.Created, reference.AddDays(-30));
+                return date.Between(earliest, FakeScope.Later(earliest, reference));
             }
 
             case ConventionKind.FutureDate:
-                return date.Future();
+                // After the reference date, and after a creation time the object was given that lies beyond it (the same single draw).
+                return scope.GivenCreated is { } given && given > reference ? date.Future(referenceDate: given) : date.Future();
             case ConventionKind.PastDate when !scope.CreatedClaimed:
                 scope.CreatedClaimed = true;
                 return scope.Created;
