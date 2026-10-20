@@ -121,7 +121,7 @@ public static partial class TemplateFunctions
     /// <summary>A date option (<c>{from: '2020-01-01'}</c>) in ISO 8601, UTC unless it has an offset.</summary>
     /// <exception cref="FormatException">The option is missing or not a date.</exception>
     private static DateTimeOffset DateOption(TemplateArgs a, string name) =>
-        a.OptionString(0, name, null) is { } text && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)
+        DateText.TryParse(a.OptionString(0, name, null), out var date)
             ? date
             : throw new FormatException($"The option '{name}' must be an ISO 8601 date such as '2020-01-01', but was '{a.OptionString(0, name, null)}'.");
 
