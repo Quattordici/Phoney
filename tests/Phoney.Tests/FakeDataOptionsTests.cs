@@ -32,6 +32,8 @@ public sealed class FakeDataOptionsTests
         date.ParamName.ShouldBe("ReferenceDate");
         date.Message.ShouldContain("2030-01-01");
         Should.Throw<ArgumentException>(() => options.ReferenceDate = "12:00"); // a time alone would take today's date, so seeds would drift
+        Should.Throw<ArgumentException>(() => options.ReferenceDate = "June 5"); // without a year, this year's
+        Should.Throw<ArgumentException>(() => options.ReferenceDate = "06/05");
         options.ReferenceDate.ShouldBeNull();
         options.ReferenceDate = "2030-01-01";
         options.ReferenceDate = null;

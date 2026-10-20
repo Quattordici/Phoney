@@ -268,4 +268,43 @@ public sealed class TemplateArgumentTests
         Parse("{{helpers.fromRegExp(it's)}}").ShouldBe("it's");
         Parse("{{helpers.fromRegExp(a:b)}}").ShouldBe("a:b");
     }
+
+    // Functions registered without options ignored any they were given, so {{airline.flightNumber({length: 9})}} gave "50" and {{color.rgb({format: 'css'})}} a hex color.
+    [Test]
+    [Arguments("{{airline.seat(5)}}", "airline.seat")]
+    [Arguments("{{person.bio({sex: 'female'})}}", "person.bio")]
+    [Arguments("{{location.city('Paris')}}", "location.city")]
+    public void A_function_without_options_rejects_arguments_instead_of_ignoring_them(string template, string function)
+    {
+        var error = Should.Throw<FormatException>(() => Parse(template));
+        error.Message.ShouldContain($"'{function}' takes no arguments");
+        Parse(template[..template.IndexOf('(', StringComparison.Ordinal)] + "()}}").ShouldNotBeNullOrEmpty();
+    }
+
+    [Test]
+    public void Flight_numbers_and_rgb_colors_read_their_options()
+    {
+        Many("{{airline.flightNumber({length: 3})}}").ShouldAllBe(n => Regex.IsMatch(n, "^[1-9][0-9]{2}$", RegexOptions.None, TimeSpan.FromSeconds(5)));
+        Many("{{airline.flightNumber({length: 2, addLeadingZeros: true})}}").ShouldAllBe(n => Regex.IsMatch(n, "^00[1-9][0-9]$", RegexOptions.None, TimeSpan.FromSeconds(5)));
+        Parse("{{color.rgb}}").ShouldBe(Faker().Color.Hex());
+        Parse("{{color.rgb({prefix: '0x', casing: 'upper'})}}").ShouldBe(Faker().Color.Hex("0x", Casing.Upper));
+        Parse("{{color.rgb({format: 'css'})}}").ShouldBe(Faker().Color.Rgb().ToCss());
+        Parse("{{color.rgb({format: 'css', includeAlpha: true})}}").ShouldBe(Faker().Color.Rgb(includeAlpha: true).ToCss());
+        Should.Throw<FormatException>(() => Parse("{{color.rgb({format: 'binary'})}}")).Message.ShouldContain("'hex' or 'css'");
+    }
+
+    [Test]
+    public void Dates_between_two_dates_are_available_in_templates()
+    {
+        var from = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var to = new DateTimeOffset(2020, 12, 31, 0, 0, 0, TimeSpan.Zero);
+        Parse("{{date.between({from: '2020-01-01', to: '2020-12-31'})}}").ShouldBe(Faker().Date.Between(from, to).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        Should.Throw<FormatException>(() => Parse("{{date.between({from: 'soon', to: '2020-12-31'})}}")).Message.ShouldContain("from");
+        Should.Throw<FormatException>(() => Parse("{{date.between({to: '2020-12-31'})}}")).Message.ShouldContain("from");
+        Should.Throw<FormatException>(() => Parse("{{date.between({from: '12:00', to: '2020-12-31'})}}")).Message.ShouldContain("from"); // a time alone would take today's date
+        Should.Throw<FormatException>(() => Parse("{{date.between({from: 'June 5', to: '2020-12-31'})}}")).Message.ShouldContain("from"); // this year
+        Should.Throw<FormatException>(() => Parse("{{date.between({from: '2020-01-01', to: '06/05'})}}")).Message.ShouldContain("to");
+        Parse("{{date.between({from: '2020-01-01T08:30:00+02:00', to: '2020-12-31 12:00'})}}").ShouldBe(
+            Faker().Date.Between(new DateTimeOffset(2020, 1, 1, 6, 30, 0, TimeSpan.Zero), new DateTimeOffset(2020, 12, 31, 12, 0, 0, TimeSpan.Zero)).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
 }
