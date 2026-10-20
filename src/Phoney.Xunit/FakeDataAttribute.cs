@@ -88,7 +88,7 @@ public sealed class FakeDataAttribute : DataAttribute
     {
         ArgumentNullException.ThrowIfNull(testMethod);
         var arguments = testMethod.GetParameters().Select(FakeArgument.From).ToList();
-        var generator = _options.CreateGenerator(arguments, $"{testMethod.DeclaringType?.FullName}.{testMethod.Name}");
+        var generator = _options.CreateGenerator(arguments, FakeDataOptions.TestName(testMethod.DeclaringType, testMethod.Name));
 
         // Rows depend on the seed and their position only, so discovery and execution see the same values.
         var rows = new List<ITheoryDataRow>(Count);

@@ -112,7 +112,7 @@ public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
         FakeDataOptions.DefaultSeed(TestName(test), arguments);
 
     /// <summary>The class and method of the test, the identity the seed is derived from.</summary>
-    private static string TestName(MethodMetadata? test) => $"{test?.Class?.Type.FullName}.{test?.Name}";
+    private static string TestName(MethodMetadata? test) => FakeDataOptions.TestName(test?.Class?.Type, test?.Name ?? "");
 
     /// <summary>
     /// Describes a parameter or property TUnit asks for, preferring its reflection info (which carries data

@@ -91,7 +91,7 @@ public sealed class FakeDataAttribute : NUnitAttribute, ITestBuilder, IImplyFixt
     {
         ArgumentNullException.ThrowIfNull(method);
         var arguments = method.GetParameters().Select(p => FakeArgument.From(p.ParameterInfo)).ToList();
-        var generator = _options.CreateGenerator(arguments, $"{method.TypeInfo.FullName}.{method.Name}");
+        var generator = _options.CreateGenerator(arguments, FakeDataOptions.TestName(method.TypeInfo.Type, method.Name));
 
         // Rows depend on the seed and their position only, so every discovery sees the same values.
         var builder = new NUnitTestCaseBuilder();

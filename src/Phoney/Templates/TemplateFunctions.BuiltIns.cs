@@ -104,6 +104,27 @@ public static partial class TemplateFunctions
     private static int Limited(int size, string name, int limit) =>
         size <= limit ? size : throw new FormatException($"The {name} {size} is too large for a template: at most {limit} (use the API for more).");
 
+    /// <summary>A function without options: arguments throw rather than being ignored, so an option Phoney doesn't have is never silently dropped.</summary>
+    private static TemplateFunction WithoutArguments(string name, Func<Faker, string> call) => (faker, a) =>
+    {
+        NoArguments(a, name);
+        return call(faker);
+    };
+
+    /// <exception cref="FormatException"><paramref name="a"/> has arguments.</exception>
+    private static void NoArguments(TemplateArgs a, string name)
+    {
+        if (a.Count > 0)
+            throw new FormatException($"'{name}' takes no arguments in a template; call the Faker API for other options.");
+    }
+
+    /// <summary>A date option (<c>{from: '2020-01-01'}</c>) in ISO 8601, UTC unless it has an offset.</summary>
+    /// <exception cref="FormatException">The option is missing or not a date.</exception>
+    private static DateTimeOffset DateOption(TemplateArgs a, string name) =>
+        DateText.TryParse(a.OptionString(0, name, null), out var date)
+            ? date
+            : throw new FormatException($"The option '{name}' must be an ISO 8601 date such as '2020-01-01', but was '{a.OptionString(0, name, null)}'.");
+
     /// <summary>The <c>sex</c> option (<c>"female"</c>/<c>"male"</c>, also as the plain argument unless <paramref name="plainAllowed"/> is off), or <see langword="null"/> when it is absent.</summary>
     /// <remarks>Values are case-insensitive, <c>f</c>/<c>m</c> are accepted, and an empty value returns <see langword="null"/>.</remarks>
     /// <exception cref="FormatException">The value is not empty or one of the accepted labels.</exception>
@@ -164,7 +185,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers string template functions, reading length, casing, exclusion and prefix options where supported.</summary>
     private static void RegisterString(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         f["string.numeric"] = (faker, a) => faker.String.Numeric(SizeOf(a, 1), a.Bool(0, "allowLeadingZeros") ?? a.Bool(1, "allowLeadingZeros") ?? true, a.OptionCharacters(0, "exclude"));
         f["string.alpha"] = (faker, a) => faker.String.Alpha(SizeOf(a, 1), CasingOf(a), a.OptionCharacters(0, "exclude"));
         f["string.alphanumeric"] = (faker, a) => faker.String.AlphaNumeric(SizeOf(a, 1), CasingOf(a), a.OptionCharacters(0, "exclude"));
@@ -182,7 +203,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers person template functions, including sex selection and supplied first and last names for full names.</summary>
     private static void RegisterPerson(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         f["person.firstName"] = (faker, a) => faker.Person.FirstName(SexOf(a));
         f["person.lastName"] = (faker, a) => faker.Person.LastName(SexOf(a));
         f["person.middleName"] = (faker, a) => faker.Person.MiddleName(SexOf(a));
@@ -203,19 +224,37 @@ public static partial class TemplateFunctions
     /// <summary>Registers location template functions, including postal-code formatting and language values as text.</summary>
     private static void RegisterLocation(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         // The address parts locale templates nest most write straight into the template's buffer; each draws what its LocationModule method draws.
         f["location.zipCode"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
             x.Random.AppendReplacedSymbols(a.String(0, "format", null) ?? x.Pick(DataKeys.LocationPostcode), ref t));
-        f["location.city"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) => x.AppendPick(DataKeys.LocationCityPattern, ref t));
-        f["location.buildingNumber"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) =>
-            x.Helpers.AppendHashRunsWithoutLeadingZero(x.Pick(DataKeys.LocationBuildingNumber), ref t));
-        f["location.street"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) => x.AppendPick(DataKeys.LocationStreetPattern, ref t));
+        f["location.city"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
+        {
+            NoArguments(a, "location.city");
+            x.AppendPick(DataKeys.LocationCityPattern, ref t);
+        });
+        f["location.buildingNumber"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
+        {
+            NoArguments(a, "location.buildingNumber");
+            x.Helpers.AppendHashRunsWithoutLeadingZero(x.Pick(DataKeys.LocationBuildingNumber), ref t);
+        });
+        f["location.street"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
+        {
+            NoArguments(a, "location.street");
+            x.AppendPick(DataKeys.LocationStreetPattern, ref t);
+        });
         f["location.streetAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
             x.AppendPick(a.Bool(0, "useFullAddress") ?? false ? DataKeys.LocationStreetAddressFull : DataKeys.LocationStreetAddressNormal, ref t));
-        f["location.postalAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) => x.AppendPick(DataKeys.LocationPostalAddress, ref t));
-        f["location.secondaryAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs _, ref TextBuilder t) =>
-            x.Helpers.AppendHashRunsWithoutLeadingZero(x.Pick(DataKeys.LocationSecondaryAddress), ref t));
+        f["location.postalAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
+        {
+            NoArguments(a, "location.postalAddress");
+            x.AppendPick(DataKeys.LocationPostalAddress, ref t);
+        });
+        f["location.secondaryAddress"] = WritingFunction.Of(static (Faker x, TemplateArgs a, ref TextBuilder t) =>
+        {
+            NoArguments(a, "location.secondaryAddress");
+            x.Helpers.AppendHashRunsWithoutLeadingZero(x.Pick(DataKeys.LocationSecondaryAddress), ref t);
+        });
         Add("location.county", x => x.Location.County());
         Add("location.country", x => x.Location.Country());
         Add("location.continent", x => x.Location.Continent());
@@ -243,7 +282,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers internet template functions and their email, username, URL, MAC, password and color options.</summary>
     private static void RegisterInternet(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         var inv = CultureInfo.InvariantCulture;
         f["internet.email"] = (faker, a) => faker.Internet.Email(a.OptionString(0, "firstName", null), a.OptionString(0, "lastName", null), a.OptionString(0, "provider", null), a.Bool(0, "allowSpecialCharacters") ?? false);
         Add("internet.exampleEmail", x => x.Internet.ExampleEmail());
@@ -279,14 +318,14 @@ public static partial class TemplateFunctions
 
     private static void RegisterPhone(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("phone.number", x => x.Phone.Number());
         Add("phone.imei", x => x.Phone.Imei());
     }
 
     private static void RegisterCompany(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("company.name", x => x.Company.Name());
         Add("company.catchPhrase", x => x.Company.CatchPhrase());
         Add("company.buzzPhrase", x => x.Company.BuzzPhrase());
@@ -301,7 +340,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers commerce template functions; price and priceText share the symbol, range and decimal-place options.</summary>
     private static void RegisterCommerce(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("commerce.department", x => x.Commerce.Department());
         Add("commerce.productName", x => x.Commerce.ProductName());
         Add("commerce.productAdjective", x => x.Commerce.ProductAdjective());
@@ -322,7 +361,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers finance template functions, including formatted amounts, optional card issuers or masks, and currency values as text.</summary>
     private static void RegisterFinance(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         f["finance.accountNumber"] = (faker, a) => faker.Finance.AccountNumber(SizeOf(a, 8));
         Add("finance.accountName", x => x.Finance.AccountName());
         Add("finance.routingNumber", x => x.Finance.RoutingNumber());
@@ -353,10 +392,11 @@ public static partial class TemplateFunctions
     /// <summary>Registers relative dates, month and weekday names, time zones, times of day and birthdates with age or year bounds.</summary>
     private static void RegisterDate(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         var inv = CultureInfo.InvariantCulture;
         Add("date.anytime", x => x.Date.Anytime().ToString("O", inv));
         f["date.past"] = (faker, a) => faker.Date.Past(a.Int(0, "years") ?? 1).ToString("O", inv);
+        f["date.between"] = (faker, a) => faker.Date.Between(DateOption(a, "from"), DateOption(a, "to")).ToString("O", inv);
         f["date.future"] = (faker, a) => faker.Date.Future(a.Int(0, "years") ?? 1).ToString("O", inv);
         f["date.recent"] = (faker, a) => faker.Date.Recent(a.Int(0, "days") ?? 1).ToString("O", inv);
         f["date.soon"] = (faker, a) => faker.Date.Soon(a.Int(0, "days") ?? 1).ToString("O", inv);
@@ -375,7 +415,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers lorem template functions with bounded counts; omitted optional counts use the module's defaults.</summary>
     private static void RegisterLorem(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         f["lorem.word"] = (faker, a) => faker.Lorem.Word(a.Int(0, "length"), a.Int(0, "length"));
         f["lorem.words"] = (faker, a) => faker.Lorem.Words(SizeOf(a, 3, "count", MaxTemplateWords));
         f["lorem.sentence"] = (faker, a) => faker.Lorem.Sentence(OptionalSizeOf(a, "count", MaxTemplateWords));
@@ -404,10 +444,15 @@ public static partial class TemplateFunctions
     /// <summary>Registers color template functions, including hex options and CSS representations of color values.</summary>
     private static void RegisterColor(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("color.human", x => x.Color.Human());
         Add("color.space", x => x.Color.Space());
-        Add("color.rgb", x => x.Color.Hex());
+        f["color.rgb"] = (faker, a) => a.OptionString(0, "format", "hex")?.ToUpperInvariant() switch
+        {
+            "HEX" => faker.Color.Hex(a.OptionString(0, "prefix", "#")!, CasingOf(a, Casing.Lower), a.Bool(0, "includeAlpha") ?? false),
+            "CSS" => faker.Color.Rgb(a.Bool(0, "includeAlpha") ?? false).ToCss(),
+            var other => throw new FormatException($"color.rgb formats a color as 'hex' or 'css' in a template, not '{other}'; Faker.Color.Rgb() returns the numbers."),
+        };
         f["color.hex"] = (faker, a) => faker.Color.Hex(a.OptionString(0, "prefix", "#")!, CasingOf(a, Casing.Lower), a.Bool(0, "includeAlpha") ?? false);
         Add("color.cmyk", x => x.Color.Cmyk().ToCss());
         Add("color.hsl", x => x.Color.Hsl().ToCss());
@@ -421,7 +466,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterAnimal(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("animal.dog", x => x.Animal.Dog());
         Add("animal.cat", x => x.Animal.Cat());
         Add("animal.snake", x => x.Animal.Snake());
@@ -442,7 +487,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterBook(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("book.author", x => x.Book.Author());
         Add("book.format", x => x.Book.Format());
         Add("book.genre", x => x.Book.Genre());
@@ -453,7 +498,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterMusic(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("music.album", x => x.Music.Album());
         Add("music.artist", x => x.Music.Artist());
         Add("music.genre", x => x.Music.Genre());
@@ -462,7 +507,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterFood(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("food.adjective", x => x.Food.Adjective());
         Add("food.description", x => x.Food.Description());
         Add("food.dish", x => x.Food.Dish());
@@ -476,7 +521,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterHacker(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("hacker.abbreviation", x => x.Hacker.Abbreviation());
         Add("hacker.adjective", x => x.Hacker.Adjective());
         Add("hacker.noun", x => x.Hacker.Noun());
@@ -487,7 +532,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterVehicle(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("vehicle.vehicle", x => x.Vehicle.Vehicle());
         Add("vehicle.manufacturer", x => x.Vehicle.Manufacturer());
         Add("vehicle.model", x => x.Vehicle.Model());
@@ -502,10 +547,10 @@ public static partial class TemplateFunctions
     /// <summary>Registers airline template functions, formatting typed values as text and aircraft types in lower case.</summary>
     private static void RegisterAirline(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("airline.recordLocator", x => x.Airline.RecordLocator());
         Add("airline.seat", x => x.Airline.Seat());
-        Add("airline.flightNumber", x => x.Airline.FlightNumber());
+        f["airline.flightNumber"] = (faker, a) => faker.Airline.FlightNumber(OptionalSizeOf(a, "length", MaxTemplateSize), a.Bool(0, "addLeadingZeros") ?? false);
         Add("airline.airline", x => x.Airline.Airline().ToString());
         Add("airline.airplane", x => x.Airline.Airplane().ToString());
         Add("airline.airport", x => x.Airline.Airport().ToString());
@@ -515,7 +560,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers chemical-element and scientific-unit template functions using the values' text representations.</summary>
     private static void RegisterScience(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("science.chemicalElement", x => x.Science.ChemicalElement().ToString());
         Add("science.unit", x => x.Science.Unit().ToString());
     }
@@ -526,7 +571,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterDatabase(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("database.column", x => x.Database.Column());
         Add("database.type", x => x.Database.Type());
         Add("database.collation", x => x.Database.Collation());
@@ -536,7 +581,7 @@ public static partial class TemplateFunctions
 
     private static void RegisterSystem(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         f["system.fileName"] = (faker, a) => faker.System.FileName(a.Int(0, "extensionCount") ?? 1);
         Add("system.commonFileName", x => x.System.CommonFileName());
         Add("system.mimeType", x => x.System.MimeType());
@@ -554,7 +599,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers Git template functions, including commit dates, log entries and a bounded SHA length.</summary>
     private static void RegisterGit(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("git.branch", x => x.Git.Branch());
         Add("git.commitMessage", x => x.Git.CommitMessage());
         Add("git.commitDate", x => x.Git.CommitDate());
@@ -565,7 +610,7 @@ public static partial class TemplateFunctions
     /// <summary>Registers image template functions for avatar URLs, photo URLs and placeholder data URIs.</summary>
     private static void RegisterImage(ConcurrentDictionary<string, TemplateFunction> f)
     {
-        void Add(string name, Func<Faker, string> call) => f[name] = (faker, _) => call(faker);
+        void Add(string name, Func<Faker, string> call) => f[name] = WithoutArguments(name, call);
         Add("image.avatar", x => x.Image.Avatar());
         Add("image.personPortrait", x => x.Image.Avatar()); // faker.js name
         Add("image.avatarGitHub", x => x.Image.AvatarGitHub());

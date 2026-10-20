@@ -295,7 +295,7 @@ TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-##
 ```
 
 - **faker.js templates work unchanged**: names are case-insensitive (`{{person.firstName}}`), and locale data paths and record fields (`{{airline.airport.iataCode}}`) work too.
-- **Options** are an options object or the plain value: `{{number.int({"min":1,"max":9})}}`, `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.mac("-")}}`. JavaScript literals, which need no escaping in a C# string, work as well: `{{number.int({min: 1, max: 9})}}`, `{{location.zipCode('#####')}}`. A wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters or a count above its limit.
+- **Options** are an options object or the plain value: `{{number.int({"min":1,"max":9})}}`, `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.mac("-")}}`. JavaScript literals, which need no escaping in a C# string, work as well: `{{number.int({min: 1, max: 9})}}`, `{{location.zipCode('#####')}}`. A wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters, a count above its limit, or an argument to a function that takes none (`{{airline.seat(5)}}`), so an option Phoney doesn't have is never silently ignored. Dates between two dates are `{{date.between({from: '2020-01-01', to: '2020-12-31'})}}`.
 - Typed results (`airline.airport`, `finance.currency`, `color.hsl`…) are written in their usual text form. `TemplateFunctions.Names` lists every function.
 
 ## Objects
@@ -779,7 +779,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 ```
 
 - The data is the same on every model build (the seed is derived from the entity name), so migrations stay stable.
-- Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys point at seeded principals (seed principals first, or link with `WithOneOf`).
+- Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys point at seeded principals (seed principals first, or link with `WithOneOf`; a key to the same table points at an earlier row).
 - Call it after the entity's other configuration, since it reads keys, maximum lengths and navigations from the model.
 
 ## NodaTime
