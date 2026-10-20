@@ -4,6 +4,8 @@ using FizzWare.NBuilder;
 using Phoney;
 using Phoney.Generation;
 
+namespace Phoney.Benchmarks.Comparison;
+
 /// <summary>
 /// How each library is set up to make the same objects, shared by the timed benchmarks and the cold start measurement. Libraries that can't
 /// infer values from member names (Bogus) get the rules a user would write; the others get the defaults a user would start with.

@@ -72,7 +72,24 @@ internal static class LocaleReader
     }
 
     /// <summary>A faker.js method name as the name of its data (<c>buildingNumber</c> → <c>building_number</c>).</summary>
-    private static string SnakeCase(string name) => string.Concat(name.Select((c, i) => char.IsAsciiLetterUpper(c) ? (i > 0 ? "_" : "") + char.ToLowerInvariant(c) : c.ToString()));
+    private static string SnakeCase(string name)
+    {
+        var text = new System.Text.StringBuilder(name.Length + 4);
+        foreach (var c in name)
+        {
+            if (!char.IsAsciiLetterUpper(c))
+            {
+                text.Append(c);
+                continue;
+            }
+
+            if (text.Length > 0)
+                text.Append('_');
+            text.Append(char.ToLowerInvariant(c));
+        }
+
+        return text.ToString();
+    }
 
     /// <summary>
     /// Removes the spaces faker.js has at the ends of a few values by mistake (<c>" بابل"</c>, <c>"রংপুর "</c>, and hy street suffixes, which their pattern already puts a space before).
@@ -136,12 +153,7 @@ internal static class LocaleReader
                 };
             }
 
-            var fields = new List<string>();
-            foreach (var item in items)
-                foreach (var property in item.EnumerateObject())
-                    if (!fields.Contains(property.Name))
-                        fields.Add(property.Name);
-
+            var fields = FieldsOf(items);
             var rows = items
                 .Select(item => (IReadOnlyList<string?>)fields
                     .Select(f => item.TryGetProperty(f, out var v) ? Scalar(v, $"{code}: {path}.{f}") : null)
@@ -160,28 +172,35 @@ internal static class LocaleReader
     /// </summary>
     private static LeafEntry MapToRecords(string group, string path, JsonElement map, string code)
     {
-        var fields = new List<string> { "key" };
-        foreach (var item in map.EnumerateObject())
-        {
-            if (item.Value.ValueKind != JsonValueKind.Object)
-                throw new InvalidDataException($"{code}: map '{path}' must contain objects, got {item.Value.ValueKind} at '{item.Name}'.");
-            foreach (var property in item.Value.EnumerateObject())
-                if (!fields.Contains(property.Name))
-                    fields.Add(property.Name);
-        }
+        var items = map.EnumerateObject().ToList();
+        var invalid = items.FindIndex(item => item.Value.ValueKind != JsonValueKind.Object);
+        if (invalid >= 0)
+            throw new InvalidDataException($"{code}: map '{path}' must contain objects, got {items[invalid].Value.ValueKind} at '{items[invalid].Name}'.");
 
-        var rows = map.EnumerateObject()
+        var fields = FieldsOf(items.Select(item => item.Value), leading: "key");
+        var rows = items
             .Select(item => (IReadOnlyList<string?>)fields
-                .Select(f => f == "key"
-                    ? item.Name
-                    : item.Value.TryGetProperty(f, out var v)
-                        ? v.ValueKind == JsonValueKind.Array
-                            ? string.Join(",", v.EnumerateArray().Select(e => Scalar(e, $"{code}: {path}.{item.Name}.{f}")))
-                            : Scalar(v, $"{code}: {path}.{item.Name}.{f}")
-                        : null)
+                .Select(f => f == "key" ? item.Name : MapCell(item.Value, f, $"{code}: {path}.{item.Name}.{f}"))
                 .ToList())
             .ToList();
         return new LeafEntry(path, group, EntryKind.Records) { Fields = fields, Rows = rows };
+    }
+
+    /// <summary>A field of a map entry as text: <c>null</c> when missing, comma-separated for an array.</summary>
+    private static string? MapCell(JsonElement entry, string field, string where)
+    {
+        if (!entry.TryGetProperty(field, out var value))
+            return null;
+        if (value.ValueKind == JsonValueKind.Array)
+            return string.Join(",", value.EnumerateArray().Select(e => Scalar(e, where)));
+        return Scalar(value, where);
+    }
+
+    /// <summary>The property names of <paramref name="objects"/>, each once in the order they first appear, after <paramref name="leading"/> when given.</summary>
+    private static List<string> FieldsOf(IEnumerable<JsonElement> objects, string? leading = null)
+    {
+        var names = objects.SelectMany(o => o.EnumerateObject()).Select(p => p.Name);
+        return (leading is null ? names : names.Prepend(leading)).Distinct(StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Whether an object key is a name (as opposed to data such as a MIME type).</summary>

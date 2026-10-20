@@ -28,20 +28,7 @@ internal static class LocaleWriter
     /// <summary>Serializes the locale's own leaves and Brotli-compresses them.</summary>
     public static byte[] Write(RawLocale locale, Catalog catalog, string fakerVersion)
     {
-        var strings = new List<string>();
-        var stringIds = new Dictionary<string, int>(StringComparer.Ordinal);
-        int Intern(string s)
-        {
-            if (!stringIds.TryGetValue(s, out var id))
-            {
-                id = strings.Count;
-                strings.Add(s);
-                stringIds.Add(s, id);
-            }
-
-            return id;
-        }
-
+        var strings = new StringTable();
         var leaves = locale.Leaves.Values.OrderBy(l => catalog.KeyIds[l.Path]).ToList();
 
         // Entries are written to a separate buffer first so the string table can precede them.
@@ -50,45 +37,7 @@ internal static class LocaleWriter
         {
             w.Write7BitEncodedInt(leaves.Count);
             foreach (var leaf in leaves)
-            {
-                w.Write7BitEncodedInt(catalog.KeyIds[leaf.Path]);
-                w.Write((byte)leaf.Kind);
-                switch (leaf.Kind)
-                {
-                    case EntryKind.Unavailable:
-                        break;
-                    case EntryKind.Strings:
-                        w.Write7BitEncodedInt(leaf.Strings.Count);
-                        foreach (var s in leaf.Strings)
-                            w.Write7BitEncodedInt(Intern(s));
-                        break;
-                    case EntryKind.Weighted:
-                        w.Write7BitEncodedInt(leaf.Strings.Count);
-                        for (var i = 0; i < leaf.Strings.Count; i++)
-                        {
-                            w.Write7BitEncodedInt(Intern(leaf.Strings[i]));
-                            w.Write7BitEncodedInt(leaf.Weights[i]);
-                        }
-
-                        break;
-                    case EntryKind.Ints:
-                        w.Write7BitEncodedInt(leaf.Ints.Count);
-                        foreach (var n in leaf.Ints)
-                            w.Write(n);
-                        break;
-                    case EntryKind.Records:
-                        w.Write7BitEncodedInt(leaf.Fields.Count);
-                        foreach (var f in leaf.Fields)
-                            w.Write7BitEncodedInt(Intern(f));
-                        w.Write7BitEncodedInt(leaf.Rows.Count);
-                        foreach (var row in leaf.Rows)
-                            foreach (var value in row)
-                                w.Write7BitEncodedInt(value is null ? 0 : Intern(value) + 1);
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Unknown kind {leaf.Kind}.");
-                }
-            }
+                WriteEntry(w, leaf, catalog.KeyIds[leaf.Path], strings);
         }
 
         using var raw = new MemoryStream();
@@ -98,8 +47,8 @@ internal static class LocaleWriter
             w.Write(FormatVersion);
             w.Write(fakerVersion);
             w.Write7BitEncodedInt(catalog.Keys.Count);
-            w.Write7BitEncodedInt(strings.Count);
-            foreach (var s in strings)
+            w.Write7BitEncodedInt(strings.Values.Count);
+            foreach (var s in strings.Values)
                 w.Write(s);
             w.Write(body.ToArray());
         }
@@ -108,5 +57,86 @@ internal static class LocaleWriter
         using (var brotli = new BrotliStream(compressed, CompressionLevel.SmallestSize, leaveOpen: true))
             brotli.Write(raw.ToArray());
         return compressed.ToArray();
+    }
+
+    /// <summary>Writes one entry: its key, its kind and the payload of that kind.</summary>
+    private static void WriteEntry(BinaryWriter w, LeafEntry leaf, int keyId, StringTable strings)
+    {
+        w.Write7BitEncodedInt(keyId);
+        w.Write((byte)leaf.Kind);
+        switch (leaf.Kind)
+        {
+            case EntryKind.Unavailable:
+                break;
+            case EntryKind.Strings:
+                WriteStrings(w, leaf, strings);
+                break;
+            case EntryKind.Weighted:
+                WriteWeighted(w, leaf, strings);
+                break;
+            case EntryKind.Ints:
+                WriteInts(w, leaf);
+                break;
+            case EntryKind.Records:
+                WriteRecords(w, leaf, strings);
+                break;
+            default:
+                throw new InvalidOperationException($"Unknown kind {leaf.Kind}.");
+        }
+    }
+
+    private static void WriteStrings(BinaryWriter w, LeafEntry leaf, StringTable strings)
+    {
+        w.Write7BitEncodedInt(leaf.Strings.Count);
+        foreach (var s in leaf.Strings)
+            w.Write7BitEncodedInt(strings.Intern(s));
+    }
+
+    private static void WriteWeighted(BinaryWriter w, LeafEntry leaf, StringTable strings)
+    {
+        w.Write7BitEncodedInt(leaf.Strings.Count);
+        for (var i = 0; i < leaf.Strings.Count; i++)
+        {
+            w.Write7BitEncodedInt(strings.Intern(leaf.Strings[i]));
+            w.Write7BitEncodedInt(leaf.Weights[i]);
+        }
+    }
+
+    private static void WriteInts(BinaryWriter w, LeafEntry leaf)
+    {
+        w.Write7BitEncodedInt(leaf.Ints.Count);
+        foreach (var n in leaf.Ints)
+            w.Write(n);
+    }
+
+    private static void WriteRecords(BinaryWriter w, LeafEntry leaf, StringTable strings)
+    {
+        w.Write7BitEncodedInt(leaf.Fields.Count);
+        foreach (var f in leaf.Fields)
+            w.Write7BitEncodedInt(strings.Intern(f));
+        w.Write7BitEncodedInt(leaf.Rows.Count);
+        foreach (var row in leaf.Rows)
+            foreach (var value in row)
+                w.Write7BitEncodedInt(value is null ? 0 : strings.Intern(value) + 1);
+    }
+
+    /// <summary>The deduplicated string table, in the order the entries first use each string.</summary>
+    private sealed class StringTable
+    {
+        private readonly Dictionary<string, int> _ids = new(StringComparer.Ordinal);
+
+        public List<string> Values { get; } = [];
+
+        public int Intern(string value)
+        {
+            if (!_ids.TryGetValue(value, out var id))
+            {
+                id = Values.Count;
+                Values.Add(value);
+                _ids.Add(value, id);
+            }
+
+            return id;
+        }
     }
 }
