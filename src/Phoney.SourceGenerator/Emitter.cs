@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.CodeAnalysis.CSharp;
 using System.Text;
 using Microsoft.CodeAnalysis;
 
@@ -161,7 +162,7 @@ internal static class Emitter
             sb.AppendLine();
             sb.Append(i2).AppendLine("{");
             foreach (var (m, index) in initializers)
-                sb.Append(i3).AppendLine($"{m.Name} = v{index},");
+                sb.Append(i3).AppendLine($"{Identifier(m.Name)} = v{index},");
             sb.Append(i2).Append('}');
         }
 
@@ -174,11 +175,11 @@ internal static class Emitter
             if (m.FillsExisting)
             {
                 // A read-only collection: the generated elements are added to the one the object holds.
-                sb.Append(i2).AppendLine($"if (scope.Include({index})) global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(o.{m.Name}, v{index});");
+                sb.Append(i2).AppendLine($"if (scope.Include({index})) global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(o.{Identifier(m.Name)}, v{index});");
                 continue;
             }
 
-            sb.Append(i2).AppendLine($"if (scope.Include({index})) o.{m.Name} = v{index};");
+            sb.Append(i2).AppendLine($"if (scope.Include({index})) o.{Identifier(m.Name)} = v{index};");
         }
 
         sb.Append(i2).AppendLine("return o;");
@@ -197,7 +198,7 @@ internal static class Emitter
                 continue;
             var assignment = m.SetterInitOnly
                 ? $"__set_{index}({(model.IsValueType ? "ref " : "")}instance, ({m.TypeName})value)"
-                : $"instance.{m.Name} = ({m.TypeName})value";
+                : $"instance.{Identifier(m.Name)} = ({m.TypeName})value";
             sb.Append(i3).AppendLine($"case {index}: {assignment}; return instance;");
         }
 
@@ -214,7 +215,7 @@ internal static class Emitter
         for (var index = 0; index < model.Members.Count; index++)
         {
             if (model.Members[index].Settable || model.Members[index].FillsExisting)
-                sb.Append(i3).AppendLine($"case {index}: return (object)instance.{model.Members[index].Name};");
+                sb.Append(i3).AppendLine($"case {index}: return (object)instance.{Identifier(model.Members[index].Name)};");
         }
 
         sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" cannot be read from an existing object.\");");
@@ -228,7 +229,7 @@ internal static class Emitter
         for (var index = 0; index < model.Members.Count; index++)
         {
             if (model.Members[index].Settable || model.Members[index].FillsExisting)
-                sb.Append(i3).AppendLine($"case {index}: return global::Phoney.Generation.FakeScope.IsUnset(instance.{model.Members[index].Name});");
+                sb.Append(i3).AppendLine($"case {index}: return global::Phoney.Generation.FakeScope.IsUnset(instance.{Identifier(model.Members[index].Name)});");
         }
 
         sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" cannot be read from an existing object.\");");
@@ -247,7 +248,7 @@ internal static class Emitter
             {
                 var m = model.Members[index];
                 if (m.FillsExisting)
-                    sb.Append(i3).AppendLine($"case {index}: global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(instance.{m.Name}, ({m.TypeName})value, replace); return;");
+                    sb.Append(i3).AppendLine($"case {index}: global::Phoney.Generation.FakeScope.AddAll<{m.FillTypeArguments}>(instance.{Identifier(m.Name)}, ({m.TypeName})value, replace); return;");
             }
 
             sb.Append(i3).AppendLine("default: throw new global::System.InvalidOperationException(__members[member].Name + \" is not a collection that is filled in place.\");");
@@ -284,6 +285,9 @@ internal static class Emitter
 
     /// <summary>The <c>scope.Get</c> call that reads member <paramref name="index"/> through the generator's rules.</summary>
     private static string Get(int index, MemberModel m) => $"scope.Get({index}, static s0 => {m.Value})";
+
+    /// <summary>The member name as C# source: a reserved keyword (<c>class</c>, <c>event</c>) needs its <c>@</c>, which the symbol's name leaves out.</summary>
+    private static string Identifier(string name) => SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None ? name : "@" + name;
 
     /// <summary>C# literal for a boolean.</summary>
     private static string Bool(bool value) => value ? "true" : "false";

@@ -672,7 +672,7 @@ var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 });
 | PHONEY008 | Warning | a rule replaces an earlier rule for the same member in the same chain, or a `WithGeneratorFor` generator / `Subtype` mapping replaces an earlier one for the same type in the same chain |
 | PHONEY009 | Error | `[FakeSubtype<TBase, TSubtype>]` names an abstract type or interface, which can't be created; the registration is left out |
 | PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
-| PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`, `Where(x => …, 0)`…) |
+| PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`, `Where(x => …, 0)`, `WithNormalDistribution(x => x.Age, 40, -5)`…) |
 | PHONEY012 | Info | `Fake.For<T>()`, `One`, `Many` or `Populate` generate a type with reflection because no `[FakeFor<T>]` covers it |
 
 The IDE fixes **PHONEY001** (make the class and its containing types `partial`) and **PHONEY012** (add `[FakeFor<T>]` to the class that already lists types, or create one). PHONEY012 is only a suggestion, since reflection is fine unless the app is trimmed or AOT compiled. The advisory rules (PHONEY004–008 and 010–012) are in the category `Phoney.Usage`, and the generator's (001–003 and 009) in `Phoney`, so you can tone down all advisory rules at once:

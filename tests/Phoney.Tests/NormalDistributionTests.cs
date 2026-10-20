@@ -281,10 +281,12 @@ public sealed class NormalDistributionTests
     [Test]
     public void Arguments_are_checked_when_the_rule_is_added()
     {
-        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, -1));
-        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, double.NaN, 1));
-        Should.Throw<ArgumentException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, 8, min: 10, max: 1));
-        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, 8, decimals: -2));
+        double negative = -1, notANumber = double.NaN, ten = 10, one = 1; // not constants: PHONEY011 reports constant mistakes at compile time
+        var tooFew = -2;
+        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, negative));
+        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, notANumber, 1));
+        Should.Throw<ArgumentException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, 8, min: ten, max: one));
+        Should.Throw<ArgumentOutOfRangeException>(() => Reflected().WithNormalDistribution(p => p.Height, 175, 8, decimals: tooFew));
         Should.Throw<ArgumentNullException>(() => Reflected().WithNormalDistribution<double>(null!, 175, 8));
     }
 }

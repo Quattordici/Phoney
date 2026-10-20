@@ -106,6 +106,31 @@ public sealed class FakeForGeneratorTests
     }
 
     [Test]
+    public void Members_named_like_keywords_compile(CancellationToken cancellationToken)
+    {
+        var (driver, output, diagnostics) = GeneratorHarness.Run("""
+            using System.Collections.Generic;
+            using Phoney.Generation;
+            public class Lesson
+            {
+                public string @class { get; set; } = "";
+                public int @event;
+                public string @namespace { get; init; } = "";
+                public required string @base { get; set; }
+                public List<string> @params { get; } = new();
+            }
+            public record Course(string @operator, int @fixed);
+            [FakeFor<Lesson>, FakeFor<Course>] public static partial class Data;
+            """);
+        diagnostics.ShouldBeEmpty();
+        output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        source.ShouldContain("o.@class = ");
+        source.ShouldContain("new global::Phoney.Generation.FakeMember(\"class\""); // the name rules and conventions see, as reflection reports it
+        source.ShouldContain("Name = \"set_namespace\"");
+    }
+
+    [Test]
     public void Non_partial_classes_are_reported()
     {
         var (_, _, diagnostics) = GeneratorHarness.Run("""
