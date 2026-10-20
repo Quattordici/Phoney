@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Phoney.Modules;
+using Phoney.Templates;
 
 namespace Phoney.Tests;
 
@@ -279,6 +280,59 @@ public sealed class TemplateArgumentTests
         var error = Should.Throw<FormatException>(() => Parse(template));
         error.Message.ShouldContain($"'{function}' takes no arguments");
         Parse(template[..template.IndexOf('(', StringComparison.Ordinal)] + "()}}").ShouldNotBeNullOrEmpty();
+    }
+
+    // Options a function doesn't read were dropped: faker.js' {{number.float({min: 10, max: 100, multipleOf: 0.25})}} gave 36.27451109122353, and a typo such as maks gave any number.
+    [Test]
+    [Arguments("{{number.float({min: 10, max: 100, multipleOf: 0.25})}}", "number.float", "multipleOf", "")]
+    [Arguments("{{number.int({min: 1, mx: 5})}}", "number.int", "mx", " Did you mean 'max'?")]
+    [Arguments("{{string.alpha({length: 3, Casing: 'upper'})}}", "string.alpha", "Casing", " Did you mean 'casing'?")]
+    [Arguments("{{color.rgb({format: 'css', casing: 'upper'})}}", "color.rgb", "casing", "")]
+    [Arguments("{{internet.email({firstName: 'Jo', surname: 'Do'})}}", "internet.email", "surname", "")]
+    public void An_option_the_function_does_not_use_is_reported(string template, string function, string option, string suggestion)
+    {
+        var error = Should.Throw<FormatException>(() => Parse(template));
+
+        error.Message.ShouldStartWith($"'{function}' doesn't use the option '{option}' in a template.{suggestion}");
+        Should.Throw<FormatException>(() => Parse(template)); // every time, not only on the first evaluation
+    }
+
+    // An option of the wrong type read as absent: {{internet.password({memorable: 'yes'})}} gave a password that isn't memorable.
+    [Test]
+    [Arguments("{{internet.password({memorable: 'yes'})}}", "memorable", "true or false")]
+    [Arguments("{{string.alpha({length: 'three'})}}", "length", "a whole number")]
+    [Arguments("{{string.alpha({length: [3]})}}", "length", "a whole number")]
+    [Arguments("{{number.float({min: 'low', max: 2})}}", "min", "a number")]
+    public void An_option_of_the_wrong_type_is_reported(string template, string option, string expected)
+    {
+        var error = Should.Throw<FormatException>(() => Parse(template));
+
+        error.Message.ShouldStartWith($"The option '{option}' must be {expected}");
+    }
+
+    [Test]
+    public void Options_given_as_numeric_text_or_null_still_work()
+    {
+        Parse("{{string.alpha({length: '4'})}}").Length.ShouldBe(4);
+        Parse("{{number.float({min: '1', max: '2'})}}").ShouldStartWith("1");
+        Parse("{{string.alpha({length: null})}}").Length.ShouldBe(1); // null is the default, as in faker.js
+    }
+
+    [Test]
+    public void Options_the_function_reads_are_accepted()
+    {
+        Parse("{{number.int({min: 1, max: 5, multipleOf: 2})}}").ShouldBeOneOf("2", "4");
+        Parse("{{number.float({min: 1, max: 2, fractionDigits: 1})}}").Length.ShouldBe(3);
+        Parse("{{internet.email({firstName: 'Jo', lastName: 'Do', provider: 'x.io', allowSpecialCharacters: false})}}").ShouldEndWith("@x.io");
+        Parse("{{helpers.slugify({a: 1})}}").ShouldNotBeEmpty(); // a plain text argument: the object is the text
+    }
+
+    [Test]
+    public void Functions_registered_by_the_user_read_their_arguments_as_they_like()
+    {
+        TemplateFunctions.Register("probe.raw", (_, a) => a.IsOptions(0) ? "options" : "plain");
+
+        Parse("{{probe.raw({anything: 1})}}").ShouldBe("options");
     }
 
     [Test]

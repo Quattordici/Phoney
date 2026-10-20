@@ -171,6 +171,9 @@ internal sealed class Template
         /// <summary>Arguments parsed once from <c>name(args)</c> expressions.</summary>
         private TemplateArgs _args = TemplateArgs.Empty;
 
+        /// <summary>The function's name as written, when it is a built-in that must use every option it is given (see <see cref="TemplateArgs.CheckOptionsRead"/>); otherwise <see langword="null"/>.</summary>
+        private string? _checkedFunction;
+
         /// <summary>Key id when the expression is a data path (<c>person.last_name.generic</c>), otherwise -1.</summary>
         private int _key = -1;
 
@@ -206,6 +209,8 @@ internal sealed class Template
                     ?? throw new FormatException($"Unknown template function '{name}' in '{{{{{expression}}}}}'.{NameSuggestions.For(name, TemplateFunctions.Names)}");
                 segment._args = TemplateArgs.Parse(expression[(parenthesis + 1)..^1]);
                 segment._writer = WritingFunction.WriterOf(segment._function);
+                if (!TemplateFunctions.IsRegisteredByUser(name))
+                    segment._checkedFunction = name; // a function of the user's own reads its arguments as it likes
                 return segment;
             }
 
@@ -232,6 +237,8 @@ internal sealed class Template
                 try
                 {
                     _writer(faker, _args, ref text);
+                    if (_checkedFunction is not null)
+                        _args.CheckOptionsRead(_checkedFunction);
                 }
                 catch (PhoneyDataUnavailableException)
                 {
@@ -289,7 +296,10 @@ internal sealed class Template
         {
             try
             {
-                return function(faker, _args);
+                var text = function(faker, _args);
+                if (_checkedFunction is not null)
+                    _args.CheckOptionsRead(_checkedFunction);
+                return text;
             }
             catch (PhoneyDataUnavailableException)
             {

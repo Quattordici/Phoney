@@ -18,6 +18,9 @@ public static partial class TemplateFunctions
 {
     private static readonly ConcurrentDictionary<string, TemplateFunction> Functions = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The names <see cref="Register"/> was called with: those functions read their arguments as they like, built-ins must use every option given.</summary>
+    private static readonly ConcurrentDictionary<string, bool> UserFunctions = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Names of all registered functions.</summary>
     public static IReadOnlyCollection<string> Names
     {
@@ -37,8 +40,12 @@ public static partial class TemplateFunctions
         if (name.Contains('(') || name.Contains('{'))
             throw new ArgumentException($"'{name}' is not a valid function name.", nameof(name));
         EnsureModuleOf(name); // the built-ins of its module go in first, so they can't replace this one later
+        UserFunctions[name] = true;
         Functions[name] = function;
     }
+
+    /// <summary>Whether the function named <paramref name="name"/> was registered with <see cref="Register"/> rather than built in.</summary>
+    internal static bool IsRegisteredByUser(string name) => UserFunctions.ContainsKey(name);
 
     /// <summary>Whether a function with this name is registered.</summary>
     public static bool Contains(string name)

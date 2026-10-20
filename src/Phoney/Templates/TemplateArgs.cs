@@ -17,7 +17,66 @@ public sealed class TemplateArgs
 
     internal static readonly TemplateArgs Empty = new([]);
 
-    private TemplateArgs(JsonElement[] json) => _json = json;
+    private TemplateArgs(JsonElement[] json)
+    {
+        _json = json;
+        _hasOptions = Array.Exists(json, e => e.ValueKind == JsonValueKind.Object);
+    }
+
+    // Built-in functions must not drop an option they don't use (a typo, or a faker.js option Phoney lacks): the options they read are noted until
+    // the first call has shown that they read every one given (see CheckOptionsRead). The arguments never change, so one call decides it.
+    private readonly bool _hasOptions;
+    private List<(int Index, string? Option)>? _read; // a null option: the whole argument was read as text; a handful of entries
+    private volatile bool _optionsChecked;
+
+    /// <summary>Notes that <paramref name="option"/> of argument <paramref name="index"/> was asked for (<see langword="null"/>: the argument as a whole).</summary>
+    private void Note(int index, string? option)
+    {
+        if (!_hasOptions || _optionsChecked || (uint)index >= (uint)_json.Length || _json[index].ValueKind != JsonValueKind.Object)
+            return;
+        var read = Volatile.Read(ref _read) ?? Interlocked.CompareExchange(ref _read, [], null) ?? _read!;
+        lock (read)
+        {
+            if (!read.Contains((index, option)))
+                read.Add((index, option));
+        }
+    }
+
+    /// <summary>
+    /// Throws when an options object has a property that the call of built-in <paramref name="function"/> just made never asked for, so it would be ignored:
+    /// <c>{{number.float({min: 1, max: 2, multipleOf: 0.25})}}</c>, or a misspelt <c>maks</c>.
+    /// </summary>
+    /// <exception cref="FormatException">An option is not used.</exception>
+    internal void CheckOptionsRead(string function)
+    {
+        if (!_hasOptions || _optionsChecked)
+            return;
+        var read = Volatile.Read(ref _read);
+        (int, string?)[] asked;
+        if (read is null)
+            asked = [];
+        else
+        {
+            lock (read)
+                asked = [.. read];
+        }
+
+        for (var index = 0; index < _json.Length; index++)
+        {
+            if (_json[index].ValueKind != JsonValueKind.Object || Array.IndexOf(asked, (index, (string?)null)) >= 0)
+                continue;
+            foreach (var property in _json[index].EnumerateObject())
+            {
+                if (Array.IndexOf(asked, (index, property.Name)) >= 0)
+                    continue;
+                var known = asked.Where(a => a.Item1 == index && a.Item2 is not null).Select(a => a.Item2!);
+                throw new FormatException(
+                    $"'{function}' doesn't use the option '{property.Name}' in a template.{Data.NameSuggestions.For(property.Name, known)} Remove it, or call the Faker API for options templates don't have.");
+            }
+        }
+
+        _optionsChecked = true;
+    }
 
     /// <summary>Number of arguments.</summary>
     public int Count => _json.Length;
@@ -55,6 +114,7 @@ public sealed class TemplateArgs
     {
         if (index >= _json.Length)
             return fallback;
+        Note(index, null);
         var value = _json[index];
         return value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
     }
@@ -70,6 +130,7 @@ public sealed class TemplateArgs
         ArgumentNullException.ThrowIfNull(option);
         if (index >= _json.Length)
             return fallback;
+        Note(index, option);
         var value = _json[index];
         if (value.ValueKind == JsonValueKind.Object && !value.TryGetProperty(option, out value))
             return fallback;
@@ -92,6 +153,7 @@ public sealed class TemplateArgs
         ArgumentNullException.ThrowIfNull(option);
         if (index >= _json.Length)
             return null;
+        Note(index, option);
         var value = _json[index];
         if (value.ValueKind == JsonValueKind.Object && !value.TryGetProperty(option, out value))
             return null;
@@ -139,6 +201,8 @@ public sealed class TemplateArgs
     /// </summary>
     public int? Int(int index, string? option = null)
     {
+        if (option is not null)
+            Note(index, option);
         // The arguments never change and templates are evaluated over and over, so each number is read from the JSON once.
         var cached = Volatile.Read(ref _ints);
         for (var entry = cached; entry is not null; entry = entry.Next)
@@ -176,26 +240,45 @@ public sealed class TemplateArgs
         if (index >= _json.Length)
             return null;
         var value = _json[index];
-        if (value.ValueKind == JsonValueKind.Object && (option is null || !value.TryGetProperty(option, out value)))
+        var named = value.ValueKind == JsonValueKind.Object;
+        if (named && (option is null || !value.TryGetProperty(option, out value)))
             return null;
 
         return value.ValueKind switch
         {
             JsonValueKind.Number => value.TryGetInt32(out var i) ? i : (int)Math.Clamp(value.GetDouble(), int.MinValue, int.MaxValue), // a cast alone is platform dependent out of range
             JsonValueKind.String when int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) => s,
+            _ when named => WrongType<int>(option!, value, "a whole number"),
             _ => null,
         };
     }
+
+    /// <summary>
+    /// An option given with a value of another type (<c>{memorable: 'yes'}</c>) would be read as absent and quietly give the default; <see langword="null"/> is absent, as in faker.js.
+    /// A plain argument is left alone: functions try their plain arguments as one type after another.
+    /// </summary>
+    /// <exception cref="FormatException">The value is not <see langword="null"/>.</exception>
+    private static T? WrongType<T>(string option, JsonElement value, string expected) where T : struct =>
+        value.ValueKind == JsonValueKind.Null ? null : throw new FormatException($"The option '{option}' must be {expected}, but is {value.GetRawText()}.");
 
     /// <summary>Argument <paramref name="index"/> as a double, or an options property when it is an object.</summary>
     public double? Double(int index, string? option = null)
     {
         if (index >= _json.Length)
             return null;
+        if (option is not null)
+            Note(index, option);
         var value = _json[index];
-        if (value.ValueKind == JsonValueKind.Object && (option is null || !value.TryGetProperty(option, out value)))
+        var named = value.ValueKind == JsonValueKind.Object;
+        if (named && (option is null || !value.TryGetProperty(option, out value)))
             return null;
-        return value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number => value.GetDouble(),
+            JsonValueKind.String when named && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) => d, // like a whole number given as text
+            _ when named => WrongType<double>(option!, value, "a number"),
+            _ => null,
+        };
     }
 
     /// <summary>Argument <paramref name="index"/> as a boolean, or an options property when it is an object.</summary>
@@ -203,13 +286,17 @@ public sealed class TemplateArgs
     {
         if (index >= _json.Length)
             return null;
+        if (option is not null)
+            Note(index, option);
         var value = _json[index];
-        if (value.ValueKind == JsonValueKind.Object && (option is null || !value.TryGetProperty(option, out value)))
+        var named = value.ValueKind == JsonValueKind.Object;
+        if (named && (option is null || !value.TryGetProperty(option, out value)))
             return null;
         return value.ValueKind switch
         {
             JsonValueKind.True => true,
             JsonValueKind.False => false,
+            _ when named => WrongType<bool>(option!, value, "true or false"),
             _ => null,
         };
     }
