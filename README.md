@@ -176,7 +176,7 @@ Fake.Locale = "fr";               // default for Fake.* and generators
 <summary>Supported locales</summary>
 
 <!-- locales:start -->
-76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`); a requested script is never substituted.
+76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`, `no` → `nb_NO`); a requested script is never substituted.
 
 | Code | Language | Native name | Falls back to |
 |---|---|---|---|
