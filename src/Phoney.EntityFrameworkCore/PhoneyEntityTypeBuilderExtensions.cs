@@ -23,7 +23,7 @@ public static class PhoneyEntityTypeBuilderExtensions
     /// so migrations don't change between builds. Navigations, owned and nested objects are left empty because
     /// <c>HasData</c> only takes scalar values; strings are cut to their configured maximum length; a single integer
     /// primary key is numbered 1…n when its values are not unique; and a foreign key that matches no seeded principal
-    /// is pointed at one (seed principals first).
+    /// is pointed at one (seed principals first; a key to the same table points at an earlier row).
     /// </para>
     /// <para>Call it after the entity's other configuration (keys, maximum lengths, owned types), which it reads.</para>
     /// </remarks>
@@ -137,7 +137,7 @@ public static class PhoneyEntityTypeBuilderExtensions
                 for (var j = 0; j < items.Count; j++)
                 {
                     if (model.Get(items[j], index) is string text && text.Length > max)
-                        items[j] = model.Set(items[j], index, text[..max]);
+                        items[j] = model.Set(items[j], index, text[..(max > 0 && char.IsHighSurrogate(text[max - 1]) ? max - 1 : max)]); // keeps a surrogate pair whole
                 }
             }
         }
@@ -173,14 +173,24 @@ public static class PhoneyEntityTypeBuilderExtensions
                 $"Seed data for {typeof(T).Name} needs unique, non-default keys, but {names} has default or duplicate values. Make it unique with .Unique(x => x.{key.Properties[0].Name}) or set it with .With(...).");
         }
 
-        /// <summary>Points single-property foreign keys that match no seeded principal at one, reproducibly.</summary>
+        /// <summary>
+        /// Points single-property foreign keys that match no seeded principal at one, reproducibly. A key to the entity's own table (<c>ManagerId</c>) points
+        /// at an earlier row, so the rows can be inserted in order; the first row gets <see langword="null"/>, or itself when the key is required.
+        /// </summary>
         public void LinkForeignKeys()
         {
             var random = new SeededRandom(seed ^ 0x5EED_F00D);
+            var ownTable = new List<(IMutableForeignKey Key, int Index)>();
             foreach (var foreignKey in entityType.GetForeignKeys())
             {
                 if (foreignKey.Properties.Count != 1 || foreignKey.PrincipalKey.Properties.Count != 1 || !TryMember(foreignKey.Properties[0].Name, out var index))
                     continue;
+                if (foreignKey.PrincipalEntityType == entityType) // a key to a base type keeps the base's seeded rows
+                {
+                    ownTable.Add((foreignKey, index));
+                    continue;
+                }
+
                 var principalName = foreignKey.PrincipalKey.Properties[0].Name;
                 var principals = foreignKey.PrincipalEntityType.GetSeedData()
                     .Select(row => row.TryGetValue(principalName, out var value) ? value : null)
@@ -192,10 +202,46 @@ public static class PhoneyEntityTypeBuilderExtensions
                 for (var j = 0; j < items.Count; j++)
                 {
                     var value = model.Get(items[j], index);
-                    if (value is null || known.Contains(value))
+                    if ((value is null && foreignKey.Properties[0].IsNullable) || (value is not null && known.Contains(value)))
                         continue; // optional and unset, or already linked
                     items[j] = model.Set(items[j], index, principals[random.Index(principals.Count)]);
                 }
+            }
+
+            // After the other keys, so their draws don't move.
+            foreach (var (foreignKey, index) in ownTable)
+                LinkToEarlierRows(foreignKey, index, random);
+        }
+
+        /// <summary>
+        /// Links a key to the entity's own table to an earlier row, drawn at random. A one-to-one key (unique index) points at the row just before instead,
+        /// so no two rows share a target; when such a key is required every row points at itself.
+        /// </summary>
+        private void LinkToEarlierRows(IMutableForeignKey foreignKey, int index, SeededRandom random)
+        {
+            if (!TryMember(foreignKey.PrincipalKey.Properties[0].Name, out var keyIndex))
+                return;
+            var nullable = foreignKey.Properties[0].IsNullable;
+            // Rows an earlier HasFakeData call for this entity seeded are valid targets too.
+            var keyName = foreignKey.PrincipalKey.Properties[0].Name;
+            var earlier = entityType.GetSeedData().Select(row => row.TryGetValue(keyName, out var key) ? key : null).OfType<object>().ToHashSet();
+            var used = new HashSet<object>();
+            for (var j = 0; j < items.Count; j++)
+            {
+                var value = model.Get(items[j], index);
+                var linked = value is not null && earlier.Contains(value) && !(foreignKey.IsUnique && used.Contains(value));
+                if ((value is not null || !nullable) && !linked) // a required key needs a target even when its CLR type allowed a null
+                {
+                    var target = foreignKey.IsUnique
+                        ? nullable ? j - 1 : j
+                        : j > 0 ? random.Index(j) : nullable ? -1 : 0;
+                    items[j] = model.Set(items[j], index, target < 0 ? null : model.Get(items[target], keyIndex));
+                }
+
+                if (model.Get(items[j], index) is { } link)
+                    used.Add(link);
+                if (model.Get(items[j], keyIndex) is { } key)
+                    earlier.Add(key);
             }
         }
 

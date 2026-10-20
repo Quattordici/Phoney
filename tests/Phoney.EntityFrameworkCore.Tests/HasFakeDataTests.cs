@@ -63,6 +63,31 @@ public sealed class Book
     public Author? Author { get; set; }
 }
 
+/// <summary>An entity that refers to another row of its own table.</summary>
+public sealed class Employee
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int? ManagerId { get; set; }
+    public Employee? Manager { get; set; }
+}
+
+/// <summary>An entity with a one-to-one link to another row of its own table, so its foreign key has a unique index.</summary>
+public sealed class Apprentice
+{
+    public int Id { get; set; }
+    public int? MentorId { get; set; }
+    public Apprentice? Mentor { get; set; }
+}
+
+/// <summary>An entity whose link to its own table is required although the CLR property is nullable.</summary>
+public sealed class Crew
+{
+    public int Id { get; set; }
+    public int? LeadId { get; set; }
+    public Crew? Lead { get; set; }
+}
+
 public sealed class ShopContext(DbContextOptions<ShopContext> options, Action<ModelBuilder> seed) : DbContext(options)
 {
     public DbSet<Customer> Customers => Set<Customer>();
@@ -203,5 +228,95 @@ public sealed class HasFakeDataTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         using var context = Context(connection, mb => mb.Entity<Customer>().HasFakeData(-1));
         Should.Throw<ArgumentOutOfRangeException>(() => context.Model);
+    }
+
+    [Test]
+    public void Foreign_keys_to_the_same_table_point_at_an_earlier_seeded_row()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Employee> employees = [];
+        using var context = Context(connection, mb =>
+        {
+            mb.Entity<Employee>().HasOne(e => e.Manager).WithMany().HasForeignKey(e => e.ManagerId);
+            employees = mb.Entity<Employee>().HasFakeData(10);
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue();
+
+        context.Set<Employee>().Count().ShouldBe(10);
+        employees[0].ManagerId.ShouldBeNull(); // the first row has no earlier one to refer to
+        for (var i = 1; i < employees.Count; i++)
+            employees[i].ManagerId.ShouldBeOneOf([null, .. employees.Take(i).Select(e => (int?)e.Id)]);
+        employees.Skip(1).ShouldContain(e => e.ManagerId != null);
+    }
+
+    [Test]
+    public void Strings_are_cut_without_splitting_a_surrogate_pair()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        IReadOnlyList<Customer> customers = [];
+        using var context = Context(connection, mb => customers = mb.Entity<Customer>().HasFakeData(1, g => g.With(c => c.Email, "abcdefghijk\U0001F600")));
+
+        _ = context.Model;
+
+        customers[0].Email.ShouldBe("abcdefghijk");
+    }
+
+    [Test]
+    public void One_to_one_foreign_keys_to_the_same_table_stay_unique()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Apprentice> apprentices = [];
+        using var context = Context(connection, mb =>
+        {
+            mb.Entity<Apprentice>().HasOne(a => a.Mentor).WithOne().HasForeignKey<Apprentice>(a => a.MentorId);
+            apprentices = mb.Entity<Apprentice>().HasFakeData(10);
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue(); // the unique index rejects two rows with the same mentor
+
+        var mentors = apprentices.Where(a => a.MentorId != null).Select(a => a.MentorId).ToList();
+        mentors.ShouldBeUnique();
+        mentors.ShouldNotBeEmpty();
+    }
+
+    [Test]
+    public void Required_links_to_the_same_table_are_set_even_when_the_generated_value_is_null()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Crew> crews = [];
+        using var context = Context(connection, mb =>
+        {
+            mb.Entity<Crew>().HasOne(c => c.Lead).WithMany().HasForeignKey(c => c.LeadId).IsRequired();
+            crews = mb.Entity<Crew>().HasFakeData(6, g => g.With(c => c.LeadId, (int?)null));
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue(); // a null in the required column would fail
+
+        crews[0].LeadId.ShouldBe(crews[0].Id); // the first row can only point at itself
+        for (var i = 1; i < crews.Count; i++)
+            crews[i].LeadId.ShouldBeOneOf([.. crews.Take(i).Select(c => (int?)c.Id)]);
+    }
+
+    [Test]
+    public void Links_to_rows_of_an_earlier_call_for_the_same_table_are_kept()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Employee> second = [];
+        using var context = Context(connection, mb =>
+        {
+            mb.Entity<Employee>().HasOne(e => e.Manager).WithMany().HasForeignKey(e => e.ManagerId);
+            mb.Entity<Employee>().HasFakeData(3);
+            second = mb.Entity<Employee>().HasFakeData(3, g => g.Sequence(e => e.Id, i => (int)i + 100).With(e => e.ManagerId, (int?)1));
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue();
+
+        second.ShouldAllBe(e => e.ManagerId == 1);
+        context.Set<Employee>().Count().ShouldBe(6);
     }
 }

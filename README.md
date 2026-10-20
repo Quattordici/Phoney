@@ -779,7 +779,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 ```
 
 - The data is the same on every model build (the seed is derived from the entity name), so migrations stay stable.
-- Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys point at seeded principals (seed principals first, or link with `WithOneOf`).
+- Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys point at seeded principals (seed principals first, or link with `WithOneOf`; a key to the same table points at an earlier row).
 - Call it after the entity's other configuration, since it reads keys, maximum lengths and navigations from the model.
 
 ## NodaTime
