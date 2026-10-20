@@ -302,5 +302,9 @@ public sealed class TemplateArgumentTests
         Should.Throw<FormatException>(() => Parse("{{date.between({from: 'soon', to: '2020-12-31'})}}")).Message.ShouldContain("from");
         Should.Throw<FormatException>(() => Parse("{{date.between({to: '2020-12-31'})}}")).Message.ShouldContain("from");
         Should.Throw<FormatException>(() => Parse("{{date.between({from: '12:00', to: '2020-12-31'})}}")).Message.ShouldContain("from"); // a time alone would take today's date
+        Should.Throw<FormatException>(() => Parse("{{date.between({from: 'June 5', to: '2020-12-31'})}}")).Message.ShouldContain("from"); // this year
+        Should.Throw<FormatException>(() => Parse("{{date.between({from: '2020-01-01', to: '06/05'})}}")).Message.ShouldContain("to");
+        Parse("{{date.between({from: '2020-01-01T08:30:00+02:00', to: '2020-12-31 12:00'})}}").ShouldBe(
+            Faker().Date.Between(new DateTimeOffset(2020, 1, 1, 6, 30, 0, TimeSpan.Zero), new DateTimeOffset(2020, 12, 31, 12, 0, 0, TimeSpan.Zero)).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
     }
 }
