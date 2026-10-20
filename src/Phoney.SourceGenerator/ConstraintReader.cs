@@ -154,23 +154,22 @@ internal static class ConstraintReader
 
         private static string Literal(string? value) =>
             value is null ? "null" : "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+        private static string Constant(TypedConstant constant)
+        {
+            if (constant.IsNull)
+                return "null";
+            if (constant.Type is { TypeKind: TypeKind.Enum } enumType)
+                return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){Invariant(constant.Value)}";
+            return constant.ToCSharpString();
+        }
+
+        private static string? Invariant(object? value) => value switch
+        {
+            null => null,
+            double d => d.ToString("R", CultureInfo.InvariantCulture),
+            System.IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+            _ => value.ToString(),
+        };
     }
-
-    private static string Constant(TypedConstant constant)
-    {
-        if (constant.IsNull)
-            return "null";
-        if (constant.Type is { TypeKind: TypeKind.Enum } enumType)
-            return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){Invariant(constant.Value)}";
-        return constant.ToCSharpString();
-    }
-
-    private static string? Invariant(object? value) => value switch
-    {
-        null => null,
-        double d => d.ToString("R", CultureInfo.InvariantCulture),
-        System.IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
-        _ => value.ToString(),
-    };
-
 }
