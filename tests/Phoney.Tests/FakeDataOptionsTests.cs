@@ -27,6 +27,13 @@ public sealed class FakeDataOptionsTests
         Should.Throw<ArgumentOutOfRangeException>(() => options.Count = 0).ParamName.ShouldBe("Count");
         Should.Throw<ArgumentOutOfRangeException>(() => options.NullProbability = 1.5).ParamName.ShouldBe("NullProbability");
         Should.Throw<ArgumentOutOfRangeException>(() => options.NullProbability = -0.1);
+        Should.Throw<ArgumentOutOfRangeException>(() => options.NullProbability = double.NaN);
+        var date = Should.Throw<ArgumentException>(() => options.ReferenceDate = "next tuesday");
+        date.ParamName.ShouldBe("ReferenceDate");
+        date.Message.ShouldContain("2030-01-01");
+        options.ReferenceDate.ShouldBeNull();
+        options.ReferenceDate = "2030-01-01";
+        options.ReferenceDate = null;
         Should.Throw<ArgumentNullException>(() => options.CreateGenerator(null!, "T.M"));
         Should.Throw<ArgumentException>(() => options.CreateGenerator(Arguments, " "));
     }
@@ -40,6 +47,21 @@ public sealed class FakeDataOptionsTests
         FakeDataOptions.DefaultSeed("Shop.OrderTests.Places_order", Arguments).ShouldNotBe(FakeDataOptions.DefaultSeed("Shop.OrderTests.Places_order", [Arguments[0]]));
         FakeDataOptions.DefaultSeed("Shop.OrderTests.Places_order", Arguments).ShouldBe(-1706052241072025365L);
     }
+
+    [Test]
+    public void The_default_seed_of_generic_types_does_not_depend_on_assembly_versions()
+    {
+        // FullName puts "System.Private.CoreLib, Version=…" in type arguments, which differs between .NET 8 and .NET 10 (CI runs both) and with every release.
+        FakeArgument[] arguments = [new("quantity", typeof(int?)), new("emails", typeof(List<string>)), new("scores", typeof(Dictionary<string, int[]>[]))];
+        FakeDataOptions.DefaultSeed("Shop.OrderTests.Places_order", arguments).ShouldBe(PinnedGenericSeed);
+        FakeDataOptions.StableName(typeof(Dictionary<string, int[]>[])).ShouldBe("System.Collections.Generic.Dictionary`2[[System.String],[System.Int32[]]][]");
+        FakeDataOptions.TestName(typeof(GenericTests<int>), "Runs").ShouldBe("Phoney.Tests.FakeDataOptionsTests+GenericTests`1[[System.Int32]].Runs");
+        FakeDataOptions.TestName(typeof(FakeDataOptionsTests), "Runs").ShouldBe("Phoney.Tests.FakeDataOptionsTests.Runs");
+    }
+
+    private const long PinnedGenericSeed = 3979569184680146208L; // also computed in Python from the identity string with the version-free names
+
+    private sealed class GenericTests<T>;
 
     [Test]
     public void An_explicit_seed_wins_and_the_environment_seed_moves_the_derived_one()

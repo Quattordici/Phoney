@@ -63,6 +63,15 @@ public sealed class Book
     public Author? Author { get; set; }
 }
 
+/// <summary>An entity that refers to another row of its own table.</summary>
+public sealed class Employee
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int? ManagerId { get; set; }
+    public Employee? Manager { get; set; }
+}
+
 public sealed class ShopContext(DbContextOptions<ShopContext> options, Action<ModelBuilder> seed) : DbContext(options)
 {
     public DbSet<Customer> Customers => Set<Customer>();
@@ -203,5 +212,38 @@ public sealed class HasFakeDataTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         using var context = Context(connection, mb => mb.Entity<Customer>().HasFakeData(-1));
         Should.Throw<ArgumentOutOfRangeException>(() => context.Model);
+    }
+
+    [Test]
+    public void Foreign_keys_to_the_same_table_point_at_an_earlier_seeded_row()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Employee> employees = [];
+        using var context = Context(connection, mb =>
+        {
+            mb.Entity<Employee>().HasOne(e => e.Manager).WithMany().HasForeignKey(e => e.ManagerId);
+            employees = mb.Entity<Employee>().HasFakeData(10);
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue();
+
+        context.Set<Employee>().Count().ShouldBe(10);
+        employees[0].ManagerId.ShouldBeNull(); // the first row has no earlier one to refer to
+        for (var i = 1; i < employees.Count; i++)
+            employees[i].ManagerId.ShouldBeOneOf([null, .. employees.Take(i).Select(e => (int?)e.Id)]);
+        employees.Skip(1).ShouldContain(e => e.ManagerId != null);
+    }
+
+    [Test]
+    public void Strings_are_cut_without_splitting_a_surrogate_pair()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        IReadOnlyList<Customer> customers = [];
+        using var context = Context(connection, mb => customers = mb.Entity<Customer>().HasFakeData(1, g => g.With(c => c.Email, "abcdefghijk\U0001F600")));
+
+        _ = context.Model;
+
+        customers[0].Email.ShouldBe("abcdefghijk");
     }
 }
