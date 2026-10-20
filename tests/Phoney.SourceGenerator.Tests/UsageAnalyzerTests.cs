@@ -617,4 +617,21 @@ public sealed class UsageAnalyzerTests
         diagnostics.Select(TextOf).ShouldBe(["-1", "2", "1"], ignoreOrder: true);
         diagnostics.Single(d => TextOf(d) == "2").GetMessage().ShouldContain("at least 5");
     }
+
+    [Test]
+    public async Task Constant_arguments_of_a_normal_distribution_are_checked(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY011", """
+            public static object A() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, -1);
+            public static object B() => Fake.For<Product>().WithNormalDistribution(p => p.Price, double.NaN, 2);
+            public static object C() => Fake.For<Product>().WithNormalDistribution(p => p.Id, 10, double.PositiveInfinity);
+            public static object D() => Fake.For<Product>().WithNormalDistribution(p => p.Id, 10, 2, min: 5, max: 1);
+            public static object E() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2, decimals: 16);
+            public static object F() => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 2, min: double.NaN);
+            public static object G(double sd) => Fake.For<Product>().WithNormalDistribution(p => p.Price, 10, 0).WithNormalDistribution(p => p.Id, 10, 2, 0, 20, 0).WithNormalDistribution(p => p.Price, -5, sd, max: 3, decimals: 15);
+            """, cancellationToken);
+
+        diagnostics.Select(TextOf).ShouldBe(["-1", "double.NaN", "double.PositiveInfinity", "max: 1", "decimals: 16", "min: double.NaN"], ignoreOrder: true);
+        diagnostics.Single(d => TextOf(d) == "max: 1").GetMessage().ShouldContain("at least 5");
+    }
 }

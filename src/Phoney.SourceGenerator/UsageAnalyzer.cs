@@ -139,8 +139,20 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             case UniqueMethod or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
                 break;
+            case "WithNormalDistribution": // NumberModule.ValidateNormal
+                Check(context, call, "mean", IsFinite, "to be finite");
+                Check(context, call, "standardDeviation", v => IsFinite(v) && v >= 0, "to be finite and not negative");
+                Check(context, call, "min", v => !double.IsNaN(v), "to be a number");
+                Check(context, call, "max", v => !double.IsNaN(v), "to be a number");
+                if (Constant(call, "min") is { } lowest && !double.IsNaN(lowest))
+                    Check(context, call, "max", v => double.IsNaN(v) || v >= lowest, $"at least {lowest.ToString(CultureInfo.InvariantCulture)} (the minimum)");
+                Check(context, call, "decimals", v => v is >= 0 and <= 15, "between 0 and 15");
+                break;
         }
     }
+
+    /// <summary><c>double.IsFinite</c>, which netstandard2.0 lacks.</summary>
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static void Check(OperationAnalysisContext context, IInvocationOperation call, string parameter, Func<double, bool> valid, string expected)
     {
@@ -156,11 +168,17 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static IArgumentOperation? Argument(IInvocationOperation call, string parameter) =>
         call.Arguments.FirstOrDefault(a => a.Parameter?.Name == parameter && a.ArgumentKind != ArgumentKind.DefaultValue);
 
-    /// <summary>The numeric constant passed for <paramref name="parameter"/>, or <see langword="null"/>.</summary>
-    private static double? Constant(IInvocationOperation call, string parameter) =>
-        call.Arguments.FirstOrDefault(a => a.Parameter?.Name == parameter)?.Value.ConstantValue is { HasValue: true, Value: IConvertible value } && value is not (string or bool or char)
-            ? value.ToDouble(CultureInfo.InvariantCulture)
+    /// <summary>The numeric constant passed for <paramref name="parameter"/> (also to a nullable parameter, <c>min: 5</c>), or <see langword="null"/>.</summary>
+    private static double? Constant(IInvocationOperation call, string parameter)
+    {
+        var value = call.Arguments.FirstOrDefault(a => a.Parameter?.Name == parameter)?.Value;
+        // A constant converted to a nullable type is not a constant itself; its operand is.
+        while (value is IConversionOperation { ConstantValue.HasValue: false } conversion)
+            value = conversion.Operand;
+        return value?.ConstantValue is { HasValue: true, Value: IConvertible number } && number is not (string or bool or char)
+            ? number.ToDouble(CultureInfo.InvariantCulture)
             : null;
+    }
 
     /// <summary>PHONEY005: a configuration method's new generator is dropped, so the call changes nothing.</summary>
     private static void CheckDiscarded(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)

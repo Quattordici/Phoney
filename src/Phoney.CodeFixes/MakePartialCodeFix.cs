@@ -16,6 +16,9 @@ namespace Phoney.CodeFixes;
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(MakePartialCodeFix)), Shared]
 public sealed class MakePartialCodeFix : CodeFixProvider
 {
+    /// <summary>One key for every class, so "Fix all" applies the fix to all of them rather than only to classes with the same name.</summary>
+    private const string EquivalenceKey = "Phoney.MakePartial";
+
     /// <inheritdoc />
     public override ImmutableArray<string> FixableDiagnosticIds { get; } = ImmutableArray.Create("PHONEY001");
 
@@ -34,7 +37,7 @@ public sealed class MakePartialCodeFix : CodeFixProvider
             ? $"Make '{declaration.Identifier.ValueText}' and its containing types partial"
             : $"Make '{declaration.Identifier.ValueText}' partial";
         context.RegisterCodeFix(
-            CodeAction.Create(title, ct => MakePartialAsync(context.Document, declaration, ct), equivalenceKey: title),
+            CodeAction.Create(title, ct => MakePartialAsync(context.Document, declaration, ct), equivalenceKey: EquivalenceKey),
             context.Diagnostics);
     }
 

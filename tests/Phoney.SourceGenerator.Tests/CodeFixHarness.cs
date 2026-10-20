@@ -63,4 +63,32 @@ internal static class CodeFixHarness
 
         return fixes;
     }
+
+    /// <summary>Applies the provider's fix-all to every diagnostic in <paramref name="diagnostics"/>, starting from the fix offered for the first one, as the IDE's "Fix all in document" does.</summary>
+    public static async Task<Project> FixAll(Project project, CodeFixProvider provider, ImmutableArray<Diagnostic> diagnostics, CancellationToken cancellationToken)
+    {
+        var first = diagnostics[0];
+        var document = project.GetDocument(first.Location.SourceTree)!;
+        var actions = new List<CodeAction>();
+        await provider.RegisterCodeFixesAsync(new CodeFixContext(document, first, (action, _) => actions.Add(action), cancellationToken));
+
+        var context = new FixAllContext(
+            document, provider, FixAllScope.Document, actions.Single().EquivalenceKey, [first.Id], new FixedDiagnostics(diagnostics), cancellationToken);
+        var action = (await provider.GetFixAllProvider()!.GetFixAsync(context))!;
+        var operations = await action.GetOperationsAsync(cancellationToken);
+        return operations.OfType<ApplyChangesOperation>().Single().ChangedSolution.GetProject(project.Id)!;
+    }
+
+    /// <summary>Hands the fix-all the diagnostics a test made, in place of running the generator that reports them.</summary>
+    private sealed class FixedDiagnostics(ImmutableArray<Diagnostic> diagnostics) : FixAllContext.DiagnosticProvider
+    {
+        public override Task<IEnumerable<Diagnostic>> GetDocumentDiagnosticsAsync(Document document, CancellationToken cancellationToken) =>
+            Task.FromResult(diagnostics.Where(d => d.Location.SourceTree == document.GetSyntaxTreeAsync(cancellationToken).Result));
+
+        public override Task<IEnumerable<Diagnostic>> GetProjectDiagnosticsAsync(Project project, CancellationToken cancellationToken) =>
+            Task.FromResult(Enumerable.Empty<Diagnostic>());
+
+        public override Task<IEnumerable<Diagnostic>> GetAllDiagnosticsAsync(Project project, CancellationToken cancellationToken) =>
+            Task.FromResult<IEnumerable<Diagnostic>>(diagnostics);
+    }
 }

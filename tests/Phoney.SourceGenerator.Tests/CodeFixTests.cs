@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Phoney.CodeFixes;
 
@@ -136,6 +137,32 @@ public sealed class CodeFixTests
         text.ShouldContain("public static partial class Data");
         text.ShouldContain("public class Outer");
         fix.Title.ShouldBe("Make 'Data' and its containing types partial");
+    }
+
+    [Test]
+    public async Task MakePartial_fixes_every_class_of_a_document_at_once(CancellationToken cancellationToken)
+    {
+        var project = CodeFixHarness.CreateProject(
+            ("Models.cs", Models),
+            ("Data.cs", """
+                using Phoney.Generation;
+                [FakeFor<Shop.Order>] public static class First { }
+                [FakeFor<Shop.Product>] public static class Second { }
+                public static class Wrapper
+                {
+                    [FakeFor<Shop.Order>] public static class Inner { }
+                    [FakeFor<Shop.Address>] public static class Other { }
+                }
+                """));
+        var diagnostics = ImmutableArray.Create(
+            NotPartialAt(project, "Data.cs", "First"), NotPartialAt(project, "Data.cs", "Second"), NotPartialAt(project, "Data.cs", "Inner"), NotPartialAt(project, "Data.cs", "Other"));
+
+        var fixedProject = await CodeFixHarness.FixAll(project, new MakePartialCodeFix(), diagnostics, cancellationToken);
+
+        var text = (await fixedProject.Documents.Single(d => d.Name == "Data.cs").GetTextAsync(cancellationToken)).ToString();
+        foreach (var name in new[] { "First", "Second", "Wrapper", "Inner", "Other" })
+            text.ShouldContain($"public static partial class {name}");
+        text.ShouldNotContain("partial partial");
     }
 
     /// <summary>The PHONEY001 diagnostic the generator reports on the identifier of the class.</summary>
