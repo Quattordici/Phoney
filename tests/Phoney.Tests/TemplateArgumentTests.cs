@@ -313,9 +313,9 @@ public sealed class TemplateArgumentTests
     [Test]
     public void Options_given_as_numeric_text_or_null_still_work()
     {
-        Parse("{{string.alpha({length: '4'})}}").Length.ShouldBe(4);
-        Parse("{{number.float({min: '1', max: '2'})}}").ShouldStartWith("1");
-        Parse("{{string.alpha({length: null})}}").Length.ShouldBe(1); // null is the default, as in faker.js
+        Parse("{{string.alpha({length: '4'})}}").ShouldBe(Parse("{{string.alpha({length: 4})}}"));
+        Parse("{{number.float({min: '1', max: '2'})}}").ShouldBe(Parse("{{number.float({min: 1, max: 2})}}"));
+        Parse("{{string.alpha({length: null})}}").ShouldBe(Parse("{{string.alpha}}")); // null is the default, as in faker.js
     }
 
     [Test]

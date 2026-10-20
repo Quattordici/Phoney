@@ -18,7 +18,16 @@ public sealed class IssueNote
     public string Text { get; set; } = "";
 }
 
+/// <summary>Declares its updated date before its creation date.</summary>
+public sealed class Revision
+{
+    public DateTime UpdatedAt { get; set; }
+    public string Author { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+}
+
 [FakeFor<Issue>]
+[FakeFor<Revision>]
 public static partial class IssueFakes;
 
 /// <summary>A creation time the object already has, or that a rule gives it, is the one its other dates are built around.</summary>
@@ -95,6 +104,17 @@ public sealed class GivenCreationTimeTests
         ruled.Select(Others).ShouldBe(plain.Select(Others));
 
         static string Others(Issue t) => $"{t.Id}|{t.ExpiresAt:O}|{t.Title}|{string.Join(",", t.Notes.Select(n => $"{n.CreatedAt:O} {n.Text}"))}";
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public void A_constant_creation_time_counts_for_dates_declared_before_it(bool generated)
+    {
+        var revisions = (generated ? IssueFakes.Revision : new ObjectGenerator<Revision>(new ReflectionModel<Revision>())).Seed(1)
+            .With(r => r.CreatedAt, Created).Generate(300);
+
+        revisions.ShouldAllBe(r => r.CreatedAt == Created && r.UpdatedAt >= Created && r.UpdatedAt <= Reference.UtcDateTime);
     }
 
     [Test]

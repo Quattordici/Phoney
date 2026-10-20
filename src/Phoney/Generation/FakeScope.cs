@@ -187,6 +187,8 @@ public sealed class FakeScope
         {
             if (!_hasCreated)
             {
+                if (!_createdGiven)
+                    GiveConstantCreated();
                 var drawn = Settings.CausalTimelines && _parent is { } parent
                     ? Faker.Date.Between(parent.Created, Later(parent.Created, Faker.ReferenceDate))
                     : Faker.Date.Past();
@@ -223,6 +225,24 @@ public sealed class FakeScope
         {
             _created = created;
             _createdGiven = true;
+        }
+    }
+
+    /// <summary>
+    /// Gives the object the creation time of a constant rule before a date declared ahead of the "created" member is built around a drawn one.
+    /// A constant draws nothing, so taking it early moves no draws; factories and conventions draw, so they count only when their member is reached.
+    /// </summary>
+    private void GiveConstantCreated()
+    {
+        if (_slots is null)
+            return;
+        foreach (var slot in _slots)
+        {
+            if (slot is { GivesCreated: true, Kind: RuleKind.Constant })
+            {
+                GiveCreated(slot.Value);
+                return;
+            }
         }
     }
 
