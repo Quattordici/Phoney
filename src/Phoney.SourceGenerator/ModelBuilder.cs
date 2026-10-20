@@ -199,7 +199,7 @@ internal sealed class ModelBuilder
         var name = match?.Name ?? Capitalize(parameter.Name);
         // Annotations may sit on the parameter or (with [property: …]) on the generated property.
         var attributes = parameter.GetAttributes().Concat(match is null ? Enumerable.Empty<AttributeData>() : AttributesOf(match));
-        var member = Member(type, new MemberSource(name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), type, IsField: false), MemberRole.ConstructorParameter, attributes, index);
+        var member = Member(type, new MemberSource(name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), type, IsField: false), MemberRoles.ConstructorParameter, attributes, index);
         // A record's positional property behind the parameter can be set on an existing object.
         if (match is IPropertySymbol property)
         {
@@ -222,24 +222,25 @@ internal sealed class ModelBuilder
         if (member is IPropertySymbol p)
         {
             var initOnly = p.SetMethod!.IsInitOnly;
-            var role = MemberRole.None;
+            var role = MemberRoles.None;
             if (initOnly)
-                role |= MemberRole.InitOnly;
+                role |= MemberRoles.InitOnly;
             if (initOnly || p.IsRequired)
-                role |= MemberRole.InInitializer;
+                role |= MemberRoles.InInitializer;
             return Member(type, new MemberSource(p.Name, p.Type, IsNullableReference(p.Type, p.NullableAnnotation), p.ContainingType, IsField: false), role, AttributesOf(p), index);
         }
 
-        return member is IFieldSymbol f
-            ? Member(type, new MemberSource(f.Name, f.Type, IsNullableReference(f.Type, f.NullableAnnotation), f.ContainingType, IsField: true), f.IsRequired ? MemberRole.InInitializer : MemberRole.None, f.GetAttributes(), index)
-            : null;
+        if (member is not IFieldSymbol f)
+            return null;
+        var fieldRole = f.IsRequired ? MemberRoles.InInitializer : MemberRoles.None;
+        return Member(type, new MemberSource(f.Name, f.Type, IsNullableReference(f.Type, f.NullableAnnotation), f.ContainingType, IsField: true), fieldRole, f.GetAttributes(), index);
     }
 
     /// <summary>Describes a read-only collection that is filled in place.</summary>
     private MemberModel FilledMember(INamedTypeSymbol type, ISymbol member, int index)
     {
         var (memberType, annotation) = member is IPropertySymbol property ? (property.Type, property.NullableAnnotation) : (((IFieldSymbol)member).Type, ((IFieldSymbol)member).NullableAnnotation);
-        var filled = Member(type, new MemberSource(member.Name, memberType, IsNullableReference(memberType, annotation), member.ContainingType, member is IFieldSymbol), MemberRole.None, AttributesOf(member), index);
+        var filled = Member(type, new MemberSource(member.Name, memberType, IsNullableReference(memberType, annotation), member.ContainingType, member is IFieldSymbol), MemberRoles.None, AttributesOf(member), index);
         filled.Settable = false;
         filled.FillsExisting = true;
         filled.FillTypeArguments = string.Join(", ", ((INamedTypeSymbol)memberType).TypeArguments.Select(Fq));
@@ -261,7 +262,7 @@ internal sealed class ModelBuilder
 
     /// <summary>How a member is set.</summary>
     [Flags]
-    private enum MemberRole
+    private enum MemberRoles
     {
         /// <summary>A settable member, set after construction.</summary>
         None = 0,
@@ -277,12 +278,12 @@ internal sealed class ModelBuilder
     }
 
     /// <summary>Describes a member and computes its value expression.</summary>
-    private MemberModel Member(INamedTypeSymbol owner, MemberSource source, MemberRole role, IEnumerable<AttributeData> attributes, int index)
+    private MemberModel Member(INamedTypeSymbol owner, MemberSource source, MemberRoles role, IEnumerable<AttributeData> attributes, int index)
     {
         var (name, type, nullableReference, declaringType, isField) = source;
-        var isConstructorParameter = (role & MemberRole.ConstructorParameter) != 0;
-        var isInitOnly = (role & MemberRole.InitOnly) != 0;
-        var inInitializer = (role & MemberRole.InInitializer) != 0;
+        var isConstructorParameter = (role & MemberRoles.ConstructorParameter) != 0;
+        var isInitOnly = (role & MemberRoles.InitOnly) != 0;
+        var inInitializer = (role & MemberRoles.InInitializer) != 0;
         // Same rules as the reflection model: a format annotation overrides the name convention, [Required] is never null.
         var constraints = ConstraintReader.Read(attributes);
         var convention = constraints.Format is { } format

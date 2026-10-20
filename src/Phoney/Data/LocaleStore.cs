@@ -112,10 +112,9 @@ internal static class LocaleStore
     {
         lock (Gate)
         {
-            foreach (var fallback in builder.FallbackCodes.Where(code => !Sources.ContainsKey(code)))
-            {
-                throw new ArgumentException($"Fallback locale '{fallback}' of '{builder.Code}' is not registered.");
-            }
+            var missing = builder.FallbackCodes.FirstOrDefault(code => !Sources.ContainsKey(code));
+            if (missing is not null)
+                throw new ArgumentException($"Fallback locale '{missing}' of '{builder.Code}' is not registered.");
 
             var info = new LocaleInfo(builder.Code, builder.TitleText, null, null, null, null, "ltr", builder.FallbackCodes);
             var source = new Source(info, static () => LocaleResource.Empty);

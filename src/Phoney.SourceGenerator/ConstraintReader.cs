@@ -142,13 +142,18 @@ internal static class ConstraintReader
             _maxLength = _maxLength is { } current && current < value ? current : value;
             Set("MaxLength", Int(_maxLength.Value));
         }
-    }
 
-    /// <summary><c>params object?[]</c> arguments as an <c>object[]</c> expression.</summary>
-    private static string Values(System.Collections.Immutable.ImmutableArray<TypedConstant> args)
-    {
-        var items = args.Length == 1 && args[0].Kind == TypedConstantKind.Array ? args[0].Values : args;
-        return "new object[] { " + string.Join(", ", items.Select(Constant)) + " }";
+        /// <summary><c>params object?[]</c> arguments as an <c>object[]</c> expression.</summary>
+        private static string Values(System.Collections.Immutable.ImmutableArray<TypedConstant> args)
+        {
+            var items = args.Length == 1 && args[0].Kind == TypedConstantKind.Array ? args[0].Values : args;
+            return "new object[] { " + string.Join(", ", items.Select(Constant)) + " }";
+        }
+
+        private static string Int(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+        private static string Literal(string? value) =>
+            value is null ? "null" : "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     }
 
     private static string Constant(TypedConstant constant)
@@ -160,8 +165,6 @@ internal static class ConstraintReader
         return constant.ToCSharpString();
     }
 
-    private static string Int(int value) => value.ToString(CultureInfo.InvariantCulture);
-
     private static string? Invariant(object? value) => value switch
     {
         null => null,
@@ -170,6 +173,4 @@ internal static class ConstraintReader
         _ => value.ToString(),
     };
 
-    private static string Literal(string? value) =>
-        value is null ? "null" : "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 }

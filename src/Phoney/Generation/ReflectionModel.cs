@@ -178,6 +178,59 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
             Defaults.Add(memberType.IsValueType ? Activator.CreateInstance(memberType) : null);
             Fallbacks.Add(Producer(memberType, name, convention, nullable && constraints?.Required != true, constraints));
         }
+
+        /// <summary>Whether a member of this type is created and populated recursively; mirrors the last branch of <see cref="NonNullProducer"/>.</summary>
+        private static bool IsNestedType(Type type)
+        {
+            type = Nullable.GetUnderlyingType(type) ?? type;
+            if (FakeMember.ConventionCategory(type) != TypeCategory.Other || type == typeof(byte[]) || CollectionTypes.ElementType(type, out _) is not null)
+                return false;
+            return !IsFrameworkType(type);
+        }
+
+        /// <summary>Compiled member setter; reflection for structs (in-place on the box) and without a JIT.</summary>
+        private static Action<object, object?> CreateSetter(Type type, MemberInfo member)
+        {
+            // Boxed structs must be mutated in place, which only reflection does; compiled setters would copy.
+            if (type.IsValueType || !RuntimeFeature.IsDynamicCodeCompiled)
+            {
+                return member switch
+                {
+                    PropertyInfo p => p.SetValue,
+                    FieldInfo f => f.SetValue,
+                    _ => throw new InvalidOperationException(),
+                };
+            }
+
+            var target = Expression.Parameter(typeof(object), "target");
+            var value = Expression.Parameter(typeof(object), "value");
+            var memberType = member is PropertyInfo prop ? prop.PropertyType : ((FieldInfo)member).FieldType;
+            var access = Expression.MakeMemberAccess(Expression.Convert(target, type), member);
+            var assign = Expression.Assign(access, Expression.Convert(value, memberType));
+            return Expression.Lambda<Action<object, object?>>(assign, target, value).Compile();
+        }
+
+        /// <summary>Compiled member getter; reflection for structs and without a JIT.</summary>
+        private static Func<object, object?> CreateGetter(Type type, MemberInfo member)
+        {
+            if (type.IsValueType || !RuntimeFeature.IsDynamicCodeCompiled)
+            {
+                return member switch
+                {
+                    PropertyInfo p => p.GetValue,
+                    FieldInfo f => f.GetValue,
+                    _ => throw new InvalidOperationException(),
+                };
+            }
+
+            var target = Expression.Parameter(typeof(object), "target");
+            var access = Expression.MakeMemberAccess(Expression.Convert(target, type), member);
+            return Expression.Lambda<Func<object, object?>>(Expression.Convert(access, typeof(object)), target).Compile();
+        }
+
+        /// <summary>Whether the property's setter is <c>init</c>.</summary>
+        private static bool IsInitOnly(PropertyInfo property) =>
+            property.SetMethod?.ReturnParameter.GetRequiredCustomModifiers().Contains(typeof(IsExternalInit)) == true;
     }
 
     /// <summary>The populated type.</summary>
@@ -253,15 +306,6 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
     Func<FakeScope, object?> IPopulateTarget<object>.ProducerOf(int member) => FallbackOf(member);
 
     void IPopulateTarget<object>.FillAt(object instance, int member, object? values, bool replace) => FillObject(instance, member, values, replace);
-
-    /// <summary>Whether a member of this type is created and populated recursively; mirrors the last branch of <see cref="NonNullProducer"/>.</summary>
-    private static bool IsNestedType(Type type)
-    {
-        type = Nullable.GetUnderlyingType(type) ?? type;
-        if (FakeMember.ConventionCategory(type) != TypeCategory.Other || type == typeof(byte[]) || CollectionTypes.ElementType(type, out _) is not null)
-            return false;
-        return !IsFrameworkType(type);
-    }
 
     /// <summary>Framework types (System.*, Microsoft.*) are not populated recursively; their constructors expect real data.</summary>
     private static bool IsFrameworkType(Type type)
@@ -550,50 +594,6 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
         var body = Expression.Convert(Expression.New(constructor, parameters), typeof(object));
         return Expression.Lambda<Func<object?[], object>>(body, args).Compile();
     }
-
-    /// <summary>Compiled member setter; reflection for structs (in-place on the box) and without a JIT.</summary>
-    private static Action<object, object?> CreateSetter(Type type, MemberInfo member)
-    {
-        // Boxed structs must be mutated in place, which only reflection does; compiled setters would copy.
-        if (type.IsValueType || !RuntimeFeature.IsDynamicCodeCompiled)
-        {
-            return member switch
-            {
-                PropertyInfo p => p.SetValue,
-                FieldInfo f => f.SetValue,
-                _ => throw new InvalidOperationException(),
-            };
-        }
-
-        var target = Expression.Parameter(typeof(object), "target");
-        var value = Expression.Parameter(typeof(object), "value");
-        var memberType = member is PropertyInfo prop ? prop.PropertyType : ((FieldInfo)member).FieldType;
-        var access = Expression.MakeMemberAccess(Expression.Convert(target, type), member);
-        var assign = Expression.Assign(access, Expression.Convert(value, memberType));
-        return Expression.Lambda<Action<object, object?>>(assign, target, value).Compile();
-    }
-
-    /// <summary>Compiled member getter; reflection for structs and without a JIT.</summary>
-    private static Func<object, object?> CreateGetter(Type type, MemberInfo member)
-    {
-        if (type.IsValueType || !RuntimeFeature.IsDynamicCodeCompiled)
-        {
-            return member switch
-            {
-                PropertyInfo p => p.GetValue,
-                FieldInfo f => f.GetValue,
-                _ => throw new InvalidOperationException(),
-            };
-        }
-
-        var target = Expression.Parameter(typeof(object), "target");
-        var access = Expression.MakeMemberAccess(Expression.Convert(target, type), member);
-        return Expression.Lambda<Func<object, object?>>(Expression.Convert(access, typeof(object)), target).Compile();
-    }
-
-    /// <summary>Whether the property's setter is <c>init</c>.</summary>
-    private static bool IsInitOnly(PropertyInfo property) =>
-        property.SetMethod?.ReturnParameter.GetRequiredCustomModifiers().Contains(typeof(IsExternalInit)) == true;
 
     /// <summary>Upper-cases the first character (constructor parameter → property name).</summary>
     internal static string Capitalize(string name) => name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];

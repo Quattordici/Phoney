@@ -161,6 +161,16 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
                 return false; // decided at runtime
             return true;
         }
+
+        /// <summary>Whether a <c>WithConvention&lt;TValue&gt;</c> applies to a member type (also its nullable form), like <c>CustomConvention.Matches</c>.</summary>
+        private static bool Matches(ITypeSymbol conventionType, ITypeSymbol? memberType)
+        {
+            if (memberType is null)
+                return false;
+            if (memberType is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+                memberType = nullable.TypeArguments[0];
+            return SymbolEqualityComparer.Default.Equals(conventionType.WithNullableAnnotation(NullableAnnotation.None), memberType.WithNullableAnnotation(NullableAnnotation.None));
+        }
     }
 
     private static bool IsGeneratorMethod(IMethodSymbol method, INamedTypeSymbol generator) =>
@@ -173,13 +183,4 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         return argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue || argument.Value.ConstantValue is { HasValue: true, Value: true };
     }
 
-    /// <summary>Whether a <c>WithConvention&lt;TValue&gt;</c> applies to a member type (also its nullable form), like <c>CustomConvention.Matches</c>.</summary>
-    private static bool Matches(ITypeSymbol conventionType, ITypeSymbol? memberType)
-    {
-        if (memberType is null)
-            return false;
-        if (memberType is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
-            memberType = nullable.TypeArguments[0];
-        return SymbolEqualityComparer.Default.Equals(conventionType.WithNullableAnnotation(NullableAnnotation.None), memberType.WithNullableAnnotation(NullableAnnotation.None));
-    }
 }
