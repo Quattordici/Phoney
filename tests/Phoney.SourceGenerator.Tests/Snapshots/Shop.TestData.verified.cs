@@ -33,7 +33,7 @@ static partial class TestData
     {
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Phone", typeof(string), global::Phoney.Generation.ConventionKind.Phone, false, false, null, true, false),
+            new global::Phoney.Generation.FakeMember("Phone", typeof(string), global::Phoney.Generation.ConventionKind.Phone),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -93,15 +93,15 @@ static partial class TestData
 
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None, false, false, __c0, true, false),
-            new global::Phoney.Generation.FakeMember("Id", typeof(int), global::Phoney.Generation.ConventionKind.Id, false, false, null, true, false),
-            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName, false, false, __c2, true, false),
-            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username, false, false, __c3, true, false),
-            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price, false, false, __c4, true, false),
-            new global::Phoney.Generation.FakeMember("Email", typeof(string), global::Phoney.Generation.ConventionKind.Email, false, true, null, true, false),
-            new global::Phoney.Generation.FakeMember("Address", typeof(global::Shop.Address), global::Phoney.Generation.ConventionKind.None, false, true, null, true, true),
-            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None, false, false, __c7, true, false),
-            new global::Phoney.Generation.FakeMember("Payment", typeof(global::Shop.IPayment), global::Phoney.Generation.ConventionKind.None, false, false, null, true, true),
+            new global::Phoney.Generation.FakeMember("Status", typeof(global::Shop.Status), global::Phoney.Generation.ConventionKind.None) { Constraints = __c0 },
+            new global::Phoney.Generation.FakeMember("Id", typeof(int), global::Phoney.Generation.ConventionKind.Id),
+            new global::Phoney.Generation.FakeMember("FirstName", typeof(string), global::Phoney.Generation.ConventionKind.FirstName) { Constraints = __c2 },
+            new global::Phoney.Generation.FakeMember("Nickname", typeof(string), global::Phoney.Generation.ConventionKind.Username) { Constraints = __c3 },
+            new global::Phoney.Generation.FakeMember("Balance", typeof(decimal?), global::Phoney.Generation.ConventionKind.Price) { Constraints = __c4 },
+            new global::Phoney.Generation.FakeMember("Email", typeof(string), global::Phoney.Generation.ConventionKind.Email) { IsInitOnly = true },
+            new global::Phoney.Generation.FakeMember("Address", typeof(global::Shop.Address), global::Phoney.Generation.ConventionKind.None) { IsInitOnly = true, IsNested = true },
+            new global::Phoney.Generation.FakeMember("Orders", typeof(global::System.Collections.Generic.List<global::Shop.Order>), global::Phoney.Generation.ConventionKind.None) { Constraints = __c7 },
+            new global::Phoney.Generation.FakeMember("Payment", typeof(global::Shop.IPayment), global::Phoney.Generation.ConventionKind.None) { IsNested = true },
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -214,8 +214,8 @@ static partial class TestData
 
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Street", typeof(string), global::Phoney.Generation.ConventionKind.StreetAddress, true, false, __c0, true, false),
-            new global::Phoney.Generation.FakeMember("City", typeof(string), global::Phoney.Generation.ConventionKind.Email, true, false, __c1, true, false),
+            new global::Phoney.Generation.FakeMember("Street", typeof(string), global::Phoney.Generation.ConventionKind.StreetAddress) { IsConstructorParameter = true, Constraints = __c0, IsSettable = true },
+            new global::Phoney.Generation.FakeMember("City", typeof(string), global::Phoney.Generation.ConventionKind.Email) { IsConstructorParameter = true, Constraints = __c1, IsSettable = true },
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -279,9 +279,9 @@ static partial class TestData
     {
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("Id", typeof(global::System.Guid), global::Phoney.Generation.ConventionKind.Id, true, false, null, true, false),
-            new global::Phoney.Generation.FakeMember("CreatedAt", typeof(global::System.DateTime), global::Phoney.Generation.ConventionKind.PastDate, true, false, null, true, false),
-            new global::Phoney.Generation.FakeMember("Customer", typeof(global::Shop.Customer), global::Phoney.Generation.ConventionKind.None, false, false, null, true, true),
+            new global::Phoney.Generation.FakeMember("Id", typeof(global::System.Guid), global::Phoney.Generation.ConventionKind.Id) { IsConstructorParameter = true, IsSettable = true },
+            new global::Phoney.Generation.FakeMember("CreatedAt", typeof(global::System.DateTime), global::Phoney.Generation.ConventionKind.PastDate) { IsConstructorParameter = true, IsSettable = true },
+            new global::Phoney.Generation.FakeMember("Customer", typeof(global::Shop.Customer), global::Phoney.Generation.ConventionKind.None) { IsNested = true },
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;
@@ -351,7 +351,7 @@ static partial class TestData
     {
         private static readonly global::Phoney.Generation.FakeMember[] __members =
         {
-            new global::Phoney.Generation.FakeMember("CreditCardNumber", typeof(string), global::Phoney.Generation.ConventionKind.CreditCardNumber, false, false, null, true, false),
+            new global::Phoney.Generation.FakeMember("CreditCardNumber", typeof(string), global::Phoney.Generation.ConventionKind.CreditCardNumber),
         };
 
         public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;

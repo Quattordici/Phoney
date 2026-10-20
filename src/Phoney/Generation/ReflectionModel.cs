@@ -169,9 +169,15 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
             var convention = constraints?.Format ?? ConventionRules.Match(name, category, type.Name);
             var fillsExisting = role == MemberRole.Filled;
             // Constructor parameters behind a settable property (a record's positional properties) can be set on an existing object too.
-            Members.Add(new FakeMember(
-                name, memberType, convention, role == MemberRole.Parameter, role == MemberRole.InitOnly, constraints,
-                isSettable: accessor is not null && !fillsExisting, isNested: IsNestedType(memberType), fillsExisting));
+            Members.Add(new FakeMember(name, memberType, convention)
+            {
+                IsConstructorParameter = role == MemberRole.Parameter,
+                IsInitOnly = role == MemberRole.InitOnly,
+                Constraints = constraints,
+                IsSettable = accessor is not null && !fillsExisting,
+                IsNested = IsNestedType(memberType),
+                FillsExisting = fillsExisting,
+            });
             Setters.Add(accessor is null || fillsExisting ? null : CreateSetter(type, accessor));
             Fillers.Add(fillsExisting ? CollectionFillers.Create(memberType) : null);
             Getters.Add(accessor is null ? null : CreateGetter(type, accessor));

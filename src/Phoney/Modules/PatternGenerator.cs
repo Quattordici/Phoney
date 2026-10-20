@@ -399,7 +399,7 @@ internal sealed class PatternGenerator
             }
 
             _pos++;
-            var end = _pattern[_pos] == '\\' ? Unescape(++_pos) : _pattern[_pos++];
+            var end = _pattern[_pos] == '\\' ? EscapedRangeEnd() : _pattern[_pos++];
             if (end < start)
                 throw Error($"character range {start}-{end} is out of order");
             for (var ch = start; ch <= end; ch++)
@@ -415,17 +415,13 @@ internal sealed class PatternGenerator
             return new string(remaining);
         }
 
-        /// <summary>Reads an escaped character used as a range bound.</summary>
-        private char Unescape(int position)
+        /// <summary>Reads the escaped character that ends a range (<c>\u005A</c>, <c>\x5A</c>, <c>\t</c>…), read like any escape in a class.</summary>
+        private char EscapedRangeEnd()
         {
-            _pos = position + 1;
-            return _pattern[position] switch
-            {
-                't' => '\t',
-                'n' => '\n',
-                'r' => '\r',
-                var other => other,
-            };
+            _pos++;
+            return ParseEscape(inClass: true) is LiteralNode { Text.Length: 1 } literal
+                ? literal.Text[0]
+                : throw Error("a character class escape (\\d, \\w, \\p{…}) can't end a range");
         }
 
         /// <summary>Parses an escape after <c>\</c>.</summary>

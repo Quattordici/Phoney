@@ -157,13 +157,15 @@ public sealed class ArgumentGenerator
         var category = FakeMember.ConventionCategory(argument.Type);
         var convention = constraints?.Format ?? ConventionRules.Match(name, category, "");
 
-        var member = new FakeMember(name, argument.Type, convention, constraints: constraints);
+        var member = new FakeMember(name, argument.Type, convention) { Constraints = constraints };
         if (FakeConventions.All.FirstOrDefault(c => c.Matches(member)) is { } custom)
             return custom.Factory;
 
         return ReflectionTypeModel.Producer(argument.Type, name, convention, argument.Nullable && constraints?.Required != true, constraints);
     }
 
+#pragma warning disable S2094 // a marker type for the scope of a row; its name shows in messages
     /// <summary>Scope type of a row; never equal to a real type, so arguments of any type are not mistaken for cycles.</summary>
     private sealed class ArgumentList;
+#pragma warning restore S2094
 }

@@ -5,33 +5,45 @@ namespace Phoney.Generation;
 /// <summary>A member (property, field or constructor parameter) that a <see cref="FakeModel{T}"/> populates.</summary>
 public sealed class FakeMember
 {
-    /// <summary>Creates a member description.</summary>
+    private readonly bool? _isSettable;
+
+    /// <summary>
+    /// Creates a member description. The other values are set with the initializer:
+    /// <c>new FakeMember("Email", typeof(string), ConventionKind.Email) { IsInitOnly = true, Constraints = constraints }</c>.
+    /// </summary>
     /// <param name="name">Member name; constructor parameters use the name of the property they initialize.</param>
     /// <param name="type">Declared type.</param>
     /// <param name="convention">Name convention chosen for the member.</param>
-    /// <param name="isConstructorParameter">Whether the value is passed to the constructor.</param>
-    /// <param name="isInitOnly">Whether the member can only be set during construction (<c>init</c>).</param>
-    /// <param name="constraints">Validation rules from the member's data annotations, if any.</param>
-    /// <param name="isSettable">
-    /// Whether the member can be set on an existing instance (for <see cref="PopulateMode"/>): a public setter or
-    /// <c>init</c> accessor, also behind a constructor parameter. Default: every member that is not a constructor parameter.
-    /// </param>
-    /// <param name="isNested">Whether the member holds an object the generator creates and populates recursively.</param>
-    /// <param name="fillsExisting">
-    /// Whether the member is a collection that can only be read (<c>{ get; }</c>, a private setter, a readonly field): it is generated like any collection and its
-    /// elements are added to the collection the object already holds (<see cref="FakeModel{T}.Fill"/>). Such a member is not <paramref name="isSettable"/>.
-    /// </param>
-    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter = false, bool isInitOnly = false, MemberConstraints? constraints = null, bool? isSettable = null, bool isNested = false, bool fillsExisting = false)
+    public FakeMember(string name, Type type, ConventionKind convention)
     {
-        FillsExisting = fillsExisting;
-        Constraints = constraints;
         Name = name;
         Type = type;
         Convention = convention;
+    }
+
+    /// <summary>Creates a member description with every value; kept for models compiled against earlier versions.</summary>
+    /// <param name="name">Member name; constructor parameters use the name of the property they initialize.</param>
+    /// <param name="type">Declared type.</param>
+    /// <param name="convention">Name convention chosen for the member.</param>
+    /// <param name="isConstructorParameter">See <see cref="IsConstructorParameter"/>.</param>
+    /// <param name="isInitOnly">See <see cref="IsInitOnly"/>.</param>
+    /// <param name="constraints">See <see cref="Constraints"/>.</param>
+    /// <param name="isSettable">See <see cref="IsSettable"/>; <see langword="null"/> for the default.</param>
+    /// <param name="isNested">See <see cref="IsNested"/>.</param>
+    /// <param name="fillsExisting">See <see cref="FillsExisting"/>.</param>
+    [Obsolete("Pass the name, type and convention, and set the other values with the initializer: new FakeMember(name, type, convention) { IsConstructorParameter = true }.")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+#pragma warning disable S107 // the signature models compiled against earlier versions call; new code uses the initializer
+    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter = false, bool isInitOnly = false, MemberConstraints? constraints = null, bool? isSettable = null, bool isNested = false, bool fillsExisting = false)
+#pragma warning restore S107
+        : this(name, type, convention)
+    {
         IsConstructorParameter = isConstructorParameter;
         IsInitOnly = isInitOnly;
-        IsSettable = isSettable ?? !isConstructorParameter;
+        Constraints = constraints;
+        _isSettable = isSettable;
         IsNested = isNested;
+        FillsExisting = fillsExisting;
     }
 
     /// <summary>Member name.</summary>
@@ -44,22 +56,32 @@ public sealed class FakeMember
     public ConventionKind Convention { get; }
 
     /// <summary>Whether the value is passed to the constructor.</summary>
-    public bool IsConstructorParameter { get; }
+    public bool IsConstructorParameter { get; init; }
 
-    /// <summary>Whether the member can only be set during construction.</summary>
-    public bool IsInitOnly { get; }
+    /// <summary>Whether the member can only be set during construction (<c>init</c>).</summary>
+    public bool IsInitOnly { get; init; }
 
     /// <summary>Validation rules from data annotations (<c>[StringLength]</c>, <c>[Range]</c>…), or <see langword="null"/>.</summary>
-    public MemberConstraints? Constraints { get; }
+    public MemberConstraints? Constraints { get; init; }
 
-    /// <summary>Whether the member can be set on an existing instance.</summary>
-    public bool IsSettable { get; }
+    /// <summary>
+    /// Whether the member can be set on an existing instance (for <see cref="PopulateMode"/>): a public setter or <c>init</c> accessor, also behind a constructor parameter.
+    /// Default: every member that is not a constructor parameter.
+    /// </summary>
+    public bool IsSettable
+    {
+        get => _isSettable ?? !IsConstructorParameter;
+        init => _isSettable = value;
+    }
 
     /// <summary>Whether the member holds an object that is created and populated recursively.</summary>
-    public bool IsNested { get; }
+    public bool IsNested { get; init; }
 
-    /// <summary>Whether the member is a read-only collection whose elements are added to the collection the object holds.</summary>
-    public bool FillsExisting { get; }
+    /// <summary>
+    /// Whether the member is a collection that can only be read (<c>{ get; }</c>, a private setter, a readonly field): it is generated like any collection and its
+    /// elements are added to the collection the object already holds (<see cref="FakeModel{T}.Fill"/>). Such a member is not <see cref="IsSettable"/>.
+    /// </summary>
+    public bool FillsExisting { get; init; }
 
     /// <summary>Whether the member holds a scalar value (string, number, date…) rather than an object or collection.</summary>
     public bool IsScalar => ScalarCategory(Type) != TypeCategory.Other || ScalarAdapters.IsAdapted(Type);

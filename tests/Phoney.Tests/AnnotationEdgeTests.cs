@@ -212,6 +212,27 @@ public sealed partial class AnnotationEdgeTests
     }
 
     [Test]
+    [Arguments("[\\u0041-\\u005A]{20}", "^[A-Z]{20}$")]
+    [Arguments("[A-\\x5A]{20}", "^[A-Z]{20}$")]
+    [Arguments("[\\x30-\\u0039]{20}", "^[0-9]{20}$")]
+    [Arguments("[ -\\t]{3}", null)] // out of order: tab is below space
+    public void Hexadecimal_escapes_can_end_a_character_range(string pattern, string? expected)
+    {
+        var faker = new Faker(seed: 4);
+
+        if (expected is null)
+            Should.Throw<FormatException>(() => faker.Helpers.FromRegExp(pattern)).Message.ShouldContain("out of order");
+        else
+            faker.Helpers.FromRegExp(pattern).ShouldMatch(expected);
+    }
+
+    [Test]
+    public void A_class_escape_cannot_end_a_character_range()
+    {
+        Should.Throw<FormatException>(() => new Faker().Helpers.FromRegExp("[a-\\d]")).Message.ShouldContain("[a-\\d]");
+    }
+
+    [Test]
     public void Patterns_with_escapes_that_cannot_be_generated_are_rejected()
     {
         var faker = new Faker();

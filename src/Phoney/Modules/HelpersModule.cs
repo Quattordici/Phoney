@@ -151,6 +151,7 @@ public sealed partial class HelpersModule : FakerModule
         return Random.Bool(probability) ? factory() : default;
     }
 
+#pragma warning disable S2325 // module methods are instance methods everywhere (faker.Helpers.Multiple), as faker.js has them; static would break callers
     /// <summary>Calls <paramref name="factory"/> <paramref name="count"/> times.</summary>
     public List<T> Multiple<T>(Func<T> factory, int count = 3)
     {
@@ -187,6 +188,7 @@ public sealed partial class HelpersModule : FakerModule
 
         return result;
     }
+#pragma warning restore S2325
 
     /// <summary>Replaces runs of <c>#</c> with digits where the first digit is not zero (used for building and apartment numbers).</summary>
     internal string ReplaceHashRunsWithoutLeadingZero(string text)

@@ -42,6 +42,7 @@ public sealed class PhoneyOptions
     /// <summary>Makes registered generators strict (a scalar member without a rule, convention or annotation throws), see <c>ObjectGenerator&lt;T&gt;.Strict</c>. Off by default.</summary>
     public bool Strict { get; set; }
 
+#pragma warning disable S3236, S3928 // the parameter name is the option that is wrong (MaxCollectionSize…), which is what a caller of AddPhoney needs to see
     /// <summary>Checks the generation options; used by <c>AddPhoney</c> so a mistake shows at registration rather than at the first resolve.</summary>
     /// <exception cref="ArgumentOutOfRangeException">An option is outside its range.</exception>
     internal void Validate()
@@ -63,4 +64,5 @@ public sealed class PhoneyOptions
         if (MaxDepth is { } depth)
             ArgumentOutOfRangeException.ThrowIfNegative(depth, nameof(MaxDepth));
     }
+#pragma warning restore S3236, S3928
 }

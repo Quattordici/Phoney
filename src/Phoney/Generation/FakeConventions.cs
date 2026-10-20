@@ -24,6 +24,7 @@ public sealed class FakeConventions
     /// <summary>Snapshot of the registered conventions.</summary>
     internal static ImmutableList<CustomConvention> All => Volatile.Read(ref s_all);
 
+#pragma warning disable S2325 // instance members on purpose: Fake.Conventions is one registry discovered from Fake., and making them static would break callers
     /// <summary>
     /// Generates members of type <typeparamref name="TValue"/> whose name matches <paramref name="nameMatches"/>
     /// with <paramref name="factory"/>. Applies to generators compiled afterwards.
@@ -53,6 +54,7 @@ public sealed class FakeConventions
 
     /// <summary>Removes all custom conventions.</summary>
     public void Clear() => Volatile.Write(ref s_all, []);
+#pragma warning restore S2325
 }
 
 /// <summary>A user-defined convention: member type plus a name predicate; <paramref name="Source"/> is the call that registered it, for messages.</summary>
@@ -95,6 +97,7 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
     }
 }
 
+#pragma warning disable S2326 // the source generator reads T: it is the type to generate a model for
 /// <summary>
 /// Generates a reflection-free, trim- and Native AOT-safe model for <typeparamref name="T"/> (and the types it
 /// contains) at compile time. Put it on a <c>partial</c> class; the class gets a <c>ObjectGenerator&lt;T&gt;</c> property per type.
@@ -110,3 +113,4 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
 /// <typeparam name="T">The type to generate a model for.</typeparam>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class FakeForAttribute<T> : Attribute;
+#pragma warning restore S2326

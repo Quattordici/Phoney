@@ -189,7 +189,9 @@ public sealed class FakeScope
     internal void ForceNextCollectionCount(int? count) => _forcedCount = count ?? -1;
 
     // Set when NestedObject returns null because the object can't exist here (depth limit, cycle, no subtype or model), so collections leave that element out.
+#pragma warning disable S1450 // set by NestedObject and read by TryElement, two separate calls
     private bool _cutOff;
+#pragma warning restore S1450
 
     /// <summary>
     /// Produces one collection element; <see langword="false"/> when it was cut off (see <see cref="NestedObject"/>) and must be left out. Only a

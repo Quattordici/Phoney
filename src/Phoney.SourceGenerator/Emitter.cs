@@ -187,15 +187,33 @@ internal static class Emitter
         sb.Append(i1).AppendLine("{");
         foreach (var m in members)
         {
-            var fills = m.FillsExisting ? ", fillsExisting: true" : "";
             sb.Append(i2).AppendLine(
-                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}, {Bool(m.IsConstructorParameter)}, {Bool(m.IsInitOnly)}, {m.ConstraintsField ?? "null"}, {Bool(m.Settable)}, {Bool(m.IsNested)}{fills}),");
+                $"new global::Phoney.Generation.FakeMember(\"{m.Name}\", typeof({m.TypeName}), global::Phoney.Generation.ConventionKind.{m.Convention}){MemberInitializer(m)},");
         }
 
         sb.Append(i1).AppendLine("};");
         sb.AppendLine();
         sb.Append(i1).AppendLine("public override global::System.Collections.Generic.IReadOnlyList<global::Phoney.Generation.FakeMember> Members => __members;");
         sb.AppendLine();
+    }
+
+    /// <summary>The object initializer of a member's <c>FakeMember</c>: the values that differ from the defaults, or nothing.</summary>
+    private static string MemberInitializer(MemberModel m)
+    {
+        var values = new List<string>();
+        if (m.IsConstructorParameter)
+            values.Add("IsConstructorParameter = true");
+        if (m.IsInitOnly)
+            values.Add("IsInitOnly = true");
+        if (m.ConstraintsField is not null)
+            values.Add("Constraints = " + m.ConstraintsField);
+        if (m.Settable == m.IsConstructorParameter) // the default is settable unless it is a constructor parameter
+            values.Add("IsSettable = " + Bool(m.Settable));
+        if (m.IsNested)
+            values.Add("IsNested = true");
+        if (m.FillsExisting)
+            values.Add("FillsExisting = true");
+        return values.Count == 0 ? "" : " { " + string.Join(", ", values) + " }";
     }
 
     /// <summary>

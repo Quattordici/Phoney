@@ -30,6 +30,7 @@ public sealed class FakeGenerators
     /// <summary>Snapshot of the registered generators by type.</summary>
     internal static ImmutableDictionary<Type, INestedGenerator> All => Volatile.Read(ref s_all);
 
+#pragma warning disable S2325 // instance members on purpose: Fake.Generators is one registry discovered from Fake., and making them static would break callers
     /// <summary>Creates every nested <typeparamref name="TNested"/> with <paramref name="generator"/>, replacing an earlier registration for the type.</summary>
     /// <exception cref="ArgumentException"><typeparamref name="TNested"/> is a scalar (string, number, date, enum…) or an array.</exception>
     public void Add<TNested>(ObjectGenerator<TNested> generator) => Add<TNested, TNested>(generator);
@@ -53,6 +54,7 @@ public sealed class FakeGenerators
 
     /// <summary>Removes all registered generators.</summary>
     public void Clear() => Volatile.Write(ref s_all, ImmutableDictionary<Type, INestedGenerator>.Empty);
+#pragma warning restore S2325
 }
 
 /// <summary>What generators registered for types (<c>WithGeneratorFor</c>, <c>Fake.Generators</c>) have in common.</summary>

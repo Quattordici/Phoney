@@ -121,6 +121,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         where T1 : TBase
         where T2 : TBase => Subtype<TBase>(typeof(T1), typeof(T2));
 
+#pragma warning disable S2436 // each type parameter is one more subtype, checked against TBase at compile time; params Type[] can't check that
     /// <summary>Generates one of the subtypes, picked at random, for every member of type <typeparamref name="TBase"/>.</summary>
     public ObjectGenerator<T> Subtype<TBase, T1, T2, T3>()
         where T1 : TBase
@@ -133,6 +134,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         where T2 : TBase
         where T3 : TBase
         where T4 : TBase => Subtype<TBase>(typeof(T1), typeof(T2), typeof(T3), typeof(T4));
+#pragma warning restore S2436
 
     /// <summary>Generates one of <paramref name="subtypes"/>, picked at random in the given order, for every member of type <typeparamref name="TBase"/>.</summary>
     /// <exception cref="ArgumentException">A subtype is abstract, an interface, open generic or not assignable to <typeparamref name="TBase"/>.</exception>
@@ -1689,6 +1691,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         FeedSettings? Feed,
         GenerationSettings Settings)
     {
+#pragma warning disable S2743 // one default configuration per T is intended
         public static readonly Config Default = new(
             null, null, null, null,
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
@@ -1709,6 +1712,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             [],
             null,
             GenerationSettings.Default);
+#pragma warning restore S2743
     }
 
     /// <summary>Extracts <c>Name</c> from <c>x =&gt; x.Name</c> (also through conversions like <c>(object)x.Name</c>); for rules that exist per member of the generated type only.</summary>
