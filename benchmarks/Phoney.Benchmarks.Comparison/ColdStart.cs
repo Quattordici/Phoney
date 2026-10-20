@@ -130,10 +130,16 @@ internal static class ColdPhases
         for (var run = 0; run < 15; run++)
         {
             using var process = Process.Start(new ProcessStartInfo(host, [.. prefix, "cold-phases-child"]) { RedirectStandardOutput = true })!;
-            foreach (var part in process.StandardOutput.ReadToEnd().Trim().Split(';'))
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            process.WaitForExit();
+            if (process.ExitCode != 0 || !TryParseMarks(output, out var marks))
             {
-                var name = part[..part.LastIndexOf('=')];
-                var numbers = part[(part.LastIndexOf('=') + 1)..].Split(',').Select(n => double.Parse(n, CultureInfo.InvariantCulture)).ToArray();
+                Console.Error.WriteLine($"cold-phases: run {run + 1} failed (exit code {process.ExitCode}, output '{output}').");
+                return 1;
+            }
+
+            foreach (var (name, ms, jitMs, methods) in marks)
+            {
                 if (!samples.ContainsKey(name))
                 {
                     samples[name] = [];
@@ -142,12 +148,10 @@ internal static class ColdPhases
                     order.Add(name);
                 }
 
-                samples[name].Add(numbers[0]);
-                jitSamples[name].Add(numbers[1]);
-                methodSamples[name].Add(numbers[2]);
+                samples[name].Add(ms);
+                jitSamples[name].Add(jitMs);
+                methodSamples[name].Add(methods);
             }
-
-            process.WaitForExit();
         }
 
         static string Median(List<double> values, string format)
@@ -162,5 +166,26 @@ internal static class ColdPhases
             Console.WriteLine($"| {name} | {Median(samples[name], "F2")} | {Median(jitSamples[name], "F2")} | {Median(methodSamples[name], "F0")} |");
 
         return 0;
+    }
+
+    /// <summary>Reads the <c>name=ms,jitMs,methods</c> records that <see cref="Child"/> prints, separated by ';'; false when any of them is malformed.</summary>
+    private static bool TryParseMarks(string output, out List<(string Name, double Ms, double JitMs, double Methods)> marks)
+    {
+        marks = [];
+        if (output.Length == 0)
+            return false;
+        foreach (var part in output.Split(';'))
+        {
+            var at = part.LastIndexOf('=');
+            var numbers = at > 0 ? part[(at + 1)..].Split(',') : [];
+            if (numbers.Length != 3
+                || !double.TryParse(numbers[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var ms)
+                || !double.TryParse(numbers[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var jitMs)
+                || !double.TryParse(numbers[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var methods))
+                return false;
+            marks.Add((part[..at], ms, jitMs, methods));
+        }
+
+        return true;
     }
 }

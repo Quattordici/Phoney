@@ -1,10 +1,13 @@
+using System.Globalization;
 using AutoBogus;
 using AutoFixture;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Engines;
+using BenchmarkDotNet.Exporters.Csv;
 using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Toolchains.NativeAot;
 using Phoney;
 using Phoney.Generation;
@@ -27,6 +30,10 @@ public sealed class ComparisonConfig : ManualConfig
         }
 
         AddJob(job);
+
+        // The CSV reports are what "summarize" reads, so they are written the same way on every machine: the default follows the
+        // current culture (';' between fields and decimal commas under sv-SE, for instance).
+        AddExporter(new CsvExporter(CsvSeparator.Comma, SummaryStyle.Default.WithCultureInfo(CultureInfo.InvariantCulture)));
     }
 }
 
