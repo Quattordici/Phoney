@@ -104,6 +104,16 @@ public sealed class StrictAnalyzerTests
     }
 
     [Test]
+    public async Task The_last_WithNameConventions_before_Strict_wins_like_at_runtime(CancellationToken cancellationToken)
+    {
+        var on = await Diagnose("public static object A() => Data.Product.WithNameConventions(false).WithNameConventions(true).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);
+        var off = await Diagnose("public static object A() => Data.Product.WithNameConventions(true).WithNameConventions(false).Strict().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Generate();", cancellationToken);
+
+        on.ShouldBeEmpty();
+        off.ShouldHaveSingleItem().GetMessage().ShouldContain("Id, Name, Price");
+    }
+
+    [Test]
     public async Task Chains_that_may_get_more_rules_elsewhere_are_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("""

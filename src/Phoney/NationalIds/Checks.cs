@@ -20,7 +20,25 @@ internal static class Checks
     /// <summary>Removes the characters in <paramref name="separators"/> and surrounding spaces.</summary>
     public static string Compact(string value, string separators = " -.")
     {
-        return string.Concat(value.Trim().Where(c => separators.IndexOf(c, StringComparison.Ordinal) < 0));
+        var trimmed = value.Trim();
+        var length = 0;
+        for (var i = 0; i < trimmed.Length; i++)
+        {
+            if (separators.IndexOf(trimmed[i], StringComparison.Ordinal) < 0)
+                length++;
+        }
+
+        if (length == trimmed.Length)
+            return trimmed;
+        return string.Create(length, (Value: trimmed, Separators: separators), static (result, state) =>
+        {
+            var written = 0;
+            for (var i = 0; i < state.Value.Length; i++)
+            {
+                if (state.Separators.IndexOf(state.Value[i], StringComparison.Ordinal) < 0)
+                    result[written++] = state.Value[i];
+            }
+        });
     }
 
     /// <summary>Whether <paramref name="text"/> is non-empty and consists of ASCII digits only.</summary>

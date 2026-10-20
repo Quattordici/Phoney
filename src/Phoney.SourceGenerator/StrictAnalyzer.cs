@@ -101,6 +101,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
 
         if (!AnalyzerSupport.IsStart(receiver, fake, fakeFor))
             return null;
+        earlier.Reverse(); // collected from Strict outward; the calls run first to last
         earlier.AddRange(later);
         return earlier;
     }
