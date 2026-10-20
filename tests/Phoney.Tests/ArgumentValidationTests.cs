@@ -37,6 +37,58 @@ public sealed class ArgumentValidationTests
     }
 
     [Test]
+    [Arguments(-5, -1, "min")]
+    [Arguments(-1, 10, "min")]
+    [Arguments(0, -1, "max")]
+    public void Negative_prices_are_refused_instead_of_giving_zero(int min, int max, string parameter)
+    {
+        var faker = new Faker("en", 1);
+
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Commerce.Price(min, max)).ParamName.ShouldBe(parameter);
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Commerce.PriceText("$", min, max)).ParamName.ShouldBe(parameter);
+    }
+
+    [Test]
+    public void Coordinates_must_lie_on_the_globe()
+    {
+        var faker = new Faker("en", 1);
+
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Latitude(0, 100)).ParamName.ShouldBe("max");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Latitude(-91, 0)).ParamName.ShouldBe("min");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Longitude(0, 180.5)).ParamName.ShouldBe("max");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Longitude(-200, 0)).ParamName.ShouldBe("min");
+        faker.Location.Latitude(90, 90).ShouldBe(90);
+        faker.Location.Longitude(-180, -180).ShouldBe(-180);
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments(" ")]
+    [Arguments("https://")]
+    [Arguments("ht tp")]
+    [Arguments("1http")]
+    public void Url_schemes_must_be_valid(string protocol) =>
+        Should.Throw<ArgumentException>(() => new Faker("en", 1).Internet.Url(protocol: protocol)).ParamName.ShouldBe("protocol");
+
+    [Test]
+    public void Url_accepts_any_valid_scheme()
+    {
+        var faker = new Faker("en", 1);
+
+        faker.Internet.Url(protocol: "ftp").ShouldStartWith("ftp://");
+        faker.Internet.Url(protocol: "git+ssh").ShouldStartWith("git+ssh://");
+        Should.Throw<ArgumentNullException>(() => faker.Internet.Url(protocol: null!)).ParamName.ShouldBe("protocol");
+    }
+
+    [Test]
+    public void A_missing_culture_or_path_is_reported()
+    {
+        Should.Throw<ArgumentNullException>(() => new Faker((CultureInfo)null!)).ParamName.ShouldBe("culture");
+        Should.Throw<ArgumentNullException>(() => new Faker("en", 1).TryPick(null!)).ParamName.ShouldBe("path");
+        new Faker(CultureInfo.InvariantCulture).Locale.ShouldBe(Locales.Default);
+    }
+
+    [Test]
     public void Prices_next_to_the_largest_decimal_do_not_overflow()
     {
         var (min, max) = (decimal.MaxValue - 1, decimal.MaxValue);

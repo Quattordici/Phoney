@@ -174,9 +174,14 @@ public sealed class InternetModule : FakerModule
 
     /// <summary>Returns a URL such as <c>https://dependable-lamp.com/</c>.</summary>
     /// <param name="appendSlash">Whether to end with <c>/</c>; random when <see langword="null"/>.</param>
-    /// <param name="protocol">URL scheme.</param>
+    /// <param name="protocol">URL scheme, without <c>://</c>: <c>https</c>, <c>ftp</c>, <c>git+ssh</c>…</param>
+    /// <exception cref="ArgumentNullException"><paramref name="protocol"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="protocol"/> is not a URL scheme (a letter, then letters, digits, <c>+</c>, <c>-</c> or <c>.</c>).</exception>
     public string Url(bool? appendSlash = null, string protocol = "https")
     {
+        ArgumentNullException.ThrowIfNull(protocol);
+        if (!Uri.CheckSchemeName(protocol))
+            throw new ArgumentException($"'{protocol}' is not a URL scheme: pass one such as \"https\" or \"ftp\", without \"://\".", nameof(protocol));
         var text = new TextBuilder(stackalloc char[128]);
         text.Append(protocol);
         text.Append("://");
