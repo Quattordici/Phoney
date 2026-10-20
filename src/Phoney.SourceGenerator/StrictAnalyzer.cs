@@ -49,7 +49,36 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         if (strict.TargetMethod.Name != "Strict" || !IsGeneratorMethod(strict.TargetMethod, generator) || !IsTrue(strict.Arguments))
             return;
 
-        // Later calls in the chain (outer invocations): the chain must end in a terminal call, and a later Strict(...) is analyzed on its own.
+        var calls = Chain(strict, generator, fake, fakeFor);
+        if (calls is null)
+            return;
+
+        var type = strict.TargetMethod.ContainingType.TypeArguments[0] as INamedTypeSymbol;
+        if (type is null || type.IsAbstract || type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
+            return;
+
+        var coverage = new Coverage();
+        if (!calls.TrueForAll(coverage.Read))
+            return;
+
+        var members = ModelBuilder.DescribeMembers(context.Compilation, type);
+        if (members is null)
+            return;
+
+        var uncovered = members.Where(coverage.LeavesUncovered).Select(m => m.Name).ToList();
+        if (uncovered.Count == 0)
+            return;
+
+        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.StrictUncovered, AnalyzerSupport.NameLocation(strict), type.Name, string.Join(", ", uncovered)));
+    }
+
+    /// <summary>
+    /// The other calls of the chain <paramref name="strict"/> is in, earlier ones first, or <see langword="null"/> when the chain doesn't start a generator,
+    /// doesn't end in a terminal call, or has a later <c>Strict(...)</c> (which is analyzed on its own).
+    /// </summary>
+    private static List<IInvocationOperation>? Chain(IInvocationOperation strict, INamedTypeSymbol generator, INamedTypeSymbol? fake, INamedTypeSymbol? fakeFor)
+    {
+        // Later calls in the chain (outer invocations).
         IOperation current = strict;
         var later = new List<IInvocationOperation>();
         while (current.Parent is IInvocationOperation outer && outer.Instance == current && IsGeneratorMethod(outer.TargetMethod, generator))
@@ -58,8 +87,8 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             current = outer;
         }
 
-        if (later.Count == 0 || !AnalyzerSupport.Terminals.Contains(later[later.Count - 1].TargetMethod.Name) || later.Any(i => i.TargetMethod.Name == "Strict"))
-            return;
+        if (later.Count == 0 || !AnalyzerSupport.Terminals.Contains(later[later.Count - 1].TargetMethod.Name) || later.Exists(i => i.TargetMethod.Name == "Strict"))
+            return null;
 
         // Earlier calls (receivers), down to where the generator was started.
         var earlier = new List<IInvocationOperation>();
@@ -71,62 +100,78 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         }
 
         if (!AnalyzerSupport.IsStart(receiver, fake, fakeFor))
-            return;
+            return null;
+        earlier.Reverse(); // collected from Strict outward; the calls run first to last
+        earlier.AddRange(later);
+        return earlier;
+    }
 
-        var type = ((INamedTypeSymbol)strict.TargetMethod.ContainingType).TypeArguments[0] as INamedTypeSymbol;
-        if (type is null || type.IsAbstract || type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
-            return;
+    /// <summary>What the calls of a chain give values to: members with rules, types with conventions, and whether name conventions apply.</summary>
+    private sealed class Coverage
+    {
+        private readonly HashSet<string> _covered = new(StringComparer.Ordinal);
+        private readonly List<ITypeSymbol> _conventionTypes = [];
+        private bool _useConventions = true;
 
-        var covered = new HashSet<string>(StringComparer.Ordinal);
-        var conventionTypes = new List<ITypeSymbol>();
-        var useConventions = true;
-        foreach (var call in earlier.Concat(later))
+        /// <summary>Records what <paramref name="call"/> covers; <see langword="false"/> when that can't be known from the source, so nothing is reported.</summary>
+        public bool Read(IInvocationOperation call)
         {
             var name = call.TargetMethod.Name;
             if (MemberRules.Contains(name))
+                return ReadMemberRule(call);
+            switch (name)
             {
-                var selector = RuleSelector.Read(call);
-                if (selector.Kind == SelectorKind.Combination)
-                    continue; // a unique combination checks members, it doesn't give them values
-                if (selector.Kind != SelectorKind.Member)
-                    return; // the member can't be read from the source, so don't guess
-                if (!selector.IsNested)
-                    covered.Add(selector.Name!); // a rule for Billing.City is not a rule for Billing
-            }
-            else if (name == "WithFeed")
-            {
-                return; // the columns of the feed are read at runtime: which members they cover can't be known here
-            }
-            else if (name is "WithConvention" or "WithEveryMemberOfType")
-            {
-                conventionTypes.Add(call.TargetMethod.TypeArguments[0]);
-            }
-            else if (name == "WithNameConventions")
-            {
-                var argument = call.Arguments.FirstOrDefault();
-                if (argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue)
-                    useConventions = true;
-                else if (argument.Value.ConstantValue is { HasValue: true, Value: bool value })
-                    useConventions = value;
-                else
-                    return; // decided at runtime
+                case "WithFeed":
+                    return false; // the columns of the feed are read at runtime: which members they cover can't be known here
+                case "WithConvention" or "WithEveryMemberOfType":
+                    _conventionTypes.Add(call.TargetMethod.TypeArguments[0]);
+                    return true;
+                case "WithNameConventions":
+                    return ReadNameConventions(call);
+                default:
+                    return true;
             }
         }
 
-        var members = ModelBuilder.DescribeMembers(context.Compilation, type);
-        if (members is null)
-            return;
+        /// <summary>Whether a member is a scalar that nothing gives a value to.</summary>
+        public bool LeavesUncovered(MemberModel member) =>
+            member.IsScalar && !member.DefinesValue && !_covered.Contains(member.Name)
+            && (member.Convention == nameof(ConventionKind.None) || !_useConventions)
+            && !_conventionTypes.Exists(t => Matches(t, member.Type));
 
-        var uncovered = members
-            .Where(m => m.IsScalar && !m.DefinesValue && !covered.Contains(m.Name)
-                && (m.Convention == nameof(ConventionKind.None) || !useConventions)
-                && !conventionTypes.Any(t => Matches(t, m.Type)))
-            .Select(m => m.Name)
-            .ToList();
-        if (uncovered.Count == 0)
-            return;
+        private bool ReadMemberRule(IInvocationOperation call)
+        {
+            var selector = RuleSelector.Read(call);
+            if (selector.Kind == SelectorKind.Combination)
+                return true; // a unique combination checks members, it doesn't give them values
+            if (selector.Kind != SelectorKind.Member)
+                return false; // the member can't be read from the source, so don't guess
+            if (!selector.IsNested)
+                _covered.Add(selector.Name!); // a rule for Billing.City is not a rule for Billing
+            return true;
+        }
 
-        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.StrictUncovered, AnalyzerSupport.NameLocation(strict), type.Name, string.Join(", ", uncovered)));
+        private bool ReadNameConventions(IInvocationOperation call)
+        {
+            var argument = call.Arguments.FirstOrDefault();
+            if (argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue)
+                _useConventions = true;
+            else if (argument.Value.ConstantValue is { HasValue: true, Value: bool value })
+                _useConventions = value;
+            else
+                return false; // decided at runtime
+            return true;
+        }
+
+        /// <summary>Whether a <c>WithConvention&lt;TValue&gt;</c> applies to a member type (also its nullable form), like <c>CustomConvention.Matches</c>.</summary>
+        private static bool Matches(ITypeSymbol conventionType, ITypeSymbol? memberType)
+        {
+            if (memberType is null)
+                return false;
+            if (memberType is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+                memberType = nullable.TypeArguments[0];
+            return SymbolEqualityComparer.Default.Equals(conventionType.WithNullableAnnotation(NullableAnnotation.None), memberType.WithNullableAnnotation(NullableAnnotation.None));
+        }
     }
 
     private static bool IsGeneratorMethod(IMethodSymbol method, INamedTypeSymbol generator) =>
@@ -139,13 +184,4 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         return argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue || argument.Value.ConstantValue is { HasValue: true, Value: true };
     }
 
-    /// <summary>Whether a <c>WithConvention&lt;TValue&gt;</c> applies to a member type (also its nullable form), like <c>CustomConvention.Matches</c>.</summary>
-    private static bool Matches(ITypeSymbol conventionType, ITypeSymbol? memberType)
-    {
-        if (memberType is null)
-            return false;
-        if (memberType is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
-            memberType = nullable.TypeArguments[0];
-        return SymbolEqualityComparer.Default.Equals(conventionType.WithNullableAnnotation(NullableAnnotation.None), memberType.WithNullableAnnotation(NullableAnnotation.None));
-    }
 }

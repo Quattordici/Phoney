@@ -197,9 +197,9 @@ public sealed class FinanceModule : FakerModule
         var bank = Faker.String.Alpha(4, Casing.Upper);
         var country = Random.Element(IbanData.Iso3166);
         var location = Faker.String.AlphaNumeric(2, Casing.Upper);
-        var branch = (includeBranchCode ?? Random.Bool())
-            ? Random.Bool() ? Faker.String.AlphaNumeric(3, Casing.Upper) : "XXX"
-            : "";
+        var branch = "";
+        if (includeBranchCode ?? Random.Bool())
+            branch = Random.Bool() ? Faker.String.AlphaNumeric(3, Casing.Upper) : "XXX";
         return bank + country + location + branch;
     }
 

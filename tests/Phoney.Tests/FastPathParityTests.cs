@@ -9,8 +9,11 @@ namespace Phoney.Tests;
 /// The fast paths (integer decimal arithmetic, templates written into one buffer, one-pass emails, precompiled name patterns) must give exactly
 /// what the straightforward code gave: same draws, same strings, same decimal bits (scale included).
 /// </summary>
-public sealed class FastPathParityTests
+public sealed partial class FastPathParityTests
 {
+    [GeneratedRegex("^[a-z][a-z-]*[a-z]$", RegexOptions.IgnoreCase)]
+    private static partial Regex DomainSlug();
+
     /// <summary>Values captured before the fast paths existed, from <c>new Faker(locale, seed: 2025)</c> in this order.</summary>
     [Test]
     [Arguments("en", "4592 Tremblay Manors|8872 Rowan Wells Apt. 291|Raleighmouth|19950-7979|Obie Keebler|Eden_Rolfson70@gmail.com|Ryann36|https://disloyal-seagull.net/|90189,0,0,131072|2024-04-14T19:15:21.5900000+00:00")]
@@ -71,10 +74,9 @@ public sealed class FastPathParityTests
     [Test]
     public void Domain_slugs_are_checked_like_the_regular_expression()
     {
-        var regex = new Regex("^[a-z][a-z-]*[a-z]$", RegexOptions.IgnoreCase);
         string[] samples = ["", "a", "ab", "a-b", "-ab", "ab-", "a--b", "a1b", "Ab", "aB-c", "é", "aéb", "a_b", "a.b", "ab c", "AB"];
         foreach (var sample in samples)
-            InternetModule.IsDomainSlug(sample).ShouldBe(regex.IsMatch(sample), sample);
+            InternetModule.IsDomainSlug(sample).ShouldBe(DomainSlug().IsMatch(sample), sample);
 
         // What it is used for: slugs of the words of every locale.
         foreach (var locale in Locales.All)
@@ -85,7 +87,7 @@ public sealed class FastPathParityTests
                 foreach (var word in new[] { Try(() => f.Word.Adjective()), Try(() => f.Word.Noun()), Try(() => f.Lorem.Word()) })
                 {
                     var slug = HelpersModule.Slugify(word);
-                    InternetModule.IsDomainSlug(slug).ShouldBe(regex.IsMatch(slug), $"{locale.Code}: {slug}");
+                    InternetModule.IsDomainSlug(slug).ShouldBe(DomainSlug().IsMatch(slug), $"{locale.Code}: {slug}");
                 }
             }
         }
@@ -125,7 +127,7 @@ public sealed class FastPathParityTests
         public static decimal Decimal(SeededRandom random, decimal min, decimal max, int decimals)
         {
             if (max < min)
-                throw new ArgumentException("max", nameof(max));
+                throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
             ArgumentOutOfRangeException.ThrowIfNegative(decimals);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, 28);
 

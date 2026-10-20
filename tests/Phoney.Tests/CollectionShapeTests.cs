@@ -53,7 +53,7 @@ public sealed class CollectionShapeTests
 
     private static ObjectGenerator<Catalog> Reflected() => new ObjectGenerator<Catalog>(new ReflectionModel<Catalog>()).Seed(8);
 
-    private static IEnumerable<PropertyInfo> Collections() => typeof(Catalog).GetProperties();
+    private static PropertyInfo[] Collections() => typeof(Catalog).GetProperties();
 
     private static List<string> Items(Catalog catalog, PropertyInfo property) =>
         ((IEnumerable)property.GetValue(catalog)!).Cast<object>().Select(o => o.ToString()!).ToList();
@@ -164,7 +164,8 @@ public sealed class CollectionShapeTests
         one.Code.ShouldNotBeNullOrEmpty();
         many.Count.ShouldBe(5);
         many.ShouldAllBe(x => x is Ticket);
-        Fake.One(typeof(int)).ShouldBeOfType<int>();
+        var scalar = typeof(int);
+        Fake.One(scalar).ShouldBeOfType<int>();
         string Code()
         {
             using var _ = Fake.Seeded(3);

@@ -130,12 +130,13 @@ public sealed class AddFakeForCodeFix : CodeFixProvider
     private static async Task<string> FreeNameAsync(Project project, CancellationToken cancellationToken)
     {
         var compilation = await project.GetCompilationAsync(cancellationToken).ConfigureAwait(false);
-        for (var n = 1; ; n++)
-        {
-            var name = n == 1 ? NewClassName : NewClassName + n;
-            var taken = compilation?.GetTypeByMetadataName(name) is not null || project.Documents.Any(d => d.Name == name + ".cs");
-            if (!taken)
-                return name;
-        }
+        var name = NewClassName;
+        var n = 1;
+        while (IsTaken(name))
+            name = NewClassName + ++n;
+        return name;
+
+        bool IsTaken(string candidate) =>
+            compilation?.GetTypeByMetadataName(candidate) is not null || project.Documents.Any(d => d.Name == candidate + ".cs");
     }
 }

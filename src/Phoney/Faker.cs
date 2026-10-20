@@ -156,18 +156,18 @@ public sealed partial class Faker : IFaker
         return Pick(key);
     }
 
+    /// <summary>Picks a value of a string entry and evaluates its templates.</summary>
+    internal string Pick(int key) => Pick(Data.Strings(key));
+
+    /// <summary>Picks a value (weighted if applicable) and evaluates its templates.</summary>
+    internal string Pick(StringsEntry entry) => entry.Resolve(entry.PickIndex(Random), this);
+
     /// <summary>Like <see cref="Pick(string)"/> but returns <see langword="null"/> when the locale has no data.</summary>
     public string? TryPick(string path) =>
         KeyRegistry.TryGetId(path, out var key) ? TryPick(key) : null;
 
-    /// <summary>Picks a value of a string entry and evaluates its templates.</summary>
-    internal string Pick(int key) => Pick(Data.Strings(key));
-
     /// <summary>Like <see cref="Pick(int)"/>, or <see langword="null"/> when there is no data.</summary>
     internal string? TryPick(int key) => Data.TryStrings(key) is { } entry ? Pick(entry) : null;
-
-    /// <summary>Picks a value (weighted if applicable) and evaluates its templates.</summary>
-    internal string Pick(StringsEntry entry) => entry.Resolve(entry.PickIndex(Random), this);
 
     /// <summary>Like <see cref="Pick(int)"/>, writing the value into <paramref name="text"/> instead of returning it.</summary>
     internal void AppendPick(int key, ref TextBuilder text)

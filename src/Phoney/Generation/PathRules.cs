@@ -23,7 +23,16 @@ internal sealed class PathNode
     private readonly ConcurrentDictionary<Type, PathBinding> _bound = new();
 
     /// <summary>The position below this one reached through <paramref name="member"/>, created on first use.</summary>
-    public PathNode Child(string member) => _children.TryGetValue(member, out var child) ? child : _children[member] = new PathNode();
+    public PathNode Child(string member)
+    {
+        if (!_children.TryGetValue(member, out var child))
+        {
+            child = new PathNode();
+            _children[member] = child;
+        }
+
+        return child;
+    }
 
     /// <summary>Sets (or replaces) the rule for <paramref name="member"/> of the object at this position; <paramref name="usage"/> is marked when an object there gets it.</summary>
     public void Set(string member, PathRule rule, RuleUsage.Entry? usage) => _rules[member] = (rule, usage);
@@ -95,14 +104,12 @@ internal static class PathRules
         var node = root;
         var owner = rootType;
         IReadOnlyList<FakeMember>? members = rootMembers;
-        var path = rootType.Name;
         for (var i = 0; i < spec.Segments.Length; i++)
         {
             var name = spec.Segments[i];
-            path += "." + name;
             var member = members?.FirstOrDefault(m => m.Name == name);
             if (members is not null && member is null)
-                throw new InvalidOperationException($"{path} can't be generated: {owner.Name} has no public settable member or constructor parameter '{name}'.");
+                throw new InvalidOperationException($"{PathTo(rootType, spec, i)} can't be generated: {owner.Name} has no public settable member or constructor parameter '{name}'.");
 
             if (i == spec.Segments.Length - 1)
             {
@@ -116,14 +123,25 @@ internal static class PathRules
             if (member is null)
                 continue; // below an interface or abstract class: nothing to check against
 
-            var type = Nullable.GetUnderlyingType(member.Type) ?? member.Type;
-            if (CollectionTypes.ElementType(type, out _) is { } element)
-                type = Nullable.GetUnderlyingType(element) ?? element;
-            if (type == typeof(byte[]) || FakeMember.ScalarCategory(type) != TypeCategory.Other || ScalarAdapters.IsAdapted(type))
-                throw new InvalidOperationException($"{path} is {type.Name}, not an object with members, so the rule for {rootType.Name}.{string.Join('.', spec.Segments)} can't be generated.");
+            var (type, isObject) = HeldType(member);
+            if (!isObject)
+                throw new InvalidOperationException($"{PathTo(rootType, spec, i)} is {type.Name}, not an object with members, so the rule for {PathTo(rootType, spec, spec.Segments.Length - 1)} can't be generated.");
 
             owner = type;
-            members = ModelRegistry.Get(type)?.Members;
+            members = ModelRegistry.Get(owner)?.Members;
         }
+    }
+
+    /// <summary>The path up to segment <paramref name="last"/> for messages (<c>Order.Billing.City</c>).</summary>
+    private static string PathTo(Type rootType, PathSpec spec, int last) => rootType.Name + "." + string.Join('.', spec.Segments, 0, last + 1);
+
+    /// <summary>The type of the values a member holds (its element type for a collection), and whether they are objects: a scalar has no members to put rules on.</summary>
+    private static (Type Type, bool IsObject) HeldType(FakeMember member)
+    {
+        var type = Nullable.GetUnderlyingType(member.Type) ?? member.Type;
+        if (CollectionTypes.ElementType(type, out _) is { } element)
+            type = Nullable.GetUnderlyingType(element) ?? element;
+        var scalar = type == typeof(byte[]) || FakeMember.ScalarCategory(type) != TypeCategory.Other || ScalarAdapters.IsAdapted(type);
+        return (type, !scalar);
     }
 }

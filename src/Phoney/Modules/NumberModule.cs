@@ -139,10 +139,10 @@ public sealed class NumberModule : FakerModule
             throw new ArgumentOutOfRangeException(nameof(max), max, "The maximum must be a finite number.");
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
+        OptionalArgument.ThrowIfNegative(fractionDigits);
+        OptionalArgument.ThrowIfGreaterThan(fractionDigits, 15);
         if (fractionDigits is not { } digits)
             return Random.Double(min, max);
-        ArgumentOutOfRangeException.ThrowIfNegative(digits, nameof(fractionDigits));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(digits, 15, nameof(fractionDigits));
 
         // Choose an integer number of steps of 10^-digits, so every representable value is equally likely.
         var factor = PowersOfTen[digits];
@@ -181,40 +181,55 @@ public sealed class NumberModule : FakerModule
 
         // The common case: both ends scaled by 10^decimals fit in a long, so the value is built from its digits (same draw, same result as decimal arithmetic).
         if (decimals <= MaxLongPlaces && TryScale(min, decimals, ceiling: true, out var start) && TryScale(max, decimals, ceiling: false, out var end))
-        {
-            if (end < start)
-                throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
-            var drawn = Random.Long(0, end - start);
-            var step = start + drawn;
-            if (step != 0)
-            {
-                steps = new DecimalSteps(step, start, end);
-                return FromSteps(step, decimals);
-            }
-
-            // A zero keeps the sign decimal arithmetic gives it (-0 from a negative minimum), so it is divided out like before.
-            var scale = DecimalPowers[decimals];
-            return decimal.Round((decimal.Ceiling(min * scale) + drawn) / scale, decimals);
-        }
+            return DecimalFromSteps(min, max, decimals, start, end, out steps);
 
         var largest = Math.Max(Math.Abs(min), Math.Abs(max));
-        if (decimals <= MaxLongPlaces && largest <= DecimalPowers[MaxLongPlaces - decimals])
+        return decimals <= MaxLongPlaces && largest <= DecimalPowers[MaxLongPlaces - decimals]
+            ? DecimalFromScaledSteps(min, max, decimals, out steps)
+            : WideDecimal(min, max, decimals, largest);
+    }
+
+    /// <summary>A decimal drawn as a step between <paramref name="start"/> and <paramref name="end"/>, the ends scaled by 10^<paramref name="decimals"/>.</summary>
+    private decimal DecimalFromSteps(decimal min, decimal max, int decimals, long start, long end, out DecimalSteps steps)
+    {
+        steps = default;
+        if (end < start)
+            throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
+        var drawn = Random.Long(0, end - start);
+        var step = start + drawn;
+        if (step != 0)
         {
-            // Every step fits in a long, but an end has more than 64 bits of digits (many decimals beyond the ones asked for): scale it with decimal arithmetic.
-            var scale = DecimalPowers[decimals];
-            var first = decimal.Ceiling(min * scale);
-            var last = decimal.Floor(max * scale);
-            if (last < first)
-                throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
-            var from = (long)first;
-            var drawn = Random.Long(0, (long)last - from);
-            var step = from + drawn;
-            if (step != 0)
-                steps = new DecimalSteps(step, from, (long)last);
-            return step != 0 ? FromSteps(step, decimals) : decimal.Round((first + drawn) / scale, decimals);
+            steps = new DecimalSteps(step, start, end);
+            return FromSteps(step, decimals);
         }
 
-        // A value too large to scale by 10^decimals can't hold that many places either: keep as many as fit.
+        // A zero keeps the sign decimal arithmetic gives it (-0 from a negative minimum), so it is divided out like before.
+        var scale = DecimalPowers[decimals];
+        return decimal.Round((decimal.Ceiling(min * scale) + drawn) / scale, decimals);
+    }
+
+    /// <summary>
+    /// A decimal whose steps all fit in a long, but an end has more than 64 bits of digits (many decimals beyond the ones asked for): the ends are scaled with decimal arithmetic.
+    /// </summary>
+    private decimal DecimalFromScaledSteps(decimal min, decimal max, int decimals, out DecimalSteps steps)
+    {
+        steps = default;
+        var scale = DecimalPowers[decimals];
+        var first = decimal.Ceiling(min * scale);
+        var last = decimal.Floor(max * scale);
+        if (last < first)
+            throw new ArgumentException($"No value with {decimals} decimals between {min} and {max}.", nameof(decimals));
+        var from = (long)first;
+        var drawn = Random.Long(0, (long)last - from);
+        var step = from + drawn;
+        if (step != 0)
+            steps = new DecimalSteps(step, from, (long)last);
+        return step != 0 ? FromSteps(step, decimals) : decimal.Round((first + drawn) / scale, decimals);
+    }
+
+    /// <summary>A decimal too large to scale by 10^decimals, which can't hold that many places either: it keeps as many as fit.</summary>
+    private decimal WideDecimal(decimal min, decimal max, int decimals, decimal largest)
+    {
         var places = decimals;
         while (places > 0 && largest > decimal.MaxValue / Pow10(places))
             places--;
@@ -234,9 +249,10 @@ public sealed class NumberModule : FakerModule
 
         var range = high - low;
         // decimal has more precision than one double draw; combine two draws for wide ranges.
+        var span = range < decimal.MaxValue ? range + 1 : range;
         var offset = range <= long.MaxValue
             ? Random.Long(0, (long)range)
-            : decimal.Floor((decimal)Random.Double() * (range < decimal.MaxValue ? range + 1 : range));
+            : decimal.Floor((decimal)Random.Double() * span);
         return decimal.Round((low + offset) / factor, places);
     }
 

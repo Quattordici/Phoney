@@ -245,7 +245,7 @@ public sealed class DataExportTests
         var second = generator.ToCsv(5);
 
         second.ShouldNotBe(first);
-        DataFeed.FromCsv(first + second.Substring(second.IndexOf('\n') + 1)).Count.ShouldBe(10);
+        DataFeed.FromCsv(string.Concat(first, second.AsSpan(second.IndexOf('\n') + 1))).Count.ShouldBe(10);
     }
 
     [Test]

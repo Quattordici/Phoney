@@ -41,11 +41,7 @@ public sealed class LocaleBuilder
         foreach (var code in codes)
         {
             var info = LocaleStore.Info(code);
-            foreach (var c in info.Fallback.Prepend(info.Code))
-            {
-                if (!chain.Contains(c))
-                    chain.Add(c);
-            }
+            chain.AddRange(info.Fallback.Prepend(info.Code).Where(c => !chain.Contains(c)).ToList());
         }
 
         if (!chain.Contains("base"))
@@ -253,13 +249,18 @@ public sealed class LocaleBuilder
             .Distinct()
             .Prepend("key")
             .ToArray();
-        var values = items.SelectMany(item => fields.Select(f =>
-                f == "key" ? item.Name
-                : item.Value.ValueKind == JsonValueKind.Object && item.Value.TryGetProperty(f, out var v)
-                    ? v.ValueKind == JsonValueKind.Array ? string.Join(",", v.EnumerateArray().Select(Scalar)) : Scalar(v)
-                    : null))
-            .ToArray();
+        var values = items.SelectMany(item => fields.Select(f => FieldOf(item, f))).ToArray();
         _changes[KeyRegistry.GetOrAdd(path)] = items.Length == 0 ? null : new RecordsEntry(fields, values);
+    }
+
+    /// <summary>One field of a map entry as record text: its key, a scalar, or the items of an array joined with commas.</summary>
+    private static string? FieldOf(JsonProperty item, string field)
+    {
+        if (field == "key")
+            return item.Name;
+        if (item.Value.ValueKind != JsonValueKind.Object || !item.Value.TryGetProperty(field, out var value))
+            return null;
+        return value.ValueKind == JsonValueKind.Array ? string.Join(",", value.EnumerateArray().Select(Scalar)) : Scalar(value);
     }
 
     /// <summary>Whether an object key is a name (as opposed to data such as a MIME type).</summary>

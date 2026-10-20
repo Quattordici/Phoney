@@ -122,6 +122,23 @@ public sealed class SeededRandom
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public double Double() => (NextUInt64() >> 11) * (1.0 / (1UL << 53));
 
+    /// <summary>Returns a double in <c>[min, max)</c> (<paramref name="min"/> when both are equal). Any finite range works, up to <see cref="double.MinValue"/> to <see cref="double.MaxValue"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> or <paramref name="max"/> is not a finite number.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public double Double(double min, double max)
+    {
+        RequireFinite(min, nameof(min));
+        RequireFinite(max, nameof(max));
+        if (max < min)
+            throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
+        var fraction = Double();
+        var range = max - min;
+        var value = double.IsFinite(range)
+            ? min + (fraction * range)
+            : (min * (1 - fraction)) + (max * fraction); // the width overflows a double; this form stays between the bounds
+        return value < max || max <= min ? value : Math.BitDecrement(max); // rounding can land on max, which the range excludes
+    }
+
     /// <summary>
     /// Returns a number from a normal (Gaussian) distribution, with the Box–Muller transform. It always draws two numbers, whatever the result, so what is drawn after it does not
     /// depend on its value, and it keeps no state, so reseeding gives the same sequence. The logarithm and cosine are made without the system's maths library
@@ -140,23 +157,6 @@ public sealed class SeededRandom
         var radius = Math.Sqrt(-2.0 * PureMath.Ln(1.0 - Double())); // 1 - [0, 1) is in (0, 1]
         var turns = Double();
         return mean + (standardDeviation * radius * PureMath.CosTurns(turns));
-    }
-
-    /// <summary>Returns a double in <c>[min, max)</c> (<paramref name="min"/> when both are equal). Any finite range works, up to <see cref="double.MinValue"/> to <see cref="double.MaxValue"/>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> or <paramref name="max"/> is not a finite number.</exception>
-    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
-    public double Double(double min, double max)
-    {
-        RequireFinite(min, nameof(min));
-        RequireFinite(max, nameof(max));
-        if (max < min)
-            throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
-        var fraction = Double();
-        var range = max - min;
-        var value = double.IsFinite(range)
-            ? min + (fraction * range)
-            : (min * (1 - fraction)) + (max * fraction); // the width overflows a double; this form stays between the bounds
-        return value < max || max <= min ? value : Math.BitDecrement(max); // rounding can land on max, which the range excludes
     }
 
     /// <summary>Returns a decimal in <c>[min, max)</c>. Any range works, up to <see cref="decimal.MinValue"/> to <see cref="decimal.MaxValue"/>.</summary>

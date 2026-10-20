@@ -36,7 +36,13 @@ internal static class SeededRun
         }
         catch (Exception e) when (e is not SkipTestException)
         {
-            report(Describe(seed, pinned is not null ? Origin.Pinned : environment is not null ? Origin.Environment : Origin.Random));
+            var origin = (pinned, environment) switch
+            {
+                (not null, _) => Origin.Pinned,
+                (_, not null) => Origin.Environment,
+                _ => Origin.Random,
+            };
+            report(Describe(seed, origin));
             throw;
         }
     }

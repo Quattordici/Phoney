@@ -75,9 +75,9 @@ public sealed class FakeDataTests
 /// <summary>What the attribute hands to NUnit, independent of a running test.</summary>
 public sealed class FakeDataRowTests
 {
-    private void Sample(string email, [Range(1, 3)] int quantity) { }
+    private static void Sample(string email, [Range(1, 3)] int quantity) { }
 
-    private static IMethodInfo Method(string name) => new MethodWrapper(typeof(FakeDataRowTests), typeof(FakeDataRowTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!);
+    private static MethodWrapper Method(string name) => new(typeof(FakeDataRowTests), typeof(FakeDataRowTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!);
 
     [Test]
     public void Count_gives_that_many_distinct_cases()

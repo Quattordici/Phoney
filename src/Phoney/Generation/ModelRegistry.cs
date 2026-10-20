@@ -42,7 +42,11 @@ public static class ModelRegistry
     {
         // A type first seen as a nested object has an untyped reflection model; upgrade it to a typed one.
         var model = Models.GetOrAdd(typeof(T), static _ => new ReflectionModel<T>());
-        return model as FakeModel<T> ?? (FakeModel<T>)(Models[typeof(T)] = new ReflectionModel<T>());
+        if (model is FakeModel<T> typed)
+            return typed;
+        var upgraded = new ReflectionModel<T>();
+        Models[typeof(T)] = upgraded;
+        return upgraded;
     }
 
     /// <summary>

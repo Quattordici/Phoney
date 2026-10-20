@@ -232,9 +232,12 @@ internal sealed class LocaleResource
 
     private static void SkipVarint(byte[] data, ref int position)
     {
-        while ((data[position++] & 0x80) != 0)
+        byte b;
+        do
         {
+            b = data[position++];
         }
+        while ((b & 0x80) != 0); // the high bit says another byte follows
     }
 
     /// <summary>A 7-bit encoded integer (what <c>BinaryWriter.Write7BitEncodedInt</c> writes).</summary>

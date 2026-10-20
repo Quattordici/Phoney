@@ -60,6 +60,9 @@ public static partial class BasketFakes;
 
 public sealed class ReadOnlyCollectionTests
 {
+    private static readonly string[] AB = ["a", "b"];
+    private static readonly string[] Only = ["only"];
+
     private static ObjectGenerator<Basket> Make() => Fake.For<Basket>().Seed(6);
 
     private static ObjectGenerator<Basket> Generated() => BasketFakes.Basket.Seed(6);
@@ -128,7 +131,7 @@ public sealed class ReadOnlyCollectionTests
     {
         var generator = generated ? Generated() : Reflected();
 
-        generator.With(b => b.Items, new List<string> { "a", "b" }).Generate(3).ShouldAllBe(b => b.Items.SequenceEqual(new[] { "a", "b" }));
+        generator.With(b => b.Items, new List<string> { "a", "b" }).Generate(3).ShouldAllBe(b => b.Items.SequenceEqual(AB));
         generator.With(b => b.Tags, f => new HashSet<string> { "x" }).Generate(3).ShouldAllBe(b => b.Tags.Count == 1 && b.Tags.Contains("x"));
         generator.Ignore(b => b.Items).Ignore(b => b.Lines).Generate(3).ShouldAllBe(b => b.Items.Count == 0 && b.Lines.Count == 0 && b.Tags.Count > 0);
         generator.With(b => b.Lines.Each().Sku, "SKU").Generate(3).SelectMany(b => b.Lines).ShouldAllBe(l => l.Sku == "SKU");
@@ -149,7 +152,7 @@ public sealed class ReadOnlyCollectionTests
     {
         var baskets = Make().CreateWith(_ => new Basket()).With(b => b.Items, new List<string> { "only" }).Generate(2);
 
-        baskets.ShouldAllBe(b => b.Items.SequenceEqual(new[] { "only" }));
+        baskets.ShouldAllBe(b => b.Items.SequenceEqual(Only));
     }
 
     [Test]

@@ -45,18 +45,7 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
             return new RuleSelector(SelectorKind.Unknown, null, call.Syntax.GetLocation());
 
         var location = argument.Syntax.GetLocation();
-        var value = argument.Value;
-        while (true)
-        {
-            if (value is IConversionOperation conversion)
-                value = conversion.Operand;
-            else if (value is IDelegateCreationOperation creation)
-                value = creation.Target;
-            else
-                break;
-        }
-
-        if (value is not IAnonymousFunctionOperation lambda)
+        if (Lambda(argument.Value) is not { } lambda)
             return new RuleSelector(SelectorKind.Unknown, null, location);
 
         // Expression-bodied lambdas are a block with one implicit return.
@@ -68,7 +57,31 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
         var parameter = lambda.Symbol.Parameters.FirstOrDefault();
         if (returned is IAnonymousObjectCreationOperation combination)
             return ReadCombination(combination, parameter, location);
+        return ReadPath(returned, parameter, location);
+    }
 
+    /// <summary>The lambda an argument passes, looking through conversions and delegate creations, or <see langword="null"/> when it is not one.</summary>
+    private static IAnonymousFunctionOperation? Lambda(IOperation value)
+    {
+        while (true)
+        {
+            switch (value)
+            {
+                case IConversionOperation conversion:
+                    value = conversion.Operand;
+                    break;
+                case IDelegateCreationOperation creation:
+                    value = creation.Target;
+                    break;
+                default:
+                    return value as IAnonymousFunctionOperation;
+            }
+        }
+    }
+
+    /// <summary><c>x =&gt; x.Billing.City</c> (and <c>x.Lines.Each().Sku</c>): a <see cref="SelectorKind.Member"/> when it is a chain of members of the parameter.</summary>
+    private static RuleSelector ReadPath(IOperation returned, IParameterSymbol? parameter, Location location)
+    {
         var names = new List<string>();
         var current = returned;
         while (!(current is IParameterReferenceOperation reference && SymbolEqualityComparer.Default.Equals(reference.Parameter, parameter)))

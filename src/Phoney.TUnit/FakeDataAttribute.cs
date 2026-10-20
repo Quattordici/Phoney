@@ -83,10 +83,13 @@ public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
     {
         ArgumentNullException.ThrowIfNull(dataGeneratorMetadata);
         var arguments = dataGeneratorMetadata.MembersToGenerate.Select(ToArgument).ToList();
-        var generator = CreateGenerator(arguments, dataGeneratorMetadata.TestInformation);
+        return Rows(CreateGenerator(arguments, dataGeneratorMetadata.TestInformation), Count);
+    }
 
-        // Each test case recreates its row on demand, so retried or re-instantiated tests get fresh, identical values.
-        for (var i = 0; i < Count; i++)
+    /// <summary>Each test case recreates its row on demand, so retried or re-instantiated tests get fresh, identical values.</summary>
+    private static IEnumerable<Func<object?[]?>> Rows(ArgumentGenerator generator, int count)
+    {
+        for (var i = 0; i < count; i++)
         {
             var index = i;
             yield return () => generator.Row(index);

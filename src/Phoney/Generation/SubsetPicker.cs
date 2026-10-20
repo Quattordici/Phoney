@@ -25,11 +25,11 @@ internal sealed class SubsetPicker<TValue>
 
     /// <summary>Checks and copies the list.</summary>
     /// <exception cref="ArgumentException">The size is larger than the list.</exception>
-    public static SubsetPicker<TValue> Create(IReadOnlyList<TValue> values, SubsetSize size, string parameter)
+    public static SubsetPicker<TValue> Create(IReadOnlyList<TValue> values, SubsetSize size)
     {
-        ArgumentNullException.ThrowIfNull(values, parameter);
+        ArgumentNullException.ThrowIfNull(values);
         if (size.Max > values.Count)
-            throw new ArgumentException($"Cannot take {size.Max} of the {values.Count} values: a subset is never larger than the list it is taken from.", parameter);
+            throw new ArgumentException($"Cannot take {size.Max} of the {values.Count} values: a subset is never larger than the list it is taken from.", nameof(values));
         return new SubsetPicker<TValue>([.. values], null, size);
     }
 
@@ -37,20 +37,20 @@ internal sealed class SubsetPicker<TValue>
     /// Checks and copies the list and its weights. A value with weight zero is never in a subset, so it is left out.
     /// </summary>
     /// <exception cref="ArgumentException">The lists differ in length, a weight is negative, not a number or infinite, or the size is larger than the values that can be taken.</exception>
-    public static SubsetPicker<TValue> Create(IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size, string parameter)
+    public static SubsetPicker<TValue> Create(IReadOnlyList<TValue> values, IReadOnlyList<double> weights, SubsetSize size)
     {
-        ArgumentNullException.ThrowIfNull(values, parameter);
+        ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(weights);
         if (values.Count != weights.Count)
             throw new ArgumentException($"Provide one weight per value: {values.Count} values and {weights.Count} weights.", nameof(weights));
         if (size.Max > values.Count)
-            throw new ArgumentException($"Cannot take {size.Max} of the {values.Count} values: a subset is never larger than the list it is taken from.", parameter);
+            throw new ArgumentException($"Cannot take {size.Max} of the {values.Count} values: a subset is never larger than the list it is taken from.", nameof(values));
 
         var choices = WeightedPicker<TValue>.PositiveChoices(values, weights, nameof(weights));
         if (size.Max > choices.Values.Length)
         {
             throw new ArgumentException(
-                $"Cannot take {size.Max} of the {choices.Values.Length} values with a weight above zero: a value with weight zero is never included.", parameter);
+                $"Cannot take {size.Max} of the {choices.Values.Length} values with a weight above zero: a value with weight zero is never included.", nameof(values));
         }
 
         return new SubsetPicker<TValue>(choices.Values, choices.Weights, size);
@@ -134,34 +134,41 @@ internal sealed class SubsetPicker<TValue>
         taken.Clear(); // the module skips zeroing stack buffers
         for (var count = 0; count < positions.Length; count++)
         {
-            var remaining = 0.0;
-            for (var i = 0; i < n; i++)
-            {
-                if (!taken[i])
-                    remaining += weights[i];
-            }
-
-            var target = random.Double() * remaining;
-            var chosen = -1;
-            var lastFree = -1;
-            for (var i = 0; i < n; i++)
-            {
-                if (taken[i])
-                    continue;
-                lastFree = i;
-                target -= weights[i];
-                if (target < 0)
-                {
-                    chosen = i;
-                    break;
-                }
-            }
-
-            chosen = chosen < 0 ? lastFree : chosen; // rounding put the target exactly on the total: the last one left
+            var chosen = FreePositionAt(weights, taken, random.Double() * FreeWeight(weights, taken));
             taken[chosen] = true;
             positions[count] = chosen;
         }
 
         positions.Sort();
+    }
+
+    /// <summary>The total weight of the positions not taken yet.</summary>
+    private static double FreeWeight(ReadOnlySpan<double> weights, ReadOnlySpan<bool> taken)
+    {
+        var remaining = 0.0;
+        for (var i = 0; i < weights.Length; i++)
+        {
+            if (!taken[i])
+                remaining += weights[i];
+        }
+
+        return remaining;
+    }
+
+    /// <summary>The free position whose share of the free weight holds <paramref name="target"/>.</summary>
+    private static int FreePositionAt(ReadOnlySpan<double> weights, ReadOnlySpan<bool> taken, double target)
+    {
+        var lastFree = -1;
+        for (var i = 0; i < weights.Length; i++)
+        {
+            if (taken[i])
+                continue;
+            lastFree = i;
+            target -= weights[i];
+            if (target < 0)
+                return i;
+        }
+
+        return lastFree; // rounding put the target exactly on the total: the last one left
     }
 }

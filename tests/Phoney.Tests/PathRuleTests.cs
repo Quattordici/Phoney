@@ -26,7 +26,7 @@ public sealed class Contact
 {
     public string Phone { get; set; } = "";
     public string Email { get; set; } = "";
-    public string Label => "read only";
+    public string Label { get; } = "read only";
 }
 
 public sealed class Line

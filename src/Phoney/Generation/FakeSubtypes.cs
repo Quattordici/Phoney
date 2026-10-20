@@ -37,6 +37,8 @@ public sealed class FakeSubtypes
     public void Add<TBase, T1>()
         where T1 : TBase => Add<TBase>(typeof(T1));
 
+#pragma warning disable S2325 // instance members on purpose: Fake.Subtypes is one registry discovered from Fake., and making them static would break callers
+#pragma warning disable S2436 // each type parameter is one more subtype, checked against TBase at compile time; params Type[] can't check that
     /// <summary>Generates one of the subtypes for members of type <typeparamref name="TBase"/>, in addition to subtypes added before.</summary>
     public void Add<TBase, T1, T2>()
         where T1 : TBase
@@ -64,6 +66,8 @@ public sealed class FakeSubtypes
 
     /// <summary>Removes all registered subtypes, including those registered by <see cref="FakeSubtypeAttribute{TBase, TSubtype}"/>.</summary>
     public void Clear() => Volatile.Write(ref s_all, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
+#pragma warning restore S2436
+#pragma warning restore S2325
 
     private static void Add(Type baseType, Type[] subtypes)
     {
@@ -73,6 +77,7 @@ public sealed class FakeSubtypes
     }
 }
 
+#pragma warning disable S2326 // the source generator reads TBase and TSubtype to register the subtype
 /// <summary>
 /// Registers <typeparamref name="TSubtype"/> as a subtype of <typeparamref name="TBase"/> app-wide, like
 /// <c>Fake.Subtypes.Add&lt;TBase, TSubtype&gt;()</c>, and makes the source generator write a model for it. Put it on
@@ -89,6 +94,7 @@ public sealed class FakeSubtypes
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class FakeSubtypeAttribute<TBase, TSubtype> : Attribute
     where TSubtype : TBase;
+#pragma warning restore S2326
 
 /// <summary>Subtype validation, ordering and the <c>[JsonDerivedType]</c> defaults.</summary>
 internal static class Subtypes

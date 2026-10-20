@@ -1,8 +1,13 @@
+using System.Text.RegularExpressions;
+
 namespace Phoney.Tests;
 
 /// <summary>Git commit dates and entries, GitHub avatars and mixed hex colors.</summary>
-public sealed class GitImageAndColorTests
+public sealed partial class GitImageAndColorTests
 {
+    [GeneratedRegex("^Author: (?<first>\\S+) .+ <(?<email>.+)@")]
+    private static partial Regex AuthorLine();
+
     [Test]
     public void Git_commit_date_looks_like_git_log_and_is_reproducible()
     {
@@ -35,7 +40,7 @@ public sealed class GitImageAndColorTests
         for (var seed = 0; seed < 50; seed++)
         {
             var author = new Faker("en", seed).Git.CommitEntry().Split('\n')[1];
-            var match = System.Text.RegularExpressions.Regex.Match(author, "^Author: (?<first>\\S+) .+ <(?<email>.+)@");
+            var match = AuthorLine().Match(author);
             Letters(match.Groups["email"].Value).ShouldContain(Letters(match.Groups["first"].Value), customMessage: author);
         }
 

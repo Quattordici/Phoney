@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Phoney.Generation;
+using System.Text.RegularExpressions;
 
 namespace Phoney.Tests;
 
@@ -70,8 +71,14 @@ public sealed class BackReference
 [FakeFor<BackReference>]
 public static partial class AnnotationFakes;
 
-public sealed class AnnotationEdgeTests
+public sealed partial class AnnotationEdgeTests
 {
+    [GeneratedRegex("^\\d{3}-\\d{4}$")]
+    private static partial Regex PhonePattern();
+
+    [GeneratedRegex("^[A-Z][a-z]{3}[0-9]$")]
+    private static partial Regex WordPattern();
+
     private static ObjectGenerator<Annotated> Make(bool generated) =>
         (generated ? AnnotationFakes.Annotated : new ObjectGenerator<Annotated>(new ReflectionModel<Annotated>())).Seed(11);
 
@@ -177,9 +184,9 @@ public sealed class AnnotationEdgeTests
     {
         var values = Make(generated).Generate(200);
 
-        values.ShouldAllBe(v => System.Text.RegularExpressions.Regex.IsMatch(v.Phone, "^\\d{3}-\\d{4}$"));
+        values.ShouldAllBe(v => PhonePattern().IsMatch(v.Phone));
         values.ShouldAllBe(v => v.Password.Any(char.IsAsciiDigit));
-        values.ShouldAllBe(v => System.Text.RegularExpressions.Regex.IsMatch(v.Word, "^[A-Z][a-z]{3}[0-9]$"));
+        values.ShouldAllBe(v => WordPattern().IsMatch(v.Word));
     }
 
     [Test]
@@ -202,6 +209,33 @@ public sealed class AnnotationEdgeTests
             .Message.ShouldContain("Purple");
         Should.Throw<InvalidOperationException>(() => (generated ? AnnotationFakes.BackReference : new ObjectGenerator<BackReference>(new ReflectionModel<BackReference>())).Generate())
             .Message.ShouldContain("[RegularExpression(");
+    }
+
+    [Test]
+    [Arguments("[\\u0041-\\u005A]{20}", "^[A-Z]{20}$", "XLZFPMSAIAYMQTJLEPNH")]
+    [Arguments("[A-\\x5A]{20}", "^[A-Z]{20}$", "XLZFPMSAIAYMQTJLEPNH")]
+    [Arguments("[\\x30-\\u0039]{20}", "^[0-9]{20}$", "94926470309467341552")]
+    [Arguments("[\\uFFFE-\\uFFFF]{4}", "^[\\uFFFE\\uFFFF]{4}$", "\uFFFF\uFFFE\uFFFF\uFFFE")] // the last character ends the loop
+    [Arguments("[ -\\t]{3}", null, null)] // out of order: tab is below space
+    public void Hexadecimal_escapes_can_end_a_character_range(string pattern, string? shape, string? value)
+    {
+        var faker = new Faker(seed: 4);
+
+        if (shape is null)
+        {
+            Should.Throw<FormatException>(() => faker.Helpers.FromRegExp(pattern)).Message.ShouldContain("out of order");
+            return;
+        }
+
+        var text = faker.Helpers.FromRegExp(pattern);
+        text.ShouldMatch(shape);
+        text.ShouldBe(value);
+    }
+
+    [Test]
+    public void A_class_escape_cannot_end_a_character_range()
+    {
+        Should.Throw<FormatException>(() => new Faker().Helpers.FromRegExp("[a-\\d]")).Message.ShouldContain("[a-\\d]");
     }
 
     [Test]

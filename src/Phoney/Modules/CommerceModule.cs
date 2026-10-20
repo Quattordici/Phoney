@@ -125,7 +125,7 @@ public sealed class CommerceModule : FakerModule
         var checksum = 0;
         for (var i = 0; i < length - 1; i++)
         {
-            var weight = isbn10 ? i + 1 : i % 2 == 1 ? 3 : 1;
+            var weight = isbn10 ? i + 1 : 1 + (2 * (i % 2)); // ISBN-13 weighs the digits 1, 3, 1, 3, …
             checksum += weight * (digits[i] - '0');
         }
 

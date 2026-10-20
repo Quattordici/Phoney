@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using Phoney.Modules;
 
 namespace Phoney.Schemes;
@@ -21,28 +20,31 @@ internal static class Checks
     /// <summary>Removes the characters in <paramref name="separators"/> and surrounding spaces.</summary>
     public static string Compact(string value, string separators = " -.")
     {
-        var sb = new StringBuilder(value.Length);
-        foreach (var c in value.Trim())
+        var trimmed = value.Trim();
+        var length = 0;
+        for (var i = 0; i < trimmed.Length; i++)
         {
-            if (separators.IndexOf(c, StringComparison.Ordinal) < 0)
-                sb.Append(c);
+            if (separators.IndexOf(trimmed[i], StringComparison.Ordinal) < 0)
+                length++;
         }
 
-        return sb.ToString();
+        if (length == trimmed.Length)
+            return trimmed;
+        return string.Create(length, (Value: trimmed, Separators: separators), static (result, state) =>
+        {
+            var written = 0;
+            for (var i = 0; i < state.Value.Length; i++)
+            {
+                if (state.Separators.IndexOf(state.Value[i], StringComparison.Ordinal) < 0)
+                    result[written++] = state.Value[i];
+            }
+        });
     }
 
     /// <summary>Whether <paramref name="text"/> is non-empty and consists of ASCII digits only.</summary>
     public static bool AllDigits(string text)
     {
-        if (text.Length == 0)
-            return false;
-        foreach (var c in text)
-        {
-            if (c is < '0' or > '9')
-                return false;
-        }
-
-        return true;
+        return text.Length > 0 && text.All(char.IsAsciiDigit);
     }
 
     /// <summary>Whether <paramref name="text"/> is a number of exactly <paramref name="length"/> digits.</summary>

@@ -27,34 +27,37 @@ internal static class BackReferences
             return;
 
         ancestors.Add(node);
-        var members = model.Members;
-        for (var i = 0; i < members.Count; i++)
+        for (var i = 0; i < model.Members.Count; i++)
         {
-            var member = members[i];
-            if (!member.IsSettable && !member.FillsExisting)
-                continue;
-
-            var value = model.GetMember(node, i);
-            if (value is null)
-            {
-                if (member.IsSettable && member.IsNested && member.Type != typeof(object) && Nearest(ancestors, member.Type) is { } parent)
-                    model.SetMember(node, i, parent);
-            }
-            else if (member.IsNested)
-            {
-                Visit(value, ancestors, visited);
-            }
-            else if (CollectionTypes.IsGeneratedCollection(member.Type))
-            {
-                foreach (var element in Elements(value))
-                {
-                    if (element is not null)
-                        Visit(element, ancestors, visited);
-                }
-            }
+            if (model.Members[i] is { IsSettable: true } or { FillsExisting: true })
+                VisitMember(node, model, i, ancestors, visited);
         }
 
         ancestors.RemoveAt(ancestors.Count - 1);
+    }
+
+    /// <summary>Points a <see langword="null"/> object member at the nearest ancestor it can hold, or walks on into the object or collection it holds.</summary>
+    private static void VisitMember(object node, IFakeModel model, int index, List<object> ancestors, HashSet<object> visited)
+    {
+        var member = model.Members[index];
+        var value = model.GetMember(node, index);
+        if (value is null)
+        {
+            if (member.IsSettable && member.IsNested && member.Type != typeof(object) && Nearest(ancestors, member.Type) is { } parent)
+                model.SetMember(node, index, parent);
+        }
+        else if (member.IsNested)
+        {
+            Visit(value, ancestors, visited);
+        }
+        else if (CollectionTypes.IsGeneratedCollection(member.Type))
+        {
+            foreach (var element in Elements(value))
+            {
+                if (element is not null)
+                    Visit(element, ancestors, visited);
+            }
+        }
     }
 
     /// <summary>The closest object above <paramref name="ancestors"/>' last one (the object itself is not its own parent) that a member of <paramref name="memberType"/> can hold.</summary>

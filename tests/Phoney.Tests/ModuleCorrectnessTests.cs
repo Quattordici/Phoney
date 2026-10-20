@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Numerics;
-using System.Text.RegularExpressions;
 using Phoney.Modules;
 
 namespace Phoney.Tests;
@@ -195,12 +194,12 @@ public sealed class ModuleCorrectnessTests
     [Test]
     public void Emails_are_well_formed()
     {
-        var email = new Regex("^[A-Za-z0-9._+-]+@[a-z0-9.-]+$");
+        const string email = "^[A-Za-z0-9._+-]+@[a-z0-9.-]+$";
         foreach (var locale in new[] { "en", "ru", "el", "ja", "ar", "he" })
         {
             var faker = new Faker(locale, seed: 1);
             for (var i = 0; i < 50; i++)
-                faker.Internet.Email().ShouldMatch(email.ToString(), $"{locale}");
+                faker.Internet.Email().ShouldMatch(email, $"{locale}");
         }
     }
 

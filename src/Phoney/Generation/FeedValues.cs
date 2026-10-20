@@ -62,8 +62,8 @@ internal static class FeedValues
     /// <summary>A value of the enum by name (any case) or number; a number that names no value (or, for flags, no combination of values) is not one.</summary>
     private static object EnumValue(string text, Type target)
     {
-        if (Enum.TryParse(target, text, ignoreCase: true, out var value) && IsDefined(target, value!))
-            return value!;
+        if (Enum.TryParse(target, text, ignoreCase: true, out var value) && IsDefined(target, value))
+            return value;
         throw new FormatException($"not one of {string.Join(", ", Enum.GetNames(target))}");
 
         static bool IsDefined(Type target, object value)
@@ -101,7 +101,13 @@ internal static class FeedValues
         _ => throw new FormatException("not true/false, 1/0 or yes/no"),
     };
 
-    private static object Other(string text, Type target, CultureInfo culture)
+    private static object Other(string text, Type target, CultureInfo culture) =>
+        TimeOrIdentifier(text, target, culture)
+        ?? WrittenScalar(text, target, culture)
+        ?? throw new FormatException($"{target.Name} can't be read from text; a feed fills strings, numbers, booleans, enums, dates, times, Guid, Uri, IPAddress and Version members");
+
+    /// <summary>Dates, times, <see cref="Guid"/> and <see cref="Uri"/>, or <see langword="null"/> for another type.</summary>
+    private static object? TimeOrIdentifier(string text, Type target, CultureInfo culture)
     {
         if (target == typeof(Guid))
             return Guid.Parse(text);
@@ -115,8 +121,12 @@ internal static class FeedValues
             return TimeSpan.Parse(text, culture);
         if (target == typeof(Uri))
             return new Uri(text, UriKind.RelativeOrAbsolute);
+        return null;
+    }
 
-        // The other scalars the writers write (DataExport), so whatever a generator writes reads back.
+    /// <summary>The other scalars the writers write (<see cref="DataExport"/>), so whatever a generator writes reads back; <see langword="null"/> for another type.</summary>
+    private static object? WrittenScalar(string text, Type target, CultureInfo culture)
+    {
         if (target == typeof(Half))
             return Half.Parse(text, NumberStyles.Float, culture);
         if (target == typeof(Int128))
@@ -135,6 +145,6 @@ internal static class FeedValues
             return System.Net.IPAddress.Parse(text);
         if (target == typeof(Version))
             return Version.Parse(text);
-        throw new FormatException($"{target.Name} can't be read from text; a feed fills strings, numbers, booleans, enums, dates, times, Guid, Uri, IPAddress and Version members");
+        return null;
     }
 }

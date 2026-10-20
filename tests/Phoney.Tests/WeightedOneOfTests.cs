@@ -32,6 +32,11 @@ public static partial class WeightedFakes;
 /// <summary><c>WithOneOf</c> with weights: some choices are more likely than others.</summary>
 public sealed class WeightedOneOfTests
 {
+    private static readonly int[] OneTwo = [1, 2];
+    private static readonly string[] A = ["a"];
+    private static readonly string[] AB = ["a", "b"];
+    private static readonly double[] OneWeight = [1.0];
+
     private static ObjectGenerator<Payment> Generated() => WeightedFakes.Payment.Seed(4);
 
     private static ObjectGenerator<Payment> Reflected() => new ObjectGenerator<Payment>(new ReflectionModel<Payment>()).Seed(4);
@@ -148,7 +153,7 @@ public sealed class WeightedOneOfTests
     [Test]
     public void Strict_mode_counts_it_as_a_rule_and_the_unweighted_overload_still_works()
     {
-        Should.NotThrow(() => Reflected().Strict().WithOneOf(p => p.Method, ("a", 1), ("b", 2)).WithOneOf(p => p.CustomerId, new[] { 1, 2 })
+        Should.NotThrow(() => Reflected().Strict().WithOneOf(p => p.Method, ("a", 1), ("b", 2)).WithOneOf(p => p.CustomerId, OneTwo)
             .Ignore(p => p.Outcome).Ignore(p => p.Installments).Ignore(p => p.Main).Ignore(p => p.Receipts).Generate());
     }
 
@@ -160,9 +165,9 @@ public sealed class WeightedOneOfTests
         Should.Throw<ArgumentException>(() => Reflected().WithOneOf(p => p.Method, ("a", double.NaN)));
         Should.Throw<ArgumentException>(() => Reflected().WithOneOf(p => p.Method, ("a", double.PositiveInfinity)));
         Should.Throw<ArgumentException>(() => Reflected().WithOneOf(p => p.Method, ("a", 0), ("b", 0))).Message.ShouldContain("greater than zero");
-        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(p => p.Method, new[] { "a", "b" }, new[] { 1.0 })).Message.ShouldContain("2 values and 1 weights");
-        Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(p => p.Method, (IReadOnlyList<string>)null!, new[] { 1.0 }));
-        Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(p => p.Method, new[] { "a" }, (IReadOnlyList<double>)null!));
+        Should.Throw<ArgumentException>(() => Reflected().WithOneOf(p => p.Method, AB, OneWeight)).Message.ShouldContain("2 values and 1 weights");
+        Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(p => p.Method, (IReadOnlyList<string>)null!, OneWeight));
+        Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(p => p.Method, A, (IReadOnlyList<double>)null!));
         Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(p => p.Method, ((string, double)[])null!));
         Should.Throw<ArgumentNullException>(() => Reflected().WithOneOf(p => p.CustomerId, new[] { new Client(1, "a", 1) }, c => c.Id, (Func<Client, double>)null!));
     }

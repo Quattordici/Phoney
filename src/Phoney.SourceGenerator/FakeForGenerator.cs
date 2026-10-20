@@ -142,11 +142,13 @@ public sealed class FakeForGenerator : IIncrementalGenerator
     }
 
     /// <summary>Why <paramref name="type"/> can't be registered as a subtype, or <see langword="null"/> when it is a concrete class or struct.</summary>
-    private static string? NotCreatable(INamedTypeSymbol type) =>
-        type.TypeKind == TypeKind.Interface ? "it is an interface"
-        : type.IsAbstract ? "it is abstract"
-        : type.TypeKind is TypeKind.Class or TypeKind.Struct ? null
-        : "only classes and structs can be created";
+    private static string? NotCreatable(INamedTypeSymbol type) => type switch
+    {
+        { TypeKind: TypeKind.Interface } => "it is an interface",
+        { IsAbstract: true } => "it is abstract",
+        { TypeKind: TypeKind.Class or TypeKind.Struct } => null,
+        _ => "only classes and structs can be created",
+    };
 
     /// <summary>Turns a display name into an identifier fragment (<c>Shop.Customer</c> → <c>Shop_Customer</c>).</summary>
     internal static string Sanitize(string name)
@@ -165,15 +167,18 @@ internal static class Diagnostics
     /// </summary>
     private const string UsageCategory = "Phoney.Usage";
 
+    /// <summary>Category of the generator's own diagnostics.</summary>
+    private const string GeneratorCategory = "Phoney";
+
     public static readonly DiagnosticDescriptor NotPartial = new(
         "PHONEY001", "Class must be partial",
         "'{0}' must be declared partial so Phoney can add the generated fake data members",
-        "Phoney", DiagnosticSeverity.Error, isEnabledByDefault: true);
+        GeneratorCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor CannotGenerate = new(
         "PHONEY002", "Type cannot be generated",
         "Phoney cannot generate '{0}': {1}. Members of this type are left at their default value.",
-        "Phoney", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+        GeneratorCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor StrictUncovered = new(
         "PHONEY004", "Strict generator leaves members without a value",
@@ -218,12 +223,12 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor SubtypeNotRegistrable = new(
         "PHONEY009", "Subtype cannot be registered",
         "[FakeSubtype<{0}, {1}>] can't register '{1}': {2}. Use a concrete class or struct; the registration is left out.",
-        "Phoney", DiagnosticSeverity.Error, isEnabledByDefault: true);
+        GeneratorCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor GenericContainer = new(
         "PHONEY003", "Generic classes are not supported",
         "[FakeFor] cannot be used inside generic type '{0}'; declare it on a non-generic partial class",
-        "Phoney", DiagnosticSeverity.Error, isEnabledByDefault: true);
+        GeneratorCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 }
 
 /// <summary>A diagnostic captured as plain data so generator results stay equatable for incremental caching.</summary>
