@@ -84,6 +84,28 @@ public sealed class FakeForGeneratorTests
     }
 
     [Test]
+    public void Overrides_keep_the_annotations_of_the_members_they_override(CancellationToken cancellationToken)
+    {
+        var (driver, output, diagnostics) = GeneratorHarness.Run("""
+            using System;
+            using System.ComponentModel.DataAnnotations;
+            using Phoney.Generation;
+            [AttributeUsage(AttributeTargets.Property, Inherited = false)] public sealed class LocalAttribute : Attribute;
+            [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)] public sealed class TagAttribute : Attribute;
+            public abstract class Root { [Range(7, 9), Local, Tag] public virtual int Depth { get; set; } }
+            public class Middle : Root { [Tag] public override int Depth { get; set; } [Range(1, 3)] public virtual int Score { get; set; } }
+            public sealed class Leaf : Middle { public override int Depth { get; set; } [Range(40, 41)] public override int Score { get; set; } }
+            [FakeFor<Leaf>] public static partial class Data;
+            """);
+        diagnostics.ShouldBeEmpty();
+        output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        source.ShouldContain("RangeMin = \"7\", RangeMax = \"9\""); // two levels up
+        source.ShouldContain("RangeMin = \"40\", RangeMax = \"41\""); // the override's own single-use attribute replaces the inherited one
+        source.ShouldNotContain("RangeMin = \"1\"");
+    }
+
+    [Test]
     public void Non_partial_classes_are_reported()
     {
         var (_, _, diagnostics) = GeneratorHarness.Run("""

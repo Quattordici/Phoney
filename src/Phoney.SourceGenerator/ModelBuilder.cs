@@ -668,7 +668,6 @@ internal sealed class ModelBuilder
             .FirstOrDefault();
     }
 
-    /// <summary>Upper-cases the first character (constructor parameter → property name).</summary>
     /// <summary>
     /// The attributes of <paramref name="member"/> with those it inherits from the properties it overrides, as <c>Attribute.GetCustomAttributes(member, inherit: true)</c>
     /// returns them to the reflection model and the validator: an inherited attribute is added unless its usage says <c>Inherited = false</c>, or it allows one use only and the override has its own.
@@ -705,5 +704,6 @@ internal sealed class ModelBuilder
         return (true, false);
     }
 
+    /// <summary>Upper-cases the first character (constructor parameter → property name).</summary>
     private static string Capitalize(string name) => name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name.Substring(1);
 }
