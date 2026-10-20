@@ -234,16 +234,8 @@ public sealed class FakeScope
     /// </summary>
     private void GiveConstantCreated()
     {
-        if (_slots is null)
-            return;
-        foreach (var slot in _slots)
-        {
-            if (slot is { GivesCreated: true, Kind: RuleKind.Constant })
-            {
-                GiveCreated(slot.Value);
-                return;
-            }
-        }
+        if (_slots is not null && System.Array.Find(_slots, static slot => slot is { GivesCreated: true, Kind: RuleKind.Constant }) is { } constant)
+            GiveCreated(constant.Value);
     }
 
     /// <summary>The later of two moments.</summary>
