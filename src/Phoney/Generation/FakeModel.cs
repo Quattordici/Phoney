@@ -31,11 +31,12 @@ public sealed class FakeMember
     /// <param name="isSettable">See <see cref="IsSettable"/>; <see langword="null"/> for the default.</param>
     /// <param name="isNested">See <see cref="IsNested"/>.</param>
     /// <param name="fillsExisting">See <see cref="FillsExisting"/>.</param>
+#pragma warning disable S1133 // kept so models compiled against earlier versions keep loading; removing it is a breaking change for a major version
     [Obsolete("Pass the name, type and convention, and set the other values with the initializer: new FakeMember(name, type, convention) { IsConstructorParameter = true }.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
 #pragma warning disable S107 // the signature models compiled against earlier versions call; new code uses the initializer
-    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter = false, bool isInitOnly = false, MemberConstraints? constraints = null, bool? isSettable = null, bool isNested = false, bool fillsExisting = false)
-#pragma warning restore S107
+    public FakeMember(string name, Type type, ConventionKind convention, bool isConstructorParameter, bool isInitOnly, MemberConstraints? constraints, bool? isSettable, bool isNested, bool fillsExisting)
+#pragma warning restore S107, S1133
         : this(name, type, convention)
     {
         IsConstructorParameter = isConstructorParameter;
