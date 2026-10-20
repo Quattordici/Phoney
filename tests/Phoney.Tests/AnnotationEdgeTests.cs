@@ -212,18 +212,24 @@ public sealed partial class AnnotationEdgeTests
     }
 
     [Test]
-    [Arguments("[\\u0041-\\u005A]{20}", "^[A-Z]{20}$")]
-    [Arguments("[A-\\x5A]{20}", "^[A-Z]{20}$")]
-    [Arguments("[\\x30-\\u0039]{20}", "^[0-9]{20}$")]
-    [Arguments("[ -\\t]{3}", null)] // out of order: tab is below space
-    public void Hexadecimal_escapes_can_end_a_character_range(string pattern, string? expected)
+    [Arguments("[\\u0041-\\u005A]{20}", "^[A-Z]{20}$", "XLZFPMSAIAYMQTJLEPNH")]
+    [Arguments("[A-\\x5A]{20}", "^[A-Z]{20}$", "XLZFPMSAIAYMQTJLEPNH")]
+    [Arguments("[\\x30-\\u0039]{20}", "^[0-9]{20}$", "94926470309467341552")]
+    [Arguments("[\\uFFFE-\\uFFFF]{4}", "^[\\uFFFE\\uFFFF]{4}$", "\uFFFF\uFFFE\uFFFF\uFFFE")] // the last character ends the loop
+    [Arguments("[ -\\t]{3}", null, null)] // out of order: tab is below space
+    public void Hexadecimal_escapes_can_end_a_character_range(string pattern, string? shape, string? value)
     {
         var faker = new Faker(seed: 4);
 
-        if (expected is null)
+        if (shape is null)
+        {
             Should.Throw<FormatException>(() => faker.Helpers.FromRegExp(pattern)).Message.ShouldContain("out of order");
-        else
-            faker.Helpers.FromRegExp(pattern).ShouldMatch(expected);
+            return;
+        }
+
+        var text = faker.Helpers.FromRegExp(pattern);
+        text.ShouldMatch(shape);
+        text.ShouldBe(value);
     }
 
     [Test]

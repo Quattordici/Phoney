@@ -402,8 +402,8 @@ internal sealed class PatternGenerator
             var end = _pattern[_pos] == '\\' ? EscapedRangeEnd() : _pattern[_pos++];
             if (end < start)
                 throw Error($"character range {start}-{end} is out of order");
-            for (var ch = start; ch <= end; ch++)
-                AddCased(chars, ch);
+            for (int ch = start; ch <= end; ch++) // an int, so a range ending at \uFFFF stops
+                AddCased(chars, (char)ch);
         }
 
         /// <summary>The alphanumeric characters a class leaves out; like faker.js, negation is taken against those.</summary>
