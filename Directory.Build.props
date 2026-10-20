@@ -24,17 +24,9 @@
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)images/phoney-icon-128.png" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
-  <PropertyGroup>
-    <_RepoRelativeDir>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)'))</_RepoRelativeDir>
-  </PropertyGroup>
   <!-- SonarQube Cloud analyses everything under tests/ as test code: it doesn't recognise TUnit projects (or the AOT smoke app) by their references. -->
-  <PropertyGroup Condition="$(_RepoRelativeDir.StartsWith('tests'))">
+  <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').StartsWith('tests'))">
     <SonarQubeTestProject>true</SonarQubeTestProject>
-  </PropertyGroup>
-  <!-- tools/, benchmarks/ and samples/ are outside the analysis (sonar.exclusions in ci.yml). Excluding their projects too keeps the scanner's
-       analyzers out of their build, so their findings don't show up as warning annotations on every CI run. -->
-  <PropertyGroup Condition="$(_RepoRelativeDir.StartsWith('tools')) Or $(_RepoRelativeDir.StartsWith('benchmarks')) Or $(_RepoRelativeDir.StartsWith('samples'))">
-    <SonarQubeExclude>true</SonarQubeExclude>
   </PropertyGroup>
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>

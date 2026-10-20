@@ -21,9 +21,9 @@ var validator = new TemplateValidator(locales, methods);
 validator.Validate();
 if (validator.Errors.Count > 0)
 {
-    Console.Error.WriteLine($"Template validation failed with {validator.Errors.Count} error(s):");
+    await Console.Error.WriteLineAsync($"Template validation failed with {validator.Errors.Count} error(s):");
     foreach (var error in validator.Errors)
-        Console.Error.WriteLine("  " + error);
+        await Console.Error.WriteLineAsync("  " + error);
     return 1;
 }
 
@@ -37,16 +37,16 @@ var sizes = new List<(string Code, int Entries, int Bytes)>();
 foreach (var locale in locales)
 {
     var bytes = LocaleWriter.Write(locale, catalog, fakerVersion);
-    File.WriteAllBytes(Path.Combine(resourceDirectory, locale.Code + ".bin.br"), bytes);
+    await File.WriteAllBytesAsync(Path.Combine(resourceDirectory, locale.Code + ".bin.br"), bytes);
     totalBytes += bytes.Length;
     sizes.Add((locale.Code, locale.Leaves.Count, bytes.Length));
 }
 
 // Outputs are committed and checked by CI, so they must be byte-identical on every OS: always use LF.
-static void WriteText(string path, string text) => File.WriteAllText(path, text.ReplaceLineEndings("\n"));
+static Task WriteText(string path, string text) => File.WriteAllTextAsync(path, text.ReplaceLineEndings("\n"));
 
-WriteText(Path.Combine(generatedDirectory, "DataKeys.g.cs"), CodeEmitter.DataKeys(catalog));
-WriteText(
+await WriteText(Path.Combine(generatedDirectory, "DataKeys.g.cs"), CodeEmitter.DataKeys(catalog));
+await WriteText(
     Path.Combine(generatedDirectory, "LocaleCatalog.g.cs"),
     CodeEmitter.LocaleCatalog(fakerVersion, locales, validator.MethodReferences.Keys));
 
@@ -74,7 +74,7 @@ foreach (var (code, entries, bytes) in sizes)
     report.AppendLine($"| `{code}` | {fallback} | {entries} | {bytes} |");
 }
 
-WriteText(Path.Combine(repoRoot, "data", "report.md"), report.ToString());
+await WriteText(Path.Combine(repoRoot, "data", "report.md"), report.ToString());
 
 // Keep the README's list of locales in sync with the data (between the locales:start/end markers).
 var readmePath = Path.Combine(repoRoot, "README.md");
@@ -82,13 +82,13 @@ if (File.Exists(readmePath))
 {
     const string Start = "<!-- locales:start -->";
     const string End = "<!-- locales:end -->";
-    var readme = File.ReadAllText(readmePath);
+    var readme = await File.ReadAllTextAsync(readmePath);
     var from = readme.IndexOf(Start, StringComparison.Ordinal);
     var to = readme.IndexOf(End, StringComparison.Ordinal);
     if (from >= 0 && to > from)
     {
         readme = readme[..(from + Start.Length)] + "\n" + CodeEmitter.LocaleTable(fakerVersion, locales) + readme[to..];
-        WriteText(readmePath, readme);
+        await WriteText(readmePath, readme);
     }
 }
 
