@@ -203,16 +203,20 @@ public sealed class FinanceModule : FakerModule
         return bank + country + location + branch;
     }
 
-    /// <summary>Groups an IBAN into blocks of four characters.</summary>
+    /// <summary>Groups an IBAN into blocks of four upper-case characters; spacing it already has is dropped first, so a formatted IBAN comes back the same.</summary>
     public static string PrettyPrintIban(string iban)
     {
         ArgumentNullException.ThrowIfNull(iban);
         var sb = new StringBuilder(iban.Length + (iban.Length / 4));
-        for (var i = 0; i < iban.Length; i++)
+        var count = 0;
+        foreach (var c in iban)
         {
-            if (i > 0 && i % 4 == 0)
+            if (char.IsWhiteSpace(c))
+                continue;
+            if (count > 0 && count % 4 == 0)
                 sb.Append(' ');
-            sb.Append(iban[i]);
+            sb.Append(char.ToUpperInvariant(c));
+            count++;
         }
 
         return sb.ToString();

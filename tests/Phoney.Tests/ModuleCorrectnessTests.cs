@@ -310,4 +310,45 @@ public sealed class ModuleCorrectnessTests
         _faker.System.FileExt("image/png").ShouldBe("png");
         Should.Throw<ArgumentException>(() => _faker.System.FileExt("nope/nope"));
     }
+
+    // An empty or blank text summed to 0 and passed, and letters were read as digits ('a' - '0' = 49).
+    [Test]
+    [Arguments("")]
+    [Arguments("   ")]
+    [Arguments("-")]
+    [Arguments("0a")]
+    [Arguments("79927398713x")]
+    public void The_Luhn_check_fails_without_digits_or_with_other_characters(string text) =>
+        HelpersModule.LuhnCheck(text).ShouldBeFalse();
+
+    [Test]
+    public void The_Luhn_check_still_ignores_spaces_and_dashes()
+    {
+        HelpersModule.LuhnCheck("7992 7398 713").ShouldBeTrue();
+        HelpersModule.LuhnCheck("7992-7398-713").ShouldBeTrue();
+        HelpersModule.LuhnCheck("0").ShouldBeTrue();
+    }
+
+    [Test]
+    [Arguments("12a")]
+    [Arguments("")]
+    [Arguments("L")]
+    public void A_Luhn_check_digit_needs_digits(string text) =>
+        Should.Throw<ArgumentException>(() => HelpersModule.LuhnCheckDigit(text)).ParamName.ShouldBe("digits");
+
+    // A formatted IBAN was grouped again with its spaces counted as characters: "DE89  370 4 00 44 0 532  0130  00".
+    [Test]
+    [Arguments("DE89370400440532013000")]
+    [Arguments("DE89 3704 0044 0532 0130 00")]
+    [Arguments(" de89 3704\t0044 0532 013000 ")]
+    public void A_pretty_printed_iban_has_groups_of_four_whatever_its_spacing(string iban) =>
+        FinanceModule.PrettyPrintIban(iban).ShouldBe("DE89 3704 0044 0532 0130 00");
+
+    // Any other separator used to turn silently into ':'.
+    [Test]
+    [Arguments(".")]
+    [Arguments("--")]
+    [Arguments(" ")]
+    public void A_mac_address_separator_must_be_a_colon_a_dash_or_nothing(string separator) =>
+        Should.Throw<ArgumentException>(() => _faker.Internet.Mac(separator)).ParamName.ShouldBe("separator");
 }

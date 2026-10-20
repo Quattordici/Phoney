@@ -142,11 +142,23 @@ public sealed class MemberConstraints
     [RequiresUnreferencedCode("Reads attributes with reflection.")]
     internal static MemberConstraints? Read(ICustomAttributeProvider member, ICustomAttributeProvider? matchingProperty = null)
     {
-        var attributes = member.GetCustomAttributes(inherit: true).OfType<Attribute>();
+        var attributes = AttributesOf(member);
         if (matchingProperty is not null)
-            attributes = attributes.Concat(matchingProperty.GetCustomAttributes(inherit: true).OfType<Attribute>());
+            attributes = attributes.Concat(AttributesOf(matchingProperty));
         return From(attributes);
     }
+
+    /// <summary>
+    /// The attributes of <paramref name="provider"/> with those an override inherits, as the validator sees them: <see cref="MemberInfo.GetCustomAttributes(bool)"/>
+    /// ignores <c>inherit</c> for properties, <see cref="Attribute.GetCustomAttributes(MemberInfo, bool)"/> walks the members it overrides.
+    /// </summary>
+    [RequiresUnreferencedCode("Reads attributes with reflection.")]
+    private static IEnumerable<Attribute> AttributesOf(ICustomAttributeProvider provider) => provider switch
+    {
+        MemberInfo member => Attribute.GetCustomAttributes(member, inherit: true),
+        ParameterInfo parameter => Attribute.GetCustomAttributes(parameter, inherit: true),
+        _ => provider.GetCustomAttributes(inherit: true).OfType<Attribute>(),
+    };
 
     /// <summary>Several length annotations all apply, so the strictest limit wins, whatever order the attributes come in.</summary>
     private static int Stricter(int? current, int value, Func<int, int, int> pick) => current is { } c ? pick(c, value) : value;

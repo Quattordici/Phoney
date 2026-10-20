@@ -319,10 +319,13 @@ public sealed class InternetModule : FakerModule
     public string UserAgent() => Faker.Pick(DataKeys.InternetUserAgentPattern);
 
     /// <summary>Returns a MAC address, e.g. <c>32:8e:2e:09:c6:05</c>; <paramref name="separator"/> may be <c>:</c>, <c>-</c> or empty.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="separator"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="separator"/> is another text.</exception>
     public string Mac(string separator = ":")
     {
+        ArgumentNullException.ThrowIfNull(separator);
         if (separator is not (":" or "-" or ""))
-            separator = ":";
+            throw new ArgumentException($"A MAC address separator is \":\", \"-\" or \"\", not \"{separator}\".", nameof(separator));
         var sb = new StringBuilder(17);
         for (var i = 0; i < 12; i++)
         {
