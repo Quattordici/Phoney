@@ -65,14 +65,12 @@ public sealed class TemplateArgs
         {
             if (_json[index].ValueKind != JsonValueKind.Object || Array.IndexOf(asked, (index, (string?)null)) >= 0)
                 continue;
-            foreach (var property in _json[index].EnumerateObject())
-            {
-                if (Array.IndexOf(asked, (index, property.Name)) >= 0)
-                    continue;
-                var known = asked.Where(a => a.Item1 == index && a.Item2 is not null).Select(a => a.Item2!);
-                throw new FormatException(
-                    $"'{function}' doesn't use the option '{property.Name}' in a template.{Data.NameSuggestions.For(property.Name, known)} Remove it, or call the Faker API for options templates don't have.");
-            }
+            var unused = _json[index].EnumerateObject().Select(property => property.Name).FirstOrDefault(name => Array.IndexOf(asked, (index, name)) < 0);
+            if (unused is null)
+                continue;
+            var known = asked.Where(a => a.Item1 == index && a.Item2 is not null).Select(a => a.Item2!);
+            throw new FormatException(
+                $"'{function}' doesn't use the option '{unused}' in a template.{Data.NameSuggestions.For(unused, known)} Remove it, or call the Faker API for options templates don't have.");
         }
 
         _optionsChecked = true;
