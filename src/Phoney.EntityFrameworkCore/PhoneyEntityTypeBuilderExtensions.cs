@@ -202,7 +202,7 @@ public static class PhoneyEntityTypeBuilderExtensions
                 for (var j = 0; j < items.Count; j++)
                 {
                     var value = model.Get(items[j], index);
-                    if (value is null || known.Contains(value))
+                    if ((value is null && foreignKey.Properties[0].IsNullable) || (value is not null && known.Contains(value)))
                         continue; // optional and unset, or already linked
                     items[j] = model.Set(items[j], index, principals[random.Index(principals.Count)]);
                 }
@@ -222,13 +222,15 @@ public static class PhoneyEntityTypeBuilderExtensions
             if (!TryMember(foreignKey.PrincipalKey.Properties[0].Name, out var keyIndex))
                 return;
             var nullable = foreignKey.Properties[0].IsNullable;
-            var earlier = new HashSet<object>();
+            // Rows an earlier HasFakeData call for this entity seeded are valid targets too.
+            var keyName = foreignKey.PrincipalKey.Properties[0].Name;
+            var earlier = entityType.GetSeedData().Select(row => row.TryGetValue(keyName, out var key) ? key : null).OfType<object>().ToHashSet();
             var used = new HashSet<object>();
             for (var j = 0; j < items.Count; j++)
             {
                 var value = model.Get(items[j], index);
                 var linked = value is not null && earlier.Contains(value) && !(foreignKey.IsUnique && used.Contains(value));
-                if (value is not null && !linked)
+                if ((value is not null || !nullable) && !linked) // a required key needs a target even when its CLR type allowed a null
                 {
                     var target = foreignKey.IsUnique
                         ? nullable ? j - 1 : j

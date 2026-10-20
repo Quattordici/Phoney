@@ -48,13 +48,18 @@ public sealed class FakeDataOptions
         {
             if (value is null)
                 _referenceDate = null;
-            else if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
+            // A time alone would take today's date, and the seeded data would change every day.
+            else if (HasDay(value) && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
                 _referenceDate = date;
             else
-                throw new ArgumentException($"ReferenceDate '{value}' is not a date; use ISO 8601, such as 2030-01-01 or 2030-01-01T12:00:00Z.", nameof(ReferenceDate));
+                throw new ArgumentException($"ReferenceDate '{value}' is not a date with a day; use ISO 8601, such as 2030-01-01 or 2030-01-01T12:00:00Z.", nameof(ReferenceDate));
             _referenceDateText = value;
         }
     }
+
+    /// <summary>Whether the text names a day: with <see cref="DateTimeStyles.NoCurrentDateDefault"/> (which <see cref="DateTimeOffset"/> doesn't accept) a time alone is 0001-01-01.</summary>
+    private static bool HasDay(string text) =>
+        DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.NoCurrentDateDefault | DateTimeStyles.AdjustToUniversal, out var date) && date.Year > 1;
 
     /// <summary>Creates the generator of the test's rows, with the <c>PHONEY_SEED</c> environment variable (if set) moving the derived seed.</summary>
     /// <param name="arguments">The parameters or properties to fill.</param>
