@@ -280,6 +280,29 @@ public sealed class ModuleCorrectnessTests
     }
 
     [Test]
+    public void Full_name_keeps_given_parts_as_text()
+    {
+        // A name is data, not a template: braces in it must not run template functions or fail to parse.
+        for (var i = 0; i < 50; i++)
+        {
+            var name = _faker.Person.FullName("{{person.lastName}}", "a}}b{{c");
+            name.ShouldContain("{{person.lastName}}");
+            name.ShouldContain("a}}b{{c");
+        }
+    }
+
+    [Test]
+    public void Full_name_still_evaluates_other_expressions_of_the_pattern()
+    {
+        Locales.Register("en_named", l => l
+            .FallbackTo("en")
+            .Set("person.name", "{{person.firstName}} {{person.lastName}} ({{person.jobType}})")
+            .Set("person.job_type", "Pilot"));
+
+        new Faker("en_named", seed: 1).Person.FullName("{{x}}", "Y").ShouldBe("{{x}} Y (Pilot)");
+    }
+
+    [Test]
     public void Gendered_names_come_from_the_gendered_lists()
     {
         var sv = new Faker("sv", seed: 3);

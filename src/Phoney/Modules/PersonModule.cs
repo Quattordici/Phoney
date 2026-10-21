@@ -61,7 +61,8 @@ public sealed class PersonModule : FakerModule
     {
         var s = sex ?? Sex();
         // Substitute the name parts ourselves (as faker.js does with mustache) so they share one sex and the
-        // caller's first/last name are honoured; anything else in the pattern is evaluated afterwards.
+        // caller's first/last name are honoured; anything else in the pattern is evaluated afterwards, in the pattern's own text only,
+        // so a given name is kept as it is even when it holds braces.
         // Each part is drawn only when the pattern has it, always in this order, so unused parts consume no randomness and need no data.
         var entry = Faker.Data.Strings(DataKeys.PersonName);
         var pattern = entry.Parsed(entry.PickIndex(Random), NamePattern.Parse); // split into parts once per pattern, not per name
@@ -84,7 +85,7 @@ public sealed class PersonModule : FakerModule
                     NamePart.MiddleName => middle,
                     NamePart.LastName => last,
                     NamePart.Suffix => suffix,
-                    _ => literal,
+                    _ => Faker.Parse(literal!), // the same draws, in the same order, as evaluating the whole name afterwards
                 });
             }
 
@@ -95,7 +96,7 @@ public sealed class PersonModule : FakerModule
             name.Dispose();
         }
 
-        return Faker.Parse(text);
+        return text;
     }
 
     /// <summary>The parts of a name pattern <see cref="FullName"/> substitutes.</summary>
@@ -127,7 +128,7 @@ public sealed class PersonModule : FakerModule
 
         /// <summary>
         /// Splits <paramref name="pattern"/> at the five tags; any other <c>{{person.…}}</c> expression stays literal text, which <see cref="Faker.Parse"/>
-        /// evaluates after the substitution.
+        /// evaluates when the name is put together (the given and drawn name parts are never evaluated).
         /// </summary>
         public static NamePattern Parse(string pattern)
         {

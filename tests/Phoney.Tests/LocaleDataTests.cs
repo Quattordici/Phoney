@@ -170,6 +170,8 @@ public sealed class LocaleDataTests
     [Arguments("ku-Arab-IQ", "ku_ckb")]
     [Arguments("ku", "ku_kmr_latin")]
     [Arguments("kmr", "ku_kmr_latin")]
+    [Arguments("no", "nb_NO")] // Norwegian, the macrolanguage .NET also names "no"; written Norwegian is Bokmål
+    [Arguments("no-NO", "nb_NO")]
     // Closest locale of the language
     [Arguments("en-AU", "en_AU")]
     [Arguments("en-NZ", "en")]

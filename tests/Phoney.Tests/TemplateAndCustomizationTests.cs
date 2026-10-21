@@ -1,3 +1,4 @@
+using Phoney.Modules;
 using Phoney.Templates;
 
 namespace Phoney.Tests;
@@ -24,6 +25,45 @@ public sealed class TemplateAndCustomizationTests
         _faker.Parse("{{helpers.arrayElement([\"a\",\"b\"])}}").ShouldBeOneOf("a", "b");
         _faker.Parse("{{helpers.fromRegExp([A-Z]{2}[0-9]{2})}}").ShouldMatch("^[A-Z]{2}\\d{2}$");
     }
+
+    // The expression used to end at the first "}}", so an object inside the options (or "}}" in quoted text) broke it with "Missing closing parenthesis".
+    [Test]
+    public void Braces_inside_the_arguments_do_not_end_the_expression()
+    {
+        _faker.Parse("<{{helpers.arrayElement([\"}}\", \"{{x}}\"])}}>").ShouldBeOneOf("<}}>", "<{{x}}>");
+        _faker.Parse("{{string.alpha({length: {min: 3, max: 3}})}}!").ShouldMatch("^[A-Za-z]{3}!$");
+        _faker.Parse("{{person.firstName}}}").ShouldEndWith("}");
+    }
+
+    // An expression that never balances ends at its first "}}", as before the balanced scan. The scan for its real end gives up a short way past that
+    // "}}" instead of reading the rest of the text, so many such expressions in one template take linear time, not quadratic.
+    [Test]
+    public void Unbalanced_expressions_are_parsed_in_linear_time()
+    {
+        var text = string.Concat(Enumerable.Repeat("{{helpers.slugify(()}} ", 20_000));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        Template.Parse(text);
+
+        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15)); // about 0.2 s alone; the quadratic scan took about a minute
+        _faker.Parse("{{helpers.slugify(()}}|{{person.firstName}}").ShouldNotContain("{{");
+    }
+
+    // Only "{{" followed by a letter starts an expression, so text for another template engine is left for it.
+    [Test]
+    public void Tags_of_other_template_engines_pass_through()
+    {
+        const string Mustache = "{{#each items}}{{ name }} {{/each}} {\"a\":{\"b\":1}}";
+
+        _faker.Parse(Mustache).ShouldBe(Mustache);
+        _faker.Parse("{{ person.firstName }}|{{person.firstName}}").ShouldStartWith("{{ person.firstName }}|");
+        _faker.Parse("{{ person.firstName }}|{{person.firstName}}").ShouldNotEndWith("{{person.firstName}}");
+    }
+
+    // An apostrophe in a plain-text argument is not a quote: two of them used to join the expressions between them into one.
+    [Test]
+    public void Apostrophes_in_plain_arguments_do_not_join_expressions() =>
+        _faker.Parse("{{helpers.slugify(don't)}}-{{helpers.slugify(can't)}}").ShouldBe(HelpersModule.Slugify("don't") + "-" + HelpersModule.Slugify("can't"));
 
     [Test]
     public void Unknown_expressions_fail_with_a_clear_message() =>

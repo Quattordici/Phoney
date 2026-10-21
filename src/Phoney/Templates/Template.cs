@@ -79,7 +79,7 @@ internal sealed class Template
         while (position < text.Length)
         {
             var start = FindExpressionStart(text, position);
-            var end = start < 0 ? -1 : text.IndexOf("}}", start + 2, StringComparison.Ordinal);
+            var end = start < 0 ? -1 : FindExpressionEnd(text, start + 2);
             if (start < 0 || end < 0)
             {
                 segments.Add(Segment.ForLiteral(text[position..]));
@@ -146,6 +146,78 @@ internal sealed class Template
         }
     }
 
+    /// <summary>
+    /// The <c>}}</c> that closes the expression starting at <paramref name="from"/>: braces inside its arguments (<c>{length: {min: 2, max: 5}}</c>,
+    /// a <c>}}</c> in quoted text) don't end it, so options can hold objects. -1 when there is none; the text is then literal, as before.
+    /// </summary>
+    private static int FindExpressionEnd(string text, int from)
+    {
+        var depth = 0;
+        var quote = '\0';
+        var escaped = false;
+        var firstClose = text.IndexOf("}}", from, StringComparison.Ordinal);
+        if (firstClose < 0)
+            return -1;
+        // An expression that is still open this far past its first "}}" never balances: end there, so a text of many such expressions is read once.
+        var limit = (int)Math.Min(text.Length, (long)firstClose + MaxScanPastClose);
+        for (var i = from; i < limit; i++)
+        {
+            var c = text[i];
+            if (quote != '\0')
+            {
+                quote = InQuote(c, quote, ref escaped);
+            }
+            else if (depth > 0 && c is '"' or '\'' && StartsValue(text, i, from))
+            {
+                quote = c;
+            }
+            else if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')' && depth > 0)
+            {
+                depth--;
+            }
+            else if (depth == 0 && c == '}' && i + 1 < text.Length && text[i + 1] == '}')
+            {
+                return i;
+            }
+        }
+
+        return firstClose; // unbalanced: end where the expression ended before, so its error stays the same
+    }
+
+    /// <summary>How far past its first <c>}}</c> an expression's end is looked for: well above any options object, and a bound on the parse work per expression.</summary>
+    private const int MaxScanPastClose = 1024;
+
+    /// <summary>The quote that is still open after <paramref name="c"/> inside quoted text, or <c>'\0'</c> when <paramref name="c"/> closes it.</summary>
+    private static char InQuote(char c, char quote, ref bool escaped)
+    {
+        if (escaped)
+            escaped = false;
+        else if (c == '\\')
+            escaped = true;
+        else if (c == quote)
+            return '\0';
+        return quote;
+    }
+
+    /// <summary>
+    /// Whether a quote at <paramref name="index"/> can open a JavaScript or JSON string: after an opening bracket, a separator or a key's colon (spaces
+    /// skipped). Elsewhere it is part of plain text, like the apostrophe in <c>helpers.slugify(don't)</c>.
+    /// </summary>
+    private static bool StartsValue(string text, int index, int from)
+    {
+        for (var j = index - 1; j >= from; j--)
+        {
+            if (!char.IsWhiteSpace(text[j]))
+                return text[j] is '(' or ',' or '[' or '{' or ':';
+        }
+
+        return false;
+    }
+
     /// <summary>Index of the next <c>{{</c> followed by a letter, or -1.</summary>
     private static int FindExpressionStart(string text, int from)
     {
@@ -170,6 +242,9 @@ internal sealed class Template
 
         /// <summary>Arguments parsed once from <c>name(args)</c> expressions.</summary>
         private TemplateArgs _args = TemplateArgs.Empty;
+
+        /// <summary>The function's name as written, when it is a built-in that must use every option it is given (see <see cref="TemplateArgs.CheckOptionsRead"/>); otherwise <see langword="null"/>.</summary>
+        private string? _checkedFunction;
 
         /// <summary>Key id when the expression is a data path (<c>person.last_name.generic</c>), otherwise -1.</summary>
         private int _key = -1;
@@ -206,6 +281,8 @@ internal sealed class Template
                     ?? throw new FormatException($"Unknown template function '{name}' in '{{{{{expression}}}}}'.{NameSuggestions.For(name, TemplateFunctions.Names)}");
                 segment._args = TemplateArgs.Parse(expression[(parenthesis + 1)..^1]);
                 segment._writer = WritingFunction.WriterOf(segment._function);
+                if (!TemplateFunctions.IsRegisteredByUser(name))
+                    segment._checkedFunction = name; // a function of the user's own reads its arguments as it likes
                 return segment;
             }
 
@@ -232,6 +309,8 @@ internal sealed class Template
                 try
                 {
                     _writer(faker, _args, ref text);
+                    if (_checkedFunction is not null)
+                        _args.CheckOptionsRead(_checkedFunction);
                 }
                 catch (PhoneyDataUnavailableException)
                 {
@@ -289,7 +368,10 @@ internal sealed class Template
         {
             try
             {
-                return function(faker, _args);
+                var text = function(faker, _args);
+                if (_checkedFunction is not null)
+                    _args.CheckOptionsRead(_checkedFunction);
+                return text;
             }
             catch (PhoneyDataUnavailableException)
             {

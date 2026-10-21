@@ -39,9 +39,10 @@ public sealed partial class Faker : IFaker
         _seeded = seed is not null;
     }
 
-    /// <summary>Creates a faker for the locale matching <paramref name="culture"/> (e.g. <c>sv-SE</c> → <c>sv</c>).</summary>
+    /// <summary>Creates a faker for the locale matching <paramref name="culture"/> (e.g. <c>sv-SE</c> → <c>sv</c>); the invariant culture gives <see cref="Locales.Default"/>.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="culture"/> is <see langword="null"/>.</exception>
     public Faker(CultureInfo culture, long? seed = null)
-        : this(culture?.Name is { Length: > 0 } name ? name : Locales.Default, seed)
+        : this((culture ?? throw new ArgumentNullException(nameof(culture))).Name is { Length: > 0 } name ? name : Locales.Default, seed)
     {
     }
 
@@ -163,8 +164,12 @@ public sealed partial class Faker : IFaker
     internal string Pick(StringsEntry entry) => entry.Resolve(entry.PickIndex(Random), this);
 
     /// <summary>Like <see cref="Pick(string)"/> but returns <see langword="null"/> when the locale has no data.</summary>
-    public string? TryPick(string path) =>
-        KeyRegistry.TryGetId(path, out var key) ? TryPick(key) : null;
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    public string? TryPick(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        return KeyRegistry.TryGetId(path, out var key) ? TryPick(key) : null;
+    }
 
     /// <summary>Like <see cref="Pick(int)"/>, or <see langword="null"/> when there is no data.</summary>
     internal string? TryPick(int key) => Data.TryStrings(key) is { } entry ? Pick(entry) : null;

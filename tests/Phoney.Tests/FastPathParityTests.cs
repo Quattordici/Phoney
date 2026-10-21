@@ -170,8 +170,8 @@ public sealed partial class FastPathParityTests
         {
             ArgumentOutOfRangeException.ThrowIfNegative(decimals);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, 28);
-            if (min < 0 || max < 0)
-                return 0;
+            ArgumentOutOfRangeException.ThrowIfNegative(min); // negative prices were 0 before; now they are refused
+            ArgumentOutOfRangeException.ThrowIfNegative(max);
             if (min == max)
                 return decimal.Round(min, decimals);
 

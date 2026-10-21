@@ -31,6 +31,15 @@ public sealed class LoremModule : FakerModule
         return text.ToStringAndDispose();
     }
 
+    /// <summary>Returns between <paramref name="min"/> and <paramref name="max"/> space-separated words (faker.js <c>words({ min, max })</c>).</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public string Words(int min, int max)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(min);
+        return Words(Count(min, max, nameof(max)));
+    }
+
     /// <summary>Returns a sentence of <paramref name="wordCount"/> words (3–10 when not given), capitalized and ending with a period.</summary>
     public string Sentence(int? wordCount = null)
     {
@@ -38,6 +47,23 @@ public sealed class LoremModule : FakerModule
         var text = new TextBuilder(stackalloc char[256]);
         AppendSentence(ref text, wordCount ?? Random.Int(3, 10));
         return text.ToStringAndDispose();
+    }
+
+    /// <summary>Returns a sentence of between <paramref name="minWords"/> and <paramref name="maxWords"/> words; <c>Sentence(3, 10)</c> is <c>Sentence()</c>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="minWords"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="maxWords"/> is less than <paramref name="minWords"/>.</exception>
+    public string Sentence(int minWords, int maxWords)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(minWords);
+        return Sentence(Count(minWords, maxWords, nameof(maxWords)));
+    }
+
+    /// <summary>Draws a count between <paramref name="min"/> (checked by the caller) and <paramref name="max"/> (one draw, as for the default counts).</summary>
+    private int Count(int min, int max, string maxName)
+    {
+        if (max < min)
+            throw new ArgumentException($"The maximum ({max}) is less than the minimum ({min}).", maxName);
+        return Random.Int(min, max);
     }
 
     /// <summary>A sentence of <paramref name="wordCount"/> words without its closing period, like <c>Sentence(wordCount).TrimEnd('.')</c> in one allocation.</summary>

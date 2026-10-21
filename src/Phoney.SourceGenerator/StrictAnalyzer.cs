@@ -112,6 +112,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         private readonly HashSet<string> _covered = new(StringComparer.Ordinal);
         private readonly List<ITypeSymbol> _conventionTypes = [];
         private bool _useConventions = true;
+        private bool _useParameterDefaults;
 
         /// <summary>Records what <paramref name="call"/> covers; <see langword="false"/> when that can't be known from the source, so nothing is reported.</summary>
         public bool Read(IInvocationOperation call)
@@ -127,7 +128,9 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
                     _conventionTypes.Add(call.TargetMethod.TypeArguments[0]);
                     return true;
                 case "WithNameConventions":
-                    return ReadNameConventions(call);
+                    return ReadFlag(call, ref _useConventions);
+                case "WithParameterDefaults":
+                    return ReadFlag(call, ref _useParameterDefaults);
                 default:
                     return true;
             }
@@ -135,7 +138,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
 
         /// <summary>Whether a member is a scalar that nothing gives a value to.</summary>
         public bool LeavesUncovered(MemberModel member) =>
-            member.IsScalar && !member.DefinesValue && !_covered.Contains(member.Name)
+            member.IsScalar && !member.DefinesValue && !_covered.Contains(member.Name) && !(_useParameterDefaults && member is { IsConstructorParameter: true, DefaultValue: not null })
             && (member.Convention == nameof(ConventionKind.None) || !_useConventions)
             && !_conventionTypes.Exists(t => Matches(t, member.Type));
 
@@ -151,13 +154,14 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             return true;
         }
 
-        private bool ReadNameConventions(IInvocationOperation call)
+        /// <summary>Reads the <c>bool</c> argument of an on/off call (<see langword="true"/> when left out); <see langword="false"/> when it is decided at runtime.</summary>
+        private static bool ReadFlag(IInvocationOperation call, ref bool flag)
         {
             var argument = call.Arguments.FirstOrDefault();
             if (argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue)
-                _useConventions = true;
+                flag = true;
             else if (argument.Value.ConstantValue is { HasValue: true, Value: bool value })
-                _useConventions = value;
+                flag = value;
             else
                 return false; // decided at runtime
             return true;

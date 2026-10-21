@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -97,6 +98,9 @@ internal sealed class MemberModel
 
     /// <summary>Whether data annotations alone define the value, like <c>MemberConstraints.DefinesValue</c>.</summary>
     public bool DefinesValue { get; set; }
+
+    /// <summary>C# expression of an optional constructor parameter's declared default, like <c>FakeMember.DefaultValue</c>, or <see langword="null"/>.</summary>
+    public string? DefaultValue { get; set; }
 }
 
 /// <summary>
@@ -200,6 +204,8 @@ internal sealed class ModelBuilder
         // Annotations may sit on the parameter or (with [property: …]) on the generated property.
         var attributes = parameter.GetAttributes().Concat(match is null ? Enumerable.Empty<AttributeData>() : AttributesOf(match));
         var member = Member(type, new MemberSource(name, parameter.Type, IsNullableReference(parameter.Type, parameter.NullableAnnotation), type, IsField: false), MemberRoles.ConstructorParameter, attributes, index);
+        if (parameter.HasExplicitDefaultValue)
+            member.DefaultValue = DefaultLiteral(parameter.Type, parameter.ExplicitDefaultValue);
         // A record's positional property behind the parameter can be set on an existing object.
         if (match is IPropertySymbol property)
         {
@@ -214,6 +220,30 @@ internal sealed class ModelBuilder
         }
 
         return member;
+    }
+
+    /// <summary>
+    /// A parameter's default as an expression of its type. Metadata keeps <c>default</c> of a struct as <see langword="null"/> and an enum as its number,
+    /// so both are cast to the type, the same values the reflection model reads from <c>ParameterInfo.DefaultValue</c>.
+    /// </summary>
+    private static string DefaultLiteral(ITypeSymbol type, object? value)
+    {
+        if (value is null)
+            return $"default({Fq(type)})";
+        var literal = value switch
+        {
+            double d when double.IsNaN(d) => "double.NaN",
+            double d when double.IsPositiveInfinity(d) => "double.PositiveInfinity",
+            double d when double.IsNegativeInfinity(d) => "double.NegativeInfinity",
+            double d => d.ToString("R", CultureInfo.InvariantCulture) + "d",
+            float f when float.IsNaN(f) => "float.NaN",
+            float f when float.IsPositiveInfinity(f) => "float.PositiveInfinity",
+            float f when float.IsNegativeInfinity(f) => "float.NegativeInfinity",
+            float f => f.ToString("R", CultureInfo.InvariantCulture) + "f",
+            decimal m => m.ToString(CultureInfo.InvariantCulture) + "m",
+            _ => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatPrimitive(value, quoteStrings: true, useHexadecimalNumbers: false),
+        };
+        return $"({Fq(type)})({literal})";
     }
 
     /// <summary>Describes a settable or init-only property or field.</summary>

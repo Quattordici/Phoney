@@ -69,23 +69,34 @@ internal sealed record CustomConvention(Type Type, Func<string, bool> NameMatche
 /// The custom conventions of one compiled generator (its own, then the app-wide ones) for the nested objects it creates,
 /// bound to each nested type's members once and cached. Bound slots carry no state, so they are shared across threads.
 /// </summary>
-internal sealed class NestedConventions(ImmutableList<CustomConvention> conventions, RuleUsage? usage)
+internal sealed class NestedConventions(ImmutableList<CustomConvention> conventions, RuleUsage? usage, bool parameterDefaults)
 {
     private readonly ConcurrentDictionary<Type, RuleSlot?[]?> _slots = new();
 
-    /// <summary>A convention holder, or <see langword="null"/> when there are no conventions (nested objects then need no slots).</summary>
-    public static NestedConventions? For(ImmutableList<CustomConvention> conventions, RuleUsage? usage = null) => conventions.IsEmpty ? null : new(conventions, usage);
+    /// <summary>
+    /// A convention holder, or <see langword="null"/> when there are no conventions and optional constructor parameters are generated
+    /// (nested objects then need no slots).
+    /// </summary>
+    public static NestedConventions? For(ImmutableList<CustomConvention> conventions, RuleUsage? usage = null, bool parameterDefaults = false) =>
+        conventions.IsEmpty && !parameterDefaults ? null : new(conventions, usage, parameterDefaults);
 
-    /// <summary>Slots for the members of <paramref name="model"/> that a convention matches, or <see langword="null"/> when none does.</summary>
+    /// <summary>Slots for the members of <paramref name="model"/> that a convention or declared default matches, or <see langword="null"/> when none does.</summary>
     public RuleSlot?[]? SlotsFor(Type type, IFakeModel model) =>
-        _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(conventions, model.Members, usage));
+        _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(conventions, model.Members, usage, parameterDefaults));
 
-    /// <summary>Binds the first matching convention to each member, like the root object's rules in <c>ObjectGenerator&lt;T&gt;.Compile</c>.</summary>
-    private static RuleSlot?[]? Bind(ImmutableList<CustomConvention> conventions, IReadOnlyList<FakeMember> members, RuleUsage? usage)
+    /// <summary>Binds declared defaults, then the first matching convention to each member, like the root object's rules in <c>ObjectGenerator&lt;T&gt;.Compile</c>.</summary>
+    private static RuleSlot?[]? Bind(ImmutableList<CustomConvention> conventions, IReadOnlyList<FakeMember> members, RuleUsage? usage, bool parameterDefaults)
     {
         RuleSlot?[]? slots = null;
         for (var i = 0; i < members.Count; i++)
         {
+            if (parameterDefaults && ParameterDefaults.Slot(members[i]) is { } declared)
+            {
+                slots ??= new RuleSlot?[members.Count];
+                slots[i] = declared;
+                continue;
+            }
+
             if (conventions.FirstOrDefault(c => c.Matches(members[i])) is not { } match)
                 continue;
             usage?.Convention(match);
@@ -93,8 +104,18 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
             slots[i] = new RuleSlot(RuleKind.Convention, match.Factory, unique: false, maxAttempts: 0);
         }
 
+        if (slots is not null)
+            RuleSlot.MarkGivenValues(members, slots);
         return slots;
     }
+}
+
+/// <summary>The declared defaults of optional constructor parameters, for <c>ObjectGenerator&lt;T&gt;.WithParameterDefaults</c>.</summary>
+internal static class ParameterDefaults
+{
+    /// <summary>A constant slot with the member's declared default, or <see langword="null"/> when it is not an optional constructor parameter.</summary>
+    public static RuleSlot? Slot(FakeMember member) =>
+        member is { IsConstructorParameter: true, HasDefaultValue: true } ? new RuleSlot(RuleKind.Constant, member.DefaultValue, unique: false, maxAttempts: 0) : null;
 }
 
 #pragma warning disable S2326 // the source generator reads T: it is the type to generate a model for

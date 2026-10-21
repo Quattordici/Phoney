@@ -143,18 +143,24 @@ public sealed class LocationModule : FakerModule
     }
 
     /// <summary>Returns a latitude in degrees between <paramref name="min"/> and <paramref name="max"/>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="precision"/> is outside 0–15, or a limit is not a finite number.</exception>
-    public double Latitude(double min = -90, double max = 90, int precision = 4) => Degrees(min, max, precision);
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="precision"/> is outside 0–15, or a limit is outside -90 to 90 or not a number.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public double Latitude(double min = -90, double max = 90, int precision = 4) => Degrees(min, max, precision, 90);
 
     /// <summary>Returns a longitude in degrees between <paramref name="min"/> and <paramref name="max"/>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="precision"/> is outside 0–15, or a limit is not a finite number.</exception>
-    public double Longitude(double min = -180, double max = 180, int precision = 4) => Degrees(min, max, precision);
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="precision"/> is outside 0–15, or a limit is outside -180 to 180 or not a number.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
+    public double Longitude(double min = -180, double max = 180, int precision = 4) => Degrees(min, max, precision, 180);
 
-    /// <summary>Degrees rounded to <paramref name="precision"/> decimals, with the precision checked under its own name.</summary>
-    private double Degrees(double min, double max, int precision)
+    /// <summary>Degrees between <c>-<paramref name="limit"/></c> and <paramref name="limit"/> rounded to <paramref name="precision"/> decimals, with each argument checked under its own name.</summary>
+    private double Degrees(double min, double max, int precision, double limit)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(precision);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(precision, 15);
+        if (!(Math.Abs(min) <= limit)) // also true for NaN
+            throw new ArgumentOutOfRangeException(nameof(min), min, $"The lower limit must be a number from -{limit} to {limit} degrees.");
+        if (!(Math.Abs(max) <= limit))
+            throw new ArgumentOutOfRangeException(nameof(max), max, $"The upper limit must be a number from -{limit} to {limit} degrees.");
         return Faker.Number.Double(min, max, precision);
     }
 
