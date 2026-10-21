@@ -511,9 +511,14 @@ public sealed class UsageAnalyzerTests
                     products.Add(product);
                 }
             }
+            public static void D(List<Func<Product, bool>> properties)
+            {
+                foreach (var property in properties)
+                    Fake.For<Product>().Seed(3).Check(property);
+            }
             """, cancellationToken);
 
-        diagnostics.Count.ShouldBe(3);
+        diagnostics.Count.ShouldBe(4);
         diagnostics.ShouldAllBe(d => TextOf(d) == "Seed");
         diagnostics[0].GetMessage().ShouldContain("same");
     }
@@ -581,10 +586,13 @@ public sealed class UsageAnalyzerTests
             public static object H() => Fake.For<Product>().Unique(p => p.Name, 0);
             public static object I() => Fake.Many<Product>(-1);
             public static object J() => Fake.For<Product>().Where(p => p.Id > 0, 0);
+            public static void K() => Fake.For<Product>().Check(p => p.Id > 0, -3);
+            public static void L() => Fake.For<Product>().Check(p => p.Id > 0, maxShrinks: -4);
+            public static System.Threading.Tasks.Task M() => Fake.For<Product>().CheckAsync(p => System.Threading.Tasks.Task.CompletedTask, -6);
             """, cancellationToken);
 
-        diagnostics.Count.ShouldBe(10);
-        diagnostics.Select(TextOf).ShouldBe(["1.5", "-0.1", "2", "-1", "-1", "-1", "-5", "0", "-1", "0"], ignoreOrder: true);
+        diagnostics.Count.ShouldBe(13);
+        diagnostics.Select(TextOf).ShouldBe(["1.5", "-0.1", "2", "-1", "-1", "-1", "-5", "0", "-1", "0", "-3", "maxShrinks: -4", "-6"], ignoreOrder: true);
         diagnostics.Single(d => TextOf(d) == "1.5").GetMessage().ShouldContain("NullProbability");
         diagnostics.Single(d => TextOf(d) == "2").GetMessage().ShouldContain("at least 5");
     }
@@ -598,6 +606,7 @@ public sealed class UsageAnalyzerTests
             public static object B() => (Fake.For<Product>().Generate(0), Fake.For<Product>().Generate(Many));
             public static object C(int n, double p) => Fake.For<Product>().NullProbability(p).CollectionSize(n, 1).CollectionSize(2, n).MaxDepth(n).Generate(n);
             public static object D() => Fake.Many<Product>(0);
+            public static void E() => Fake.For<Product>().Check(p => p.Id > 0, 0, 0);
             """, cancellationToken);
 
         diagnostics.ShouldBeEmpty();

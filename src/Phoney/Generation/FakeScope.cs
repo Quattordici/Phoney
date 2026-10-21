@@ -399,7 +399,8 @@ public sealed class FakeScope
         _ => defaultValue is not null && value.Equals(defaultValue),
     };
 
-    private static bool IsEmpty(IEnumerable sequence)
+    /// <summary>Whether <paramref name="sequence"/> has no elements; a default <c>ImmutableArray&lt;T&gt;</c> counts as empty.</summary>
+    internal static bool IsEmpty(IEnumerable sequence)
     {
         try
         {

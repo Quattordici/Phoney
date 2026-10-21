@@ -135,6 +135,19 @@ var real = new List<Customer> { new() { Id = 1, Email = "anna@example.com" }, ne
 foreach (var masked in Fake.For<Customer>().Seed(99).Ignore(c => c.Id).Pseudonymize(real, c => c.Email))
     Console.WriteLine($"  #{masked.Id}: {masked.FirstName} {masked.LastName} <{masked.Email}>");   // the same stand-in for the same person
 
+// 7f. Property checks that shrink -------------------------------------------------------------
+Console.WriteLine("\n== Property check");
+try
+{
+    // A hundred customers; the first whose orders reach 2,000 is shrunk to the simplest customer the generator can make that still does.
+    SampleData.Customer.Seed(3).CollectionSize(0, 5).Check(c => c.Orders.Sum(o => o.Total) < 2_000);
+}
+catch (FakeCheckException<Customer> e)
+{
+    var shrunk = e.Counterexample;
+    Console.WriteLine($"Failed for customer {e.Index + 1}, shrunk in {e.ShrinkSteps} steps to {shrunk.FirstName} {shrunk.LastName} with {shrunk.Orders.Count} order(s) totalling {shrunk.Orders.Sum(o => o.Total)}");
+}
+
 // 8. Time from a TimeProvider -----------------------------------------------------------------
 Console.WriteLine("\n== TimeProvider");
 var clock = new FixedClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));

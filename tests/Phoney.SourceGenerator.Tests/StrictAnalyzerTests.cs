@@ -48,6 +48,18 @@ public sealed class StrictAnalyzerTests
     }
 
     [Test]
+    public async Task A_check_ends_a_chain_like_Generate(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("""
+            public static void A() => Fake.For<Product>().Strict().Check(p => p.Id > 0);
+            public static System.Threading.Tasks.Task B() => Fake.For<Product>().Strict().CheckAsync(p => System.Threading.Tasks.Task.CompletedTask);
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("Flavor, Shelf"));
+    }
+
+    [Test]
     public async Task A_unique_combination_does_not_cover_its_members(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("""

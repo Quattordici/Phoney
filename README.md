@@ -15,6 +15,7 @@
 - **76 locales** imported from faker.js (`@faker-js/faker` 10.6.0), kept up to date by an automated sync pipeline.
 - **One line to a value or a fully populated object**: `Fake.Person.FullName()`, `Fake.Many<Customer>(100)`. Name conventions fill `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… and the names, email and avatar of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members or reach into nested ones (`.With(x => x.Lines.Each().Sku, …)`), uniqueness, conditions, numbering, weighted choices, subtypes and `[JsonDerivedType]`, strict mode checked at compile time, custom conventions and locales, faker.js-style templates.
+- **Property checks that shrink**: `Fake.For<Order>().Check(o => Pricing.Total(o) >= 0)` tests a property on a hundred realistic orders and, when one fails, shrinks it to the simplest order your own rules can make that still fails, with the seed to replay it.
 - **Test-focused**: invalid and boundary data from your data annotations, `[FakeData]` for xUnit, NUnit, MSTest and TUnit, replayable random tests (`PHONEY_SEED=… dotnet test`), a `TimeProvider` for "now", and stable stand-ins for real data (`Fake.Keyed("customer:42")`, `Pseudonymize`).
 - **Data from files and to files**: fill members from the rows of a CSV or JSON file, or write generated objects as CSV or JSON.
 - **Fast**: array-indexed, allocation-free lookups, templates parsed once, and a **source generator** that makes generation reflection free, trim and Native AOT safe ([benchmarks](#performance)).
@@ -687,6 +688,33 @@ dotnet_analyzer_diagnostic.category-Phoney.Usage.severity = suggestion
 ```
 
 </details>
+
+## Property checks
+
+`Check` turns a generator into a property-based test: it generates objects, runs a property on each and, when one fails, **shrinks** it to the simplest object that still fails. Unlike classic property-based testing tools, the candidates are made by your generator, so the counterexample is realistic data that obeys your rules, annotations and conventions, with names, email and dates that still agree:
+
+```csharp
+Fake.For<Customer>().CollectionSize(0, 6)
+    .Check(c => c.Orders.Sum(o => o.Quantity * o.Price) < 5_000);          // returns false: fails
+
+Fake.For<Order>().Check(o => Pricing.Total(o).ShouldBeGreaterThanOrEqualTo(0));   // any assertion library
+await Fake.For<Order>().CheckAsync(async o => await Assert.That(await api.Quote(o)).IsPositive());
+```
+
+```text
+FakeCheckException<Customer>: The property failed for Customer number 1 of 100 (seed 286532772, shrunk in 63 steps).
+Counterexample:
+  Customer { Id = 1, FirstName = "Aaliyah", LastName = "Abbott", Email = "Aaliyah.Abbott0@gmail.com", BirthDate = 1944-01-02, Orders = [Order { Id = 1, Sku = "AAA-00000", Quantity = 13, Price = 384.69, CreatedAt = 2024-01-01T00:00:00.0000000+00:00 }] }
+Because: the property returned false
+Original:
+  Customer { Id = 1, FirstName = "Eusebio", LastName = "Oberbrunner", …, Orders = [Order { …, Quantity = 81, Price = 600.90, … }, Order { … }, Order { … }] }
+Replay: PHONEY_SEED=286532772 dotnet test, or Seed(286532772) on the generator.
+```
+
+- **Shrinking replays simpler draws**: every value Phoney makes comes from one stream of random numbers, so `Check` records the stream of the failing object and tries smaller streams (fewer and lower draws): collections lose elements, numbers move to their lowest value that still fails, texts and list values become the first ones (`"Aaliyah Abbott"`, `"AAA-00000"`). Each candidate goes through the generator again, so `With`, `[Range]`, `Unique`, `Where`, nested generators and both the reflection and the source-generated models apply as usual; a candidate the generator can't make is skipped.
+- **The same bug**: shrinking keeps to the kind of failure it found (returning `false`, or the same exception type), so a simpler object that fails for another reason doesn't replace it. The exception the property threw for the counterexample is the `InnerException`.
+- **Replayable**: the seed is the generator's `Seed(…)`, else `PHONEY_SEED`, else a new random one, and the report says how to replay it. The tested objects are those `Generate(count)` makes for that seed, and shrinking is deterministic, so the same seed finds and shrinks the same counterexample. Checking doesn't move the generator's own sequence.
+- `FakeCheckException<T>` has `Counterexample`, `Original`, `Seed`, `Index`, `Tested` and `ShrinkSteps`. `Check(property, count: 1_000, maxShrinks: 5_000)` tests more objects and shrinks further; `maxShrinks: 0` reports the original object. `CheckAsync` takes a `CancellationToken`. A chain that ends in `Check` is analysed like one that ends in `Generate` (**PHONEY004**, **PHONEY010**, **PHONEY011**).
 
 ## Test data in xUnit, NUnit, MSTest and TUnit
 

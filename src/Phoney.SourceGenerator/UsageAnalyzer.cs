@@ -139,6 +139,10 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 if (Constant(call, "min") is { } low)
                     Check(context, call, "max", v => v >= low, $"at least {low.ToString(CultureInfo.InvariantCulture)} (the minimum)");
                 break;
+            case "Check" or "CheckAsync":
+                Check(context, call, "count", v => v >= 0, AtLeastZero);
+                Check(context, call, "maxShrinks", v => v >= 0, AtLeastZero);
+                break;
             case UniqueMethod or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
                 break;
