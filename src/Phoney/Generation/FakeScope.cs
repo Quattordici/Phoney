@@ -211,11 +211,8 @@ public sealed class FakeScope
     /// </summary>
     private Identity CreateIdentity()
     {
-        foreach (var slot in _slots ?? [])
-        {
-            if (slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode })
-                GiveIdentity(slot.Gives, slot.Value);
-        }
+        foreach (var slot in (_slots ?? []).Where(static slot => slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode }))
+            GiveIdentity(slot!.Gives, slot.Value);
 
         return new Identity(Faker, _hints);
     }
