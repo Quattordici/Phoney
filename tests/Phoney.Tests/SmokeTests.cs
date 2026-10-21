@@ -6,7 +6,7 @@ namespace Phoney.Tests;
 public sealed class SmokeTests
 {
     /// <summary>Generators that depend on locale data, keyed by name for readable failures.</summary>
-    private static readonly (string Name, Func<Faker, object> Generate)[] Generators =
+    internal static readonly (string Name, Func<Faker, object> Generate)[] Generators =
     [
         ("person.firstName", f => f.Person.FirstName()),
         ("person.firstName(female)", f => f.Person.FirstName(Sex.Female)),

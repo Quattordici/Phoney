@@ -110,7 +110,7 @@ Parallel.For(0, 1_000, i =>
 });
 ```
 
-`ObjectGenerator<T>.Seed(n)` does the same for a generator, and `GenerateParallel` forks for you. A `Fake.Seeded` scope flows into the tasks and workers started inside it, so they would share one faker without `Fake.Fork(i)` (or `faker.Fork(i)`). One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing. For tests that run on random data but can be replayed, see [`[FakeSeed]` and `FakeSeed.Run`](#replayable-random-data).
+`ObjectGenerator<T>.Seed(n)` does the same for a generator, and `GenerateParallel` forks for you. A `Fake.Seeded` scope flows into the tasks and workers started inside it, so they would share one faker without `Fake.Fork(i)` (or `faker.Fork(i)`). One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing. Scopes nest; one disposed out of order never brings back a scope that has ended, and a task that outlives its scope goes back to the enclosing one. For tests that run on random data but can be replayed, see [`[FakeSeed]` and `FakeSeed.Run`](#replayable-random-data).
 
 ### Controlling "now" with `TimeProvider`
 
@@ -281,6 +281,8 @@ Locales.Extend("en", l => l
 
 Locales.Register("en_PIRATE", File.OpenRead("pirate.json"), "en");   // a faker.js locale file
 ```
+
+A built-in locale can't be registered again (that would drop its data for every locale that falls back to it), and a locale can't fall back to itself: both throw and say what to use instead.
 
 Typed methods cover `FirstNames`, `LastNames`, `JobTitles`, `Cities`, `Streets`, `States`, `Countries`, `ZipCodeFormats`, `PhoneFormats`, `EmailDomains`, `CompanyNames` and `LoremWords`. Each replaces only that data; everything else is inherited.
 
@@ -586,7 +588,7 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 |---|---|
 | `[StringLength]`, `[MinLength]`, `[MaxLength]`, `[Length]` | string length; element count for collections; length of `byte[]`. When several apply, the strictest limits win; an email that has to be shortened or lengthened stays an email |
 | `[Range]` | numbers, dates, times of day and durations within the range (`[Range(typeof(DateTime), "2020-01-01", "2020-12-31")]`, `[Range(typeof(TimeOnly), "09:00", "17:00")]`), and numbers as text for a string or as a character for a `char` (`[Range('a', 'f')]`); `MinimumIsExclusive`/`MaximumIsExclusive` leave the limit out, a decimal range narrower than 0.01 gets more decimals, and a range with no value of the member's type inside throws when generating |
-| `[RegularExpression]` | a value matching the pattern: classes, groups (also named), alternation, quantifiers, anchors and `\p{L}`/`\p{Lu}`/`\p{Ll}`/`\p{N}`; with lookarounds (`(?=.*\d)`) values are generated until one matches. A pattern Phoney can't generate (backreferences, other escapes) throws with the pattern in the message |
+| `[RegularExpression]` | a value matching the pattern: classes, groups (also named), alternation, quantifiers, anchors and `\p{L}`/`\p{Lu}`/`\p{Ll}`/`\p{N}`; with lookarounds (`(?=.*\d)`) values are generated until one matches. A pattern Phoney can't generate (backreferences, other escapes), one .NET rejects (`a**`, a count beyond `int`), groups nested more than 256 deep or a pattern that could produce more than 16 Mi characters or repetitions (`a{2000000000}`, `(){2000000000}`) throws a `FormatException` with the pattern in the message |
 | `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | a value of that format, whatever the member is called, also with `WithNameConventions(false)` |
 | `[AllowedValues]`, `[DeniedValues]` | one of / none of the listed values (for enums also their names); when the denied values leave nothing to pick, generating throws |
 | `[Required]` | never `null` (even with `NullProbability`) and never empty |

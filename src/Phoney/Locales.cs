@@ -29,7 +29,8 @@ public static class Locales
     public static LocaleData Data(string code) => LocaleStore.Get(code);
 
     /// <summary>
-    /// Registers a new locale (or replaces a registered one).
+    /// Registers a new locale (or replaces one registered earlier). A built-in locale can't be replaced, because that would drop its data for every locale that falls back
+    /// to it: change it with <see cref="Extend"/>, or register a locale of your own that falls back to it.
     /// <code>
     /// Locales.Register("sv_dalarna", l => l
     ///     .FallbackTo("sv")
@@ -40,19 +41,31 @@ public static class Locales
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         ArgumentNullException.ThrowIfNull(configure);
-        var builder = new LocaleBuilder(code.Replace('-', '_'));
+        var normalized = code.Trim().Replace('-', '_');
+        if (LocaleStore.BuiltInCode(normalized) is { } builtIn)
+        {
+            throw new ArgumentException(
+                $"'{builtIn}' is a built-in locale and can't be registered again: that would drop its data for every locale that falls back to it. " +
+                $"Change its data with Locales.Extend(\"{builtIn}\", …), or register a locale of your own with .FallbackTo(\"{builtIn}\").", nameof(code));
+        }
+
+        var builder = new LocaleBuilder(normalized);
         configure(builder);
         LocaleStore.Register(builder);
     }
 
     /// <summary>Registers a locale from a faker.js-shaped JSON definition.</summary>
-    public static void Register(string code, Stream utf8Json, params string[] fallback) =>
+    public static void Register(string code, Stream utf8Json, params string[] fallback)
+    {
+        ArgumentNullException.ThrowIfNull(utf8Json);
+        ArgumentNullException.ThrowIfNull(fallback);
         Register(code, l =>
         {
             if (fallback.Length > 0)
                 l.FallbackTo(fallback);
             l.ImportJson(utf8Json);
         });
+    }
 
     /// <summary>
     /// Adds or overrides data of an existing locale. Applies to <see cref="Faker"/>s created afterwards.

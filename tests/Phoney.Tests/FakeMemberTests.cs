@@ -31,6 +31,10 @@ public sealed class FakeMemberTests
         member.FillsExisting.ShouldBeFalse();
     }
 
+[Test]
+    public void A_member_describes_itself_by_name_type_and_convention() =>
+        new FakeMember("Email", typeof(string), ConventionKind.Email).ToString().ShouldBe("Email (String, Email)");
+
 #pragma warning disable CS0618 // the constructor with every value is kept for models compiled against earlier versions
     [Test]
     public void The_constructor_with_every_value_still_describes_the_same_member()

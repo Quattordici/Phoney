@@ -17,7 +17,7 @@ namespace Phoney;
 /// </example>
 public static partial class Fake
 {
-    private static readonly AsyncLocal<Faker?> s_scoped = new();
+    private static readonly AsyncLocal<Scope?> s_scoped = new();
     private static string s_locale = Locales.Default;
     private static StrongBox<long>? s_seed; // a reference, so threads read it atomically
     private static TimeProvider? s_timeProvider;
@@ -60,10 +60,10 @@ public static partial class Fake
     /// The faker behind the facade: the one from an enclosing <see cref="Seeded"/> scope, otherwise the current
     /// thread's (seeded when <see cref="Seed"/> was called).
     /// </summary>
-    public static Faker Faker => s_scoped.Value ?? ThreadFaker;
+    public static Faker Faker => Scope.Current?.ScopedFaker ?? ThreadFaker;
 
     /// <summary>Whether the facade currently produces reproducible values (a <see cref="Seeded"/> scope or <see cref="Seed"/>).</summary>
-    public static bool IsSeeded => s_scoped.Value is { } scoped ? scoped.IsSeeded : Volatile.Read(ref s_seed) is not null;
+    public static bool IsSeeded => Scope.Current is { } scoped ? scoped.ScopedFaker.IsSeeded : Volatile.Read(ref s_seed) is not null;
 
     private static Faker ThreadFaker
     {
@@ -112,9 +112,7 @@ public static partial class Fake
     /// <param name="locale">Locale for the scope; defaults to <see cref="Locale"/>.</param>
     public static IDisposable Seeded(long seed, string? locale = null)
     {
-        var previous = s_scoped.Value;
-        s_scoped.Value = new Faker(locale ?? s_locale, seed) { TimeProvider = TimeProvider };
-        return new Scope(previous);
+        return Scope.Open(new Faker(locale ?? s_locale, seed) { TimeProvider = TimeProvider });
     }
 
     /// <summary>
@@ -134,9 +132,7 @@ public static partial class Fake
     /// </example>
     public static IDisposable Fork(long index)
     {
-        var previous = s_scoped.Value;
-        s_scoped.Value = Faker.Fork(index);
-        return new Scope(previous);
+        return Scope.Open(Faker.Fork(index));
     }
 
     /// <summary>
@@ -146,10 +142,34 @@ public static partial class Fake
     /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     public static Faker Keyed(string key) => Faker.Keyed(key);
 
-    /// <summary>Restores the facade's previous faker when a <see cref="Seeded"/> or <see cref="Fork"/> scope ends.</summary>
-    private sealed class Scope(Faker? previous) : IDisposable
+    /// <summary>
+    /// A <see cref="Seeded"/> or <see cref="Fork"/> scope: its faker is the facade's while it is the innermost open scope of the async flow. Disposing it goes back to the
+    /// nearest enclosing scope that is still open, so scopes disposed out of order never bring back one that has ended, and an outer scope disposed too early leaves
+    /// the inner one in charge until that one ends too.
+    /// </summary>
+    private sealed class Scope : IDisposable
     {
-        private bool _disposed;
+        private readonly Scope? _outer;
+        private volatile bool _disposed;
+
+        private Scope(Faker faker, Scope? outer) => (ScopedFaker, _outer) = (faker, outer);
+
+        /// <summary>The scope's faker.</summary>
+        public Faker ScopedFaker { get; }
+
+        /// <summary>
+        /// The innermost scope of this async flow that is still open. A task started inside a scope keeps a copy of it, so the copy can be one its creator has
+        /// disposed since; that one is skipped like any other ended scope.
+        /// </summary>
+        public static Scope? Current => OpenFrom(s_scoped.Value);
+
+        /// <summary>Makes <paramref name="faker"/> the facade's faker of this async flow until the returned scope is disposed.</summary>
+        public static Scope Open(Faker faker)
+        {
+            var scope = new Scope(faker, Current);
+            s_scoped.Value = scope;
+            return scope;
+        }
 
         /// <inheritdoc />
         public void Dispose()
@@ -157,7 +177,17 @@ public static partial class Fake
             if (_disposed)
                 return;
             _disposed = true;
-            s_scoped.Value = previous;
+            if (!ReferenceEquals(s_scoped.Value, this))
+                return; // disposed before a scope opened inside it: that one stays in charge and skips this one when it ends
+            s_scoped.Value = OpenFrom(_outer);
+        }
+
+        /// <summary><paramref name="scope"/>, or the nearest scope around it, that is not disposed.</summary>
+        private static Scope? OpenFrom(Scope? scope)
+        {
+            while (scope is { _disposed: true })
+                scope = scope._outer;
+            return scope;
         }
     }
 

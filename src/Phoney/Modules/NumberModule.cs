@@ -81,7 +81,21 @@ public sealed class NumberModule : FakerModule
             value = Math.Ceiling(low * factor) / factor;
         if (max is { } high && value > high)
             value = Math.Floor(high * factor) / factor;
-        return TNumber.CreateSaturating(value);
+        return TNumber.CreateSaturating(Math.Clamp(value, FiniteLimit<TNumber>(negative: true), FiniteLimit<TNumber>(negative: false)));
+    }
+
+    /// <summary>
+    /// The largest (or most negative) finite value of the floating-point types that <see cref="INumberBase{TSelf}.CreateSaturating{TOther}"/> would turn into an infinity
+    /// beyond it; for every other type the double range, which <c>CreateSaturating</c> already clamps to the type's own limits.
+    /// </summary>
+    private static double FiniteLimit<TNumber>(bool negative)
+    {
+        double limit = double.MaxValue;
+        if (typeof(TNumber) == typeof(Half))
+            limit = (double)System.Half.MaxValue;
+        else if (typeof(TNumber) == typeof(float))
+            limit = float.MaxValue;
+        return negative ? -limit : limit;
     }
 
     /// <summary>Checks the arguments of a normal distribution; <c>ObjectGenerator&lt;T&gt;.WithNormalDistribution</c> calls it when the rule is added, so a mistake shows there and not at the first <c>Generate</c>.</summary>
