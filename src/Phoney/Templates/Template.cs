@@ -155,7 +155,12 @@ internal sealed class Template
         var depth = 0;
         var quote = '\0';
         var escaped = false;
-        for (var i = from; i < text.Length; i++)
+        var firstClose = text.IndexOf("}}", from, StringComparison.Ordinal);
+        if (firstClose < 0)
+            return -1;
+        // An expression that is still open this far past its first "}}" never balances: end there, so a text of many such expressions is read once.
+        var limit = (int)Math.Min(text.Length, (long)firstClose + MaxScanPastClose);
+        for (var i = from; i < limit; i++)
         {
             var c = text[i];
             if (quote != '\0')
@@ -180,8 +185,11 @@ internal sealed class Template
             }
         }
 
-        return text.IndexOf("}}", from, StringComparison.Ordinal); // unbalanced: end where the expression ended before, so its error stays the same
+        return firstClose; // unbalanced: end where the expression ended before, so its error stays the same
     }
+
+    /// <summary>How far past its first <c>}}</c> an expression's end is looked for: well above any options object, and a bound on the parse work per expression.</summary>
+    private const int MaxScanPastClose = 1024;
 
     /// <summary>The quote that is still open after <paramref name="c"/> inside quoted text, or <c>'\0'</c> when <paramref name="c"/> closes it.</summary>
     private static char InQuote(char c, char quote, ref bool escaped)

@@ -35,6 +35,20 @@ public sealed class TemplateAndCustomizationTests
         _faker.Parse("{{person.firstName}}}").ShouldEndWith("}");
     }
 
+    // An expression that never balances ends at its first "}}", as before the balanced scan. The scan for its real end gives up a short way past that
+    // "}}" instead of reading the rest of the text, so many such expressions in one template take linear time, not quadratic.
+    [Test]
+    public void Unbalanced_expressions_are_parsed_in_linear_time()
+    {
+        var text = string.Concat(Enumerable.Repeat("{{helpers.slugify(()}} ", 20_000));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        Template.Parse(text);
+
+        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15)); // about 0.2 s alone; the quadratic scan took about a minute
+        _faker.Parse("{{helpers.slugify(()}}|{{person.firstName}}").ShouldNotContain("{{");
+    }
+
     // Only "{{" followed by a letter starts an expression, so text for another template engine is left for it.
     [Test]
     public void Tags_of_other_template_engines_pass_through()
