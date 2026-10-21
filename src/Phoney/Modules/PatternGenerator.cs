@@ -31,6 +31,15 @@ internal sealed class PatternGenerator
     private const string NonWord = " !\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~";
     private const int MaxCached = 1024;
 
+    /// <summary>How deep groups may nest: parsing and generating recurse once per level, so a deeper pattern would overflow the stack instead of failing with a message.</summary>
+    private const int MaxNesting = 256;
+
+    /// <summary>The longest text a pattern may be able to produce (16 Mi characters): longer ones are refused when parsed rather than running out of memory while generating.</summary>
+    private const long MaxLength = 1L << 24;
+
+    /// <summary>The most repetitions an unbounded quantifier (<c>* + {n,}</c>) adds to its minimum (faker.js' doubling stops at 1024).</summary>
+    private const int UnboundedExtra = 1 << 10;
+
     private static readonly ConcurrentDictionary<string, PatternGenerator> Cache = new(StringComparer.Ordinal);
 
     private readonly INode _root;
@@ -57,6 +66,9 @@ internal sealed class PatternGenerator
         return generator;
     }
 
+    /// <summary>The pattern for an error message: long ones (a hundred thousand nested groups) are cut, so the message stays readable.</summary>
+    private static string Shortened(string pattern) => pattern.Length <= 200 ? pattern : string.Concat(pattern.AsSpan(0, 200), "…");
+
     /// <summary>Generates one matching string.</summary>
     public string Generate(SeededRandom random)
     {
@@ -68,15 +80,24 @@ internal sealed class PatternGenerator
     /// <summary>A node of the parsed pattern tree.</summary>
     private interface INode
     {
+        /// <summary>The most characters the node can append, saturated at <see cref="long.MaxValue"/>.</summary>
+        long MaxLength { get; }
+
         /// <summary>Appends generated text.</summary>
         void Append(StringBuilder sb, SeededRandom random);
     }
+
+    /// <summary><paramref name="a"/> + <paramref name="b"/> for lengths, saturated at <see cref="long.MaxValue"/>.</summary>
+    private static long AddLengths(long a, long b) => a > long.MaxValue - b ? long.MaxValue : a + b;
 
     /// <summary>Fixed text.</summary>
     private sealed class LiteralNode(string text) : INode
     {
         /// <summary>The text.</summary>
         public string Text { get; } = text;
+
+        /// <inheritdoc />
+        public long MaxLength => Text.Length;
 
         /// <inheritdoc />
         public void Append(StringBuilder sb, SeededRandom random) => sb.Append(Text);
@@ -89,12 +110,18 @@ internal sealed class PatternGenerator
         public string Characters { get; } = characters;
 
         /// <inheritdoc />
+        public long MaxLength => 1;
+
+        /// <inheritdoc />
         public void Append(StringBuilder sb, SeededRandom random) => sb.Append(Characters[random.Index(Characters.Length)]);
     }
 
     /// <summary>Nodes generated one after another.</summary>
     private sealed class SequenceNode(INode[] items) : INode
     {
+        /// <inheritdoc />
+        public long MaxLength { get; } = items.Aggregate(0L, (total, item) => AddLengths(total, item.MaxLength));
+
         /// <inheritdoc />
         public void Append(StringBuilder sb, SeededRandom random)
         {
@@ -107,12 +134,20 @@ internal sealed class PatternGenerator
     private sealed class AlternationNode(INode[] options) : INode
     {
         /// <inheritdoc />
+        public long MaxLength { get; } = options.Max(option => option.MaxLength);
+
+        /// <inheritdoc />
         public void Append(StringBuilder sb, SeededRandom random) => options[random.Index(options.Length)].Append(sb, random);
     }
 
     /// <summary>Repeats a node; <c>Max == -1</c> means unbounded (faker.js doubling distribution).</summary>
     private sealed class RepeatNode(INode node, int min, int max) : INode
     {
+        /// <inheritdoc />
+        public long MaxLength { get; } = node.MaxLength == 0 ? 0
+            : (max >= 0 ? max : (long)min + UnboundedExtra) is var count && node.MaxLength > long.MaxValue / Math.Max(count, 1) ? long.MaxValue
+            : node.MaxLength * count;
+
         /// <inheritdoc />
         public void Append(StringBuilder sb, SeededRandom random)
         {
@@ -124,7 +159,7 @@ internal sealed class PatternGenerator
             else
             {
                 var limit = 1;
-                while (limit < 1 << 10 && random.Bool())
+                while (limit < UnboundedExtra && random.Bool())
                     limit *= 2;
                 count = random.Int(min, min + limit);
             }
@@ -141,6 +176,7 @@ internal sealed class PatternGenerator
         private int _pos;
         private readonly bool _ignoreCase;
         private bool _hasZeroWidth; // a lookaround or an anchor inside the pattern, which generation cannot guarantee
+        private int _depth; // groups open at the current position
 
         public Parser(string pattern)
         {
@@ -175,6 +211,13 @@ internal sealed class PatternGenerator
             var node = ParseAlternation();
             if (_pos < _pattern.Length)
                 throw Error($"unexpected '{_pattern[_pos]}'");
+            if (node.MaxLength > MaxLength)
+            {
+                throw new FormatException(
+                    $"Invalid pattern '{Shortened(_pattern)}': it can produce up to {(node.MaxLength == long.MaxValue ? "more than 9 quintillion" : node.MaxLength.ToString("N0", CultureInfo.InvariantCulture))} " +
+                    $"characters, and the limit is {MaxLength.ToString("N0", CultureInfo.InvariantCulture)}. Use smaller repetition counts.");
+            }
+
             return node;
         }
 
@@ -239,9 +282,12 @@ internal sealed class PatternGenerator
                     return new SetNode(Alphanumeric);
                 case '(':
                 {
+                    if (++_depth > MaxNesting)
+                        throw Error($"groups are nested more than {MaxNesting} deep");
                     var zeroWidth = Peek() == '?' && ParseGroupPrefix();
                     var inner = ParseAlternation();
                     Expect(')');
+                    _depth--;
                     if (!zeroWidth)
                         return inner;
                     _hasZeroWidth = true;
@@ -252,6 +298,9 @@ internal sealed class PatternGenerator
                     return new SetNode(ParseClass());
                 case '\\':
                     return ParseEscape(inClass: false);
+                case '*' or '+' or '?':
+                    _pos--;
+                    throw Error($"the quantifier '{c}' follows nothing it could repeat");
                 default:
                     return Letter(c);
             }
@@ -316,38 +365,48 @@ internal sealed class PatternGenerator
                 _pos++; // lazy quantifiers generate the same way
             if (max >= 0 && max < min)
                 throw Error($"quantifier {{{min},{max}}} is out of order");
+            if (Peek() is '*' or '+' or '?' || (Peek() == '{' && IsBraceQuantifier()))
+                throw Error("a quantifier follows another quantifier (.NET has no possessive or nested quantifiers)");
             return new RepeatNode(atom, min, max);
+        }
+
+        /// <summary>Whether a <c>{n}</c>, <c>{n,}</c> or <c>{n,m}</c> quantifier starts at the current <c>{</c> (otherwise the brace is a literal, as in .NET).</summary>
+        private readonly bool IsBraceQuantifier()
+        {
+            var close = _pattern.IndexOf('}', _pos);
+            if (close < 0)
+                return false;
+            var body = _pattern.AsSpan(_pos + 1, close - _pos - 1);
+            var comma = body.IndexOf(',');
+            return comma < 0
+                ? IsDigits(body)
+                : IsDigits(body[..comma]) && (comma == body.Length - 1 || IsDigits(body[(comma + 1)..]));
+
+            static bool IsDigits(ReadOnlySpan<char> text) => !text.IsEmpty && !text.ContainsAnyExceptInRange('0', '9');
         }
 
         /// <summary>Parses <c>{n}</c>, <c>{n,}</c> or <c>{n,m}</c>; anything else is a literal brace.</summary>
         private bool TryParseBraces(out int min, out int max)
         {
             min = max = 0;
-            var close = _pattern.IndexOf('}', _pos);
-            if (close < 0)
+            if (!IsBraceQuantifier())
                 return false;
+            var close = _pattern.IndexOf('}', _pos);
             var body = _pattern.AsSpan(_pos + 1, close - _pos - 1);
             var comma = body.IndexOf(',');
-            if (comma < 0)
-            {
-                if (!int.TryParse(body, NumberStyles.None, CultureInfo.InvariantCulture, out min))
-                    return false;
-                max = min;
-            }
-            else
-            {
-                if (!int.TryParse(body[..comma], NumberStyles.None, CultureInfo.InvariantCulture, out min))
-                    return false;
-                var upper = body[(comma + 1)..];
-                if (upper.IsEmpty)
-                    max = -1;
-                else if (!int.TryParse(upper, NumberStyles.None, CultureInfo.InvariantCulture, out max))
-                    return false;
-            }
-
+            min = Count(comma < 0 ? body : body[..comma]);
+            max = comma < 0 ? min
+                : comma == body.Length - 1 ? -1
+                : Count(body[(comma + 1)..]);
             _pos = close + 1;
             return true;
         }
+
+        /// <summary>A repetition count of a brace quantifier (digits only); like .NET, one beyond <see cref="int.MaxValue"/> is an error.</summary>
+        private readonly int Count(ReadOnlySpan<char> digits) =>
+            int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var count)
+                ? count
+                : throw Error($"the repetition count {digits} is too large");
 
         /// <summary>Parses a character class after <c>[</c>, returning the allowed characters.</summary>
         private string ParseClass()
@@ -401,7 +460,7 @@ internal sealed class PatternGenerator
             _pos++;
             var end = _pattern[_pos] == '\\' ? EscapedRangeEnd() : _pattern[_pos++];
             if (end < start)
-                throw Error($"character range {start}-{end} is out of order");
+                throw Error($"character range {Printable(start)}-{Printable(end)} is out of order");
             for (int ch = start; ch <= end; ch++) // an int, so a range ending at \uFFFF stops
                 AddCased(chars, (char)ch);
         }
@@ -524,6 +583,10 @@ internal sealed class PatternGenerator
 
         /// <summary>A parse error that names the pattern and position.</summary>
         private readonly FormatException Error(string message) =>
-            new($"Invalid pattern '{_pattern}' at position {_pos}: {message}.");
+            new($"Invalid pattern '{Shortened(_pattern)}' at position {_pos}: {message}.");
+
+        /// <summary>A character as it can be read in a message: itself, or <c>\uXXXX</c> for control characters and halves of surrogate pairs.</summary>
+        private static string Printable(char c) =>
+            char.IsControl(c) || char.IsSurrogate(c) ? $"\\u{(int)c:X4}" : c.ToString();
     }
 }

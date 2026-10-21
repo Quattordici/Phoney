@@ -54,6 +54,7 @@ internal static class LocaleStore
     /// </summary>
     public static string Resolve(string code)
     {
+        ArgumentNullException.ThrowIfNull(code);
         if (TryResolve(code, out var canonical))
             return canonical;
         throw new ArgumentException(
@@ -107,6 +108,18 @@ internal static class LocaleStore
                 : Sources.Keys.Where(k => string.Equals(k, candidate, StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal).FirstOrDefault();
     }
 
+    /// <summary>The built-in locale <paramref name="code"/> names in any casing, or <see langword="null"/> when it names none.</summary>
+    public static string? BuiltInCode(string code)
+    {
+        foreach (var info in LocaleCatalog.Embedded)
+        {
+            if (string.Equals(info.Code, code, StringComparison.OrdinalIgnoreCase))
+                return info.Code;
+        }
+
+        return null;
+    }
+
     /// <summary>Adds or replaces a user-defined locale and invalidates merged data.</summary>
     public static void Register(LocaleBuilder builder)
     {
@@ -115,6 +128,11 @@ internal static class LocaleStore
             var missing = builder.FallbackCodes.FirstOrDefault(code => !Sources.ContainsKey(code));
             if (missing is not null)
                 throw new ArgumentException($"Fallback locale '{missing}' of '{builder.Code}' is not registered.");
+            if (builder.FallbackCodes.Contains(builder.Code, StringComparer.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Locale '{builder.Code}' falls back to itself (through {string.Join(" → ", builder.FallbackCodes)}): fall back to locales that don't fall back to '{builder.Code}'.");
+            }
 
             var info = new LocaleInfo(builder.Code, builder.TitleText, null, null, null, null, "ltr", builder.FallbackCodes);
             var source = new Source(info, static () => LocaleResource.Empty);
