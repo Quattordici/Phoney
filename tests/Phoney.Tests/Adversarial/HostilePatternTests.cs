@@ -129,7 +129,7 @@ public sealed class HostilePatternTests
                 continue;
             }
 
-            var regex = new Regex("^(?:" + pattern + ")$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+            var regex = Matcher("^(?:" + pattern + ")$");
             for (var n = 0; n < 5; n++)
             {
                 var value = generator.Generate(faker.Random);
@@ -141,6 +141,22 @@ public sealed class HostilePatternTests
         }
 
         checkedPatterns.ShouldBeGreaterThan(2_500);
+    }
+
+    /// <summary>
+    /// A regex that can't backtrack for ever; .NET 8 refuses non-backtracking automata over 1000 nodes (later versions allow more), and those patterns get a
+    /// backtracking one with a timeout instead.
+    /// </summary>
+    private static Regex Matcher(string pattern)
+    {
+        try
+        {
+            return new Regex(pattern, RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+        }
+        catch (NotSupportedException)
+        {
+            return new Regex(pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(5));
+        }
     }
 
     /// <summary>Random text made of regular expression syntax: parsing it gives a generator or a <see cref="FormatException"/>, never another exception or a hang.</summary>
