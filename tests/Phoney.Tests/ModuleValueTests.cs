@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Phoney.Data;
@@ -9,6 +10,9 @@ namespace Phoney.Tests;
 public sealed partial class ModuleValueTests
 {
     private const int Draws = 300;
+
+    /// <summary>The atext characters of RFC 5322 that are not letters, digits, <c>.</c>, <c>_</c> or <c>-</c>.</summary>
+    private static readonly SearchValues<char> EmailSpecials = SearchValues.Create("!#$%&'*+/=?^`{|}~");
 
     private readonly Faker _faker = new("en", seed: 2026);
 
@@ -272,14 +276,15 @@ public sealed partial class ModuleValueTests
     [Test]
     public void Emails_with_special_characters_stay_valid_addresses()
     {
-        const string Specials = "!#$%&'*+/=?^`{|}~";
         var emails = Enumerable.Range(0, Draws).Select(_ => _faker.Internet.Email(allowSpecialCharacters: true)).ToList();
 
         // RFC 5322 dot-atom local part: atext characters, dots only between them.
         emails.ShouldAllBe(e => DotAtomEmail().IsMatch(e));
-        emails.ShouldContain(e => LocalPart(e).IndexOfAny(Specials.ToCharArray()) >= 0);
+        emails.ShouldContain(e => HasSpecialCharacter(LocalPart(e)));
         _faker.Internet.ExampleEmail("Ada", "Lovelace", allowSpecialCharacters: true).ShouldMatch("@example\\.(com|net|org)$");
     }
+
+    private static bool HasSpecialCharacter(string text) => text.AsSpan().ContainsAny(EmailSpecials);
 
     private static string LocalPart(string email) => email[..email.IndexOf('@', StringComparison.Ordinal)];
 
@@ -366,11 +371,11 @@ public sealed partial class ModuleValueTests
 
     [Test]
     public void Vehicle_registration_marks_have_the_uk_shape() =>
-        Enumerable.Range(0, Draws).Select(_ => _faker.Vehicle.Vrm()).ShouldAllBe(v => Regex.IsMatch(v, "^[A-Z]{2}[0-9]{2}[A-Z]{3}$"));
+        Enumerable.Range(0, Draws).Select(_ => _faker.Vehicle.Vrm()).ShouldAllBe(v => UkRegistrationMark().IsMatch(v));
 
     [Test]
     public void MongoDb_object_ids_are_24_lower_case_hex_characters() =>
-        Enumerable.Range(0, Draws).Select(_ => _faker.Database.MongoDbObjectId()).ShouldAllBe(id => Regex.IsMatch(id, "^[0-9a-f]{24}$"));
+        Enumerable.Range(0, Draws).Select(_ => _faker.Database.MongoDbObjectId()).ShouldAllBe(id => MongoDbObjectId().IsMatch(id));
 
     [Test]
     [Arguments((byte)255, (byte)0, (byte)16, null, "#ff0010")]
@@ -445,4 +450,10 @@ public sealed partial class ModuleValueTests
 
     [GeneratedRegex("^(?:(?:en|wl|ww)(?:o[0-9]|s[0-9](?:f[0-9])?(?:d[0-9])?|x[0-9a-f]{12})|(?:P[0-9])?(?:en|wl|ww)p[0-9]s[0-9](?:f[0-9])?(?:d[0-9])?)$")]
     private static partial Regex NetworkInterfaceName();
+
+    [GeneratedRegex("^[A-Z]{2}[0-9]{2}[A-Z]{3}$")]
+    private static partial Regex UkRegistrationMark();
+
+    [GeneratedRegex("^[0-9a-f]{24}$")]
+    private static partial Regex MongoDbObjectId();
 }

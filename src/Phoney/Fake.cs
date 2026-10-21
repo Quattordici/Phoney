@@ -60,10 +60,10 @@ public static partial class Fake
     /// The faker behind the facade: the one from an enclosing <see cref="Seeded"/> scope, otherwise the current
     /// thread's (seeded when <see cref="Seed"/> was called).
     /// </summary>
-    public static Faker Faker => s_scoped.Value?.Faker ?? ThreadFaker;
+    public static Faker Faker => s_scoped.Value?.ScopedFaker ?? ThreadFaker;
 
     /// <summary>Whether the facade currently produces reproducible values (a <see cref="Seeded"/> scope or <see cref="Seed"/>).</summary>
-    public static bool IsSeeded => s_scoped.Value is { } scoped ? scoped.Faker.IsSeeded : Volatile.Read(ref s_seed) is not null;
+    public static bool IsSeeded => s_scoped.Value is { } scoped ? scoped.ScopedFaker.IsSeeded : Volatile.Read(ref s_seed) is not null;
 
     private static Faker ThreadFaker
     {
@@ -152,10 +152,10 @@ public static partial class Fake
         private readonly Scope? _outer;
         private bool _disposed;
 
-        private Scope(Faker faker, Scope? outer) => (Faker, _outer) = (faker, outer);
+        private Scope(Faker faker, Scope? outer) => (ScopedFaker, _outer) = (faker, outer);
 
         /// <summary>The scope's faker.</summary>
-        public Faker Faker { get; }
+        public Faker ScopedFaker { get; }
 
         /// <summary>Makes <paramref name="faker"/> the facade's faker of this async flow until the returned scope is disposed.</summary>
         public static Scope Open(Faker faker)

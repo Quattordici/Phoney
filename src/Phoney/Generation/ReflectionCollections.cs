@@ -19,7 +19,7 @@ internal abstract class ReflectionCollections
     [RequiresUnreferencedCode("Instantiates generic types over runtime types.")]
     [RequiresDynamicCode("Instantiates generic types over runtime types.")]
     public static Func<FakeScope, object?> DictionaryOf(Type key, Type value, Func<FakeScope, object?> keyProducer, Func<FakeScope, object?> valueProducer, MemberConstraints? constraints) =>
-        ((DictionaryBuilder)Activator.CreateInstance(typeof(Dictionaries<,>).MakeGenericType(key, value))!).Dictionary(keyProducer, valueProducer, constraints);
+        ((IDictionaryBuilder)Activator.CreateInstance(typeof(Dictionaries<,>).MakeGenericType(key, value))!).Dictionary(keyProducer, valueProducer, constraints);
 
     /// <summary>A producer of <c>T[]</c>.</summary>
     public abstract Func<FakeScope, object?> Array(Func<FakeScope, object?> element, MemberConstraints? constraints);
@@ -65,15 +65,15 @@ internal abstract class ReflectionCollections
     }
 
     /// <summary>The producer of dictionaries whose key and value types are known only at runtime.</summary>
-    private abstract class DictionaryBuilder
+    private interface IDictionaryBuilder
     {
-        public abstract Func<FakeScope, object?> Dictionary(Func<FakeScope, object?> key, Func<FakeScope, object?> value, MemberConstraints? constraints);
+        Func<FakeScope, object?> Dictionary(Func<FakeScope, object?> key, Func<FakeScope, object?> value, MemberConstraints? constraints);
     }
 
-    private sealed class Dictionaries<TKey, TValue> : DictionaryBuilder
+    private sealed class Dictionaries<TKey, TValue> : IDictionaryBuilder
         where TKey : notnull
     {
-        public override Func<FakeScope, object?> Dictionary(Func<FakeScope, object?> key, Func<FakeScope, object?> value, MemberConstraints? constraints)
+        public Func<FakeScope, object?> Dictionary(Func<FakeScope, object?> key, Func<FakeScope, object?> value, MemberConstraints? constraints)
         {
             var typedKey = Typed<TKey>(key);
             var typedValue = Typed<TValue>(value);

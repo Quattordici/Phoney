@@ -325,7 +325,7 @@ public sealed class SeededRandom
     public int WeightedIndex(ReadOnlySpan<double> cumulativeWeights)
     {
         if (cumulativeWeights.IsEmpty || !double.IsFinite(cumulativeWeights[^1]) || cumulativeWeights[^1] <= 0)
-            throw NoTotalWeight(cumulativeWeights.IsEmpty ? null : cumulativeWeights[^1].ToString(CultureInfo.InvariantCulture));
+            throw NoTotalWeight(cumulativeWeights.IsEmpty ? null : cumulativeWeights[^1].ToString(CultureInfo.InvariantCulture), nameof(cumulativeWeights));
         var target = Double() * cumulativeWeights[^1];
         // First running total strictly greater than the target.
         int lo = 0, hi = cumulativeWeights.Length - 1;
@@ -346,7 +346,7 @@ public sealed class SeededRandom
     public int WeightedIndex(ReadOnlySpan<int> cumulativeWeights)
     {
         if (cumulativeWeights.IsEmpty || cumulativeWeights[^1] <= 0)
-            throw NoTotalWeight(cumulativeWeights.IsEmpty ? null : cumulativeWeights[^1].ToString(CultureInfo.InvariantCulture));
+            throw NoTotalWeight(cumulativeWeights.IsEmpty ? null : cumulativeWeights[^1].ToString(CultureInfo.InvariantCulture), nameof(cumulativeWeights));
         var total = cumulativeWeights[^1];
         var target = Index(total);
         // First cumulative weight strictly greater than the target.
@@ -364,11 +364,11 @@ public sealed class SeededRandom
     }
 
     /// <summary>The error for a table of running totals that has no weight to pick by.</summary>
-    private static ArgumentException NoTotalWeight(string? total) => new(
+    private static ArgumentException NoTotalWeight(string? total, string paramName) => new(
         total is null
             ? "The running totals of the weights are empty: pass at least one positive weight."
             : $"The running totals of the weights end in {total}, but the total weight must be a positive finite number.",
-        "cumulativeWeights");
+        paramName);
 
     /// <summary>Returns a random decimal digit character.</summary>
     public char Digit() => (char)('0' + Index(10));

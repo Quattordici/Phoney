@@ -12,11 +12,13 @@ public sealed class ExplodingConstructor
 
 public sealed class ExplodingSetter
 {
+    private readonly string _fuse = "";
+
     public string Name { get; set; } = "";
 
     public string Fuse
     {
-        get => "";
+        get => _fuse;
         set => throw new InvalidTimeZoneException("setter");
     }
 }
@@ -50,7 +52,9 @@ public enum Single
 public enum Aliased
 {
     First = 1,
+#pragma warning disable CA1069 // the point of this enum: two names for one value
     Alias = 1,
+#pragma warning restore CA1069
     Second = 2,
 }
 

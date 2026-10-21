@@ -35,7 +35,7 @@ internal sealed class PatternGenerator
     private const int MaxNesting = 256;
 
     /// <summary>The longest text a pattern may be able to produce (16 Mi characters): longer ones are refused when parsed rather than running out of memory while generating.</summary>
-    private const long MaxLength = 1L << 24;
+    private const long MaxOutputLength = 1L << 24;
 
     /// <summary>The most repetitions an unbounded quantifier (<c>* + {n,}</c>) adds to its minimum (faker.js' doubling stops at 1024).</summary>
     private const int UnboundedExtra = 1 << 10;
@@ -66,9 +66,6 @@ internal sealed class PatternGenerator
         return generator;
     }
 
-    /// <summary>The pattern for an error message: long ones (a hundred thousand nested groups) are cut, so the message stays readable.</summary>
-    private static string Shortened(string pattern) => pattern.Length <= 200 ? pattern : string.Concat(pattern.AsSpan(0, 200), "…");
-
     /// <summary>Generates one matching string.</summary>
     public string Generate(SeededRandom random)
     {
@@ -86,9 +83,6 @@ internal sealed class PatternGenerator
         /// <summary>Appends generated text.</summary>
         void Append(StringBuilder sb, SeededRandom random);
     }
-
-    /// <summary><paramref name="a"/> + <paramref name="b"/> for lengths, saturated at <see cref="long.MaxValue"/>.</summary>
-    private static long AddLengths(long a, long b) => a > long.MaxValue - b ? long.MaxValue : a + b;
 
     /// <summary>Fixed text.</summary>
     private sealed class LiteralNode(string text) : INode
@@ -122,6 +116,9 @@ internal sealed class PatternGenerator
         /// <inheritdoc />
         public long MaxLength { get; } = items.Aggregate(0L, (total, item) => AddLengths(total, item.MaxLength));
 
+        /// <summary><paramref name="a"/> + <paramref name="b"/> for lengths, saturated at <see cref="long.MaxValue"/>.</summary>
+        private static long AddLengths(long a, long b) => a > long.MaxValue - b ? long.MaxValue : a + b;
+
         /// <inheritdoc />
         public void Append(StringBuilder sb, SeededRandom random)
         {
@@ -144,9 +141,15 @@ internal sealed class PatternGenerator
     private sealed class RepeatNode(INode node, int min, int max) : INode
     {
         /// <inheritdoc />
-        public long MaxLength { get; } = node.MaxLength == 0 ? 0
-            : (max >= 0 ? max : (long)min + UnboundedExtra) is var count && node.MaxLength > long.MaxValue / Math.Max(count, 1) ? long.MaxValue
-            : node.MaxLength * count;
+        public long MaxLength { get; } = MultiplyLengths(node.MaxLength, max >= 0 ? max : (long)min + UnboundedExtra);
+
+        /// <summary><paramref name="length"/> × <paramref name="count"/>, saturated at <see cref="long.MaxValue"/>.</summary>
+        private static long MultiplyLengths(long length, long count)
+        {
+            if (length == 0 || count == 0)
+                return 0;
+            return length > long.MaxValue / count ? long.MaxValue : length * count;
+        }
 
         /// <inheritdoc />
         public void Append(StringBuilder sb, SeededRandom random)
@@ -211,11 +214,11 @@ internal sealed class PatternGenerator
             var node = ParseAlternation();
             if (_pos < _pattern.Length)
                 throw Error($"unexpected '{_pattern[_pos]}'");
-            if (node.MaxLength > MaxLength)
+            if (node.MaxLength > MaxOutputLength)
             {
                 throw new FormatException(
                     $"Invalid pattern '{Shortened(_pattern)}': it can produce up to {(node.MaxLength == long.MaxValue ? "more than 9 quintillion" : node.MaxLength.ToString("N0", CultureInfo.InvariantCulture))} " +
-                    $"characters, and the limit is {MaxLength.ToString("N0", CultureInfo.InvariantCulture)}. Use smaller repetition counts.");
+                    $"characters, and the limit is {MaxOutputLength.ToString("N0", CultureInfo.InvariantCulture)}. Use smaller repetition counts.");
             }
 
             return node;
@@ -395,9 +398,12 @@ internal sealed class PatternGenerator
             var body = _pattern.AsSpan(_pos + 1, close - _pos - 1);
             var comma = body.IndexOf(',');
             min = Count(comma < 0 ? body : body[..comma]);
-            max = comma < 0 ? min
-                : comma == body.Length - 1 ? -1
-                : Count(body[(comma + 1)..]);
+            if (comma < 0)
+                max = min;
+            else if (comma == body.Length - 1)
+                max = -1;
+            else
+                max = Count(body[(comma + 1)..]);
             _pos = close + 1;
             return true;
         }
@@ -580,6 +586,9 @@ internal sealed class PatternGenerator
                 throw Error($"expected '{c}'");
             _pos++;
         }
+
+        /// <summary>The pattern for an error message: long ones (a hundred thousand nested groups) are cut, so the message stays readable.</summary>
+        private static string Shortened(string pattern) => pattern.Length <= 200 ? pattern : string.Concat(pattern.AsSpan(0, 200), "…");
 
         /// <summary>A parse error that names the pattern and position.</summary>
         private readonly FormatException Error(string message) =>

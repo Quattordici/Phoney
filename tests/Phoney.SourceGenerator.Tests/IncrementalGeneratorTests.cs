@@ -37,7 +37,7 @@ public sealed class IncrementalGeneratorTests
         public static partial class ShapeFakes;
         """;
 
-    private static GeneratorDriver Driver() =>
+    private static CSharpGeneratorDriver Driver() =>
         CSharpGeneratorDriver.Create(
             [new FakeForGenerator().AsSourceGenerator()],
             parseOptions: GeneratorHarness.ParseOptions,

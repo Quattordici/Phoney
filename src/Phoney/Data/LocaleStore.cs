@@ -109,16 +109,8 @@ internal static class LocaleStore
     }
 
     /// <summary>The built-in locale <paramref name="code"/> names in any casing, or <see langword="null"/> when it names none.</summary>
-    public static string? BuiltInCode(string code)
-    {
-        foreach (var info in LocaleCatalog.Embedded)
-        {
-            if (string.Equals(info.Code, code, StringComparison.OrdinalIgnoreCase))
-                return info.Code;
-        }
-
-        return null;
-    }
+    public static string? BuiltInCode(string code) =>
+        LocaleCatalog.Embedded.Where(info => string.Equals(info.Code, code, StringComparison.OrdinalIgnoreCase)).Select(info => info.Code).FirstOrDefault();
 
     /// <summary>Adds or replaces a user-defined locale and invalidates merged data.</summary>
     public static void Register(LocaleBuilder builder)

@@ -90,9 +90,11 @@ public sealed class NumberModule : FakerModule
     /// </summary>
     private static double FiniteLimit<TNumber>(bool negative)
     {
-        var limit = typeof(TNumber) == typeof(Half) ? (double)System.Half.MaxValue
-            : typeof(TNumber) == typeof(float) ? float.MaxValue
-            : double.MaxValue;
+        double limit = double.MaxValue;
+        if (typeof(TNumber) == typeof(Half))
+            limit = (double)System.Half.MaxValue;
+        else if (typeof(TNumber) == typeof(float))
+            limit = float.MaxValue;
         return negative ? -limit : limit;
     }
 
