@@ -327,7 +327,7 @@ var customers = Fake.For<Customer>()
 
 Within one object, related members describe the same thing:
 
-- **One person**: `FirstName`, `LastName`, `Email`, `Username`, `Avatar` and `Gender`/`Sex` enums belong together, and `Age` matches `BirthDate`/`DateOfBirth`.
+- **One person**: `FirstName`, `LastName`, `Email`, `Username`, `Avatar` and `Gender`/`Sex` enums belong together, and `Age` matches `BirthDate`/`DateOfBirth`. An age you give (`With(x => x.Age, 30)`, or a kept `Age` when populating) is the age the birthdate is drawn for. A constant counts in any member order, a factory when `Age` is declared before the birthdate.
 - **One address**: `Street`, `City`, `ZipCode`, `State`, `Country` and `CountryCode` come from one address; for country locales (`de_AT`, `en_US`…) the country is the locale's own.
 - **One timeline**: the first "created" date (`CreatedAt`, `RegisteredAt`, `StartDate`…) is when the object was created, "updated" dates (`UpdatedAt`, `LastLogin`…) fall between it and the reference date, and future dates (`ExpiresAt`, `DueDate`) come after both.
 - **One timeline per graph**: `WithCausalTimelines()` creates each nested object between the creation of the object that contains it and the reference date, so an order is never older than its customer and a payment never older than its invoice. Each object still draws one creation date, only from a narrower range, so the other members keep their values (a parent without a "created" member draws its date when its first child asks for it, which moves the values after it). The bound is the date the convention gives the parent: a `CreatedAt` set by a rule, or kept by `Populate`, is not seen.
@@ -535,7 +535,7 @@ List<Customer> filled = generator.Populate(customers);            // many at onc
 ```
 
 - **`MissingOnly`** (the default) fills members that hold their default (`null`, `0`, `false`, `Guid.Empty`, an empty string or collection), keeps the others and populates set nested objects member by member. A deliberate `false` or `0` counts as unset: protect it with `.Ignore(...)`.
-- Kept values shape the generated ones: with a set `FirstName` or `BirthDate`, the email, username and age match them.
+- Kept values shape the generated ones: with a set `FirstName`, `BirthDate` or `Age`, the email, username, age and birthdate match them.
 - Dependent rules and `AfterCreate` run afterwards, `CreateWith` is ignored, records are filled through `init`, and a struct is populated as a copy (use the return value). With a seed, `Populate(new T(), PopulateMode.All)` gives exactly what `Generate()` gives.
 
 ### Data tied to a key

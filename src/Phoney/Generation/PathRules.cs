@@ -75,7 +75,7 @@ internal sealed class PathNode
             slots[i] = new RuleSlot(rule.Kind, value, unique: false, maxAttempts: 0, rule.Boxed);
         }
 
-        RuleSlot.MarkCreationTimes(members, slots);
+        RuleSlot.MarkGivenValues(members, slots);
         return new PathBinding(slots, ChildrenFor(members));
     }
 }

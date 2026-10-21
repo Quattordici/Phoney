@@ -50,6 +50,19 @@ internal enum RuleKind
     Constraint,
 }
 
+/// <summary>What a value that a rule gives a member tells the object about itself (see <see cref="RuleSlot.Gives"/>).</summary>
+internal enum GivenValue
+{
+    /// <summary>Nothing.</summary>
+    None,
+
+    /// <summary>The object's creation time.</summary>
+    Created,
+
+    /// <summary>The person's age.</summary>
+    Age,
+}
+
 /// <summary>A rule bound to a member index for one compiled generator.</summary>
 internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int maxAttempts, Func<Faker, object?>? boxedFactory = null)
 {
@@ -97,21 +110,28 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     public bool RecordsKeyPart { get; set; }
 
     /// <summary>
-    /// Whether the produced value is the object's creation time (<see cref="FakeScope.Created"/>): a rule, feed or custom convention gives a "created"-style date
-    /// member its value, so the "updated" and later dates of the object are built around that value instead of a creation time drawn apart from it.
+    /// What the produced value tells the object about itself, when a rule, feed or custom convention gives the member its value: the creation time
+    /// (<see cref="FakeScope.Created"/>) that the "updated" and later dates are built around, or the age the birthdate is drawn for.
     /// </summary>
-    public bool GivesCreated { get; private set; }
+    public GivenValue Gives { get; private set; }
 
     /// <summary>
-    /// Marks the slots of "created"-style date members whose values come from a rule, feed or custom convention (see <see cref="GivesCreated"/>).
+    /// Marks the slots of "created"-style date and age members whose values come from a rule, feed or custom convention (see <see cref="Gives"/>).
     /// Called while slots are bound, before they are shared.
     /// </summary>
-    internal static void MarkCreationTimes(IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
+    internal static void MarkGivenValues(IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
     {
         for (var i = 0; i < slots.Length; i++)
         {
-            if (slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Convention } slot && members[i].Convention == ConventionKind.PastDate)
-                slot.GivesCreated = true;
+            if (slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Convention } slot)
+            {
+                slot.Gives = members[i].Convention switch
+                {
+                    ConventionKind.PastDate => GivenValue.Created,
+                    ConventionKind.Age => GivenValue.Age,
+                    _ => GivenValue.None,
+                };
+            }
         }
     }
 
@@ -173,7 +193,43 @@ public sealed class FakeScope
     internal GenerationSettings Settings { get; }
 
     /// <summary>The person or place this object describes; shared by name, email, avatar, birthdate, age and address conventions.</summary>
-    internal Identity Identity => _identity ??= new Identity(Faker, _hints);
+    internal Identity Identity => _identity ??= CreateIdentity();
+
+    /// <summary>
+    /// Creates the identity; an age a constant rule gives is handed to it first, so the birthdate is drawn for that age even when the birthdate is
+    /// declared before the age. A constant draws nothing, so taking it early moves no draws.
+    /// </summary>
+    private Identity CreateIdentity()
+    {
+        if (_slots is not null && System.Array.Find(_slots, static slot => slot is { Gives: GivenValue.Age, Kind: RuleKind.Constant }) is { } constant)
+            GiveAge(constant.Value);
+        return new Identity(Faker, _hints);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="value"/> (a whole number) the age the object's birthdate is drawn for, while the birthdate isn't drawn yet. The first one counts;
+    /// a negative age, or one too old for the reference date, is left to the rule and the birthdate drawn as usual.
+    /// </summary>
+    private void GiveAge(object? value)
+    {
+        int? given = value switch
+        {
+            int i => i,
+            long l and >= 0 and <= int.MaxValue => (int)l,
+            short h => h,
+            byte b => b,
+            sbyte sb => sb,
+            ushort us => us,
+            uint ui and <= int.MaxValue => (int)ui,
+            _ => null,
+        };
+        if (given is not { } age || age < 0 || age >= Faker.ReferenceDate.UtcDateTime.Year)
+            return;
+        if (_identity is { } identity)
+            identity.GiveAge(age);
+        else
+            (_hints ??= new IdentityHints()).Age ??= age;
+    }
 
     /// <summary>
     /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
@@ -234,7 +290,7 @@ public sealed class FakeScope
     /// </summary>
     private void GiveConstantCreated()
     {
-        if (_slots is not null && System.Array.Find(_slots, static slot => slot is { GivesCreated: true, Kind: RuleKind.Constant }) is { } constant)
+        if (_slots is not null && System.Array.Find(_slots, static slot => slot is { Gives: GivenValue.Created, Kind: RuleKind.Constant }) is { } constant)
             GiveCreated(constant.Value);
     }
 
@@ -336,6 +392,9 @@ public sealed class FakeScope
             case ConventionKind.PastDate:
                 GiveCreated(value); // the object's own creation time: its updated and later dates are generated after it
                 break;
+            case ConventionKind.Age:
+                GiveAge(value); // the birthdate is drawn for it, unless a kept birthdate says otherwise
+                break;
             case ConventionKind.BirthDate:
                 hints.BirthDate = value switch
                 {
@@ -399,7 +458,7 @@ public sealed class FakeScope
         var slot = _slots?[member];
         if (slot is null)
             return fallback(this);
-        if (!slot.Unique && slot.Filter is null && !slot.RecordsKeyPart && !slot.GivesCreated)
+        if (!slot.Unique && slot.Filter is null && !slot.RecordsKeyPart && slot.Gives == GivenValue.None)
             return Produce(slot, fallback);
 
         TValue value;
@@ -411,8 +470,10 @@ public sealed class FakeScope
             value = ProduceChecked(slot, fallback);
         if (slot.RecordsKeyPart)
             (_keyParts ??= [])[member] = value;
-        if (slot.GivesCreated)
+        if (slot.Gives == GivenValue.Created)
             GiveCreated(value);
+        else if (slot.Gives == GivenValue.Age)
+            GiveAge(value);
         return value;
     }
 
@@ -816,6 +877,7 @@ internal sealed class Identity(Faker faker, IdentityHints? hints)
     private string? _username;
     private string? _email;
     private DateOnly? _birthDate = hints?.BirthDate;
+    private int? _age = hints?.Age;
     private AddressProfile? _address;
     private string? _nationalId;
 
@@ -835,7 +897,14 @@ internal sealed class Identity(Faker faker, IdentityHints? hints)
     public string Email => _email ??= faker.Internet.Email(FirstName, LastName);
 
     /// <summary>Date of birth (18–80 years before the reference date).</summary>
-    public DateOnly BirthDate => _birthDate ??= faker.Date.Birthdate();
+    public DateOnly BirthDate => _birthDate ??= _age is { } age ? faker.Date.Birthdate(age, age) : faker.Date.Birthdate(); // one draw either way
+
+    /// <summary>Draws <see cref="BirthDate"/> for <paramref name="age"/>, when it isn't drawn (or given) yet and no age was given before.</summary>
+    public void GiveAge(int age)
+    {
+        if (_birthDate is null)
+            _age ??= age;
+    }
 
     /// <summary>Age in whole years at the reference date, matching <see cref="BirthDate"/>.</summary>
     public int Age => AgeAt(BirthDate, DateOnly.FromDateTime(faker.ReferenceDate.UtcDateTime));
@@ -859,6 +928,9 @@ internal sealed class IdentityHints
     public string? LastName { get; set; }
 
     public DateOnly? BirthDate { get; set; }
+
+    /// <summary>An age a rule gives or a populated object keeps; a <see cref="BirthDate"/> wins over it.</summary>
+    public int? Age { get; set; }
 
     public Sex? Sex { get; set; }
 }

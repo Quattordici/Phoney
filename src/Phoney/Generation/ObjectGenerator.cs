@@ -1153,7 +1153,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         if (_config.Strict)
             CheckStrict(members, slots);
         BindMemberFilters(members, known, slots); // after the strict check, so a member that only has a condition does not count as covered
-        RuleSlot.MarkCreationTimes(members, slots);
+        RuleSlot.MarkGivenValues(members, slots);
 
         var objectRetries = IdentityRetries(members, slots);
         var combinations = UniqueCombinations(members, known, slots);
