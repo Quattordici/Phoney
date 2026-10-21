@@ -156,4 +156,44 @@ public sealed class ArgumentValidationTests
         var exception = Should.Throw<ArgumentNullException>(() => new Faker("en", 1).Internet.Password(prefix: null!));
         exception.ParamName.ShouldBe("prefix");
     }
+
+    [Test]
+    public void Word_and_sentence_counts_can_be_a_range()
+    {
+        var faker = new Faker("en", 3);
+        for (var i = 0; i < 100; i++)
+        {
+            faker.Lorem.Words(2, 5).Split(' ').Length.ShouldBeInRange(2, 5);
+            faker.Lorem.Sentence(3, 6).Split(' ').Length.ShouldBeInRange(3, 6);
+        }
+
+        var drawn = new Faker("en", 3);
+        new Faker("en", 3).Lorem.Words(2, 5).ShouldBe(drawn.Lorem.Words(drawn.Random.Int(2, 5)));
+        new Faker("en", 3).Lorem.Sentence(3, 10).ShouldBe(new Faker("en", 3).Lorem.Sentence()); // the default range, drawn the same way
+    }
+
+    [Test]
+    public void Word_and_sentence_ranges_are_checked()
+    {
+        var lorem = new Faker("en", 1).Lorem;
+        Should.Throw<ArgumentOutOfRangeException>(() => lorem.Words(-1, 2)).ParamName.ShouldBe("min");
+        Should.Throw<ArgumentException>(() => lorem.Words(5, 2)).ParamName.ShouldBe("max");
+        Should.Throw<ArgumentOutOfRangeException>(() => lorem.Sentence(-1, 2)).ParamName.ShouldBe("minWords");
+        Should.Throw<ArgumentException>(() => lorem.Sentence(5, 2)).ParamName.ShouldBe("maxWords");
+    }
+
+    // An empty name gave "_57@gmail.com": a name that is given must be a name; null still means "generate one".
+    [Test]
+    [Arguments("")]
+    [Arguments(" ")]
+    public void Names_given_for_emails_and_usernames_must_not_be_empty(string name)
+    {
+        var internet = new Faker("en", 1).Internet;
+        Should.Throw<ArgumentException>(() => internet.Email(name, "Doe")).ParamName.ShouldBe("firstName");
+        Should.Throw<ArgumentException>(() => internet.Email("Jo", name)).ParamName.ShouldBe("lastName");
+        Should.Throw<ArgumentException>(() => internet.ExampleEmail(name)).ParamName.ShouldBe("firstName");
+        Should.Throw<ArgumentException>(() => internet.Username(name)).ParamName.ShouldBe("firstName");
+        Should.Throw<ArgumentException>(() => internet.DisplayName("Jo", name)).ParamName.ShouldBe("lastName");
+        internet.Email(null, "Doe").ShouldContain("@");
+    }
 }

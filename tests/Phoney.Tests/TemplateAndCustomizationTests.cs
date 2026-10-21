@@ -25,6 +25,15 @@ public sealed class TemplateAndCustomizationTests
         _faker.Parse("{{helpers.fromRegExp([A-Z]{2}[0-9]{2})}}").ShouldMatch("^[A-Z]{2}\\d{2}$");
     }
 
+    // The expression used to end at the first "}}", so an object inside the options (or "}}" in quoted text) broke it with "Missing closing parenthesis".
+    [Test]
+    public void Braces_inside_the_arguments_do_not_end_the_expression()
+    {
+        _faker.Parse("<{{helpers.arrayElement([\"}}\", \"{{x}}\"])}}>").ShouldBeOneOf("<}}>", "<{{x}}>");
+        _faker.Parse("{{string.alpha({length: {min: 3, max: 3}})}}!").ShouldMatch("^[A-Za-z]{3}!$");
+        _faker.Parse("{{person.firstName}}}").ShouldEndWith("}");
+    }
+
     [Test]
     public void Unknown_expressions_fail_with_a_clear_message() =>
         Should.Throw<PhoneyDataException>(() => _faker.Parse("{{nothing.here}}")).Message.ShouldContain("nothing.here");

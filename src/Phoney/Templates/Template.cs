@@ -79,7 +79,7 @@ internal sealed class Template
         while (position < text.Length)
         {
             var start = FindExpressionStart(text, position);
-            var end = start < 0 ? -1 : text.IndexOf("}}", start + 2, StringComparison.Ordinal);
+            var end = start < 0 ? -1 : FindExpressionEnd(text, start + 2);
             if (start < 0 || end < 0)
             {
                 segments.Add(Segment.ForLiteral(text[position..]));
@@ -147,6 +147,45 @@ internal sealed class Template
     }
 
     /// <summary>Index of the next <c>{{</c> followed by a letter, or -1.</summary>
+    /// <summary>
+    /// The <c>}}</c> that closes the expression starting at <paramref name="from"/>: braces inside its arguments (<c>{length: {min: 2, max: 5}}</c>,
+    /// a <c>}}</c> in quoted text) don't end it, so options can hold objects. -1 when there is none; the text is then literal, as before.
+    /// </summary>
+    private static int FindExpressionEnd(string text, int from)
+    {
+        var depth = 0;
+        var quote = '\0';
+        for (var i = from; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (quote != '\0')
+            {
+                if (c == '\\')
+                    i++;
+                else if (c == quote)
+                    quote = '\0';
+            }
+            else if (depth > 0 && c is '"' or '\'')
+            {
+                quote = c;
+            }
+            else if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')' && depth > 0)
+            {
+                depth--;
+            }
+            else if (depth == 0 && c == '}' && i + 1 < text.Length && text[i + 1] == '}')
+            {
+                return i;
+            }
+        }
+
+        return text.IndexOf("}}", from, StringComparison.Ordinal); // unbalanced: end where the expression ended before, so its error stays the same
+    }
+
     private static int FindExpressionStart(string text, int from)
     {
         var index = text.IndexOf("{{", from, StringComparison.Ordinal);

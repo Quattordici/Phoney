@@ -327,6 +327,37 @@ public sealed class TemplateArgumentTests
         Parse("{{helpers.slugify({a: 1})}}").ShouldNotBeEmpty(); // a plain text argument: the object is the text
     }
 
+    // faker.js takes a size as a number or as a range: lorem.words({min: 2, max: 5}), string.alpha({length: {min: 2, max: 5}}). The range used to be refused.
+    [Test]
+    public void Sizes_can_be_given_as_a_range_like_in_faker_js()
+    {
+        Parse("{{lorem.words({min: 2, max: 5})}}").ShouldBe(Faker().Lorem.Words(2, 5));
+        Parse("{{lorem.words({count: {min: 2, max: 5}})}}").ShouldBe(Faker().Lorem.Words(2, 5));
+        Parse("{{lorem.sentence({min: 3, max: 6})}}").ShouldBe(Faker().Lorem.Sentence(3, 6));
+        var faker = Faker();
+        Parse("{{string.alpha({length: {min: 2, max: 5}, casing: 'upper'})}}").ShouldBe(faker.String.Alpha(faker.Random.Int(2, 5), Casing.Upper));
+        Parse("{{lorem.word({length: {min: 4, max: 6}})}}").ShouldBe(Faker().Lorem.Word(4, 6));
+    }
+
+    [Test]
+    public void A_range_of_one_size_draws_like_the_size()
+    {
+        Parse("{{lorem.words({min: 3, max: 3})}}").ShouldBe(Parse("{{lorem.words(3)}}"));
+        Parse("{{string.alpha({length: {min: 4, max: 4}})}}").ShouldBe(Parse("{{string.alpha(4)}}"));
+    }
+
+    [Test]
+    [Arguments("{{lorem.words({min: 5, max: 2})}}", "min")]
+    [Arguments("{{lorem.words({min: 2})}}", "max")]
+    [Arguments("{{string.alpha({length: {min: 1, mx: 3}})}}", "mx")]
+    [Arguments("{{string.alpha({length: {min: 'a', max: 3}})}}", "min")]
+    public void A_wrong_range_is_reported(string template, string named) =>
+        Should.Throw<FormatException>(() => Parse(template)).Message.ShouldContain($"'{named}'");
+
+    [Test]
+    public void A_range_above_the_template_limit_is_refused() =>
+        Should.Throw<FormatException>(() => Parse("{{lorem.words({min: 1, max: 100000})}}")).Message.ShouldContain("too large");
+
     [Test]
     public void Functions_registered_by_the_user_read_their_arguments_as_they_like()
     {

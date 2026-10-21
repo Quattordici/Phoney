@@ -185,6 +185,64 @@ public sealed class TemplateArgs
         return Count > 1 ? (Int(0), Int(1)) : (null, Int(0));
     }
 
+    /// <summary>
+    /// A size (a length or count) as faker.js takes it: a number, or a range given in its place (<c>lorem.words({min: 2, max: 5})</c>) or as the option
+    /// (<c>string.alpha({length: {min: 2, max: 5}})</c>). <see langword="null"/> when it isn't given; a number is a range of one size.
+    /// </summary>
+    /// <exception cref="FormatException">The range lacks <c>min</c> or <c>max</c>, has another key, a value that isn't a whole number, or <c>min</c> above <c>max</c>.</exception>
+    internal (int Min, int Max)? Size(int index, string option)
+    {
+        if (index < _json.Length && _json[index] is { ValueKind: JsonValueKind.Object } value)
+        {
+            if (!value.TryGetProperty(option, out var named))
+            {
+                if (value.TryGetProperty("min", out _) || value.TryGetProperty("max", out _))
+                {
+                    Note(index, "min");
+                    Note(index, "max");
+                    return RangeOf(value, null);
+                }
+            }
+            else if (named.ValueKind == JsonValueKind.Object)
+            {
+                Note(index, option);
+                return RangeOf(named, option);
+            }
+        }
+
+        return Int(index, option) is { } size ? (size, size) : null;
+    }
+
+    /// <summary>Reads <c>{min, max}</c>; <paramref name="option"/> names the option that holds it, or <see langword="null"/> when it is the argument itself.</summary>
+    private static (int Min, int Max) RangeOf(JsonElement range, string? option)
+    {
+        var where = option is null ? "A range" : $"The range of '{option}'";
+        if (option is not null)
+        {
+            foreach (var property in range.EnumerateObject())
+            {
+                if (property.Name is not ("min" or "max"))
+                    throw new FormatException($"{where} takes only 'min' and 'max', not '{property.Name}'.");
+            }
+        }
+
+        var min = Bound(range, "min", where);
+        var max = Bound(range, "max", where);
+        return min <= max ? (min, max) : throw new FormatException($"{where} has 'min' ({min}) above 'max' ({max}).");
+    }
+
+    private static int Bound(JsonElement range, string name, string where)
+    {
+        if (!range.TryGetProperty(name, out var value))
+            throw new FormatException($"{where} needs both 'min' and 'max'; 'max' or 'min' is missing: '{name}'.");
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var i) => i,
+            JsonValueKind.String when int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) => s,
+            _ => throw new FormatException($"The option '{name}' must be a whole number, but is {value.GetRawText()}."),
+        };
+    }
+
     /// <summary>Like <see cref="IntRange"/> for fractional numbers.</summary>
     internal (double? Min, double? Max) DoubleRange()
     {

@@ -33,6 +33,7 @@ public sealed class InternetModule : FakerModule
     /// <param name="provider">Domain to use instead of a random free email provider.</param>
     /// <param name="allowSpecialCharacters">Whether the local part may contain RFC 5322 special characters such as <c>!#$%</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="provider"/> is empty or white space.</exception>
+    /// <exception cref="ArgumentException"><paramref name="firstName"/> or <paramref name="lastName"/> is given but empty or white space.</exception>
     public string Email(string? firstName = null, string? lastName = null, string? provider = null, bool allowSpecialCharacters = false)
     {
         if (provider is not null)
@@ -95,6 +96,7 @@ public sealed class InternetModule : FakerModule
     /// <inheritdoc cref="Email" path="/param[@name='firstName']"/>
     /// <inheritdoc cref="Email" path="/param[@name='lastName']"/>
     /// <inheritdoc cref="Email" path="/param[@name='allowSpecialCharacters']"/>
+    /// <exception cref="ArgumentException"><paramref name="firstName"/> or <paramref name="lastName"/> is given but empty or white space.</exception>
     public string ExampleEmail(string? firstName = null, string? lastName = null, bool allowSpecialCharacters = false) =>
         Email(firstName, lastName, Faker.Pick(DataKeys.InternetExampleEmail), allowSpecialCharacters);
 
@@ -102,6 +104,7 @@ public sealed class InternetModule : FakerModule
     /// Returns an ASCII username such as <c>Nettie_Zboncak40</c>. Non-Latin names are transliterated
     /// (e.g. Cyrillic) and diacritics removed.
     /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="firstName"/> or <paramref name="lastName"/> is given but empty or white space.</exception>
     public string Username(string? firstName = null, string? lastName = null)
     {
         var text = new Templates.TextBuilder(stackalloc char[96]);
@@ -109,9 +112,20 @@ public sealed class InternetModule : FakerModule
         return ToAscii(text.ToStringAndDispose());
     }
 
+    /// <summary>A name that is given must be a name (an empty one gave <c>_57@…</c>); <see langword="null"/> means "generate one".</summary>
+    /// <exception cref="ArgumentException">A name is empty or white space.</exception>
+    private static void RequireNames(string? firstName, string? lastName)
+    {
+        if (firstName is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(firstName);
+        if (lastName is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(lastName);
+    }
+
     /// <summary>Writes the username before <see cref="ToAscii"/>; draws the names that are not given, the separator, the number and the shape, in that order.</summary>
     private void AppendRawUsername(string? firstName, string? lastName, ref Templates.TextBuilder text)
     {
+        RequireNames(firstName, lastName);
         var hasLastName = lastName is not null;
         firstName ??= Faker.Person.FirstName();
         lastName ??= Faker.Person.LastName();
@@ -136,8 +150,10 @@ public sealed class InternetModule : FakerModule
     }
 
     /// <summary>Returns a display name, e.g. <c>Nettie_Zboncak40</c>; unlike <see cref="Username"/> it keeps non-ASCII letters.</summary>
+    /// <exception cref="ArgumentException"><paramref name="firstName"/> or <paramref name="lastName"/> is given but empty or white space.</exception>
     public string DisplayName(string? firstName = null, string? lastName = null)
     {
+        RequireNames(firstName, lastName);
         firstName ??= Faker.Person.FirstName();
         lastName ??= Faker.Person.LastName();
         var separator = Random.Bool() ? '.' : '_';
