@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Phoney.Data;
 using Phoney.Templates;
 
@@ -35,7 +34,7 @@ public sealed class LoremModule : FakerModule
     /// <summary>Returns between <paramref name="min"/> and <paramref name="max"/> space-separated words (faker.js <c>words({ min, max })</c>).</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> is negative.</exception>
     /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
-    public string Words(int min, int max) => Words(Count(min, max));
+    public string Words(int min, int max) => Words(Count(min, max, nameof(min), nameof(max)));
 
     /// <summary>Returns a sentence of <paramref name="wordCount"/> words (3–10 when not given), capitalized and ending with a period.</summary>
     public string Sentence(int? wordCount = null)
@@ -52,7 +51,7 @@ public sealed class LoremModule : FakerModule
     public string Sentence(int minWords, int maxWords) => Sentence(Count(minWords, maxWords, nameof(minWords), nameof(maxWords)));
 
     /// <summary>Draws a count between <paramref name="min"/> and <paramref name="max"/> (one draw, as for the default counts).</summary>
-    private int Count(int min, int max, [CallerArgumentExpression(nameof(min))] string? minName = null, [CallerArgumentExpression(nameof(max))] string? maxName = null)
+    private int Count(int min, int max, string minName, string maxName)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(min, minName);
         if (max < min)

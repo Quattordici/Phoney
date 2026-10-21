@@ -155,13 +155,16 @@ internal sealed class Template
     {
         var depth = 0;
         var quote = '\0';
+        var escaped = false;
         for (var i = from; i < text.Length; i++)
         {
             var c = text[i];
             if (quote != '\0')
             {
-                if (c == '\\')
-                    i++;
+                if (escaped)
+                    escaped = false;
+                else if (c == '\\')
+                    escaped = true;
                 else if (c == quote)
                     quote = '\0';
             }

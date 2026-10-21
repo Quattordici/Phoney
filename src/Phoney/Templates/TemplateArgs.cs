@@ -219,11 +219,8 @@ public sealed class TemplateArgs
         var where = option is null ? "A range" : $"The range of '{option}'";
         if (option is not null)
         {
-            foreach (var property in range.EnumerateObject())
-            {
-                if (property.Name is not ("min" or "max"))
-                    throw new FormatException($"{where} takes only 'min' and 'max', not '{property.Name}'.");
-            }
+            if (range.EnumerateObject().Select(property => property.Name).FirstOrDefault(name => name is not ("min" or "max")) is { } other)
+                throw new FormatException($"{where} takes only 'min' and 'max', not '{other}'.");
         }
 
         var min = Bound(range, "min", where);
