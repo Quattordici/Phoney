@@ -1,3 +1,4 @@
+using Phoney.Modules;
 using Phoney.Templates;
 
 namespace Phoney.Tests;
@@ -33,6 +34,11 @@ public sealed class TemplateAndCustomizationTests
         _faker.Parse("{{string.alpha({length: {min: 3, max: 3}})}}!").ShouldMatch("^[A-Za-z]{3}!$");
         _faker.Parse("{{person.firstName}}}").ShouldEndWith("}");
     }
+
+    // An apostrophe in a plain-text argument is not a quote: two of them used to join the expressions between them into one.
+    [Test]
+    public void Apostrophes_in_plain_arguments_do_not_join_expressions() =>
+        _faker.Parse("{{helpers.slugify(don't)}}-{{helpers.slugify(can't)}}").ShouldBe(HelpersModule.Slugify("don't") + "-" + HelpersModule.Slugify("can't"));
 
     [Test]
     public void Unknown_expressions_fail_with_a_clear_message() =>

@@ -231,7 +231,7 @@ public sealed class TemplateArgs
     private static int Bound(JsonElement range, string name, string where)
     {
         if (!range.TryGetProperty(name, out var value))
-            throw new FormatException($"{where} needs both 'min' and 'max'; 'max' or 'min' is missing: '{name}'.");
+            throw new FormatException($"{where} needs both 'min' and 'max', but '{name}' is missing.");
         return value.ValueKind switch
         {
             JsonValueKind.Number when value.TryGetInt32(out var i) => i,

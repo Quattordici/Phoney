@@ -26,8 +26,16 @@ public sealed class Revision
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>Declares its expiry date before its creation date.</summary>
+public sealed class Voucher
+{
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 [FakeFor<Issue>]
 [FakeFor<Revision>]
+[FakeFor<Voucher>]
 public static partial class IssueFakes;
 
 /// <summary>A creation time the object already has, or that a rule gives it, is the one its other dates are built around.</summary>
@@ -115,6 +123,18 @@ public sealed class GivenCreationTimeTests
             .With(r => r.CreatedAt, Created).Generate(300);
 
         revisions.ShouldAllBe(r => r.CreatedAt == Created && r.UpdatedAt >= Created && r.UpdatedAt <= Reference.UtcDateTime);
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public void A_constant_creation_time_counts_for_future_dates_declared_before_it(bool generated)
+    {
+        var later = Reference.UtcDateTime.AddDays(40);
+        var vouchers = (generated ? IssueFakes.Voucher : new ObjectGenerator<Voucher>(new ReflectionModel<Voucher>())).Seed(1)
+            .With(v => v.CreatedAt, later).Generate(200);
+
+        vouchers.ShouldAllBe(v => v.ExpiresAt > later);
     }
 
     [Test]

@@ -168,7 +168,7 @@ internal sealed class Template
                 else if (c == quote)
                     quote = '\0';
             }
-            else if (depth > 0 && c is '"' or '\'')
+            else if (depth > 0 && c is '"' or '\'' && StartsValue(text, i, from))
             {
                 quote = c;
             }
@@ -187,6 +187,21 @@ internal sealed class Template
         }
 
         return text.IndexOf("}}", from, StringComparison.Ordinal); // unbalanced: end where the expression ended before, so its error stays the same
+    }
+
+    /// <summary>
+    /// Whether a quote at <paramref name="index"/> can open a JavaScript or JSON string: after an opening bracket, a separator or a key's colon (spaces
+    /// skipped). Elsewhere it is part of plain text, like the apostrophe in <c>helpers.slugify(don't)</c>.
+    /// </summary>
+    private static bool StartsValue(string text, int index, int from)
+    {
+        for (var j = index - 1; j >= from; j--)
+        {
+            if (!char.IsWhiteSpace(text[j]))
+                return text[j] is '(' or ',' or '[' or '{' or ':';
+        }
+
+        return false;
     }
 
     private static int FindExpressionStart(string text, int from)

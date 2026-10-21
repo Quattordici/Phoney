@@ -348,11 +348,12 @@ public sealed class TemplateArgumentTests
 
     [Test]
     [Arguments("{{lorem.words({min: 5, max: 2})}}", "min")]
-    [Arguments("{{lorem.words({min: 2})}}", "max")]
+    [Arguments("{{lorem.words({min: 2})}}", "max' is missing")]
+    [Arguments("{{lorem.words({max: 2})}}", "min' is missing")]
     [Arguments("{{string.alpha({length: {min: 1, mx: 3}})}}", "mx")]
     [Arguments("{{string.alpha({length: {min: 'a', max: 3}})}}", "min")]
     public void A_wrong_range_is_reported(string template, string named) =>
-        Should.Throw<FormatException>(() => Parse(template)).Message.ShouldContain($"'{named}'");
+        Should.Throw<FormatException>(() => Parse(template)).Message.ShouldContain(named.Contains(' ', StringComparison.Ordinal) ? $"'{named}" : $"'{named}'");
 
     [Test]
     public void A_range_above_the_template_limit_is_refused() =>

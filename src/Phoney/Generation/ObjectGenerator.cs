@@ -526,8 +526,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <remarks>
     /// It changes the range of the one creation date each object draws, not the number of draws, so the other members keep their values. The parent's creation
     /// date is drawn when a child asks for it, so a parent without a "created"-style member draws it then, which moves the data after it.
-    /// The bound is the parent's convention creation date: a created-style member set by a rule or kept by <c>Populate</c> is not seen, because nested
-    /// objects can be created before that member. Objects of a nested generator (<c>WithGeneratorFor</c>, <c>With</c>) follow that generator's setting.
+    /// The bound is the parent's creation date: a constant rule on its created-style member or a value <c>Populate</c> keeps sets it, and a factory or custom
+    /// convention sets it when that member is produced before the nested object. Objects of a nested generator (<c>WithGeneratorFor</c>, <c>With</c>) follow that generator's setting.
     /// </remarks>
     /// <param name="enabled"><see langword="false"/> turns it off again.</param>
     public ObjectGenerator<T> WithCausalTimelines(bool enabled = true) => Derive(_config with { Settings = _config.Settings with { CausalTimelines = enabled } });

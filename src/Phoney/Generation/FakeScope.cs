@@ -259,7 +259,15 @@ public sealed class FakeScope
     }
 
     /// <summary>The creation time the object was given (see <see cref="GiveCreated"/>), or <see langword="null"/> when it is drawn.</summary>
-    internal DateTimeOffset? GivenCreated => _createdGiven ? _created : null;
+    internal DateTimeOffset? GivenCreated
+    {
+        get
+        {
+            if (!_createdGiven && !_hasCreated)
+                GiveConstantCreated(); // a future date declared before the "created" member: a constant draws nothing, so taking it early moves no draws
+            return _createdGiven ? _created : null;
+        }
+    }
 
     /// <summary>
     /// Makes <paramref name="value"/> (a <see cref="DateTimeOffset"/>, <see cref="DateTime"/> or <see cref="DateOnly"/>; anything else is ignored) the object's
