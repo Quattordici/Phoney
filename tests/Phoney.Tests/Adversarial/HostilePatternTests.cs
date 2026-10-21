@@ -37,6 +37,8 @@ public sealed class HostilePatternTests
     [Arguments("(a{0}){2000000000}")]
     [Arguments("((){100000}){100000}")]
     [Arguments("(|){2000000000}")]
+    [Arguments("(){2147483647,}")]
+    [Arguments("\\b{2000000000}")]
     public void Patterns_that_could_produce_gigabytes_are_refused_up_front(string pattern)
     {
         var watch = Stopwatch.StartNew();
