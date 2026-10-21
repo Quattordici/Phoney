@@ -10,22 +10,29 @@ internal static class GeneratorHarness
 {
     public static (GeneratorDriver Driver, Compilation Output, ImmutableArray<Diagnostic> Diagnostics) Run(string source)
     {
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new FakeForGenerator());
+        driver = driver.RunGeneratorsAndUpdateCompilation(Compile(source), out var output, out var diagnostics);
+        return (driver, output, diagnostics);
+    }
+
+    /// <summary>A compilation of <paramref name="sources"/> (one syntax tree each) that references the Phoney runtime.</summary>
+    public static CSharpCompilation Compile(params string[] sources)
+    {
         var trustedAssemblies = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
         var references = trustedAssemblies
             .Select(path => MetadataReference.CreateFromFile(path))
             .Append(MetadataReference.CreateFromFile(typeof(Faker).Assembly.Location))
             .ToList();
 
-        var compilation = CSharpCompilation.Create(
+        return CSharpCompilation.Create(
             "Tests",
-            [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest))],
+            sources.Select(source => CSharpSyntaxTree.ParseText(source, ParseOptions)),
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
-
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(new FakeForGenerator());
-        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
-        return (driver, output, diagnostics);
     }
+
+    /// <summary>The parse options of <see cref="Compile"/>, for trees added to its compilations.</summary>
+    public static CSharpParseOptions ParseOptions { get; } = new(LanguageVersion.Latest);
 
     /// <summary>Analyzers run concurrently and report in no particular order; tests index into the results, so sort them by position.</summary>
     internal static ImmutableArray<Diagnostic> InSourceOrder(IEnumerable<Diagnostic> diagnostics) =>
