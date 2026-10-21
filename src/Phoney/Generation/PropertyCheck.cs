@@ -14,10 +14,10 @@ namespace Phoney.Generation;
 /// <param name="seed">The seed of the run, for the report.</param>
 internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<long, ChoiceTape, T> replay, int count, int maxShrinks, CheckSeed seed)
 {
-#pragma warning disable S1450 // set by Report between the steps of the iterators, so it can't be a local
+#pragma warning disable S1450 // shared by the iterators while they are suspended (Report sets _last between their steps), so they can't be locals
     private Outcome _last;
-#pragma warning restore S1450
     private (T Item, Outcome Outcome) _best;
+#pragma warning restore S1450
 
     /// <summary>The failure to throw once <see cref="Objects"/> is done, or <see langword="null"/> when the property held for every object.</summary>
     public FakeCheckException<T>? Failure { get; private set; }
