@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Immutable;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using Phoney.Data;
 using Phoney.Modules;
 
 namespace Phoney.Generation;
@@ -391,6 +392,12 @@ public sealed class FakeScope
                 break;
             case ConventionKind.PastDate:
                 GiveCreated(value); // the object's own creation time: its updated and later dates are generated after it
+                break;
+            case ConventionKind.Country when value is string country && country.Length > 0:
+                hints.Country = country;
+                break;
+            case ConventionKind.CountryCode when value is string code && code.Length > 0:
+                hints.CountryCode = code;
                 break;
             case ConventionKind.Age:
                 GiveAge(value); // the birthdate is drawn for it, unless a kept birthdate says otherwise
@@ -879,6 +886,8 @@ internal sealed class Identity(Faker faker, IdentityHints? hints)
     private DateOnly? _birthDate = hints?.BirthDate;
     private int? _age = hints?.Age;
     private AddressProfile? _address;
+    private string? _country = hints?.Country;
+    private string? _countryCode = hints?.CountryCode;
     private string? _nationalId;
 
     /// <summary>The person's sex; drives gendered names, avatars and sex/gender enums.</summary>
@@ -912,6 +921,33 @@ internal sealed class Identity(Faker faker, IdentityHints? hints)
     /// <summary>One address, so street, city, zip code, state and country agree.</summary>
     public AddressProfile Address => _address ??= faker.Location.Address();
 
+    /// <summary>
+    /// The address's country, or in a locale without a country of its own (<c>en</c>, <c>de</c>…) a drawn one that names the same country as a
+    /// <see cref="CountryCode"/> the object already has. It is drawn either way, so every member after it draws what it drew before.
+    /// </summary>
+    public string Country()
+    {
+        if (Address.Country is { } own)
+            return own;
+        var drawn = faker.Location.Country();
+        if (_countryCode is { } code && CountryNames.NameOf(code) is { } name && faker.Data.TryStrings(DataKeys.LocationCountry) is { } names && Array.IndexOf((string[])names.Values, name) >= 0)
+            return name;
+        _country ??= drawn;
+        return drawn;
+    }
+
+    /// <summary>The address's country code, or a drawn one that matches a <see cref="Country"/> the object already has (see there).</summary>
+    public string CountryCode()
+    {
+        if (Address.CountryCode is { } own)
+            return own;
+        var drawn = faker.Location.CountryCode();
+        if (_country is { } country && CountryNames.CodeOf(country) is { } code)
+            return code;
+        _countryCode ??= drawn;
+        return drawn;
+    }
+
     /// <summary>The locale country's personal identity number, encoding <see cref="BirthDate"/> and <see cref="Sex"/>; empty when the country has no scheme.</summary>
     public string NationalId => _nationalId ??= faker.NationalId.TryPerson(BirthDate, Sex) ?? "";
 
@@ -928,6 +964,12 @@ internal sealed class IdentityHints
     public string? LastName { get; set; }
 
     public DateOnly? BirthDate { get; set; }
+
+    /// <summary>A country a populated object keeps, which a generated country code matches.</summary>
+    public string? Country { get; set; }
+
+    /// <summary>A country code a populated object keeps, which a generated country matches.</summary>
+    public string? CountryCode { get; set; }
 
     /// <summary>An age a rule gives or a populated object keeps; a <see cref="BirthDate"/> wins over it.</summary>
     public int? Age { get; set; }
