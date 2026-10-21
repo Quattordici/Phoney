@@ -532,6 +532,17 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <param name="enabled"><see langword="false"/> turns it off again.</param>
     public ObjectGenerator<T> WithCausalTimelines(bool enabled = true) => Derive(_config with { Settings = _config.Settings with { CausalTimelines = enabled } });
 
+    /// <summary>
+    /// Gives optional constructor parameters (<c>int priority = 3</c>) the default their type declares instead of a generated value, in this object and in
+    /// every object nested in it. Explicit rules, path rules, <c>Unique</c>, <c>Where</c> conditions and feeds still decide the members they name.
+    /// </summary>
+    /// <remarks>
+    /// A default draws nothing, so the members after it get other values than without this option (the data is still the same for a seed).
+    /// Objects of a nested generator (<c>WithGeneratorFor</c>, <c>With</c>) follow that generator's setting.
+    /// </remarks>
+    /// <param name="enabled"><see langword="false"/> turns it off again.</param>
+    public ObjectGenerator<T> WithParameterDefaults(bool enabled = true) => Derive(_config with { Settings = _config.Settings with { ParameterDefaults = enabled } });
+
     /// <summary>Probability (0–1) that nullable members (<c>int?</c>, <c>string?</c>…) are left <see langword="null"/>. Default 0.</summary>
     public ObjectGenerator<T> NullProbability(double probability)
     {
@@ -1148,6 +1159,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var dependent = BindRules(members, known, slots);
         if (_config.Feed is { } feed)
             ApplyFeed(feed, members, slots);
+        if (_config.Settings.ParameterDefaults)
+            ApplyParameterDefaults(members, slots);
         var conventions = _config.Conventions.AddRange(FakeConventions.All);
         ApplyConventions(conventions, members, slots, usage);
         if (_config.Strict)
@@ -1170,7 +1183,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var settings = _config.Settings with
         {
             Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
-            Conventions = NestedConventions.For(conventions, usage),
+            Conventions = NestedConventions.For(conventions, usage, _config.Settings.ParameterDefaults),
             TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
             Usage = usage,
         };
@@ -1213,6 +1226,16 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         if (member.FillsExisting)
             throw new InvalidOperationException($"{typeof(T).Name}.{member.Name} is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
         return (Func<Faker, T, object?>)rule.Value!;
+    }
+
+    /// <summary>Declared defaults fill the optional constructor parameters that have no rule, feed, <c>Unique</c> or <c>Where</c> condition (which need generated values).</summary>
+    private void ApplyParameterDefaults(IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
+    {
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (slots[i] is null && !_config.MemberFilters.ContainsKey(members[i].Name))
+                slots[i] = ParameterDefaults.Slot(members[i]);
+        }
     }
 
     /// <summary>Custom conventions (per generator, then global) fill members that have no rule.</summary>

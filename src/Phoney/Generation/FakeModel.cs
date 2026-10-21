@@ -84,6 +84,12 @@ public sealed class FakeMember
     /// </summary>
     public bool FillsExisting { get; init; }
 
+    /// <summary>Whether the member is an optional constructor parameter with a declared default (<see cref="DefaultValue"/>), which <c>WithParameterDefaults()</c> uses.</summary>
+    public bool HasDefaultValue { get; init; }
+
+    /// <summary>The declared default of an optional constructor parameter (see <see cref="HasDefaultValue"/>), as a value of <see cref="Type"/>.</summary>
+    public object? DefaultValue { get; init; }
+
     /// <summary>Whether the member holds a scalar value (string, number, date…) rather than an object or collection.</summary>
     public bool IsScalar => ScalarCategory(Type) != TypeCategory.Other || ScalarAdapters.IsAdapted(Type);
 

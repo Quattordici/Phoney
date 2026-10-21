@@ -18,7 +18,8 @@ internal sealed record GenerationSettings(
     NestedConventions? Conventions = null,
     ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null,
     RuleUsage? Usage = null,
-    bool CausalTimelines = false)
+    bool CausalTimelines = false,
+    bool ParameterDefaults = false)
 {
     public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
 }

@@ -21,7 +21,10 @@ public sealed class StrictAnalyzerTests
             public Product? Parent { get; set; }
         }
 
+        public record Shipment(string Carrier, int Boxes = 1, double Weight = 2.5);
+
         [FakeFor<Product>]
+        [FakeFor<Shipment>]
         public static partial class Data;
 
         public static class Usage
@@ -111,6 +114,16 @@ public sealed class StrictAnalyzerTests
 
         on.ShouldBeEmpty();
         off.ShouldHaveSingleItem().GetMessage().ShouldContain("Id, Name, Price");
+    }
+
+    [Test]
+    public async Task Parameter_defaults_cover_optional_constructor_parameters_like_at_runtime(CancellationToken cancellationToken)
+    {
+        var on = await Diagnose("public static object A() => Data.Shipment.WithParameterDefaults().Strict().Generate();", cancellationToken);
+        var off = await Diagnose("public static object A() => Data.Shipment.WithParameterDefaults().WithParameterDefaults(false).Strict().Generate();", cancellationToken);
+
+        on.ShouldHaveSingleItem().GetMessage().ShouldEndWith("no rule, convention or annotation for: Carrier. Add .With(...) or .Ignore(...) for them, or it throws when generating.");
+        off.ShouldHaveSingleItem().GetMessage().ShouldContain("Carrier, Boxes, Weight");
     }
 
     [Test]
