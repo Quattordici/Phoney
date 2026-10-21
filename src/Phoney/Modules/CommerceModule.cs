@@ -56,12 +56,14 @@ public sealed class CommerceModule : FakerModule
     /// Returns a price between <paramref name="min"/> and <paramref name="max"/>. Like real prices (and faker.js),
     /// the last digit favours 9, then 5 and 0, e.g. <c>39.99</c>.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="min"/> or <paramref name="max"/> is negative (a price isn't), or <paramref name="decimals"/> is outside 0–28.</exception>
+    /// <exception cref="ArgumentException"><paramref name="max"/> is less than <paramref name="min"/>.</exception>
     public decimal Price(decimal min = 1, decimal max = 1000, int decimals = 2)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(decimals);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(decimals, NumberModule.MaxDecimalPlaces);
-        if (min < 0 || max < 0)
-            return 0;
+        ArgumentOutOfRangeException.ThrowIfNegative(min);
+        ArgumentOutOfRangeException.ThrowIfNegative(max);
         if (min == max)
             return decimal.Round(min, decimals);
 
@@ -106,6 +108,7 @@ public sealed class CommerceModule : FakerModule
     private const decimal NearMaxValue = 79_228_162_514_264_337_593_543_950_326m;
 
     /// <summary>Returns a price formatted with <paramref name="symbol"/>, e.g. <c>$39.99</c>.</summary>
+    /// <inheritdoc cref="Price" path="/exception"/>
     public string PriceText(string symbol = "", decimal min = 1, decimal max = 1000, int decimals = 2) =>
         symbol + Price(min, max, decimals).ToString("F" + decimals.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
 

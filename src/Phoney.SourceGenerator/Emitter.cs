@@ -213,6 +213,8 @@ internal static class Emitter
             values.Add("IsNested = true");
         if (m.FillsExisting)
             values.Add("FillsExisting = true");
+        if (m.DefaultValue is not null)
+            values.Add("HasDefaultValue = true, DefaultValue = " + m.DefaultValue);
         return values.Count == 0 ? "" : " { " + string.Join(", ", values) + " }";
     }
 

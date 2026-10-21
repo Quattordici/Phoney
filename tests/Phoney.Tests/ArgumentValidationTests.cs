@@ -37,6 +37,58 @@ public sealed class ArgumentValidationTests
     }
 
     [Test]
+    [Arguments(-5, -1, "min")]
+    [Arguments(-1, 10, "min")]
+    [Arguments(0, -1, "max")]
+    public void Negative_prices_are_refused_instead_of_giving_zero(int min, int max, string parameter)
+    {
+        var faker = new Faker("en", 1);
+
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Commerce.Price(min, max)).ParamName.ShouldBe(parameter);
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Commerce.PriceText("$", min, max)).ParamName.ShouldBe(parameter);
+    }
+
+    [Test]
+    public void Coordinates_must_lie_on_the_globe()
+    {
+        var faker = new Faker("en", 1);
+
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Latitude(0, 100)).ParamName.ShouldBe("max");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Latitude(-91, 0)).ParamName.ShouldBe("min");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Longitude(0, 180.5)).ParamName.ShouldBe("max");
+        Should.Throw<ArgumentOutOfRangeException>(() => faker.Location.Longitude(-200, 0)).ParamName.ShouldBe("min");
+        faker.Location.Latitude(90, 90).ShouldBe(90);
+        faker.Location.Longitude(-180, -180).ShouldBe(-180);
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments(" ")]
+    [Arguments("https://")]
+    [Arguments("ht tp")]
+    [Arguments("1http")]
+    public void Url_schemes_must_be_valid(string protocol) =>
+        Should.Throw<ArgumentException>(() => new Faker("en", 1).Internet.Url(protocol: protocol)).ParamName.ShouldBe("protocol");
+
+    [Test]
+    public void Url_accepts_any_valid_scheme()
+    {
+        var faker = new Faker("en", 1);
+
+        faker.Internet.Url(protocol: "ftp").ShouldStartWith("ftp://");
+        faker.Internet.Url(protocol: "git+ssh").ShouldStartWith("git+ssh://");
+        Should.Throw<ArgumentNullException>(() => faker.Internet.Url(protocol: null!)).ParamName.ShouldBe("protocol");
+    }
+
+    [Test]
+    public void A_missing_culture_or_path_is_reported()
+    {
+        Should.Throw<ArgumentNullException>(() => new Faker((CultureInfo)null!)).ParamName.ShouldBe("culture");
+        Should.Throw<ArgumentNullException>(() => new Faker("en", 1).TryPick(null!)).ParamName.ShouldBe("path");
+        new Faker(CultureInfo.InvariantCulture).Locale.ShouldBe(Locales.Default);
+    }
+
+    [Test]
     public void Prices_next_to_the_largest_decimal_do_not_overflow()
     {
         var (min, max) = (decimal.MaxValue - 1, decimal.MaxValue);
@@ -103,5 +155,45 @@ public sealed class ArgumentValidationTests
     {
         var exception = Should.Throw<ArgumentNullException>(() => new Faker("en", 1).Internet.Password(prefix: null!));
         exception.ParamName.ShouldBe("prefix");
+    }
+
+    [Test]
+    public void Word_and_sentence_counts_can_be_a_range()
+    {
+        var faker = new Faker("en", 3);
+        for (var i = 0; i < 100; i++)
+        {
+            faker.Lorem.Words(2, 5).Split(' ').Length.ShouldBeInRange(2, 5);
+            faker.Lorem.Sentence(3, 6).Split(' ').Length.ShouldBeInRange(3, 6);
+        }
+
+        var drawn = new Faker("en", 3);
+        new Faker("en", 3).Lorem.Words(2, 5).ShouldBe(drawn.Lorem.Words(drawn.Random.Int(2, 5)));
+        new Faker("en", 3).Lorem.Sentence(3, 10).ShouldBe(new Faker("en", 3).Lorem.Sentence()); // the default range, drawn the same way
+    }
+
+    [Test]
+    public void Word_and_sentence_ranges_are_checked()
+    {
+        var lorem = new Faker("en", 1).Lorem;
+        Should.Throw<ArgumentOutOfRangeException>(() => lorem.Words(-1, 2)).ParamName.ShouldBe("min");
+        Should.Throw<ArgumentException>(() => lorem.Words(5, 2)).ParamName.ShouldBe("max");
+        Should.Throw<ArgumentOutOfRangeException>(() => lorem.Sentence(-1, 2)).ParamName.ShouldBe("minWords");
+        Should.Throw<ArgumentException>(() => lorem.Sentence(5, 2)).ParamName.ShouldBe("maxWords");
+    }
+
+    // An empty name gave "_57@gmail.com": a name that is given must be a name; null still means "generate one".
+    [Test]
+    [Arguments("")]
+    [Arguments(" ")]
+    public void Names_given_for_emails_and_usernames_must_not_be_empty(string name)
+    {
+        var internet = new Faker("en", 1).Internet;
+        Should.Throw<ArgumentException>(() => internet.Email(name, "Doe")).ParamName.ShouldBe("firstName");
+        Should.Throw<ArgumentException>(() => internet.Email("Jo", name)).ParamName.ShouldBe("lastName");
+        Should.Throw<ArgumentException>(() => internet.ExampleEmail(name)).ParamName.ShouldBe("firstName");
+        Should.Throw<ArgumentException>(() => internet.Username(name)).ParamName.ShouldBe("firstName");
+        Should.Throw<ArgumentException>(() => internet.DisplayName("Jo", name)).ParamName.ShouldBe("lastName");
+        internet.Email(null, "Doe").ShouldContain("@");
     }
 }

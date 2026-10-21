@@ -135,7 +135,7 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
                 writable.Remove(match);
             var name = match?.Name ?? Capitalize(parameter.Name ?? "Arg");
             var nullable = _nullability.Create(parameter).ReadState == NullabilityState.Nullable;
-            Add(name, parameter.ParameterType, nullable, MemberRole.Parameter, match, MemberConstraints.Read(parameter, match));
+            Add(name, parameter.ParameterType, nullable, MemberRole.Parameter, match, MemberConstraints.Read(parameter, match), parameter);
         }
 
         /// <summary>Adds a settable or init-only property or field.</summary>
@@ -162,7 +162,7 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
             Add(member.Name, memberType, nullable, MemberRole.Filled, member, MemberConstraints.Read(member));
         }
 
-        private void Add(string name, Type memberType, bool nullable, MemberRole role, MemberInfo? accessor, MemberConstraints? constraints)
+        private void Add(string name, Type memberType, bool nullable, MemberRole role, MemberInfo? accessor, MemberConstraints? constraints, ParameterInfo? parameter = null)
         {
             // A format annotation ([EmailAddress]…) says more than the member name; [Required] members are never null.
             var category = FakeMember.ConventionCategory(memberType);
@@ -177,12 +177,29 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
                 IsSettable = accessor is not null && !fillsExisting,
                 IsNested = IsNestedType(memberType),
                 FillsExisting = fillsExisting,
+                HasDefaultValue = parameter?.HasDefaultValue == true,
+                DefaultValue = parameter is { HasDefaultValue: true } ? DeclaredDefault(parameter) : null,
             });
             Setters.Add(accessor is null || fillsExisting ? null : CreateSetter(type, accessor));
             Fillers.Add(fillsExisting ? CollectionFillers.Create(memberType) : null);
             Getters.Add(accessor is null ? null : CreateGetter(type, accessor));
             Defaults.Add(memberType.IsValueType ? Activator.CreateInstance(memberType) : null);
             Fallbacks.Add(Producer(memberType, name, convention, nullable && constraints?.Required != true, constraints));
+        }
+
+        /// <summary>
+        /// The default of an optional parameter as a value of its type: metadata stores <c>default</c> of a struct as <see langword="null"/> and an enum
+        /// as its underlying number, which the source generator writes as <c>default(T)</c> and <c>(T)n</c>.
+        /// </summary>
+        private static object? DeclaredDefault(ParameterInfo parameter)
+        {
+            var type = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+            return parameter.DefaultValue switch
+            {
+                null when type == parameter.ParameterType && type.IsValueType => Activator.CreateInstance(type),
+                { } value when type.IsEnum && value.GetType() != type => Enum.ToObject(type, value),
+                var value => value,
+            };
         }
 
         /// <summary>Whether a member of this type is created and populated recursively; mirrors the last branch of <see cref="NonNullProducer"/>.</summary>

@@ -18,10 +18,11 @@ internal static class CultureMatcher
     private static readonly char[] Separators = ['-', '_'];
 
     /// <summary>Language codes .NET/CLDR use for languages faker.js files under another language code.</summary>
-    private static readonly Dictionary<string, (string Language, string Script)> LanguageAliases = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, (string Language, string? Script)> LanguageAliases = new(StringComparer.OrdinalIgnoreCase)
     {
         ["ckb"] = ("ku", "Arab"), // Central Kurdish (Sorani)
         ["kmr"] = ("ku", "Latn"), // Northern Kurdish (Kurmanji)
+        ["no"] = ("nb", null), // Norwegian, the macrolanguage: CLDR's likely written form is Bokmål
     };
 
     /// <summary>Default scripts (CLDR likely subtags) for languages written in more than one script.</summary>

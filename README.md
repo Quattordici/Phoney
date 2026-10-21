@@ -176,7 +176,7 @@ Fake.Locale = "fr";               // default for Fake.* and generators
 <summary>Supported locales</summary>
 
 <!-- locales:start -->
-76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`); a requested script is never substituted.
+76 locales from faker.js 10.6.0. Codes accept `-` or `_` and any casing (`de-AT`, `de_at`). .NET culture names resolve to the closest locale, including script-tagged ones (`sv-SE` → `sv`, `sr-Latn-RS` → `sr_RS_latin`, `zh-Hant-TW` → `zh_TW`, `ckb-IQ` → `ku_ckb`, `no` → `nb_NO`); a requested script is never substituted.
 
 | Code | Language | Native name | Falls back to |
 |---|---|---|---|
@@ -297,7 +297,8 @@ TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-##
 ```
 
 - **faker.js templates work unchanged**: names are case-insensitive (`{{person.firstName}}`), and locale data paths and record fields (`{{airline.airport.iataCode}}`) work too.
-- **Options** are an options object or the plain value: `{{number.int({"min":1,"max":9})}}`, `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.mac("-")}}`. JavaScript literals, which need no escaping in a C# string, work as well: `{{number.int({min: 1, max: 9})}}`, `{{location.zipCode('#####')}}`. A wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters, a count above its limit, or an argument to a function that takes none (`{{airline.seat(5)}}`), so an option Phoney doesn't have is never silently ignored. Dates between two dates are `{{date.between({from: '2020-01-01', to: '2020-12-31'})}}`.
+- **Options** are an options object or the plain value: `{{number.int({"min":1,"max":9})}}`, `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.mac("-")}}`. JavaScript literals, which need no escaping in a C# string, work as well: `{{number.int({min: 1, max: 9})}}`, `{{location.zipCode('#####')}}`. A wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters, a count above its limit, an argument to a function that takes none (`{{airline.seat(5)}}`), an option the function doesn't use (faker.js' `multipleOf` on `{{number.float}}`, or a typo such as `maks`) and an option of the wrong type (`{memorable: 'yes'}`), so an option Phoney doesn't have is never silently ignored. Functions you register read their arguments as they like. Dates between two dates are `{{date.between({from: '2020-01-01', to: '2020-12-31'})}}`. Lengths and counts can be a range, as in faker.js: `{{lorem.words({min: 2, max: 5})}}`, `{{string.alpha({length: {min: 4, max: 8}})}}`, `{{word.noun({length: {min: 4, max: 6}})}}` (in code, `faker.Lorem.Words(2, 5)` and `faker.Lorem.Sentence(3, 6)`).
+- **Only `{{` followed by a letter starts an expression.** `{{ person.firstName }}` with spaces, Mustache and Handlebars tags (`{{#each items}}`, `{{ name }}`, `{{/each}}`) and JSON-like text pass through unchanged, so a template can sit inside text another engine renders later. Write `{{person.firstName}}` without spaces to have Phoney fill it. Inside an expression, braces and quotes in the arguments don't end it: `{{string.alpha({length: {min: 4, max: 8}})}}`.
 - Typed results (`airline.airport`, `finance.currency`, `color.hsl`…) are written in their usual text form. `TemplateFunctions.Names` lists every function.
 
 ## Objects
@@ -323,16 +324,17 @@ var customers = Fake.For<Customer>()
 - **Unique combinations**: `Unique(x => new { x.UserId, x.RoleId })` makes the combination unique while each member may repeat, for join tables and per-tenant keys such as `new { x.TenantId, x.Email }`. The combination is read from the finished object (after rules that depend on it), and an object whose combination was produced before is generated again as a whole, so objects without a duplicate are the ones you would get without the rule.
 - **Generators are immutable**: every method returns a new generator, so you can share them and derive variants: `var admins = users.With(u => u.Role, "Admin");`.
 - **Order**: constructor arguments, then members (base class first; fields, then properties, in declaration order; read-only collections last), then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
+- **Optional constructor parameters** (`int priority = 3`) get generated values like any member. `WithParameterDefaults()` gives them the default their type declares instead, in nested objects too; a rule, path rule, feed, `Unique` or `Where` on the member still decides it. A default draws nothing, so the members after it get other values than without the option.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation, so new members can't silently get meaningless data. The analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`; it can't see app-wide `Fake.Conventions`.
 
 ### Values that agree
 
 Within one object, related members describe the same thing:
 
-- **One person**: `FirstName`, `LastName`, `Email`, `Username`, `Avatar` and `Gender`/`Sex` enums belong together, and `Age` matches `BirthDate`/`DateOfBirth`.
-- **One address**: `Street`, `City`, `ZipCode`, `State`, `Country` and `CountryCode` come from one address; for country locales (`de_AT`, `en_US`…) the country is the locale's own.
-- **One timeline**: the first "created" date (`CreatedAt`, `RegisteredAt`, `StartDate`…) is when the object was created, "updated" dates (`UpdatedAt`, `LastLogin`…) fall between it and the reference date, and future dates (`ExpiresAt`, `DueDate`) come after both.
-- **One timeline per graph**: `WithCausalTimelines()` creates each nested object between the creation of the object that contains it and the reference date, so an order is never older than its customer and a payment never older than its invoice. Each object still draws one creation date, only from a narrower range, so the other members keep their values (a parent without a "created" member draws its date when its first child asks for it, which moves the values after it). The bound is the date the convention gives the parent: a `CreatedAt` set by a rule, or kept by `Populate`, is not seen.
+- **One person**: `FirstName`, `LastName`, `Email`, `Username`, `Avatar` and `Gender`/`Sex` enums belong together, and `Age` matches `BirthDate`/`DateOfBirth`. An age you give (`With(x => x.Age, 30)`, or a kept `Age` when populating) is the age the birthdate is drawn for. A constant counts in any member order, a factory when `Age` is declared before the birthdate.
+- **One address**: `Street`, `City`, `ZipCode`, `State`, `Country` and `CountryCode` come from one address; for country locales (`de_AT`, `en_US`…) the country is the locale's own. In a language-wide locale (`en`, `de`…) the country and the code are drawn, and still name the same country where the locale's country names are English (a country or code you give with a rule, or keep when populating, decides the other; a constant in any member order, a factory when its member comes first).
+- **One timeline**: the first "created" date (`CreatedAt`, `RegisteredAt`, `StartDate`…) is when the object was created, "updated" dates (`UpdatedAt`, `LastLogin`…) fall between it and the reference date, and future dates (`ExpiresAt`, `DueDate`) come after both. A creation date you give with a constant rule or a kept value counts in any member order. A factory (`With(x => x.CreatedAt, f => …)`) is produced in member order, so declare the creation date before the dates that follow it, or use a constant: a factory `CreatedAt` declared after `UpdatedAt` comes too late for `UpdatedAt` to follow it.
+- **One timeline per graph**: `WithCausalTimelines()` creates each nested object between the creation of the object that contains it and the reference date, so an order is never older than its customer and a payment never older than its invoice. Each object still draws one creation date, only from a narrower range, so the other members keep their values (a parent without a "created" member draws its date when its first child asks for it, which moves the values after it). The bound is the parent's creation date: a constant rule on its `CreatedAt` or a value `Populate` keeps sets it, and a factory or custom convention sets it when that member is produced before the nested object.
 
 Across objects, `WithOneOf` links to data you generated already, optionally with weights, and `WithSubsetOf` gives a collection member its own random subset of values:
 
@@ -537,7 +539,7 @@ List<Customer> filled = generator.Populate(customers);            // many at onc
 ```
 
 - **`MissingOnly`** (the default) fills members that hold their default (`null`, `0`, `false`, `Guid.Empty`, an empty string or collection), keeps the others and populates set nested objects member by member. A deliberate `false` or `0` counts as unset: protect it with `.Ignore(...)`.
-- Kept values shape the generated ones: with a set `FirstName` or `BirthDate`, the email, username and age match them.
+- Kept values shape the generated ones: with a set `FirstName`, `BirthDate` or `Age`, the email, username, age and birthdate match them.
 - Dependent rules and `AfterCreate` run afterwards, `CreateWith` is ignored, records are filled through `init`, and a struct is populated as a copy (use the return value). With a seed, `Populate(new T(), PopulateMode.All)` gives exactly what `Generate()` gives.
 
 ### Data tied to a key
