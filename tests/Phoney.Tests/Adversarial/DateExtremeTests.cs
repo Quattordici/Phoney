@@ -81,7 +81,7 @@ public sealed class DateExtremeTests
     {
         var faker = At(new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
-        Guid.Parse(faker.String.UuidV7(DateTimeOffset.MaxValue)).Version.ShouldBe(7);
+        faker.String.UuidV7(DateTimeOffset.MaxValue)[14].ShouldBe('7'); // the version digit (Guid.Version needs .NET 9)
         faker.String.Ulid(DateTimeOffset.MaxValue).Length.ShouldBe(26);
     }
 }
