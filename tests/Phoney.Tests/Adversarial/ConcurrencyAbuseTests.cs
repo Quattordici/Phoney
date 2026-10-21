@@ -115,6 +115,29 @@ public sealed class ConcurrencyAbuseTests
     }
 
     [Test]
+    public async Task A_task_that_outlives_its_scope_stops_using_the_ended_scope()
+    {
+        using var outer = Fake.Seeded(1);
+        var outerFaker = Fake.Faker;
+        var inner = Fake.Seeded(2);
+        var innerFaker = Fake.Faker;
+        var ended = new TaskCompletionSource();
+        var child = Task.Run(async () =>
+        {
+            await ended.Task; // the task copied the inner scope when it started
+            return (Fake.Faker, Fake.IsSeeded);
+        });
+
+        inner.Dispose();
+        ended.SetResult();
+        var (faker, seeded) = await child;
+
+        faker.ShouldNotBeSameAs(innerFaker);
+        faker.ShouldBeSameAs(outerFaker);
+        seeded.ShouldBeTrue();
+    }
+
+    [Test]
     public void Forks_inside_a_seeded_scope_give_each_item_its_own_data_whatever_the_timing()
     {
         string[] Run()

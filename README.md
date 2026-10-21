@@ -110,7 +110,7 @@ Parallel.For(0, 1_000, i =>
 });
 ```
 
-`ObjectGenerator<T>.Seed(n)` does the same for a generator, and `GenerateParallel` forks for you. A `Fake.Seeded` scope flows into the tasks and workers started inside it, so they would share one faker without `Fake.Fork(i)` (or `faker.Fork(i)`). One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing. Scopes nest; one disposed out of order never brings back a scope that has ended. For tests that run on random data but can be replayed, see [`[FakeSeed]` and `FakeSeed.Run`](#replayable-random-data).
+`ObjectGenerator<T>.Seed(n)` does the same for a generator, and `GenerateParallel` forks for you. A `Fake.Seeded` scope flows into the tasks and workers started inside it, so they would share one faker without `Fake.Fork(i)` (or `faker.Fork(i)`). One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing. Scopes nest; one disposed out of order never brings back a scope that has ended, and a task that outlives its scope goes back to the enclosing one. For tests that run on random data but can be replayed, see [`[FakeSeed]` and `FakeSeed.Run`](#replayable-random-data).
 
 ### Controlling "now" with `TimeProvider`
 
