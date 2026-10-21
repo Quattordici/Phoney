@@ -72,6 +72,6 @@ internal sealed class ChoiceTape
 }
 
 /// <summary>A replayed tape was drawn far past its end: the object it describes can't be made, so it is not a counterexample.</summary>
-#pragma warning disable CA1032, RCS1194 // internal control flow, never thrown to callers
+#pragma warning disable CA1032, RCS1194, S3871 // internal control flow, caught by the check and never thrown to callers
 internal sealed class ChoiceTapeOverrunException() : Exception("The replayed draws ran out.");
-#pragma warning restore CA1032, RCS1194
+#pragma warning restore CA1032, RCS1194, S3871

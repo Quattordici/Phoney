@@ -39,8 +39,8 @@ internal static class ObjectDescription
             case bool b:
                 text.Append(b ? "true" : "false");
                 return;
-            case DateTime or DateTimeOffset or DateOnly or TimeOnly: // ISO 8601 rather than the invariant culture's month/day order
-                text.Append(((IFormattable)value).ToString("O", CultureInfo.InvariantCulture));
+            case IFormattable date when value is DateTime or DateTimeOffset or DateOnly or TimeOnly: // ISO 8601 rather than the invariant culture's month/day order
+                text.Append(date.ToString("O", CultureInfo.InvariantCulture));
                 return;
             case IFormattable formattable:
                 text.Append(formattable.ToString(null, CultureInfo.InvariantCulture));

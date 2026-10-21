@@ -1137,9 +1137,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         ArgumentOutOfRangeException.ThrowIfNegative(maxShrinks);
-        var seed = _config.Seed is { } own ? new CheckSeed(own, CheckSeed.Origin.Generator)
-            : FakeSeed.FromEnvironment() is { } environment ? new CheckSeed(environment, CheckSeed.Origin.Environment)
-            : new CheckSeed(FakeSeed.New(), CheckSeed.Origin.Random);
+        var seed = CheckSeed.Choose(_config.Seed);
         var generator = checking = Derive(_config with { Seed = seed.Value });
         var tracksUniqueness = !_config.Unique.IsEmpty || !_config.UniqueKeys.IsEmpty;
         Run? run = null;

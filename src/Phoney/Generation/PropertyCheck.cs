@@ -14,7 +14,10 @@ namespace Phoney.Generation;
 /// <param name="seed">The seed of the run, for the report.</param>
 internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<long, ChoiceTape, T> replay, int count, int maxShrinks, CheckSeed seed)
 {
+#pragma warning disable S1450 // set by Report between the steps of the iterators, so it can't be a local
     private Outcome _last;
+#pragma warning restore S1450
+    private (T Item, Outcome Outcome) _best;
 
     /// <summary>The failure to throw once <see cref="Objects"/> is done, or <see langword="null"/> when the property held for every object.</summary>
     public FakeCheckException<T>? Failure { get; private set; }
@@ -34,39 +37,48 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
             if (!_last.Failed)
                 continue;
 
-            var original = (Item: item, Outcome: _last);
-            var best = original;
-            var steps = 0;
-            if (maxShrinks > 0)
+            foreach (var simpler in Shrink(index, tape.Draws(), (item, _last)))
+                yield return simpler;
+            yield break;
+        }
+    }
+
+    /// <summary>Shrinks the failing object of <paramref name="index"/> from its <paramref name="draws"/>, then sets <see cref="Failure"/>.</summary>
+    private IEnumerable<T> Shrink(int index, ulong[] draws, (T Item, Outcome Outcome) original)
+    {
+        _best = original;
+        var steps = 0;
+        // The original object again from its own draws: when that differs (a Unique value that was taken by an earlier object), there is nothing to shrink from.
+        if (maxShrinks > 0 && TryReplay(index, draws, out var again, out _))
+        {
+            yield return again;
+            if (_last.SameFailureAs(original.Outcome))
             {
-                var shrinker = new TapeShrinker(tape.Draws(), maxShrinks);
-                // The original object again from its own draws: when that differs (a Unique value that was taken by an earlier object), there is nothing to shrink from.
-                if (TryReplay(index, shrinker.Best, out var again, out _))
-                {
-                    yield return again;
-                    if (_last.SameFailureAs(original.Outcome))
-                    {
-                        best = (again, _last);
-                        foreach (var candidate in shrinker.Candidates())
-                        {
-                            if (!TryReplay(index, candidate, out var simpler, out var used))
-                            {
-                                shrinker.Report(null);
-                                continue;
-                            }
+                _best = (again, _last);
+                var shrinker = new TapeShrinker(draws, maxShrinks);
+                foreach (var simpler in Candidates(index, shrinker, original.Outcome))
+                    yield return simpler;
+                steps = shrinker.Steps;
+            }
+        }
 
-                            yield return simpler;
-                            if (shrinker.Report(_last.SameFailureAs(original.Outcome) ? used : null))
-                                best = (simpler, _last);
-                        }
+        Failure = new FakeCheckException<T>(Message(index, original.Item, _best.Item, _best.Outcome, steps), _best.Outcome.Exception, seed.Value, index, index + 1, steps, original.Item, _best.Item);
+    }
 
-                        steps = shrinker.Steps;
-                    }
-                }
+    /// <summary>The objects of the shrinker's candidates; one that still fails like <paramref name="failure"/> and is simpler becomes the best one.</summary>
+    private IEnumerable<T> Candidates(int index, TapeShrinker shrinker, Outcome failure)
+    {
+        foreach (var candidate in shrinker.Candidates())
+        {
+            if (!TryReplay(index, candidate, out var simpler, out var used))
+            {
+                shrinker.Report(null);
+                continue;
             }
 
-            Failure = new FakeCheckException<T>(Message(index, original.Item, best.Item, best.Outcome, steps), best.Outcome.Exception, seed.Value, index, index + 1, steps, original.Item, best.Item);
-            yield break;
+            yield return simpler;
+            if (shrinker.Report(_last.SameFailureAs(failure) ? used : null))
+                _best = (simpler, _last);
         }
     }
 
@@ -95,7 +107,8 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
     {
         var name = typeof(T).Name;
         var because = outcome.Exception is { } exception ? $"{exception.GetType().Name}: {exception.Message}" : "the property returned false";
-        var shrunk = steps == 0 ? "could not be simplified" : $"shrunk in {steps} step{(steps == 1 ? "" : "s")}";
+        var stepWord = steps == 1 ? "step" : "steps";
+        var shrunk = steps == 0 ? "could not be simplified" : $"shrunk in {steps} {stepWord}";
         var text = new System.Text.StringBuilder()
             .Append(CultureInfo.InvariantCulture, $"The property failed for {name} number {index + 1} of {count} (seed {seed.Value}, {shrunk}).").AppendLine()
             .AppendLine("Counterexample:")
@@ -127,6 +140,14 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
 internal readonly record struct CheckSeed(long Value, CheckSeed.Origin From)
 {
     public enum Origin { Generator, Environment, Random }
+
+    /// <summary>The generator's own seed, else <c>PHONEY_SEED</c>, else a new random one.</summary>
+    public static CheckSeed Choose(long? own)
+    {
+        if (own is { } seed)
+            return new(seed, Origin.Generator);
+        return FakeSeed.FromEnvironment() is { } environment ? new(environment, Origin.Environment) : new(FakeSeed.New(), Origin.Random);
+    }
 
     /// <summary>How to run the same check again.</summary>
     public string Replay => From switch
