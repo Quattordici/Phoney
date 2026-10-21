@@ -63,6 +63,19 @@ public sealed class UnorderedIterationAnalyzerTests
     }
 
     [Test]
+    public async Task Spreading_keys_or_values_typed_as_an_interface_is_reported(CancellationToken cancellationToken)
+    {
+        // ConcurrentDictionary's Keys and Values are ICollection<T>, which is not an unordered type itself: the property says where they come from.
+        var diagnostics = await Diagnose("""
+            public static object A() => new List<string>([.. Concurrent.Keys]);
+            public static object B() => new List<int>([.. Concurrent.Values]);
+            public static object C() => new List<string>([.. List]);
+            """, cancellationToken);
+
+        diagnostics.Select(TextOf).ShouldBe(["Concurrent.Keys", "Concurrent.Values"]);
+    }
+
+    [Test]
     public async Task Sorted_order_insensitive_and_ordered_uses_are_not_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("""

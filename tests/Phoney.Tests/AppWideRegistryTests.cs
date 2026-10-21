@@ -109,12 +109,13 @@ public sealed class AppWideRegistryTests
     public void Clearing_the_conventions_affects_generators_compiled_afterwards() =>
         Restoring<FakeConventions>(() =>
         {
-            Fake.Conventions.Add<string>("LanyardColor", _ => "teal");
-            Fake.One<Lanyard>().LanyardColor.ShouldBe("teal");
+            const string FromConvention = "from the convention"; // not a color the built-in convention can draw ("teal" is one)
+            Fake.Conventions.Add<string>("LanyardColor", _ => FromConvention);
+            Fake.One<Lanyard>().LanyardColor.ShouldBe(FromConvention);
 
             Fake.Conventions.Clear();
 
-            Fake.One<Lanyard>().LanyardColor.ShouldNotBe("teal");
-            Fake.For<Lanyard>().Generate().LanyardColor.ShouldNotBe("teal");
+            Fake.One<Lanyard>().LanyardColor.ShouldNotBe(FromConvention);
+            Fake.For<Lanyard>().Generate().LanyardColor.ShouldNotBe(FromConvention);
         });
 }

@@ -25,6 +25,14 @@ public sealed class CodeFixTests
         }
         """;
 
+    [Test]
+    public void Making_classes_partial_can_be_fixed_everywhere_but_adding_models_cannot()
+    {
+        // Several PHONEY012 diagnostics for one type would each add the same [FakeFor], so that fix is offered one at a time.
+        new MakePartialCodeFix().GetFixAllProvider().ShouldBeSameAs(Microsoft.CodeAnalysis.CodeFixes.WellKnownFixAllProviders.BatchFixer);
+        new AddFakeForCodeFix().GetFixAllProvider().ShouldBeNull();
+    }
+
     private static async Task<(Project Project, Diagnostic Diagnostic)> Suggest(CancellationToken cancellationToken, params (string, string)[] documents)
     {
         var project = CodeFixHarness.CreateProject(documents);

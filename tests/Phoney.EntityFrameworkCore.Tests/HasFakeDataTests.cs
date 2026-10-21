@@ -88,6 +88,21 @@ public sealed class Crew
     public Crew? Lead { get; set; }
 }
 
+/// <summary>Both sides of a many-to-many link: EF maps the lists as skip navigations through a join table.</summary>
+public sealed class Course
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public List<Student> Students { get; set; } = [];
+}
+
+public sealed class Student
+{
+    public int Id { get; set; }
+    public string FirstName { get; set; } = "";
+    public List<Course> Courses { get; set; } = [];
+}
+
 public sealed class ShopContext(DbContextOptions<ShopContext> options, Action<ModelBuilder> seed) : DbContext(options)
 {
     public DbSet<Customer> Customers => Set<Customer>();
@@ -161,6 +176,27 @@ public sealed class HasFakeDataTests
         context.Authors.Count().ShouldBe(5);
         context.Books.Count().ShouldBe(10);
         authors.ShouldAllBe(a => a.Books.Count == 0); // a navigation is not seed data
+    }
+
+    [Test]
+    public void Many_to_many_navigations_are_not_filled()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        IReadOnlyList<Course> courses = [];
+        IReadOnlyList<Student> students = [];
+        using var context = Context(connection, mb =>
+        {
+            courses = mb.Entity<Course>().HasFakeData(4);
+            students = mb.Entity<Student>().HasFakeData(6);
+        });
+
+        context.Database.EnsureCreated().ShouldBeTrue();
+
+        context.Set<Course>().Count().ShouldBe(4);
+        context.Set<Student>().Count().ShouldBe(6);
+        courses.ShouldAllBe(c => c.Students.Count == 0 && c.Title.Length > 0); // skip navigations are not seed data
+        students.ShouldAllBe(s => s.Courses.Count == 0 && s.FirstName.Length > 0);
     }
 
     [Test]

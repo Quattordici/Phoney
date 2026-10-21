@@ -1,4 +1,7 @@
+using System.Collections.Immutable;
+using System.Collections.ObjectModel;
 using Phoney.Generation;
+using Phoney.Templates;
 
 namespace Phoney.Tests;
 
@@ -69,5 +72,31 @@ public sealed class PublicHelperTests
         generator.CollectionSize(0, 0).Seed(1).Generate()[0].ShouldBeOfType<List<string>>().ShouldBeEmpty(); // zero means none
         Should.Throw<ArgumentOutOfRangeException>(() => generator.CollectionSize(-1, 2)).ParamName.ShouldBe("min");
         Should.Throw<ArgumentOutOfRangeException>(() => generator.CollectionSize(3, 2)).ParamName.ShouldBe("max");
+    }
+
+    [Test]
+    public void A_collection_that_cannot_take_the_built_elements_says_what_to_use_instead()
+    {
+        // ReadOnlyCollection<T> is made from an IList<T> and ImmutableArray<T> from an IEnumerable<T>: neither takes a number.
+        Should.Throw<InvalidOperationException>(() => CollectionConverters.Create(typeof(ReadOnlyCollection<int>), typeof(HashSet<int>)))
+            .Message.ShouldContain("Use a List<T>, HashSet<T> or Dictionary<TKey, TValue> member");
+        Should.Throw<InvalidOperationException>(() => CollectionConverters.Create(typeof(ImmutableArray<int>), typeof(int)))
+            .Message.ShouldContain("ImmutableArray`1 is a collection Phoney builds");
+        CollectionConverters.Create(typeof(List<int>), typeof(List<int>)).ShouldBeNull(); // nothing to convert
+    }
+
+    [Test]
+    public void Template_functions_can_read_a_list_argument_as_their_own_array()
+    {
+        TemplateFunctions.Register("helperTests.joinReversed", (_, args) =>
+        {
+            var values = args.Strings(0);
+            Array.Reverse(values); // a copy: the parsed template keeps its values
+            return string.Join("-", values);
+        });
+        var faker = new Faker(seed: 1);
+
+        faker.Parse("{{helperTests.joinReversed([\"a\", \"b\", \"c\"])}}").ShouldBe("c-b-a");
+        faker.Parse("{{helperTests.joinReversed([\"a\", \"b\", \"c\"])}}").ShouldBe("c-b-a");
     }
 }
