@@ -102,10 +102,10 @@ internal static class ObjectDescription
         var model = !framework && ModelRegistry.CanGet(type) ? ModelRegistry.Get(type) : null;
         var readable = model?.Members.Select((member, index) => (member, index)).Where(m => m.member is { IsSettable: true } or { FillsExisting: true }).ToList();
         // A type the models can't read whole (a positional record, a framework type) describes itself better, when it overrides ToString.
-        var own = value.ToString();
-        if (readable is null || readable.Count == 0 || (readable.Count < model!.Members.Count && own != type.ToString()))
+        // Called only when the models can't read the object whole: a record's own ToString follows its members without cycle checks.
+        if (readable is null || readable.Count == 0 || (readable.Count < model!.Members.Count && value.ToString() is var own && own != type.ToString()))
         {
-            text.Append(own);
+            text.Append(value.ToString());
             return;
         }
 

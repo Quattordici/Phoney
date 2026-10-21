@@ -20,6 +20,18 @@ public sealed class CartLine
 
 public sealed record CheckedPoint(int X, int Y);
 
+public sealed record CheckedFolder
+{
+    public string Name { get; set; } = "";
+    public CheckedFile? Readme { get; set; }
+}
+
+public sealed record CheckedFile
+{
+    public string Name { get; set; } = "";
+    public CheckedFolder? Parent { get; set; }
+}
+
 [FakeFor<Cart>]
 public static partial class CheckFakes;
 
@@ -139,6 +151,26 @@ public sealed class PropertyCheckTests
     }
 
     [Test]
+    public void A_bool_property_that_throws_for_a_simpler_object_keeps_its_counterexample()
+    {
+        // Max throws for a cart without lines, which shrinking tries; that candidate is skipped, not the end of the check.
+        var failure = Falsify(Baskets(), b => b.Lines.Max(l => l.Quantity) < 40);
+
+        failure.InnerException.ShouldBeNull();
+        failure.Counterexample.Lines.Max(l => l.Quantity).ShouldBe(40);
+        failure.Counterexample.Lines.Count.ShouldBeLessThanOrEqualTo(failure.Original.Lines.Count);
+    }
+
+    [Test]
+    public void A_bool_property_that_throws_is_reported_with_its_exception()
+    {
+        var failure = Falsify(Baskets(), b => b.Lines.Max(l => l.Quantity) > 0);
+
+        failure.InnerException.ShouldBeOfType<InvalidOperationException>();
+        failure.Counterexample.Lines.ShouldBeEmpty();
+    }
+
+    [Test]
     public void Shrinking_keeps_to_the_kind_of_failure_it_started_with()
     {
         // Without its lines the cart throws another exception first; shrinking must not swap the failure it found for that one.
@@ -245,6 +277,14 @@ public sealed class PropertyCheckTests
 
         failure.Counterexample.Customer.ShouldBe($"C{failure.Index}");
         failure.Original.Customer.ShouldBe($"C{failure.Index}");
+    }
+
+    [Test]
+    public void A_counterexample_in_a_cycle_of_records_is_described_without_calling_their_ToString()
+    {
+        var failure = Should.Throw<FakeCheckException<CheckedFolder>>(() => Fake.For<CheckedFolder>().Seed(1).WithBackReferences().Check(f => f.Readme is null));
+
+        failure.Message.ShouldContain("Parent = …");
     }
 
     [Test]

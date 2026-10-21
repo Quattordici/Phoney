@@ -1043,7 +1043,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public void Check(Func<T, bool> property, int count = 100, int maxShrinks = 1000)
     {
         ArgumentNullException.ThrowIfNull(property);
-        Check(item => property(item) ? PropertyCheck<T>.Outcome.Passed : PropertyCheck<T>.Outcome.ReturnedFalse, count, maxShrinks);
+        Check(item => PropertyCheck<T>.Outcome.Of(() => property(item)), count, maxShrinks);
     }
 
     /// <summary>
@@ -1062,20 +1062,11 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentNullException.ThrowIfNull(property);
         Check(
-            item =>
+            item => PropertyCheck<T>.Outcome.Of(() =>
             {
-                try
-                {
-                    property(item);
-                    return PropertyCheck<T>.Outcome.Passed;
-                }
-#pragma warning disable CA1031 // any exception is the property failing; it becomes the inner exception of the report
-                catch (Exception e)
-                {
-                    return PropertyCheck<T>.Outcome.Threw(e);
-                }
-#pragma warning restore CA1031
-            },
+                property(item);
+                return true;
+            }),
             count,
             maxShrinks);
     }

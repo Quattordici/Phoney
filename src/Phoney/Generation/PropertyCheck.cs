@@ -128,6 +128,21 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
 
         public static Outcome Threw(Exception exception) => new(true, exception);
 
+        /// <summary>How <paramref name="property"/> does: an exception is a failure too, also for a property that returns a bool.</summary>
+        public static Outcome Of(Func<bool> property)
+        {
+            try
+            {
+                return property() ? Passed : ReturnedFalse;
+            }
+#pragma warning disable CA1031 // any exception is the property failing; it becomes the inner exception of the report
+            catch (Exception e)
+            {
+                return Threw(e);
+            }
+#pragma warning restore CA1031
+        }
+
         /// <summary>
         /// Whether this is the same kind of failure as <paramref name="original"/>: both returned false, or both threw the same exception type. Shrinking keeps
         /// to it, so it doesn't trade the bug it found for another one that a simpler object happens to hit.
