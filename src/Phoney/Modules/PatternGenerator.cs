@@ -77,7 +77,10 @@ internal sealed class PatternGenerator
     /// <summary>A node of the parsed pattern tree.</summary>
     private interface INode
     {
-        /// <summary>The most characters the node can append, saturated at <see cref="long.MaxValue"/>.</summary>
+        /// <summary>
+        /// The most characters the node can append, saturated at <see cref="long.MaxValue"/>; a repetition of something empty counts as one, because it still costs a
+        /// turn of the loop (<c>(){2000000000}</c> appends nothing but would take a minute).
+        /// </summary>
         long MaxLength { get; }
 
         /// <summary>Appends generated text.</summary>
@@ -143,10 +146,11 @@ internal sealed class PatternGenerator
         /// <inheritdoc />
         public long MaxLength { get; } = MultiplyLengths(node.MaxLength, max >= 0 ? max : (long)min + UnboundedExtra);
 
-        /// <summary><paramref name="length"/> × <paramref name="count"/>, saturated at <see cref="long.MaxValue"/>.</summary>
+        /// <summary><paramref name="length"/> (at least one per repetition) × <paramref name="count"/>, saturated at <see cref="long.MaxValue"/>.</summary>
         private static long MultiplyLengths(long length, long count)
         {
-            if (length == 0 || count == 0)
+            length = Math.Max(length, 1);
+            if (count == 0)
                 return 0;
             return length > long.MaxValue / count ? long.MaxValue : length * count;
         }
@@ -218,7 +222,7 @@ internal sealed class PatternGenerator
             {
                 throw new FormatException(
                     $"Invalid pattern '{Shortened(_pattern)}': it can produce up to {(node.MaxLength == long.MaxValue ? "more than 9 quintillion" : node.MaxLength.ToString("N0", CultureInfo.InvariantCulture))} " +
-                    $"characters, and the limit is {MaxOutputLength.ToString("N0", CultureInfo.InvariantCulture)}. Use smaller repetition counts.");
+                    $"characters or repetitions, and the limit is {MaxOutputLength.ToString("N0", CultureInfo.InvariantCulture)}. Use smaller repetition counts.");
             }
 
             return node;

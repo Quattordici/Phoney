@@ -33,6 +33,10 @@ public sealed class HostilePatternTests
     [Arguments("((a{1000}){1000}){1000}")]
     [Arguments("(\\d{100000}|x){1000}")]
     [Arguments("(a+){100000}")]
+    [Arguments("(){2000000000}")] // nothing repeated two billion times is two billion loop turns, so it counts like characters
+    [Arguments("(a{0}){2000000000}")]
+    [Arguments("((){100000}){100000}")]
+    [Arguments("(|){2000000000}")]
     public void Patterns_that_could_produce_gigabytes_are_refused_up_front(string pattern)
     {
         var watch = Stopwatch.StartNew();
@@ -46,6 +50,8 @@ public sealed class HostilePatternTests
     {
         Generate("a{100000}").Length.ShouldBe(100_000);
         Generate("(\\d{100}-){1000}").Length.ShouldBe(101_000);
+        Generate("(){100000}").ShouldBeEmpty();
+        Generate("a{0}").ShouldBeEmpty();
     }
 
     [Test]
