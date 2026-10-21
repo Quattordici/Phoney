@@ -35,6 +35,17 @@ public sealed class TemplateAndCustomizationTests
         _faker.Parse("{{person.firstName}}}").ShouldEndWith("}");
     }
 
+    // Only "{{" followed by a letter starts an expression, so text for another template engine is left for it.
+    [Test]
+    public void Tags_of_other_template_engines_pass_through()
+    {
+        const string Mustache = "{{#each items}}{{ name }} {{/each}} {\"a\":{\"b\":1}}";
+
+        _faker.Parse(Mustache).ShouldBe(Mustache);
+        _faker.Parse("{{ person.firstName }}|{{person.firstName}}").ShouldStartWith("{{ person.firstName }}|");
+        _faker.Parse("{{ person.firstName }}|{{person.firstName}}").ShouldNotEndWith("{{person.firstName}}");
+    }
+
     // An apostrophe in a plain-text argument is not a quote: two of them used to join the expressions between them into one.
     [Test]
     public void Apostrophes_in_plain_arguments_do_not_join_expressions() =>
