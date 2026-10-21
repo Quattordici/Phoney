@@ -146,7 +146,6 @@ internal sealed class Template
         }
     }
 
-    /// <summary>Index of the next <c>{{</c> followed by a letter, or -1.</summary>
     /// <summary>
     /// The <c>}}</c> that closes the expression starting at <paramref name="from"/>: braces inside its arguments (<c>{length: {min: 2, max: 5}}</c>,
     /// a <c>}}</c> in quoted text) don't end it, so options can hold objects. -1 when there is none; the text is then literal, as before.
@@ -161,12 +160,7 @@ internal sealed class Template
             var c = text[i];
             if (quote != '\0')
             {
-                if (escaped)
-                    escaped = false;
-                else if (c == '\\')
-                    escaped = true;
-                else if (c == quote)
-                    quote = '\0';
+                quote = InQuote(c, quote, ref escaped);
             }
             else if (depth > 0 && c is '"' or '\'' && StartsValue(text, i, from))
             {
@@ -189,6 +183,18 @@ internal sealed class Template
         return text.IndexOf("}}", from, StringComparison.Ordinal); // unbalanced: end where the expression ended before, so its error stays the same
     }
 
+    /// <summary>The quote that is still open after <paramref name="c"/> inside quoted text, or <c>'\0'</c> when <paramref name="c"/> closes it.</summary>
+    private static char InQuote(char c, char quote, ref bool escaped)
+    {
+        if (escaped)
+            escaped = false;
+        else if (c == '\\')
+            escaped = true;
+        else if (c == quote)
+            return '\0';
+        return quote;
+    }
+
     /// <summary>
     /// Whether a quote at <paramref name="index"/> can open a JavaScript or JSON string: after an opening bracket, a separator or a key's colon (spaces
     /// skipped). Elsewhere it is part of plain text, like the apostrophe in <c>helpers.slugify(don't)</c>.
@@ -204,6 +210,7 @@ internal sealed class Template
         return false;
     }
 
+    /// <summary>Index of the next <c>{{</c> followed by a letter, or -1.</summary>
     private static int FindExpressionStart(string text, int from)
     {
         var index = text.IndexOf("{{", from, StringComparison.Ordinal);

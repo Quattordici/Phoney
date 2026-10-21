@@ -217,11 +217,8 @@ public sealed class TemplateArgs
     private static (int Min, int Max) RangeOf(JsonElement range, string? option)
     {
         var where = option is null ? "A range" : $"The range of '{option}'";
-        if (option is not null)
-        {
-            if (range.EnumerateObject().Select(property => property.Name).FirstOrDefault(name => name is not ("min" or "max")) is { } other)
-                throw new FormatException($"{where} takes only 'min' and 'max', not '{other}'.");
-        }
+        if (option is not null && range.EnumerateObject().Select(property => property.Name).FirstOrDefault(name => name is not ("min" or "max")) is { } other)
+            throw new FormatException($"{where} takes only 'min' and 'max', not '{other}'.");
 
         var min = Bound(range, "min", where);
         var max = Bound(range, "max", where);
