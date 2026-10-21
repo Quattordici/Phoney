@@ -1017,6 +1017,149 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         return result;
     }
 
+    /// <summary>
+    /// Checks that <paramref name="property"/> holds for <paramref name="count"/> generated objects, property-based testing style. When it returns
+    /// <see langword="false"/> for one, the object is <em>shrunk</em>: generated again from simpler draws until no simpler object fails, and a
+    /// <see cref="FakeCheckException{T}"/> reports that counterexample, the original, the seed and how to replay it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every candidate is made by this generator, so shrinking never leaves your rules, annotations and conventions: a counterexample is an object the
+    /// generator could have made, with fewer collection elements, shorter texts, smaller numbers and earlier list values, and its names, email and dates still
+    /// agree. Shrinking keeps to the kind of failure it started with (returning <see langword="false"/>, or the same exception type), and is deterministic.
+    /// </para>
+    /// <para>
+    /// The seed is the generator's <see cref="Seed"/>, else <c>PHONEY_SEED</c>, else a new random one that the failure reports. The objects are those
+    /// <see cref="Generate(int)"/> makes for that seed from position 0, and the generator's own sequence doesn't move.
+    /// </para>
+    /// </remarks>
+    /// <example><code>Fake.For&lt;Order&gt;().Check(order =&gt; Pricing.Total(order) &gt;= 0);</code></example>
+    /// <param name="property">What must hold for every object.</param>
+    /// <param name="count">How many objects to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler objects shrinking may try; 0 reports the original object.</param>
+    /// <exception cref="FakeCheckException{T}">The property failed for an object.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    public void Check(Func<T, bool> property, int count = 100, int maxShrinks = 1000)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        Check(item => property(item) ? PropertyCheck<T>.Outcome.Passed : PropertyCheck<T>.Outcome.ReturnedFalse, count, maxShrinks);
+    }
+
+    /// <summary>
+    /// Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated objects, so assertions of any test framework can be the
+    /// property: <c>Check(order =&gt; Pricing.Total(order).ShouldBeGreaterThanOrEqualTo(0))</c>. A failing object is shrunk as for
+    /// <see cref="Check(Func{T, bool}, int, int)"/>, and the exception the property threw for the counterexample is the
+    /// <see cref="Exception.InnerException"/>.
+    /// </summary>
+    /// <param name="property">The assertions for one object.</param>
+    /// <param name="count">How many objects to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler objects shrinking may try; 0 reports the original object.</param>
+    /// <exception cref="FakeCheckException{T}">The property threw for an object.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    public void Check(Action<T> property, int count = 100, int maxShrinks = 1000)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        Check(
+            item =>
+            {
+                try
+                {
+                    property(item);
+                    return PropertyCheck<T>.Outcome.Passed;
+                }
+#pragma warning disable CA1031 // any exception is the property failing; it becomes the inner exception of the report
+                catch (Exception e)
+                {
+                    return PropertyCheck<T>.Outcome.Threw(e);
+                }
+#pragma warning restore CA1031
+            },
+            count,
+            maxShrinks);
+    }
+
+    /// <summary>
+    /// The asynchronous form of <see cref="Check(Action{T}, int, int)"/>, for properties that await (TUnit's assertions, a service under test): a
+    /// property fails when its task faults, and a failing object is shrunk the same way.
+    /// </summary>
+    /// <param name="property">The asynchronous assertions for one object.</param>
+    /// <param name="count">How many objects to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler objects shrinking may try; 0 reports the original object.</param>
+    /// <param name="cancellationToken">Stops the check between objects.</param>
+    /// <exception cref="FakeCheckException{T}">The property failed for an object.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public async Task CheckAsync(Func<T, Task> property, int count = 100, int maxShrinks = 1000, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        var check = StartCheck(count, maxShrinks, out var checking);
+        foreach (var item in check.Objects())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await property(item).ConfigureAwait(false);
+                check.Report(PropertyCheck<T>.Outcome.Passed);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+#pragma warning disable CA1031 // any exception is the property failing; it becomes the inner exception of the report
+            catch (Exception e)
+            {
+                check.Report(PropertyCheck<T>.Outcome.Threw(e));
+            }
+#pragma warning restore CA1031
+        }
+
+        EndCheck(check, checking, count);
+    }
+
+    /// <summary>The synchronous check: every object of <see cref="PropertyCheck{T}.Objects"/> through <paramref name="evaluate"/>.</summary>
+    private void Check(Func<T, PropertyCheck<T>.Outcome> evaluate, int count, int maxShrinks)
+    {
+        var check = StartCheck(count, maxShrinks, out var checking);
+        foreach (var item in check.Objects())
+            check.Report(evaluate(item));
+        EndCheck(check, checking, count);
+    }
+
+    /// <summary>
+    /// Prepares a check on a copy of this generator with the check's seed, so the objects are those of positions 0, 1, 2… and this generator's sequence
+    /// doesn't move. Shrinking makes an object again from a tape at its position; a fresh copy per candidate when uniqueness is tracked, so values taken
+    /// by earlier candidates don't count.
+    /// </summary>
+    private PropertyCheck<T> StartCheck(int count, int maxShrinks, out ObjectGenerator<T> checking)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxShrinks);
+        var seed = _config.Seed is { } own ? new CheckSeed(own, CheckSeed.Origin.Generator)
+            : FakeSeed.FromEnvironment() is { } environment ? new CheckSeed(environment, CheckSeed.Origin.Environment)
+            : new CheckSeed(FakeSeed.New(), CheckSeed.Origin.Random);
+        var generator = checking = Derive(_config with { Seed = seed.Value });
+        var tracksUniqueness = !_config.Unique.IsEmpty || !_config.UniqueKeys.IsEmpty;
+        Run? run = null;
+        return new PropertyCheck<T>(
+            (index, tape) => (run ??= generator.Start()).CreateOnTape(index, tape),
+            (index, tape) => (tracksUniqueness ? generator.Derive(generator._config).Start() : run ??= generator.Start()).CreateOnTape(index, tape),
+            count,
+            maxShrinks,
+            seed);
+    }
+
+    /// <summary>Throws the failure of a check, or verifies the rules when the property held for every object.</summary>
+    private static void EndCheck(PropertyCheck<T> check, ObjectGenerator<T> checking, int count)
+    {
+        if (check.Failure is { } failure)
+            throw failure;
+        if (count > 0)
+            checking.VerifyUsage();
+    }
+
     /// <summary>The item seed of <paramref name="key"/>: from the key and the configured seed only (never the random base seed of an unseeded generator), so it is stable everywhere.</summary>
     private long KeyedSeed(string key)
     {
@@ -1128,7 +1271,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // A new faker per run, never a pooled one: rules, AfterCreate actions, conventions and Stream() enumerators can keep the faker, and a
         // pooled faker would be reseeded under them by later runs, silently changing seeded data (a nested run also needs its own while the parent's
         // is in use). The facade's per-call cost is in compiling rules, which Fresh() shares; keep a generator to avoid the faker too.
-        var faker = new Faker(data, new SeededRandom(0));
+        var faker = new Faker(data, new SeededRandom(0) { Tape = parentFaker?.Random.Tape }); // a nested object's draws belong to the checked object's tape
         // Explicit date, else the configured clock, else the parent's date (nested generators), else a fixed date for
         // seeded generators so their relative dates don't drift with the clock; unseeded generators use the current time.
         if (_config.ReferenceDate is null && _config.TimeProvider is { } clock)
@@ -1455,6 +1598,20 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>One generation run: a faker reused for every item, reseeded per item for order-independent results.</summary>
     private sealed class Run(ObjectGenerator<T> generator, Compiled compiled, Faker faker, long seed)
     {
+        /// <summary>Creates item <paramref name="index"/> with its draws recorded on, or replayed from, <paramref name="tape"/>.</summary>
+        public T CreateOnTape(long index, ChoiceTape tape)
+        {
+            faker.Random.Tape = tape;
+            try
+            {
+                return Create(index);
+            }
+            finally
+            {
+                faker.Random.Tape = null;
+            }
+        }
+
         /// <summary>Creates item <paramref name="index"/>; its seed depends only on the base seed and the index (and the attempt, when a condition rejects an object).</summary>
         public T Create(long index, FakeScope? parent = null) => CreateFrom(index, parent, SeededRandom.DeriveSeed(seed, index));
 

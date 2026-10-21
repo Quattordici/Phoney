@@ -200,6 +200,17 @@ if (average is < 980 or > 1020)
     throw new InvalidOperationException($"normal distribution off: {average}");
 Check(faker.Number.Normal<decimal>(100, 15, min: 50, max: 150).ToString(System.Globalization.CultureInfo.InvariantCulture), "normal decimal");
 
+// A property check shrinks through the generated model and describes the counterexample without reflection.
+try
+{
+    Fakes.Person.Seed(14).Check(p => p.Pets.Count < 2);
+    throw new InvalidOperationException("the property check passed");
+}
+catch (FakeCheckException<Person> failure) when (failure.Counterexample.Pets.Count == 2 && failure.Message.Contains("Pets = [", StringComparison.Ordinal))
+{
+    Check(failure.Counterexample.Email, "shrunk counterexample");
+}
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 

@@ -68,9 +68,16 @@ public sealed class SeededRandom
         return (long)SplitMix64(ref hash);
     }
 
+    /// <summary>The tape that records or replays this randomizer's draws while <c>ObjectGenerator&lt;T&gt;.Check</c> runs; <see langword="null"/> otherwise.</summary>
+    internal ChoiceTape? Tape { get; set; }
+
     /// <summary>Returns 64 random bits.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ulong NextUInt64()
+    public ulong NextUInt64() => Tape is { } tape ? tape.Next(this) : NextState();
+
+    /// <summary>Advances the xoshiro256** state and returns its 64 bits.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ulong NextState()
     {
         var result = BitOperations.RotateLeft(_s1 * 5, 7) * 9;
         var t = _s1 << 17;
