@@ -51,6 +51,18 @@ public sealed class CountryPairTests
     }
 
     [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public void A_country_from_a_rule_decides_the_code(bool generated)
+    {
+        Shipments(generated).With(s => s.Country, "Norway").Generate(20).ShouldAllBe(s => s.CountryCode == "NO");
+        Shipments(generated).With(s => s.CountryCode, "JP").Generate(20).ShouldAllBe(s => s.Country == "Japan"); // a constant counts in any member order
+        Consignments(generated).With(c => c.Country, "Norway").Generate(20).ShouldAllBe(c => c.CountryCode == "NO");
+        Shipments(generated).With(s => s.Country, f => f.Random.Element<string>(["Norway", "Japan"])).Generate(50)
+            .ShouldAllBe(s => CountryNames.CodeOf(s.Country) == s.CountryCode); // a factory when the country comes first
+    }
+
+    [Test]
     public void Generated_and_reflection_models_agree() =>
         Shipments(generated: false).Generate(50).Select(s => (s.Country, s.CountryCode, s.City, s.Notes))
             .ShouldBe(Shipments(generated: true).Generate(50).Select(s => (s.Country, s.CountryCode, s.City, s.Notes)));

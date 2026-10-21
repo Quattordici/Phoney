@@ -63,6 +63,12 @@ internal enum GivenValue
 
     /// <summary>The person's age.</summary>
     Age,
+
+    /// <summary>The address's country name.</summary>
+    Country,
+
+    /// <summary>The address's country code.</summary>
+    CountryCode,
 }
 
 /// <summary>A rule bound to a member index for one compiled generator.</summary>
@@ -131,6 +137,8 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
                 {
                     ConventionKind.PastDate => GivenValue.Created,
                     ConventionKind.Age => GivenValue.Age,
+                    ConventionKind.Country => GivenValue.Country,
+                    ConventionKind.CountryCode => GivenValue.CountryCode,
                     _ => GivenValue.None,
                 };
             }
@@ -198,14 +206,47 @@ public sealed class FakeScope
     internal Identity Identity => _identity ??= CreateIdentity();
 
     /// <summary>
-    /// Creates the identity; an age a constant rule gives is handed to it first, so the birthdate is drawn for that age even when the birthdate is
-    /// declared before the age. A constant draws nothing, so taking it early moves no draws.
+    /// Creates the identity; an age, country or country code a constant rule gives is handed to it first, so the birthdate is drawn for that age and the
+    /// other country member matches even when it is declared first. A constant draws nothing, so taking it early moves no draws.
     /// </summary>
     private Identity CreateIdentity()
     {
-        if (_slots is not null && System.Array.Find(_slots, static slot => slot is { Gives: GivenValue.Age, Kind: RuleKind.Constant }) is { } constant)
-            GiveAge(constant.Value);
+        foreach (var slot in _slots ?? [])
+        {
+            if (slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode })
+                GiveIdentity(slot.Gives, slot.Value);
+        }
+
         return new Identity(Faker, _hints);
+    }
+
+    /// <summary>Hands a value a rule gives to the identity (see <see cref="GiveAge"/> and <see cref="GiveCountry"/>).</summary>
+    private void GiveIdentity(GivenValue given, object? value)
+    {
+        if (given == GivenValue.Age)
+            GiveAge(value);
+        else
+            GiveCountry(given, value);
+    }
+
+    /// <summary>
+    /// Makes a given country name or code the one the other country member of the object matches, while that one isn't produced yet. The first one counts.
+    /// </summary>
+    private void GiveCountry(GivenValue given, object? value)
+    {
+        if (value is not string { Length: > 0 } text)
+            return;
+        if (_identity is { } identity)
+        {
+            identity.GiveCountry(given == GivenValue.Country ? text : null, given == GivenValue.CountryCode ? text : null);
+            return;
+        }
+
+        var hints = _hints ??= new IdentityHints();
+        if (given == GivenValue.Country)
+            hints.Country ??= text;
+        else
+            hints.CountryCode ??= text;
     }
 
     /// <summary>
@@ -488,8 +529,8 @@ public sealed class FakeScope
             (_keyParts ??= [])[member] = value;
         if (slot.Gives == GivenValue.Created)
             GiveCreated(value);
-        else if (slot.Gives == GivenValue.Age)
-            GiveAge(value);
+        else if (slot.Gives != GivenValue.None)
+            GiveIdentity(slot.Gives, value);
         return value;
     }
 
@@ -922,6 +963,15 @@ internal sealed class Identity(Faker faker, IdentityHints? hints)
     {
         if (_birthDate is null)
             _age ??= age;
+    }
+
+    /// <summary>Makes a country name or code the object is given the one the other country member matches, when no country or code is known yet.</summary>
+    public void GiveCountry(string? country, string? code)
+    {
+        if (_country is not null || _countryCode is not null)
+            return;
+        _country = country;
+        _countryCode = code;
     }
 
     /// <summary>Age in whole years at the reference date, matching <see cref="BirthDate"/>.</summary>
