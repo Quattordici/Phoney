@@ -45,6 +45,20 @@ public sealed class NodaTimeRelativeValueTests
     }
 
     [Test]
+    public void A_seed_gives_the_values_it_always_gave()
+    {
+        // The comparison above would pass if the core values moved too; these are recorded.
+        var noda = Faker(3).Noda();
+
+        string.Join(" | ",
+            noda.Instant.Anytime().ToString(),
+            noda.LocalDate.Future(2).ToString("uuuu-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            noda.LocalDateTime.Recent(3).ToString("uuuu-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+            noda.ZonedDateTime.Soon(3, PlusTwo).ToString("uuuu-MM-ddTHH:mm:ss o<g>", System.Globalization.CultureInfo.InvariantCulture))
+            .ShouldBe("2025-10-18T03:58:58Z | 2026-09-11 | 2025-05-29T15:42:53 | 2025-06-02T16:26:43 +02");
+    }
+
+    [Test]
     public void Relative_values_are_on_the_right_side_of_the_reference_date()
     {
         var noda = Faker(5).Noda();

@@ -45,6 +45,8 @@ public sealed class FakeFacadeTests
         using var _ = Fake.Seeded(77, "de");
 
         Fake.Animal.Dog().ShouldBe(expected.Animal.Dog());
+        expected.Animal.Dog().ShouldBe("Catahoula Leopard Dog"); // and the values themselves are the ones this seed has always given
+        Fake.Animal.Dog().ShouldBe("Catahoula Leopard Dog");
         Fake.Vehicle.Fuel().ShouldBe(expected.Vehicle.Fuel());
         Fake.Random.Int(0, 1000).ShouldBe(expected.Random.Int(0, 1000));
         Fake.Parse("{{person.firstName}} {{location.city}}").ShouldBe(expected.Parse("{{person.firstName}} {{location.city}}"));

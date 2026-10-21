@@ -118,6 +118,32 @@ public sealed class EveryLocaleTests
         Generated(locale).Generate(3).Select(Describe).ShouldBe(Generated(locale).Generate(3).Select(Describe), locale);
     }
 
+    /// <summary>
+    /// The first person seed 11 gives in a few scripts, as recorded: the comparisons above would still pass if a change moved every seed's data alike.
+    /// <see cref="CurrentCultureTests"/> checks the same values under other cultures.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> RecordedPeople = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["en"] = "Jose Torphy <Jose_Torphy@yahoo.com> Reaganworth",
+        ["de"] = "Levent Szendrei <Levent_Szendrei@yahoo.com> Nikitaland",
+        ["ja"] = "正雄 谷口 <l7nts4_rp3gkj@softbank.ne.jp> 港泉村",
+        ["ar"] = "إياس جاوحدو <a191yas_jawhdw69@yahoo.com> بنغازي",
+    };
+
+    public static IEnumerable<string> RecordedLocales() => RecordedPeople.Keys.Order(StringComparer.Ordinal);
+
+    /// <summary>The first person seed 11 gives in <paramref name="locale"/>, in one line.</summary>
+    internal static string FirstPerson(string locale)
+    {
+        var profile = Generated(locale).Generate();
+        return $"{profile.FirstName} {profile.LastName} <{profile.Email}> {profile.Address.City}";
+    }
+
+    [Test]
+    [MethodDataSource(nameof(RecordedLocales))]
+    public void A_seed_gives_the_data_it_always_gave(string locale) =>
+        FirstPerson(locale).ShouldBe(RecordedPeople[locale]);
+
     [Test]
     [MethodDataSource(typeof(TestLocales), nameof(TestLocales.All))]
     public void The_facade_and_a_seeded_scope_use_the_locale(string locale)

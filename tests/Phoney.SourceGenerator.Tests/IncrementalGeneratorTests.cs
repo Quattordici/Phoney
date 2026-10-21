@@ -63,7 +63,7 @@ public sealed class IncrementalGeneratorTests
         var reasons = OutputReasons(driver);
         reasons.ShouldNotBeEmpty();
         reasons.ShouldAllBe(r => r == IncrementalStepRunReason.Cached || r == IncrementalStepRunReason.Unchanged);
-        driver.GetRunResult().Diagnostics.Select(d => (d.Id, d.Location.SourceSpan)).ShouldBe(first.Diagnostics.Select(d => (d.Id, d.Location.SourceSpan)));
+        driver.GetRunResult().Diagnostics.Select(Describe).ShouldBe(first.Diagnostics.Select(Describe));
         driver.GetRunResult().Results.Single().GeneratedSources.Select(s => s.SourceText.ToString())
             .ShouldBe(first.Results.Single().GeneratedSources.Select(s => s.SourceText.ToString()));
     }
@@ -82,4 +82,8 @@ public sealed class IncrementalGeneratorTests
         OutputReasons(driver).ShouldContain(IncrementalStepRunReason.Modified);
         driver.GetRunResult().Results.Single().GeneratedSources.ShouldContain(s => s.SourceText.ToString().Contains("\"Age\"", StringComparison.Ordinal));
     }
+
+    /// <summary>Everything that tells two diagnostics apart: id, file, span, severity and message.</summary>
+    private static (string Id, string Path, Microsoft.CodeAnalysis.Text.TextSpan Span, DiagnosticSeverity Severity, string Message) Describe(Diagnostic diagnostic) =>
+        (diagnostic.Id, diagnostic.Location.SourceTree?.FilePath ?? "", diagnostic.Location.SourceSpan, diagnostic.Severity, diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture));
 }

@@ -58,6 +58,7 @@ public sealed class LocaleBuilderTests
         var dogs = Enumerable.Range(0, 1000).Select(_ => faker.Animal.Dog()).ToList();
         dogs.Count(d => d == "Tax").ShouldBeInRange(850, 950);
         dogs.Count(d => d == "Pudel").ShouldBeInRange(50, 150);
+        dogs.Count(d => d == "Tax").ShouldBe(892); // the exact count for this seed, so a change in how weights are drawn shows
 
         var removed = Register("en_builder_weighted_removed", l => l.SetWeighted("animal.dog", ("Tax", 1)).SetWeighted("animal.dog"));
         removed.Data.Get("animal.dog").ShouldBeSameAs(Locales.Data("en").Get("animal.dog"));

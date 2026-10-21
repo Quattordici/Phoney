@@ -82,6 +82,14 @@ public sealed class CurrentCultureTests
 
     [Test]
     [MethodDataSource(nameof(CultureNames))]
+    public void Recorded_people_are_the_same_under_every_culture(string culture)
+    {
+        foreach (var (locale, expected) in EveryLocaleTests.RecordedPeople)
+            In(culture, () => EveryLocaleTests.FirstPerson(locale)).ShouldBe(expected, $"{locale} under {culture}");
+    }
+
+    [Test]
+    [MethodDataSource(nameof(CultureNames))]
     public void A_culture_resolves_to_a_locale_of_its_language(string culture) =>
         new Faker(new CultureInfo(culture)).Locale.ShouldStartWith(culture[..2]);
 }
