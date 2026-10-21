@@ -117,6 +117,7 @@ public sealed class ReflectionOnlyGraphTests
         var reflected = Seats(new ObjectGenerator<Seat>(new ReflectionModel<Seat>())).Generate(60);
 
         generated.Select(s => (s.Row, s.Number)).Distinct().Count().ShouldBe(60);
+        generated.Take(3).Select(s => (s.Row, s.Number, s.Holder)).ShouldBe([(4, 5, "textilis"), (3, 1, "eaque"), (5, 4, "cavus")]); // what seed 8 has always given
         reflected.Select(s => (s.Row, s.Number, s.Holder)).ShouldBe(generated.Select(s => (s.Row, s.Number, s.Holder)));
     }
 

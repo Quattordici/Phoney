@@ -197,6 +197,7 @@ public sealed class HasFakeDataTests
         context.Set<Student>().Count().ShouldBe(6);
         courses.ShouldAllBe(c => c.Students.Count == 0 && c.Title.Length > 0); // skip navigations are not seed data
         students.ShouldAllBe(s => s.Courses.Count == 0 && s.FirstName.Length > 0);
+        (courses[0].Title, students[0].FirstName).ShouldBe(("Bene tolero varius verecundia", "Lillian")); // the stable seed of HasFakeData gives these every time
     }
 
     [Test]
