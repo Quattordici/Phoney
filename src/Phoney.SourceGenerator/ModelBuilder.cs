@@ -116,7 +116,6 @@ internal sealed class ModelBuilder
     private readonly List<DiagnosticInfo> _diagnostics;
     private readonly Queue<INamedTypeSymbol> _queue = new();
     private readonly HashSet<INamedTypeSymbol> _seen = new(SymbolEqualityComparer.Default);
-    private LocationInfo _location;
 
     public ModelBuilder(Compilation compilation, INamedTypeSymbol owner, List<DiagnosticInfo> diagnostics, LocationInfo location)
         : this(compilation, owner, owner.Name, diagnostics, location)
@@ -130,15 +129,11 @@ internal sealed class ModelBuilder
         _owner = owner;
         _ownerName = ownerName;
         _diagnostics = diagnostics;
-        _location = location;
+        DiagnosticLocation = location;
     }
 
     /// <summary>Where diagnostics for the types built next are reported.</summary>
-    public LocationInfo DiagnosticLocation
-    {
-        get => _location;
-        set => _location = value;
-    }
+    public LocationInfo DiagnosticLocation { get; set; }
 
     /// <summary>Models built so far, requested types first.</summary>
     public List<TypeModel> Models { get; } = new();
@@ -298,7 +293,7 @@ internal sealed class ModelBuilder
     /// <summary>Reports PHONEY002 for a type that cannot be generated.</summary>
     private TypeModel? Skip(INamedTypeSymbol type, string reason)
     {
-        _diagnostics.Add(new DiagnosticInfo(Diagnostics.CannotGenerate, _location, type.ToDisplayString(), reason));
+        _diagnostics.Add(new DiagnosticInfo(Diagnostics.CannotGenerate, DiagnosticLocation, type.ToDisplayString(), reason));
         return null;
     }
 

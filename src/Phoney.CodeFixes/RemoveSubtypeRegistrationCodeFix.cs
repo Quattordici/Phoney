@@ -32,15 +32,17 @@ public sealed class RemoveSubtypeRegistrationCodeFix : CodeFixProvider
         if (root is null || attribute?.Parent is not AttributeListSyntax list)
             return;
 
-        // The only attribute in its list takes the brackets with it; the leading trivia (indentation, doc comments) stays.
-        var updated = list.Attributes.Count == 1
-            ? root.RemoveNode(list, SyntaxRemoveOptions.KeepLeadingTrivia)
-            : root.RemoveNode(attribute, SyntaxRemoveOptions.KeepNoTrivia);
-        if (updated is null)
-            return;
-
         context.RegisterCodeFix(
-            CodeAction.Create($"Remove '[{attribute}]'", _ => Task.FromResult(context.Document.WithSyntaxRoot(updated)), EquivalenceKey),
+            CodeAction.Create($"Remove '[{attribute}]'", _ => Task.FromResult(context.Document.WithSyntaxRoot(Remove(root, list, attribute))), EquivalenceKey),
             context.Diagnostics);
     }
+
+    /// <summary>
+    /// Removes <paramref name="attribute"/>; the only attribute in its list takes the brackets with it, keeping the leading trivia
+    /// (indentation, doc comments). <c>RemoveNode</c> only returns <see langword="null"/> for the root, which an attribute never is.
+    /// </summary>
+    private static SyntaxNode Remove(SyntaxNode root, AttributeListSyntax list, AttributeSyntax attribute) =>
+        list.Attributes.Count == 1
+            ? root.RemoveNode(list, SyntaxRemoveOptions.KeepLeadingTrivia)!
+            : root.RemoveNode(attribute, SyntaxRemoveOptions.KeepNoTrivia)!;
 }

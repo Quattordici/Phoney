@@ -322,4 +322,119 @@ public sealed class UsageCodeFixTests
         fix.Title.ShouldBe($"Remove '[{attribute}]'");
         (await fix.TextOf("Shapes.cs", cancellationToken)).ShouldBe(header + expected);
     }
+
+    // Fix-all support and diagnostics a fix can't act on
+
+    [Test]
+    public void Fixes_that_can_apply_together_support_fix_all()
+    {
+        Microsoft.CodeAnalysis.CodeFixes.CodeFixProvider[] batched =
+            [new IgnoreUncoveredMembersCodeFix(), new UseReturnedValueCodeFix(), new RemoveReplacedRuleCodeFix(), new RemoveSubtypeRegistrationCodeFix()];
+        foreach (var provider in batched)
+            provider.GetFixAllProvider().ShouldBeSameAs(Microsoft.CodeAnalysis.CodeFixes.WellKnownFixAllProviders.BatchFixer);
+    }
+
+    private const string Unfixable = """
+        public static class Usage
+        {
+            public static Gadget A() => Make();
+
+            private static Gadget Make() => new();
+        }
+        """;
+
+    /// <summary>A diagnostic made by hand at the first occurrence of <paramref name="at"/>, as a stale or foreign diagnostic could be.</summary>
+    private static async Task<Diagnostic> Handmade(Project project, string id, string at, string? additional = null, ImmutableDictionary<string, string?>? properties = null)
+    {
+        var tree = (await project.Documents.Single().GetSyntaxTreeAsync())!;
+        var text = tree.ToString();
+        Location LocationOf(string part) => Location.Create(tree, new Microsoft.CodeAnalysis.Text.TextSpan(text.IndexOf(part, StringComparison.Ordinal), part.Length));
+        IEnumerable<Location>? additionalLocations = additional is null ? null : [LocationOf(additional)];
+        return Diagnostic.Create(new DiagnosticDescriptor(id, id, "", "Phoney", DiagnosticSeverity.Warning, true), LocationOf(at), additionalLocations, properties);
+    }
+
+    [Test]
+    public async Task Ignore_fix_needs_the_member_names_and_a_Strict_call(CancellationToken cancellationToken)
+    {
+        var (project, _) = Project(Unfixable);
+        var members = ImmutableDictionary<string, string?>.Empty.Add("Members", "Alpha");
+
+        (await CodeFixHarness.Fixes(project, new IgnoreUncoveredMembersCodeFix(), await Handmade(project, "PHONEY004", "Make()"), cancellationToken)).ShouldBeEmpty();
+        (await CodeFixHarness.Fixes(project, new IgnoreUncoveredMembersCodeFix(), await Handmade(project, "PHONEY004", "Usage", properties: members), cancellationToken)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Remove_replaced_rule_fix_needs_the_replaced_call(CancellationToken cancellationToken)
+    {
+        var (project, _) = Project(Unfixable);
+
+        (await CodeFixHarness.Fixes(project, new RemoveReplacedRuleCodeFix(), await Handmade(project, "PHONEY008", "Make()"), cancellationToken)).ShouldBeEmpty();
+        // The replaced call must be a member call (receiver.With(...)), so there is a receiver to keep.
+        (await CodeFixHarness.Fixes(project, new RemoveReplacedRuleCodeFix(), await Handmade(project, "PHONEY008", "Usage", additional: "Make()"), cancellationToken)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Remove_subtype_fix_needs_an_attribute(CancellationToken cancellationToken)
+    {
+        var (project, _) = Project(Unfixable);
+
+        (await CodeFixHarness.Fixes(project, new RemoveSubtypeRegistrationCodeFix(), await Handmade(project, "PHONEY009", "Usage"), cancellationToken)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Seeded_scope_names_avoid_every_name_the_member_declares(CancellationToken cancellationToken)
+    {
+        var (project, diagnostics) = await Diagnose("""
+            public static class Usage
+            {
+                public static void F(int seeded)
+                {
+                    Func<int, int> f = _ => 1;
+                    int.TryParse("1", out var seeded2);
+                    foreach (var item in new int[0]) { }
+                    try { } catch (Exception e) { }
+                    void Local() { }
+                    Fake.Seeded(1);
+                }
+
+                public static void G() { IDisposable a = Fake.Seeded(1), b = Fake.Seeded(2); }
+            }
+            """, new UsageAnalyzer(), "PHONEY006", cancellationToken);
+        diagnostics.Length.ShouldBe(3);
+        var provider = new DisposeSeededScopeCodeFix();
+
+        var fix = await SingleFix(project, provider, diagnostics[0], cancellationToken);
+        (await fix.TextOf("Usage.cs", cancellationToken)).ShouldContain("using var seeded3 = Fake.Seeded(1);");
+        await ShouldCompile(fix.Result, cancellationToken);
+
+        // A declaration of several variables can't become one using declaration.
+        (await CodeFixHarness.Fixes(project, provider, diagnostics[1], cancellationToken)).ShouldBeEmpty();
+        (await CodeFixHarness.Fixes(project, provider, diagnostics[2], cancellationToken)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Populated_structs_are_assigned_back_to_writable_parameters_only(CancellationToken cancellationToken)
+    {
+        var (project, diagnostics) = await Diagnose("""
+            public static class Usage
+            {
+                public static void H(Point p, in Point q, Point[] points)
+                {
+                    Fake.ForGenerated<Point>().Populate(p);
+                    Fake.ForGenerated<Point>().Populate(q);
+                    Fake.ForGenerated<Point>().Populate(points[0]);
+                    Fake.Populate<Point?>(p);
+                }
+            }
+            """, new UsageAnalyzer(), "PHONEY005", cancellationToken);
+        diagnostics.Length.ShouldBe(4);
+
+        var fix = await SingleFix(project, new UseReturnedValueCodeFix(), diagnostics[0], cancellationToken);
+        (await fix.TextOf("Usage.cs", cancellationToken)).ShouldContain("p = Fake.ForGenerated<Point>().Populate(p);");
+        await ShouldCompile(fix.Result, cancellationToken);
+
+        // An 'in' parameter is read-only, an array element is not a variable the fix assigns, and a Point? result doesn't fit back into a Point.
+        foreach (var diagnostic in diagnostics.Skip(1))
+            (await CodeFixHarness.Fixes(project, new UseReturnedValueCodeFix(), diagnostic, cancellationToken)).ShouldBeEmpty();
+    }
 }

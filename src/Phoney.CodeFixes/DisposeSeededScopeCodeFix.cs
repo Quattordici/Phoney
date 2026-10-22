@@ -91,10 +91,12 @@ public sealed class DisposeSeededScopeCodeFix : CodeFixProvider
         var taken = new HashSet<string>(body.DescendantNodes().Select(DeclaredName).Where(n => n is not null)!);
         if (!taken.Contains("_"))
             return "_";
-        var name = "seeded";
-        for (var n = 2; taken.Contains(name); n++)
-            name = "seeded" + n;
-        return name;
+        if (!taken.Contains("seeded"))
+            return "seeded";
+        var number = 2;
+        while (taken.Contains("seeded" + number))
+            number++;
+        return "seeded" + number;
     }
 
     private static string? DeclaredName(SyntaxNode node) => node switch

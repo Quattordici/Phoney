@@ -155,4 +155,36 @@ public sealed class TypeArgumentGeneratorTests
         output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
         driver.GetRunResult().GeneratedTrees.Single().ToString().ShouldContain("ModelRegistry.Register(__phoneyModel_Shop_Customer)");
     }
+
+    [Test]
+    public void Generic_names_that_do_not_resolve_generate_nothing()
+    {
+        var (driver, _, diagnostics) = GeneratorHarness.Run(Builder, Models, """
+            namespace Shop;
+            public static class Usage
+            {
+                public static object Value() => Missing<Product>.Value;
+            }
+            """);
+
+        diagnostics.ShouldBeEmpty();
+        driver.GetRunResult().GeneratedTrees.ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Dynamic_type_arguments_are_generated_like_object(CancellationToken cancellationToken)
+    {
+        var (driver, output, diagnostics) = GeneratorHarness.Run(Builder, """
+            namespace Shop;
+            public sealed class Wrapper<T> { public string Name { get; set; } = ""; }
+            public static class Usage
+            {
+                public static Wrapper<dynamic> Make() => Testing.Factory.Create<Wrapper<dynamic>>().Generate();
+            }
+            """);
+
+        diagnostics.ShouldBeEmpty();
+        output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        driver.GetRunResult().GeneratedTrees.Single().ToString().ShouldContain("Shop.Wrapper<");
+    }
 }
