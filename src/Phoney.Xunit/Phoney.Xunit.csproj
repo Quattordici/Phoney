@@ -8,7 +8,7 @@
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
     <IsPackable>true</IsPackable>
     <PackageId>Phoney.Xunit</PackageId>
-    <Description>Phoney fake data for xUnit.net v3 tests: [FakeData] fills test method parameters, constructor parameters and properties with realistic, reproducible values that agree with each other.</Description>
+    <Description>Phoney fake data for xUnit.net v3 tests: [FakeData] fills test method parameters, constructor parameters and properties with realistic, reproducible values that agree with each other; [FakeCheck] runs a test as a property check that shrinks failing rows.</Description>
     <PackageTags>$(PackageTags);xunit;autodata;testing</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
