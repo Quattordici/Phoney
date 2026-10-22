@@ -784,7 +784,7 @@ public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =
     Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
 
 // xUnit.net v3, NUnit and MSTest: [FakeCheck] replaces [Fact], [Test] or [TestMethod]
-[FakeCheck(Count = 500)]
+[FakeCheck]
 public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
     Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
 // FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).

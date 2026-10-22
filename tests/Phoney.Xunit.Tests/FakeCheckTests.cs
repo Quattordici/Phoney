@@ -65,6 +65,39 @@ public sealed class FakeCheckTests
         Should.Throw<ArgumentOutOfRangeException>(() => new FakeCheckAttribute { Count = 0 });
     }
 
+    [Fact]
+    public async Task A_ValueTask_method_is_awaited_and_its_failure_shrunk()
+    {
+        var invocation = (Task)Checked(nameof(Methods.FailsLater)).Invoke(new Methods(), [])!;
+
+        var failure = await Should.ThrowAsync<FakeCheckException<object?[]>>(invocation);
+        failure.InnerException.ShouldBeOfType<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void An_async_void_method_is_refused_because_it_cant_be_awaited() =>
+        Should.Throw<NotSupportedException>(() => Checked(nameof(Methods.AsyncVoid)).Invoke(new Methods(), [])).Message.ShouldContain("async void");
+
+    [Fact]
+    public void A_method_returning_a_ValueTask_of_a_result_is_refused_instead_of_not_being_awaited() =>
+        Should.Throw<NotSupportedException>(() => Checked(nameof(Methods.ReturnsAResult)).Invoke(new Methods(), [])).Message.ShouldContain("ValueTask<Int32>");
+
+    private static CheckedMethod Checked(string name) => new(typeof(Methods).GetMethod(name)!);
+
+    /// <summary>Not tests: the tests above invoke them through <see cref="CheckedMethod"/>.</summary>
+    private sealed class Methods
+    {
+        public async ValueTask FailsLater(int quantity)
+        {
+            await Task.Yield();
+            throw new InvalidOperationException($"failed for {quantity}");
+        }
+
+        public async void AsyncVoid(int quantity) => await Task.Yield();
+
+        public ValueTask<int> ReturnsAResult(int quantity) => new(quantity);
+    }
+
     private static MethodInfo Shape => typeof(FakeCheckTests).GetMethod(nameof(ShapeOfTheRows), BindingFlags.NonPublic | BindingFlags.Static)!;
 
     private static void ShapeOfTheRows([Range(0, 1000)] int quantity, string email) => _ = (quantity, email);

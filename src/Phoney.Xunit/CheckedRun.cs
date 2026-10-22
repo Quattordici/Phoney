@@ -93,6 +93,8 @@ internal sealed class CheckedMethod(MethodInfo method) : MethodInfo
     {
         if (method.ReturnType == typeof(void) && method.IsDefined(typeof(AsyncStateMachineAttribute), false))
             throw new NotSupportedException($"[FakeCheck] can't wait for the 'async void' method {method.Name}; make it return Task.");
+        if (method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(ValueTask<>))
+            throw new NotSupportedException($"[FakeCheck] doesn't wait for the {method.ReturnType.Name.Replace("`1", "", StringComparison.Ordinal)}<{method.ReturnType.GenericTypeArguments[0].Name}> of {method.Name}; make it return ValueTask or Task.");
 
         var options = method.GetCustomAttribute<FakeCheckAttribute>()?.Options ?? new FakeCheckOptions();
         var generator = options.CreateGenerator([.. method.GetParameters().Select(FakeArgument.From)]);
