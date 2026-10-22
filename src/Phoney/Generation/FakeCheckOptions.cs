@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace Phoney.Generation;
 
 /// <summary>
-/// The settings of the <c>[FakeCheck]</c> attributes of the test framework packages (<c>Phoney.TUnit</c>), which run a test as a property check: once per
+/// The settings of the <c>[FakeCheck]</c> attributes of the test framework packages (<c>Phoney.Xunit</c>, <c>Phoney.NUnit</c>, <c>Phoney.MSTest</c>, <c>Phoney.TUnit</c>), which run a test as a property check: once per
 /// generated row of its parameters, shrinking a failing row to the simplest one that still fails (see <see cref="ArgumentGenerator.Check(Func{object?[], bool}, int, int)"/>).
 /// </summary>
 /// <remarks>

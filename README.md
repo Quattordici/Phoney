@@ -15,7 +15,7 @@
 - **76 locales** imported from faker.js (`@faker-js/faker` 10.6.0), kept up to date by an automated sync pipeline.
 - **One line to a value or a fully populated object**: `Fake.Person.FullName()`, `Fake.Many<Customer>(100)`. Name conventions fill `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… and the names, email and avatar of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members or reach into nested ones (`.With(x => x.Lines.Each().Sku, …)`), uniqueness, conditions, numbering, weighted choices, subtypes and `[JsonDerivedType]`, strict mode checked at compile time, custom conventions and locales, faker.js-style templates.
-- **Property checks that shrink**: `Fake.For<Order>().Check(o => Pricing.Total(o) >= 0)` tests a property on a hundred realistic orders and, when one fails, shrinks it to the simplest order your own rules can make that still fails, with the seed to replay it. `Fake.Check((Order o, int discount) => …)` and TUnit's `[FakeCheck]` do the same for parameters.
+- **Property checks that shrink**: `Fake.For<Order>().Check(o => Pricing.Total(o) >= 0)` tests a property on a hundred realistic orders and, when one fails, shrinks it to the simplest order your own rules can make that still fails, with the seed to replay it. `Fake.Check((Order o, int discount) => …)` and `[FakeCheck]` (xUnit, NUnit, MSTest and TUnit) do the same for parameters.
 - **Test-focused**: invalid and boundary data from your data annotations, `[FakeData]` for xUnit, NUnit, MSTest and TUnit, replayable random tests (`PHONEY_SEED=… dotnet test`), a `TimeProvider` for "now", and stable stand-ins for real data (`Fake.Keyed("customer:42")`, `Pseudonymize`).
 - **Data from files and to files**: fill members from the rows of a CSV or JSON file, or write generated objects as CSV or JSON.
 - **Fast**: array-indexed, allocation-free lookups, templates parsed once, and a **source generator** that makes generation reflection free, trim and Native AOT safe ([benchmarks](#performance)).
@@ -24,10 +24,10 @@
 | Package | What it adds | |
 |---|---|---|
 | `Phoney` | fakers, generators, the source generator and the analyzers | [![NuGet](https://img.shields.io/nuget/v/Phoney.svg?label=)](https://www.nuget.org/packages/Phoney) |
-| `Phoney.MSTest` | [`[FakeData]` for MSTest](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.MSTest.svg?label=)](https://www.nuget.org/packages/Phoney.MSTest) |
-| `Phoney.NUnit` | [`[FakeData]` for NUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NUnit.svg?label=)](https://www.nuget.org/packages/Phoney.NUnit) |
+| `Phoney.MSTest` | [`[FakeData]` and `[FakeCheck]` for MSTest](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.MSTest.svg?label=)](https://www.nuget.org/packages/Phoney.MSTest) |
+| `Phoney.NUnit` | [`[FakeData]` and `[FakeCheck]` for NUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NUnit.svg?label=)](https://www.nuget.org/packages/Phoney.NUnit) |
 | `Phoney.TUnit` | [`[FakeData]`, `[FakeSeed]` and `[FakeCheck]` for TUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.TUnit.svg?label=)](https://www.nuget.org/packages/Phoney.TUnit) |
-| `Phoney.Xunit` | [`[FakeData]` for xUnit.net v3](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.Xunit.svg?label=)](https://www.nuget.org/packages/Phoney.Xunit) |
+| `Phoney.Xunit` | [`[FakeData]` and `[FakeCheck]` for xUnit.net v3](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.Xunit.svg?label=)](https://www.nuget.org/packages/Phoney.Xunit) |
 | `Phoney.DependencyInjection` | [`services.AddPhoney()`, `IFaker`, injectable generators](#dependency-injection-and-aspnet-core) | [![NuGet](https://img.shields.io/nuget/v/Phoney.DependencyInjection.svg?label=)](https://www.nuget.org/packages/Phoney.DependencyInjection) |
 | `Phoney.EntityFrameworkCore` | [`HasFakeData` seed data](#ef-core-seeding) | [![NuGet](https://img.shields.io/nuget/v/Phoney.EntityFrameworkCore.svg?label=)](https://www.nuget.org/packages/Phoney.EntityFrameworkCore) |
 | `Phoney.NodaTime` | [NodaTime values and members](#nodatime) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NodaTime.svg?label=)](https://www.nuget.org/packages/Phoney.NodaTime) |
@@ -738,7 +738,7 @@ Replay: PHONEY_SEED=355719690 dotnet test.
 
 - The seed is the facade's when it is seeded (`Fake.Seeded`, `[FakeSeed]`), else `PHONEY_SEED`, else a new random one. `Counterexample` and `Original` are the rows (`object?[]`), in parameter order.
 - For more parameters, or to pin the seed in code, use the generator underneath: `Fake.Arguments(method).Seed(42).Check(row => …)` (also `Check(Action<object?[]>)` and `CheckAsync`).
-- In TUnit, `[Test, FakeCheck]` turns a test method into such a check: the test runs once per row and fails with the shrunk row. See [`[FakeCheck]`](#property-checks-in-tunit).
+- In a test framework, `[FakeCheck]` turns a test method into such a check: the test runs once per row and fails with the shrunk row. See [`[FakeCheck]`](#property-checks-in-test-methods).
 
 ## Test data in xUnit, NUnit, MSTest and TUnit
 
@@ -773,12 +773,18 @@ public async Task Places_order(Customer customer, string email, [Range(1, 10)] i
 - xUnit, NUnit and MSTest fill method parameters; TUnit also fills constructor parameters and `required` properties.
 - Supported versions: **xUnit.net v3 3.0** and later (3.x and 4.x), **NUnit 4.0** and later (4.x and 5.x), **MSTest 4.0** and later (4.0 changed the data source interface, so 3.x is not supported) and **TUnit 1.10** and later.
 
-### Property checks in TUnit
+### Property checks in test methods
 
-`[FakeCheck]` (in `Phoney.TUnit`) runs a test once for each of 100 generated rows of its parameters and, when it fails for one, shrinks the row and fails with the simplest one:
+`[FakeCheck]` (in all four packages) runs a test once for each of 100 generated rows of its parameters and, when it fails for one, shrinks the row and fails with the simplest one:
 
 ```csharp
+// TUnit
 [Test, FakeCheck]
+public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
+    Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
+
+// xUnit.net v3, NUnit and MSTest: [FakeCheck] replaces [Fact], [Test] or [TestMethod]
+[FakeCheck(Count = 500)]
 public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
     Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
 // FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
@@ -790,8 +796,9 @@ public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =
 
 - Parameters are filled like `[FakeData]` fills them, but the rows are **new on every run**, so the suite explores more data over time; `[FakeCheck(Seed = 812734)]` or `PHONEY_SEED` replays a failure and its shrinking exactly.
 - Options: `Count` (default 100), `MaxShrinks` (default 1000, 0 reports the original row), `Seed`, `Locale`, `NullProbability` and `ReferenceDate`.
-- The rows run one after another on one instance of the test class, inside the executor the test already has (`[TestExecutor<T>]`) and inside `[FakeSeed]`. TUnit lists one test with a sample row.
-- xUnit, NUnit and MSTest can use `Fake.Check` inside a test for now.
+- The framework lists one test and reports one result; the failure message names the failing row. Every exception a row throws fails it, so use the framework's assertions as usual (in NUnit, `Assert.Pass()` passes a row).
+- **Around each row**: TUnit and xUnit.net run the rows on one instance of the test class (TUnit inside the executor the test already has, `[TestExecutor<T>]`, and inside `[FakeSeed]`); NUnit runs them between one `[SetUp]` and `[TearDown]`; MSTest invokes each row as a full test (a new instance, `[TestInitialize]` and `[TestCleanup]`).
+- The options of the framework's own attribute apply to the whole check: `Skip`, `Timeout`, `DisplayName` and `Explicit` in xUnit.net, `DisplayName` in MSTest, NUnit attributes such as `[Timeout]` and `[Category]`.
 
 ### Replayable random data
 

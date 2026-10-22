@@ -27,3 +27,24 @@ public class OrderTests
 - **Replayable random data**: `FakeSeed.Run(() => { … }, TestContext.WriteLine)` (or `RunAsync`) runs a test body on a seeded `Fake` facade, new on every run, and reports the seed when it throws; `PHONEY_SEED=… dotnet test` or `FakeSeed.Run(…, seed: n)` replays it.
 - Custom conventions (`Fake.Conventions.Add(...)`), subtypes (`Fake.Subtypes.Add<IShape, Circle>()`, `[JsonDerivedType]`) and source-generated models (`[FakeFor<T>]`) apply. Test data is created while MSTest discovers tests, so register them before that, for example in a module initializer.
 - It fills method parameters. See the [main README](https://github.com/Quattordici/Phoney#test-data-in-xunit-nunit-mstest-and-tunit) for the full feature set.
+
+## Property checks that shrink
+
+`[FakeCheck]` (instead of `[TestMethod]`) runs a test once for each of 100 generated rows of its parameters. When the test fails for a row, the row is **shrunk** to the simplest one that still fails (fewer collection elements, lower numbers, the first list values), and the test fails with it:
+
+```csharp
+[FakeCheck]
+public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
+    Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
+// The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
+// Counterexample:
+//   order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }] }, discount = 2
+// …
+// Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
+```
+
+- Parameters are filled like `[FakeData]` fills them (names, types, annotations; the values of a row agree), and shrinking only makes rows Phoney could have generated, so a counterexample is still realistic data.
+- **New rows on every run**, so the suite explores more data over time. `[FakeCheck(Seed = 812734)]` or `PHONEY_SEED=812734 dotnet test` replays a failure and its shrinking exactly.
+- **Options:** `Count` (default 100), `MaxShrinks` (default 1000; 0 reports the original row), `Seed`, `Locale`, `NullProbability` and `ReferenceDate`.
+- MSTest lists one test and reports one result. The rows run as full MSTest invocations (a new instance, `[TestInitialize]` and `[TestCleanup]` per row).
+- Outside a test method attribute, `Fake.Check((Order order, int discount) => …)` does the same for a lambda.
