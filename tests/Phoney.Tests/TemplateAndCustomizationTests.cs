@@ -37,15 +37,14 @@ public sealed class TemplateAndCustomizationTests
 
     // An expression that never balances ends at its first "}}", as before the balanced scan. The scan for its real end gives up a short way past that
     // "}}" instead of reading the rest of the text, so many such expressions in one template take linear time, not quadratic.
+    // Eight times the expressions take about 8 times as long when the parse is linear and far longer (up to 64 times) when it is quadratic. The test compares
+    // the two instead of asserting a time budget, which a busy CI runner (macOS, next to the source generator tests) overran with the linear parse.
     [Test]
     public void Unbalanced_expressions_are_parsed_in_linear_time()
     {
-        var text = string.Concat(Enumerable.Repeat("{{helpers.slugify(()}} ", 20_000));
-        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var factor = Growth.Factor(count => Template.Parse(string.Concat(Enumerable.Repeat("{{helpers.slugify(()}} ", count))), size: 2_000, scale: 8);
 
-        Template.Parse(text);
-
-        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15)); // about 0.2 s alone; the quadratic scan took about a minute
+        factor.ShouldBeLessThan(20); // about 8 to 10 here; the quadratic scan gave 36 to 70
         _faker.Parse("{{helpers.slugify(()}}|{{person.firstName}}").ShouldNotContain("{{");
     }
 
