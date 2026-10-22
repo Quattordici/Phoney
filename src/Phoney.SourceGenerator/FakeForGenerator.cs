@@ -155,13 +155,13 @@ public sealed class FakeForGenerator : IIncrementalGenerator
             .ToList();
 
     /// <summary>The <c>[FakeSubtype&lt;TBase, TSubtype&gt;]</c> pairs on <paramref name="owner"/>.</summary>
-    internal static IEnumerable<(ITypeSymbol Base, INamedTypeSymbol Subtype)> SubtypePairs(INamedTypeSymbol owner)
+    internal static IEnumerable<(ITypeSymbol Base, INamedTypeSymbol Subtype, AttributeData Attribute)> SubtypePairs(INamedTypeSymbol owner)
     {
         foreach (var attribute in owner.GetAttributes().Where(a => IsAttribute(a, SubtypeAttributeMetadataName)))
         {
             var arguments = attribute.AttributeClass!.TypeArguments;
             if (arguments.Length == 2 && arguments[1] is INamedTypeSymbol subtype)
-                yield return (arguments[0], subtype);
+                yield return (arguments[0], subtype, attribute);
         }
     }
 
@@ -206,12 +206,14 @@ public sealed class FakeForGenerator : IIncrementalGenerator
         // [FakeSubtype<TBase, TSubtype>]: register the pair at startup and generate a model for the subtype.
         var subtypes = new List<(string Base, string Subtype)>();
         var builder = new ModelBuilder(compilation, symbol, diagnostics, location);
-        foreach (var (baseType, subtype) in SubtypePairs(symbol))
+        foreach (var (baseType, subtype, attribute) in SubtypePairs(symbol))
         {
             // Registering a subtype that can't be created would make the module initializer throw when the app starts.
             if (NotCreatable(subtype) is { } reason)
             {
-                diagnostics.Add(new DiagnosticInfo(Diagnostics.SubtypeNotRegistrable, location, baseType.ToDisplayString(), subtype.ToDisplayString(), reason));
+                // Reported on the attribute, so the code fix can remove it.
+                var attributeLocation = attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is { } syntax ? LocationInfo.From(syntax.GetLocation()) : location;
+                diagnostics.Add(new DiagnosticInfo(Diagnostics.SubtypeNotRegistrable, attributeLocation, baseType.ToDisplayString(), subtype.ToDisplayString(), reason));
                 continue;
             }
 

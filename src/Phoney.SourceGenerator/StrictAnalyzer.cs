@@ -69,8 +69,13 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         if (uncovered.Count == 0)
             return;
 
-        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.StrictUncovered, AnalyzerSupport.NameLocation(strict), type.Name, string.Join(", ", uncovered)));
+        // The member names go along so the code fix can add .Ignore(...) for them.
+        var properties = ImmutableDictionary<string, string?>.Empty.Add(MembersProperty, string.Join(",", uncovered));
+        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.StrictUncovered, AnalyzerSupport.NameLocation(strict), properties: properties, type.Name, string.Join(", ", uncovered)));
     }
+
+    /// <summary>The diagnostic property with the uncovered member names, comma separated.</summary>
+    public const string MembersProperty = "Members";
 
     /// <summary>
     /// The other calls of the chain <paramref name="strict"/> is in, earlier ones first, or <see langword="null"/> when the chain doesn't start a generator,
