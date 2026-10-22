@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Phoney.Modules;
@@ -41,10 +40,9 @@ public sealed class HostilePatternTests
     [Arguments("\\b{2000000000}")]
     public void Patterns_that_could_produce_gigabytes_are_refused_up_front(string pattern)
     {
-        var watch = Stopwatch.StartNew();
+        var cpu = CpuTime.Of(() => Should.Throw<FormatException>(() => Generate(pattern)).Message.ShouldContain("characters"));
 
-        Should.Throw<FormatException>(() => Generate(pattern)).Message.ShouldContain("characters");
-        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(2));
+        cpu.ShouldBeLessThan(TimeSpan.FromSeconds(2));
     }
 
     [Test]
@@ -165,21 +163,23 @@ public sealed class HostilePatternTests
     {
         const string Soup = "ab01()[]{}^$|*+?.,-\\:=!<>'dwsDWSpPxu{}LNu2F";
         var faker = new Faker("en", seed: 7);
-        var watch = Stopwatch.StartNew();
-        for (var i = 0; i < 20_000; i++)
+        var cpu = CpuTime.Of(() =>
         {
-            var pattern = new string([.. Enumerable.Range(0, faker.Random.Int(1, 12)).Select(_ => Soup[faker.Random.Index(Soup.Length)])]);
-            try
+            for (var i = 0; i < 20_000; i++)
             {
-                _ = PatternGenerator.Get(pattern).Generate(faker.Random);
+                var pattern = new string([.. Enumerable.Range(0, faker.Random.Int(1, 12)).Select(_ => Soup[faker.Random.Index(Soup.Length)])]);
+                try
+                {
+                    _ = PatternGenerator.Get(pattern).Generate(faker.Random);
+                }
+                catch (FormatException)
+                {
+                    // refused with a message: fine
+                }
             }
-            catch (FormatException)
-            {
-                // refused with a message: fine
-            }
-        }
+        });
 
-        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(30));
+        cpu.ShouldBeLessThan(TimeSpan.FromSeconds(30));
     }
 
     private static string RandomPattern(Faker faker, int depth)

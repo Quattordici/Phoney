@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Phoney.Generation;
 
 namespace Phoney.Tests.Adversarial;
@@ -162,12 +161,12 @@ public sealed class HostileGraphTests
     {
         foreach (var (model, generator) in Both(HostileGraphFakes.Ouroboros))
         {
-            var watch = Stopwatch.StartNew();
-            var snake = generator.MaxDepth(int.MaxValue).CollectionSize(5, 5).Seed(1).Generate();
+            Ouroboros snake = null!;
+            var cpu = CpuTime.Of(() => snake = generator.MaxDepth(int.MaxValue).CollectionSize(5, 5).Seed(1).Generate());
 
             snake.Tail.ShouldBeNull(model); // a type never contains itself, at any depth
             snake.Children.ShouldBeEmpty(model);
-            watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
+            cpu.ShouldBeLessThan(TimeSpan.FromSeconds(5));
         }
     }
 
@@ -213,8 +212,8 @@ public sealed class HostileGraphTests
     {
         foreach (var (model, generator) in Both(HostileGraphFakes.Scarce))
         {
-            var watch = Stopwatch.StartNew();
-            var scarce = generator.CollectionSize(1_000, 1_000).Seed(1).Generate();
+            Scarce scarce = null!;
+            var cpu = CpuTime.Of(() => scarce = generator.CollectionSize(1_000, 1_000).Seed(1).Generate());
 
             scarce.Flags.Count.ShouldBe(2, model);
             scarce.ByFlag.Count.ShouldBe(2, model);
@@ -223,7 +222,7 @@ public sealed class HostileGraphTests
             scarce.Nothings.ShouldBe([default(Nothing)], model);
             scarce.None.ShouldBe(default, model);
             Enum.IsDefined(scarce.Aliased).ShouldBeTrue(model);
-            watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
+            cpu.ShouldBeLessThan(TimeSpan.FromSeconds(5));
         }
     }
 
@@ -249,10 +248,9 @@ public sealed class HostileGraphTests
     [Test]
     public void A_condition_nothing_satisfies_gives_up_with_a_message_instead_of_looping()
     {
-        var watch = Stopwatch.StartNew();
+        var cpu = CpuTime.Of(() => Should.Throw<InvalidOperationException>(() => HostileGraphFakes.Yin.Where(_ => false).Generate()).Message.ShouldContain("Where"));
 
-        Should.Throw<InvalidOperationException>(() => HostileGraphFakes.Yin.Where(_ => false).Generate()).Message.ShouldContain("Where");
-        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(10));
+        cpu.ShouldBeLessThan(TimeSpan.FromSeconds(10));
     }
 
     [Test]
