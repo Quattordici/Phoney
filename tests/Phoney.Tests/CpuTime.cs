@@ -19,6 +19,7 @@ internal static class CpuTime
         return OfCurrentThread() - start;
     }
 
+    /// <summary>The processor time the current thread has used since it started.</summary>
     private static TimeSpan OfCurrentThread()
     {
         if (OperatingSystem.IsWindows())

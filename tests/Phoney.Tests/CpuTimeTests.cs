@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 namespace Phoney.Tests;
 
+/// <summary>What <see cref="CpuTime"/> counts: work on the thread, not time spent waiting.</summary>
 public sealed class CpuTimeTests
 {
     [Test]
