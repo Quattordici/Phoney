@@ -76,6 +76,7 @@ public static partial class Fake
         ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!, (T4)row[3]!), count, maxShrinks);
 
     /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
+    /// <remarks>An <c>async</c> lambda binds here as <c>async void</c>, so a failure after its first <c>await</c> is not seen as a failing row: use <see cref="CheckAsync{T1}(Func{T1, Task}, int, int, CancellationToken)"/> for asynchronous assertions.</remarks>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
     /// <param name="property">The assertions for one row.</param>
     /// <param name="count">How many rows to test; 0 tests none.</param>
@@ -89,6 +90,7 @@ public static partial class Fake
         ArgumentsOf(property).Check(row => property((T1)row[0]!), count, maxShrinks);
 
     /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
+    /// <remarks>An <c>async</c> lambda binds here as <c>async void</c>, so a failure after its first <c>await</c> is not seen as a failing row: use <see cref="CheckAsync{T1, T2}(Func{T1, T2, Task}, int, int, CancellationToken)"/> for asynchronous assertions.</remarks>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
     /// <typeparam name="T2">The type of parameter 2.</typeparam>
     /// <param name="property">The assertions for one row.</param>
@@ -103,6 +105,7 @@ public static partial class Fake
         ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!), count, maxShrinks);
 
     /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
+    /// <remarks>An <c>async</c> lambda binds here as <c>async void</c>, so a failure after its first <c>await</c> is not seen as a failing row: use <see cref="CheckAsync{T1, T2, T3}(Func{T1, T2, T3, Task}, int, int, CancellationToken)"/> for asynchronous assertions.</remarks>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
     /// <typeparam name="T2">The type of parameter 2.</typeparam>
     /// <typeparam name="T3">The type of parameter 3.</typeparam>
@@ -118,6 +121,7 @@ public static partial class Fake
         ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!), count, maxShrinks);
 
     /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
+    /// <remarks>An <c>async</c> lambda binds here as <c>async void</c>, so a failure after its first <c>await</c> is not seen as a failing row: use <see cref="CheckAsync{T1, T2, T3, T4}(Func{T1, T2, T3, T4, Task}, int, int, CancellationToken)"/> for asynchronous assertions.</remarks>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
     /// <typeparam name="T2">The type of parameter 2.</typeparam>
     /// <typeparam name="T3">The type of parameter 3.</typeparam>
