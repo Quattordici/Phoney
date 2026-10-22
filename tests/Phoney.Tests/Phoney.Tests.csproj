@@ -7,6 +7,8 @@
     <!-- Test classes and methods are documented by their names. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!-- The P/Invoke marshalling that [LibraryImport] generates (CpuTime) is unsafe code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
