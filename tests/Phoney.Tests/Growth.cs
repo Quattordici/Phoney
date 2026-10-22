@@ -1,18 +1,16 @@
-using System.Diagnostics;
-
 namespace Phoney.Tests;
 
 /// <summary>
-/// How the running time of some work grows with its size. A test that asserts a time budget measures the machine as much as the code: on a CI runner
-/// shared with other test processes the same work can take twenty times longer. The ratio of two sizes measured on the same machine at the same time
-/// cancels that out, so a test can tell linear from quadratic without knowing how fast the machine is.
+/// How the processor time of some work grows with its size. The ratio of two sizes measured on the same machine at the same time doesn't depend on how
+/// fast the machine is, so a test can tell linear from quadratic anywhere; measuring processor time (<see cref="CpuTime"/>) leaves out the time a busy CI
+/// runner keeps the thread waiting for a core.
 /// </summary>
 internal static class Growth
 {
     /// <summary>
     /// How many times longer <paramref name="work"/> takes for <paramref name="size"/> × <paramref name="scale"/> than for <paramref name="size"/>: about
     /// <paramref name="scale"/> when it is linear, <paramref name="scale"/>² when it is quadratic. Both sizes run once to warm up and then alternate, each
-    /// one first every other round, and the fastest run of each counts, so a pause of the machine during one run doesn't change the result.
+    /// one first every other round, and the runs of each size are added up, so the coarse steps of a processor-time clock (15.6 ms on Windows) even out.
     /// </summary>
     public static double Factor(Action<int> work, int size, int scale, int rounds = 5)
     {
@@ -23,31 +21,23 @@ internal static class Growth
 
         work(size);
         work(size * scale);
-        var small = long.MaxValue;
-        var large = long.MaxValue;
+        var small = TimeSpan.Zero;
+        var large = TimeSpan.Zero;
         for (var round = 0; round < rounds; round++)
         {
             // Every other round starts with the large size, so something the machine does on a schedule doesn't always hit the same size.
             if (round % 2 == 0)
             {
-                small = Math.Min(small, Time(work, size));
-                large = Math.Min(large, Time(work, size * scale));
+                small += CpuTime.Of(() => work(size));
+                large += CpuTime.Of(() => work(size * scale));
             }
             else
             {
-                large = Math.Min(large, Time(work, size * scale));
-                small = Math.Min(small, Time(work, size));
+                large += CpuTime.Of(() => work(size * scale));
+                small += CpuTime.Of(() => work(size));
             }
         }
 
-        return (double)large / Math.Max(small, 1);
-    }
-
-    /// <summary>The <see cref="Stopwatch"/> ticks <paramref name="work"/> takes for <paramref name="size"/>.</summary>
-    private static long Time(Action<int> work, int size)
-    {
-        var start = Stopwatch.GetTimestamp();
-        work(size);
-        return Stopwatch.GetTimestamp() - start;
+        return large / (small > TimeSpan.Zero ? small : TimeSpan.FromTicks(1));
     }
 }

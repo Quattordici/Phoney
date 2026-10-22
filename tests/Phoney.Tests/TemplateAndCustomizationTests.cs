@@ -38,7 +38,8 @@ public sealed class TemplateAndCustomizationTests
     // An expression that never balances ends at its first "}}", as before the balanced scan. The scan for its real end gives up a short way past that
     // "}}" instead of reading the rest of the text, so many such expressions in one template take linear time, not quadratic.
     // Eight times the expressions take about 8 times as long when the parse is linear and far longer (up to 64 times) when it is quadratic. The test compares
-    // the two instead of asserting a time budget, which a busy CI runner (macOS, next to the source generator tests) overran with the linear parse.
+    // the two instead of asserting a time budget, which a busy CI runner (macOS, next to the source generator tests) overran with the linear parse. The small
+    // size takes tens of milliseconds per run and five runs are added up, so the 15.6 ms steps in which Windows counts processor time hardly matter.
     [Test]
     public void Unbalanced_expressions_are_parsed_in_linear_time()
     {
