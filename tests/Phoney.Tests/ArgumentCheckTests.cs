@@ -98,7 +98,7 @@ public sealed class ArgumentCheckTests
     {
         var failure = Falsify(() => Fake.Check((int quantity) => false));
 
-        failure.Message.ShouldContain("Replay: PHONEY_SEED=");
+        failure.Message.ShouldContain("PHONEY_SEED="); // "Replay: PHONEY_SEED=…", or "run again with PHONEY_SEED=…" when the seed came from it
         failure.Message.ShouldNotContain("on the generator");
     }
 

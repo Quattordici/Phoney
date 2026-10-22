@@ -233,7 +233,8 @@ internal readonly record struct CheckSeed(long Value, CheckSeed.Origin From, str
     {
         Origin.Generator when Pin.Length == 0 => "Replay: the same seed finds and shrinks it again.",
         Origin.Generator => $"Replay: {Pin} finds and shrinks it again.",
-        Origin.Environment => $"Replay: the seed came from {FakeSeed.EnvironmentVariable}; run again with {FakeSeed.EnvironmentVariable}={Value}.",
+        Origin.Environment when Pin.Length == 0 => $"Replay: the seed came from {FakeSeed.EnvironmentVariable}; run again with {FakeSeed.EnvironmentVariable}={Value}.",
+        Origin.Environment => $"Replay: the seed came from {FakeSeed.EnvironmentVariable}; run again with {FakeSeed.EnvironmentVariable}={Value}, or pin it with {Pin}.",
         _ when Pin.Length == 0 => $"Replay: {FakeSeed.EnvironmentVariable}={Value} dotnet test.",
         _ => $"Replay: {FakeSeed.EnvironmentVariable}={Value} dotnet test, or {Pin}.",
     };
