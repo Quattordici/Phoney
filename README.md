@@ -661,6 +661,16 @@ var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 });
 - The generator writes a model for each listed type and every type it contains and registers them at startup, so `Fake.For<Customer>()` uses them too. **Generated and reflection models produce identical data for the same seed.**
 - `Fake.For`, `One`, `Many` and `Populate` fall back to reflection and are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`), so the compiler flags them in trimmed and AOT apps. **`Fake.ForGenerated<T>()`** is the same facade without reflection, and throws with the fix when the type has no model.
 - Subtypes need models too: `[JsonDerivedType]` types get them automatically, and `[FakeSubtype<IShape, Circle>]` generates one and registers the subtype. NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
+- Generic helpers (test-data builders, factories in a shared package) can mark their type parameter with **`[FakeForTypeArgument]`**: every project that passes a concrete type for it, in a base class or an explicit generic call, gets a generated, registered model for that type without listing it in `[FakeFor]`. Type arguments inferred from method arguments are not seen.
+
+  ```csharp
+  public abstract class TestDataBuilder<[FakeForTypeArgument] T> where T : class
+  {
+      public T Build() => Fake.ForGenerated<T>().Generate();
+  }
+
+  internal sealed class CustomerBuilder : TestDataBuilder<Customer>; // Customer gets a model
+  ```
 
 <details>
 <summary>Diagnostics</summary>

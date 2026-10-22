@@ -135,3 +135,24 @@ internal static class ParameterDefaults
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class FakeForAttribute<T> : Attribute;
 #pragma warning restore S2326
+
+/// <summary>
+/// Marks a type parameter whose type arguments get a source-generated model, as if each were listed with
+/// <see cref="FakeForAttribute{T}"/>. Put it on the type parameter of a generic helper that generates <c>T</c> with
+/// <see cref="Fake.ForGenerated{T}"/>; every compilation that passes a concrete type for it (in a base class, a
+/// variable type or an explicit generic method call) generates and registers a model for that type.
+/// </summary>
+/// <example>
+/// <code>
+/// public abstract class TestDataBuilder&lt;[FakeForTypeArgument] T&gt; where T : class
+/// {
+///     public T Build() =&gt; Fake.ForGenerated&lt;T&gt;().Generate();
+/// }
+///
+/// // In a project referencing Phoney: Customer gets a model, no [FakeFor&lt;Customer&gt;] needed.
+/// internal sealed class CustomerBuilder : TestDataBuilder&lt;Customer&gt;;
+/// </code>
+/// </example>
+/// <remarks>Type arguments inferred from method arguments are not seen; pass them explicitly.</remarks>
+[AttributeUsage(AttributeTargets.GenericParameter, AllowMultiple = false, Inherited = false)]
+public sealed class FakeForTypeArgumentAttribute : Attribute;

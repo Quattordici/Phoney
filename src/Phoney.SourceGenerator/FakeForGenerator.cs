@@ -13,12 +13,15 @@ namespace Phoney.SourceGenerator;
 /// Generates reflection-free <c>FakeModel&lt;T&gt;</c> implementations for every type listed with
 /// <c>[FakeFor&lt;T&gt;]</c> on a partial class (plus the types they contain), a <c>ObjectGenerator&lt;T&gt;</c> property
 /// per listed type, and a module initializer that registers the models so <c>Fake.For&lt;T&gt;()</c> uses them too.
+/// Types passed for <c>[FakeForTypeArgument]</c> type parameters get registered models as well, in one generated class.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class FakeForGenerator : IIncrementalGenerator
 {
     private const string AttributeMetadataName = "Phoney.Generation.FakeForAttribute`1";
     private const string SubtypeAttributeMetadataName = "Phoney.Generation.FakeSubtypeAttribute`2";
+    private const string TypeArgumentAttributeMetadataName = "Phoney.Generation.FakeForTypeArgumentAttribute";
+    private const string TypeArgumentHintName = "Phoney.TypeArgumentModels.g.cs";
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -36,6 +39,86 @@ public sealed class FakeForGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(targets, static (spc, result) => Report(spc, result));
         context.RegisterSourceOutput(subtypeOnly, static (spc, result) => Report(spc, result));
+
+        // Closed type arguments of [FakeForTypeArgument] type parameters (TestDataBuilder<CustomerBuilder, Customer>, Factory.Create<Order>()).
+        var typeArguments = context.SyntaxProvider.CreateSyntaxProvider(
+                static (node, _) => node is GenericNameSyntax,
+                static (ctx, ct) => DiscoverTypeArguments(ctx, ct))
+            .Where(static found => found.Length > 0)
+            .Collect()
+            .Combine(context.CompilationProvider)
+            .Select(static (pair, ct) => AnalyzeTypeArguments(pair.Left, pair.Right, ct));
+        context.RegisterSourceOutput(typeArguments, static (spc, result) => Report(spc, result));
+    }
+
+    /// <summary>
+    /// The types passed for type parameters marked <c>[FakeForTypeArgument]</c> at one generic name, with where they were passed.
+    /// Type parameters, abstract types, interfaces and framework types are left out: there is nothing to generate for them.
+    /// </summary>
+    private static ImmutableArray<(INamedTypeSymbol Type, Location Location)> DiscoverTypeArguments(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    {
+        var name = (GenericNameSyntax)context.Node;
+        var info = context.SemanticModel.GetSymbolInfo(name, cancellationToken);
+        var symbol = info.Symbol ?? (info.CandidateSymbols.Length == 1 ? info.CandidateSymbols[0] : null);
+        var (parameters, arguments) = symbol switch
+        {
+            INamedTypeSymbol type => (type.OriginalDefinition.TypeParameters, type.TypeArguments),
+            IMethodSymbol method => (method.OriginalDefinition.TypeParameters, method.TypeArguments),
+            _ => (ImmutableArray<ITypeParameterSymbol>.Empty, ImmutableArray<ITypeSymbol>.Empty),
+        };
+
+        var found = ImmutableArray.CreateBuilder<(INamedTypeSymbol, Location)>();
+        for (var index = 0; index < parameters.Length && index < arguments.Length; index++)
+        {
+            if (arguments[index] is INamedTypeSymbol argument && IsTypeArgumentRoot(argument) &&
+                parameters[index].GetAttributes().Any(a => IsAttribute(a, TypeArgumentAttributeMetadataName)))
+            {
+                var location = index < name.TypeArgumentList.Arguments.Count ? name.TypeArgumentList.Arguments[index].GetLocation() : name.GetLocation();
+                found.Add((argument, location));
+            }
+        }
+
+        return found.ToImmutable();
+    }
+
+    /// <summary>Whether a model can be written for <paramref name="type"/> as a type argument (the rest is skipped silently).</summary>
+    private static bool IsTypeArgumentRoot(INamedTypeSymbol type) =>
+        type is { TypeKind: TypeKind.Class or TypeKind.Struct, IsAbstract: false, SpecialType: SpecialType.None } &&
+        !ModelBuilder.IsFrameworkType(type) &&
+        !ContainsTypeParameter(type);
+
+    private static bool ContainsTypeParameter(ITypeSymbol type) =>
+        type is ITypeParameterSymbol || (type is INamedTypeSymbol { IsGenericType: true } named && named.TypeArguments.Any(ContainsTypeParameter));
+
+    /// <summary>Builds one class with the models of all discovered type arguments, registered at startup like <c>[FakeFor]</c> models.</summary>
+    private static GenerationResult? AnalyzeTypeArguments(
+        ImmutableArray<ImmutableArray<(INamedTypeSymbol Type, Location Location)>> found, Compilation compilation, CancellationToken cancellationToken)
+    {
+        var roots = new Dictionary<INamedTypeSymbol, Location>(SymbolEqualityComparer.Default);
+        foreach (var (type, location) in found.SelectMany(f => f))
+        {
+            if (!roots.ContainsKey(type))
+                roots.Add(type, location);
+        }
+
+        if (roots.Count == 0)
+            return null;
+
+        var diagnostics = new List<DiagnosticInfo>();
+        var builder = new ModelBuilder(compilation, compilation.Assembly, compilation.AssemblyName ?? "this assembly", diagnostics, LocationInfo.From(Location.None));
+        foreach (var root in roots.OrderBy(r => r.Key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
+        {
+            // Build each root (and what it contains) before the next, so diagnostics point at the place that requested it.
+            builder.DiagnosticLocation = LocationInfo.From(root.Value);
+            builder.Enqueue(root.Key);
+            builder.BuildAll(cancellationToken);
+        }
+
+        if (builder.Models.Count == 0)
+            return new GenerationResult(TypeArgumentHintName, null, diagnostics);
+
+        var className = "__PhoneyTypeArgumentModels_" + Sanitize(compilation.AssemblyName ?? "Assembly");
+        return new GenerationResult(TypeArgumentHintName, Emitter.EmitStandalone(className, builder.Models, builder.DerivedTypes), diagnostics);
     }
 
     /// <summary>Classes and records can carry the attributes; structs are rejected by the attributes' usage.</summary>

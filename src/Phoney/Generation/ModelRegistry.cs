@@ -33,7 +33,7 @@ public static class ModelRegistry
         Models.TryGetValue(typeof(T), out var model) && model is FakeModel<T> typed and not ReflectionModel<T>
             ? typed
             : throw new InvalidOperationException(
-                $"No source-generated model for '{typeof(T).FullName}'. Add [FakeFor<{typeof(T).Name}>] to a partial class so Phoney can generate it without reflection, or use Fake.For<{typeof(T).Name}>() where reflection is available.");
+                $"No source-generated model for '{typeof(T).FullName}'. Add [FakeFor<{typeof(T).Name}>] to a partial class (or pass the type to a [FakeForTypeArgument] type parameter) so Phoney can generate it without reflection, or use Fake.For<{typeof(T).Name}>() where reflection is available.");
 
     /// <summary>Returns the model for <typeparamref name="T"/>, building a reflection model when none is registered.</summary>
     [RequiresUnreferencedCode("Types without a source-generated model are populated with reflection. Add [FakeFor<T>] to make generation trim and AOT safe.")]
