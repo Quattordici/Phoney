@@ -43,6 +43,7 @@ public sealed class ArgumentGenerator
     {
     }
 
+#pragma warning disable S107 // the private copy constructor of an immutable generator takes every field
     private ArgumentGenerator(
         ImmutableArray<FakeArgument> arguments,
         string? locale,
@@ -52,6 +53,7 @@ public sealed class ArgumentGenerator
         GenerationSettings settings,
         string replayHint,
         Func<FakeScope, object?>[]? producers)
+#pragma warning restore S107
     {
         _arguments = arguments;
         _locale = locale;

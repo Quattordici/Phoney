@@ -4,6 +4,7 @@ using Phoney.Generation;
 namespace Phoney;
 
 // Property checks over the parameters of a lambda: Fake.Check((Order order, int discount) => …).
+#pragma warning disable S2436 // up to four parameters, the arities a test reads at a glance; more go through ArgumentGenerator.Check
 public static partial class Fake
 {
     /// <summary>
@@ -29,34 +30,6 @@ public static partial class Fake
     public static void Check<T1>(Func<T1, bool> property, int count = 100, int maxShrinks = 1000) =>
         ArgumentsOf(property).Check(row => property((T1)row[0]!), count, maxShrinks);
 
-    /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
-    /// <typeparam name="T1">The type of parameter 1.</typeparam>
-    /// <param name="property">The assertions for one row.</param>
-    /// <param name="count">How many rows to test; 0 tests none.</param>
-    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
-    /// <exception cref="FakeCheckException{T}">The property threw for a row; what it threw is the inner exception.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
-    [RequiresUnreferencedCode(ReflectionMessage)]
-    [RequiresDynamicCode(ReflectionMessage)]
-    public static void Check<T1>(Action<T1> property, int count = 100, int maxShrinks = 1000) =>
-        ArgumentsOf(property).Check(row => property((T1)row[0]!), count, maxShrinks);
-
-    /// <summary>The asynchronous form of <see cref="Check{T1}(Action{T1}, int, int)"/>: a row fails when the property's task faults.</summary>
-    /// <typeparam name="T1">The type of parameter 1.</typeparam>
-    /// <param name="property">The asynchronous assertions for one row.</param>
-    /// <param name="count">How many rows to test; 0 tests none.</param>
-    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
-    /// <param name="cancellationToken">Stops the check between rows.</param>
-    /// <exception cref="FakeCheckException{T}">The property failed for a row.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    [RequiresUnreferencedCode(ReflectionMessage)]
-    [RequiresDynamicCode(ReflectionMessage)]
-    public static Task CheckAsync<T1>(Func<T1, Task> property, int count = 100, int maxShrinks = 1000, CancellationToken cancellationToken = default) =>
-        ArgumentsOf(property).CheckAsync(row => property((T1)row[0]!), count, maxShrinks, cancellationToken);
-
     /// <summary>Checks that <paramref name="property"/> holds for <paramref name="count"/> generated sets of its 2 parameters, and shrinks a failing set; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
     /// <typeparam name="T2">The type of parameter 2.</typeparam>
@@ -70,36 +43,6 @@ public static partial class Fake
     [RequiresDynamicCode(ReflectionMessage)]
     public static void Check<T1, T2>(Func<T1, T2, bool> property, int count = 100, int maxShrinks = 1000) =>
         ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!), count, maxShrinks);
-
-    /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
-    /// <typeparam name="T1">The type of parameter 1.</typeparam>
-    /// <typeparam name="T2">The type of parameter 2.</typeparam>
-    /// <param name="property">The assertions for one row.</param>
-    /// <param name="count">How many rows to test; 0 tests none.</param>
-    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
-    /// <exception cref="FakeCheckException{T}">The property threw for a row; what it threw is the inner exception.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
-    [RequiresUnreferencedCode(ReflectionMessage)]
-    [RequiresDynamicCode(ReflectionMessage)]
-    public static void Check<T1, T2>(Action<T1, T2> property, int count = 100, int maxShrinks = 1000) =>
-        ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!), count, maxShrinks);
-
-    /// <summary>The asynchronous form of <see cref="Check{T1, T2}(Action{T1, T2}, int, int)"/>: a row fails when the property's task faults.</summary>
-    /// <typeparam name="T1">The type of parameter 1.</typeparam>
-    /// <typeparam name="T2">The type of parameter 2.</typeparam>
-    /// <param name="property">The asynchronous assertions for one row.</param>
-    /// <param name="count">How many rows to test; 0 tests none.</param>
-    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
-    /// <param name="cancellationToken">Stops the check between rows.</param>
-    /// <exception cref="FakeCheckException{T}">The property failed for a row.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    [RequiresUnreferencedCode(ReflectionMessage)]
-    [RequiresDynamicCode(ReflectionMessage)]
-    public static Task CheckAsync<T1, T2>(Func<T1, T2, Task> property, int count = 100, int maxShrinks = 1000, CancellationToken cancellationToken = default) =>
-        ArgumentsOf(property).CheckAsync(row => property((T1)row[0]!, (T2)row[1]!), count, maxShrinks, cancellationToken);
 
     /// <summary>Checks that <paramref name="property"/> holds for <paramref name="count"/> generated sets of its 3 parameters, and shrinks a failing set; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
@@ -115,38 +58,6 @@ public static partial class Fake
     [RequiresDynamicCode(ReflectionMessage)]
     public static void Check<T1, T2, T3>(Func<T1, T2, T3, bool> property, int count = 100, int maxShrinks = 1000) =>
         ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!), count, maxShrinks);
-
-    /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
-    /// <typeparam name="T1">The type of parameter 1.</typeparam>
-    /// <typeparam name="T2">The type of parameter 2.</typeparam>
-    /// <typeparam name="T3">The type of parameter 3.</typeparam>
-    /// <param name="property">The assertions for one row.</param>
-    /// <param name="count">How many rows to test; 0 tests none.</param>
-    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
-    /// <exception cref="FakeCheckException{T}">The property threw for a row; what it threw is the inner exception.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
-    [RequiresUnreferencedCode(ReflectionMessage)]
-    [RequiresDynamicCode(ReflectionMessage)]
-    public static void Check<T1, T2, T3>(Action<T1, T2, T3> property, int count = 100, int maxShrinks = 1000) =>
-        ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!), count, maxShrinks);
-
-    /// <summary>The asynchronous form of <see cref="Check{T1, T2, T3}(Action{T1, T2, T3}, int, int)"/>: a row fails when the property's task faults.</summary>
-    /// <typeparam name="T1">The type of parameter 1.</typeparam>
-    /// <typeparam name="T2">The type of parameter 2.</typeparam>
-    /// <typeparam name="T3">The type of parameter 3.</typeparam>
-    /// <param name="property">The asynchronous assertions for one row.</param>
-    /// <param name="count">How many rows to test; 0 tests none.</param>
-    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
-    /// <param name="cancellationToken">Stops the check between rows.</param>
-    /// <exception cref="FakeCheckException{T}">The property failed for a row.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    [RequiresUnreferencedCode(ReflectionMessage)]
-    [RequiresDynamicCode(ReflectionMessage)]
-    public static Task CheckAsync<T1, T2, T3>(Func<T1, T2, T3, Task> property, int count = 100, int maxShrinks = 1000, CancellationToken cancellationToken = default) =>
-        ArgumentsOf(property).CheckAsync(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!), count, maxShrinks, cancellationToken);
 
     /// <summary>Checks that <paramref name="property"/> holds for <paramref name="count"/> generated sets of its 4 parameters, and shrinks a failing set; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
@@ -166,6 +77,48 @@ public static partial class Fake
 
     /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
+    /// <param name="property">The assertions for one row.</param>
+    /// <param name="count">How many rows to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
+    /// <exception cref="FakeCheckException{T}">The property threw for a row; what it threw is the inner exception.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static void Check<T1>(Action<T1> property, int count = 100, int maxShrinks = 1000) =>
+        ArgumentsOf(property).Check(row => property((T1)row[0]!), count, maxShrinks);
+
+    /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
+    /// <typeparam name="T1">The type of parameter 1.</typeparam>
+    /// <typeparam name="T2">The type of parameter 2.</typeparam>
+    /// <param name="property">The assertions for one row.</param>
+    /// <param name="count">How many rows to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
+    /// <exception cref="FakeCheckException{T}">The property threw for a row; what it threw is the inner exception.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static void Check<T1, T2>(Action<T1, T2> property, int count = 100, int maxShrinks = 1000) =>
+        ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!), count, maxShrinks);
+
+    /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
+    /// <typeparam name="T1">The type of parameter 1.</typeparam>
+    /// <typeparam name="T2">The type of parameter 2.</typeparam>
+    /// <typeparam name="T3">The type of parameter 3.</typeparam>
+    /// <param name="property">The assertions for one row.</param>
+    /// <param name="count">How many rows to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
+    /// <exception cref="FakeCheckException{T}">The property threw for a row; what it threw is the inner exception.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static void Check<T1, T2, T3>(Action<T1, T2, T3> property, int count = 100, int maxShrinks = 1000) =>
+        ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!), count, maxShrinks);
+
+    /// <summary>Checks that <paramref name="property"/> doesn't throw for <paramref name="count"/> generated sets of its parameters, so any assertion library can be the property; see <see cref="Check{T1}(Func{T1, bool}, int, int)"/>.</summary>
+    /// <typeparam name="T1">The type of parameter 1.</typeparam>
     /// <typeparam name="T2">The type of parameter 2.</typeparam>
     /// <typeparam name="T3">The type of parameter 3.</typeparam>
     /// <typeparam name="T4">The type of parameter 4.</typeparam>
@@ -179,6 +132,54 @@ public static partial class Fake
     [RequiresDynamicCode(ReflectionMessage)]
     public static void Check<T1, T2, T3, T4>(Action<T1, T2, T3, T4> property, int count = 100, int maxShrinks = 1000) =>
         ArgumentsOf(property).Check(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!, (T4)row[3]!), count, maxShrinks);
+
+    /// <summary>The asynchronous form of <see cref="Check{T1}(Action{T1}, int, int)"/>: a row fails when the property's task faults.</summary>
+    /// <typeparam name="T1">The type of parameter 1.</typeparam>
+    /// <param name="property">The asynchronous assertions for one row.</param>
+    /// <param name="count">How many rows to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
+    /// <param name="cancellationToken">Stops the check between rows.</param>
+    /// <exception cref="FakeCheckException{T}">The property failed for a row.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static Task CheckAsync<T1>(Func<T1, Task> property, int count = 100, int maxShrinks = 1000, CancellationToken cancellationToken = default) =>
+        ArgumentsOf(property).CheckAsync(row => property((T1)row[0]!), count, maxShrinks, cancellationToken);
+
+    /// <summary>The asynchronous form of <see cref="Check{T1, T2}(Action{T1, T2}, int, int)"/>: a row fails when the property's task faults.</summary>
+    /// <typeparam name="T1">The type of parameter 1.</typeparam>
+    /// <typeparam name="T2">The type of parameter 2.</typeparam>
+    /// <param name="property">The asynchronous assertions for one row.</param>
+    /// <param name="count">How many rows to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
+    /// <param name="cancellationToken">Stops the check between rows.</param>
+    /// <exception cref="FakeCheckException{T}">The property failed for a row.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static Task CheckAsync<T1, T2>(Func<T1, T2, Task> property, int count = 100, int maxShrinks = 1000, CancellationToken cancellationToken = default) =>
+        ArgumentsOf(property).CheckAsync(row => property((T1)row[0]!, (T2)row[1]!), count, maxShrinks, cancellationToken);
+
+    /// <summary>The asynchronous form of <see cref="Check{T1, T2, T3}(Action{T1, T2, T3}, int, int)"/>: a row fails when the property's task faults.</summary>
+    /// <typeparam name="T1">The type of parameter 1.</typeparam>
+    /// <typeparam name="T2">The type of parameter 2.</typeparam>
+    /// <typeparam name="T3">The type of parameter 3.</typeparam>
+    /// <param name="property">The asynchronous assertions for one row.</param>
+    /// <param name="count">How many rows to test; 0 tests none.</param>
+    /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
+    /// <param name="cancellationToken">Stops the check between rows.</param>
+    /// <exception cref="FakeCheckException{T}">The property failed for a row.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static Task CheckAsync<T1, T2, T3>(Func<T1, T2, T3, Task> property, int count = 100, int maxShrinks = 1000, CancellationToken cancellationToken = default) =>
+        ArgumentsOf(property).CheckAsync(row => property((T1)row[0]!, (T2)row[1]!, (T3)row[2]!), count, maxShrinks, cancellationToken);
 
     /// <summary>The asynchronous form of <see cref="Check{T1, T2, T3, T4}(Action{T1, T2, T3, T4}, int, int)"/>: a row fails when the property's task faults.</summary>
     /// <typeparam name="T1">The type of parameter 1.</typeparam>
@@ -207,3 +208,4 @@ public static partial class Fake
         return Arguments(property.Method).WithoutReplayHint();
     }
 }
+#pragma warning restore S2436

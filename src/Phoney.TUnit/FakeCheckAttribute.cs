@@ -101,6 +101,6 @@ public sealed class FakeCheckAttribute : UntypedDataSourceGeneratorAttribute, IT
         var test = dataGeneratorMetadata.TestInformation;
         var seed = FakeDataOptions.DefaultSeed(FakeDataOptions.TestName(test?.Class?.Type, test?.Name ?? ""), arguments);
         var sample = _options.CreateGenerator(arguments).Seed(seed);
-        yield return () => sample.Row(0);
+        return [() => sample.Row(0)];
     }
 }

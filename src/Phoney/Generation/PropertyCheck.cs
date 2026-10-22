@@ -221,11 +221,12 @@ internal readonly record struct CheckSeed(long Value, CheckSeed.Origin From, str
     /// <summary>The generator's own seed, else <c>PHONEY_SEED</c>, else a new random one; <paramref name="pin"/> formats how to pin it (<c>{0}</c> is the seed), empty for no way.</summary>
     public static CheckSeed Choose(long? own, string pin = GeneratorPin)
     {
-        var (value, from) = own is { } seed
-            ? (seed, Origin.Generator)
-            : FakeSeed.FromEnvironment() is { } environment ? (environment, Origin.Environment) : (FakeSeed.New(), Origin.Random);
-        return new(value, from, string.Format(CultureInfo.InvariantCulture, pin, value));
+        if (own is { } seed)
+            return Create(seed, Origin.Generator, pin);
+        return FakeSeed.FromEnvironment() is { } environment ? Create(environment, Origin.Environment, pin) : Create(FakeSeed.New(), Origin.Random, pin);
     }
+
+    private static CheckSeed Create(long value, Origin from, string pin) => new(value, from, string.Format(CultureInfo.InvariantCulture, pin, value));
 
     /// <summary>How to run the same check again.</summary>
     public string Replay => From switch
