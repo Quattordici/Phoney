@@ -7,7 +7,7 @@ namespace Phoney.Tests;
 /// with other test processes (macOS has three cores for all of them) that wait can be fifty times the work. Processor time counts only the work, so a budget
 /// in it fails when the code gets slower, not when the machine is busy. The work must run on the calling thread, as synchronous code does.
 /// </summary>
-internal static class CpuTime
+internal static partial class CpuTime
 {
     /// <summary>The processor time <paramref name="work"/> takes on the current thread, in user and kernel mode.</summary>
     public static TimeSpan Of(Action work)
@@ -31,7 +31,7 @@ internal static class CpuTime
 
         // CLOCK_THREAD_CPUTIME_ID: 3 on Linux, 16 on macOS.
         var clock = OperatingSystem.IsMacOS() ? 16 : 3;
-        if (clock_gettime(clock, out var time) != 0)
+        if (ClockGetTime(clock, out var time) != 0)
             throw new InvalidOperationException($"clock_gettime failed with error {Marshal.GetLastPInvokeError()}.");
         return TimeSpan.FromTicks((time.Seconds * TimeSpan.TicksPerSecond) + (time.Nanoseconds / 100));
     }
@@ -43,13 +43,13 @@ internal static class CpuTime
         public long Nanoseconds;
     }
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int clock_gettime(int clock, out TimeSpec time);
+    [LibraryImport("libc", EntryPoint = "clock_gettime", SetLastError = true)]
+    private static partial int ClockGetTime(int clock, out TimeSpec time);
 
-    [DllImport("kernel32")]
-    private static extern IntPtr GetCurrentThread();
+    [LibraryImport("kernel32")]
+    private static partial IntPtr GetCurrentThread();
 
-    [DllImport("kernel32", SetLastError = true)]
+    [LibraryImport("kernel32", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetThreadTimes(IntPtr thread, out long creation, out long exit, out long kernel, out long user);
+    private static partial bool GetThreadTimes(IntPtr thread, out long creation, out long exit, out long kernel, out long user);
 }
