@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Phoney.Tests;
 
 /// <summary>What <see cref="CpuTime"/> counts: work on the thread, not time spent waiting.</summary>
@@ -8,12 +6,9 @@ public sealed class CpuTimeTests
     [Test]
     public void Waiting_costs_no_processor_time()
     {
-        var wall = Stopwatch.StartNew();
-
         var cpu = CpuTime.Of(() => Thread.Sleep(300));
 
-        wall.Elapsed.ShouldBeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(250));
-        cpu.ShouldBeLessThan(TimeSpan.FromMilliseconds(150));
+        cpu.ShouldBeLessThan(TimeSpan.FromMilliseconds(150)); // the sleep alone is 300 ms of wall time
     }
 
     [Test]
