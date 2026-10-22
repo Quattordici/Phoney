@@ -20,6 +20,11 @@ public sealed class CartLine
 
 public sealed record CheckedPoint(int X, int Y);
 
+public sealed class CheckedCatalog
+{
+    public Dictionary<string, CartLine> BySku { get; set; } = [];
+}
+
 public sealed record CheckedFolder
 {
     public string Name { get; set; } = "";
@@ -293,6 +298,25 @@ public sealed class PropertyCheckTests
         var failure = Should.Throw<FakeCheckException<CheckedPoint>>(() => Fake.For<CheckedPoint>().Seed(3).Check(p => p.X < 0));
 
         failure.Message.ShouldContain("CheckedPoint { X = ");
+    }
+
+    [Test]
+    public void A_tuple_counterexample_describes_each_of_its_elements()
+    {
+        var failure = Should.Throw<FakeCheckException<(CartLine Line, int Discount)>>(() =>
+            Fake.For<(CartLine Line, int Discount)>().Seed(1).Check(t => t.Line.Quantity * 10 - t.Discount >= 0));
+
+        failure.Message.ShouldContain("(CartLine { Sku = \"");
+        failure.Message.ShouldNotContain("(CartLine,");
+    }
+
+    [Test]
+    public void A_dictionary_counterexample_describes_its_values()
+    {
+        var failure = Should.Throw<FakeCheckException<CheckedCatalog>>(() => Fake.For<CheckedCatalog>().Seed(1).Check(c => c.BySku.Count < 1));
+
+        failure.Message.ShouldContain("BySku = [\"");
+        failure.Message.ShouldContain("\" = CartLine { Sku = \"");
     }
 
     [Test]

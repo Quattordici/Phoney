@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Phoney.Generation;
@@ -53,11 +54,35 @@ internal static class ObjectDescription
             return;
         }
 
-        if (value is IEnumerable sequence)
+        if (value is ITuple tuple)
+            AppendTuple(text, tuple, depth, path);
+        else if (value is IDictionary dictionary && !FakeScope.IsEmpty(dictionary))
+            AppendElements(text, Entries(dictionary), depth, path); // entries, not boxed KeyValuePairs, whose ToString hides the values' members
+        else if (value is IEnumerable sequence)
             AppendElements(text, sequence, depth, path);
         else
             AppendObject(text, value, depth, path);
         path.Remove(value);
+    }
+
+    private static IEnumerable Entries(IDictionary dictionary)
+    {
+        var entries = dictionary.GetEnumerator();
+        while (entries.MoveNext())
+            yield return entries.Entry;
+    }
+
+    private static void AppendTuple(StringBuilder text, ITuple tuple, int depth, HashSet<object> path)
+    {
+        text.Append('(');
+        for (var i = 0; i < tuple.Length; i++)
+        {
+            if (i > 0)
+                text.Append(", ");
+            Append(text, tuple[i], depth + 1, path);
+        }
+
+        text.Append(')');
     }
 
     private static void AppendElements(StringBuilder text, IEnumerable sequence, int depth, HashSet<object> path)
