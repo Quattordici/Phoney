@@ -143,6 +143,58 @@ public sealed class UsageCodeFixTests
             (await CodeFixHarness.Fixes(project, new UseReturnedValueCodeFix(), diagnostic, cancellationToken)).ShouldBeEmpty();
     }
 
+    [Test]
+    public async Task Discarded_results_are_only_assigned_back_through_receivers_that_are_read_once(CancellationToken cancellationToken)
+    {
+        var (project, diagnostics) = await Diagnose("""
+            public sealed class Holder
+            {
+                public Point Value;
+                public Point Property { get; set; }
+                public ObjectGenerator<Gadget> Gen = Fake.For<Gadget>();
+                public Holder Inner = null!;
+            }
+
+            public sealed class Usage
+            {
+                private Holder _holder = new();
+
+                private static Holder GetHolder() => new();
+
+                public void A(Holder parameter)
+                {
+                    var holder = new Holder();
+                    Fake.ForGenerated<Point>().Populate(GetHolder().Value);
+                    Fake.ForGenerated<Point>().Populate(GetHolder().Property);
+                    GetHolder().Gen.Seed(1);
+                    Fake.ForGenerated<Point>().Populate(holder.Value);
+                    Fake.ForGenerated<Point>().Populate(parameter.Property);
+                    Fake.ForGenerated<Point>().Populate(_holder.Inner.Value);
+                    this._holder.Gen.Seed(2);
+                }
+            }
+            """, new UsageAnalyzer(), "PHONEY005", cancellationToken);
+        diagnostics.Length.ShouldBe(7);
+
+        // A call (or a property getter) as receiver would run twice, possibly returning another object each time.
+        foreach (var diagnostic in diagnostics.Take(3))
+            (await CodeFixHarness.Fixes(project, new UseReturnedValueCodeFix(), diagnostic, cancellationToken)).ShouldBeEmpty();
+
+        string[] expected =
+        [
+            "holder.Value = Fake.ForGenerated<Point>().Populate(holder.Value);",
+            "parameter.Property = Fake.ForGenerated<Point>().Populate(parameter.Property);",
+            "_holder.Inner.Value = Fake.ForGenerated<Point>().Populate(_holder.Inner.Value);",
+            "this._holder.Gen = this._holder.Gen.Seed(2);",
+        ];
+        for (var i = 0; i < expected.Length; i++)
+        {
+            var fix = await SingleFix(project, new UseReturnedValueCodeFix(), diagnostics[3 + i], cancellationToken);
+            (await fix.TextOf("Usage.cs", cancellationToken)).ShouldContain(expected[i]);
+            await ShouldCompile(fix.Result, cancellationToken);
+        }
+    }
+
     // PHONEY006: Fake.Seeded scope never disposed
 
     [Test]

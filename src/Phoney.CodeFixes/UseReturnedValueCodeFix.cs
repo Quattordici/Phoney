@@ -15,7 +15,8 @@ namespace Phoney.CodeFixes;
 /// <summary>
 /// PHONEY005: assigns a discarded result back to where it came from: <c>gen.With(...);</c> becomes
 /// <c>gen = gen.With(...);</c>, and <c>gen.Populate(point);</c> on a struct becomes <c>point = gen.Populate(point);</c>.
-/// Offered only when that variable, field or property can be assigned the result.
+/// Offered only when that variable, field or property can be assigned the result, and its receiver (if any) is read
+/// without side effects, so writing it on both sides of <c>=</c> doesn't evaluate a call or getter twice.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(UseReturnedValueCodeFix)), Shared]
 public sealed class UseReturnedValueCodeFix : CodeFixProvider
@@ -83,8 +84,26 @@ public sealed class UseReturnedValueCodeFix : CodeFixProvider
             IPropertyReferenceOperation { Property: { IsIndexer: false, SetMethod: { IsInitOnly: false } setter } } => model.IsAccessible(position, setter),
             _ => false,
         };
-        return assignable && target.Type is { } targetType && call.Type is { } resultType &&
+        return assignable && HasStableReceiver(target) && target.Type is { } targetType && call.Type is { } resultType &&
             model.Compilation.ClassifyCommonConversion(resultType, targetType).IsImplicit;
+    }
+
+    /// <summary>
+    /// Whether the receiver of a field or property target can be written twice (<c>target = …(target)</c>) without changing
+    /// behaviour: none, <c>this</c>/<c>base</c>, a local, a parameter, or a field read on one of those. Calls and property
+    /// getters may have side effects or return another object each time, so <c>GetHolder().Value</c> gets no fix.
+    /// </summary>
+    private static bool HasStableReceiver(IOperation target)
+    {
+        var receiver = target switch
+        {
+            IFieldReferenceOperation field => field.Instance,
+            IPropertyReferenceOperation property => property.Instance,
+            _ => null,
+        };
+        while (receiver is IFieldReferenceOperation field)
+            receiver = field.Instance;
+        return receiver is null or ILocalReferenceOperation or IParameterReferenceOperation or IInstanceReferenceOperation;
     }
 
     /// <summary><c>call;</c> → <c>target = call;</c>, keeping the statement's trivia and the layout of the call.</summary>
