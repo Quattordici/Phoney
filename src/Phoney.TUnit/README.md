@@ -56,6 +56,27 @@ public async Task Totals_add_up()
 - It seeds the `Fake` facade of the test, not generators created earlier (a `static` field) or ones that call `.Seed(...)` themselves. Skipped tests print nothing.
 - It works with other test executors (`[TestExecutor<T>]`): the executor the test already has runs inside the seeded scope.
 
+## Property checks that shrink
+
+`[FakeCheck]` runs a test once for each of 100 generated rows of its parameters. When the test fails for a row, the row is **shrunk** to the simplest one that still fails (fewer collection elements, lower numbers, the first list values), and the test fails with it:
+
+```csharp
+[Test, FakeCheck]
+public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
+    Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
+// FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
+// Counterexample:
+//   order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }] }, discount = 2
+// …
+// Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
+```
+
+- Parameters are filled like `[FakeData]` fills them (names, types, annotations; the values of a row agree), and shrinking only makes rows Phoney could have generated, so a counterexample is still realistic data.
+- **New rows on every run**, so the suite explores more data over time. `[FakeCheck(Seed = 812734)]` or `PHONEY_SEED=812734 dotnet test` replays a failure and its shrinking exactly.
+- **Options:** `Count` (default 100), `MaxShrinks` (default 1000; 0 reports the original row), `Seed`, `Locale`, `NullProbability` and `ReferenceDate`.
+- The rows run one after another on one instance of the test class, inside the executor the test already has (`[TestExecutor<T>]`) and inside `[FakeSeed]`. TUnit lists one test, named with a sample row.
+- Outside a test method attribute, `Fake.Check((Order order, int discount) => …)` does the same for a lambda.
+
 ## Invalid and boundary data as test cases
 
 `ObjectGenerator<T>.InvalidCases()` and `BoundaryCases()` (see the main README) make good TUnit data sources: every case is a test case named after what it is.
