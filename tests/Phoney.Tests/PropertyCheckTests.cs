@@ -325,6 +325,25 @@ public sealed class PropertyCheckTests
     }
 
     [Test]
+    public void A_large_dictionary_shows_its_lowest_keys_in_order_and_then_an_ellipsis()
+    {
+        var numbers = new Dictionary<int, string>();
+        for (var i = 15; i >= 1; i--)
+            numbers[i] = $"n{i}";
+
+        ObjectDescription.Of(numbers).ShouldBe("""[1 = "n1", 2 = "n2", 3 = "n3", 4 = "n4", 5 = "n5", 6 = "n6", 7 = "n7", 8 = "n8", 9 = "n9", 10 = "n10", …]""");
+    }
+
+    [Test]
+    public void Keys_that_refuse_to_be_compared_are_described_in_the_dictionary_order()
+    {
+        var pairs = new Dictionary<Tuple<object>, int> { [Tuple.Create<object>(new object())] = 1, [Tuple.Create<object>(new object())] = 2 };
+
+        ObjectDescription.Of(pairs).ShouldStartWith("[(");
+        ObjectDescription.Of(pairs).ShouldEndWith(" = 2]");
+    }
+
+    [Test]
     public void A_recorded_tape_replays_the_same_object_and_runs_out_into_the_simplest_draw()
     {
         var recording = ChoiceTape.Record();
