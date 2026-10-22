@@ -10,18 +10,18 @@ public sealed class OpenWindow
     [Range(0, 10, MinimumIsExclusive = true)] public int AboveZero { get; set; }
     [Range(0.0, 1.0, MinimumIsExclusive = true, MaximumIsExclusive = true)] public double Share { get; set; }
     [Range(0.0, 0.01, MaximumIsExclusive = true)] public double Tiny { get; set; }
-    [Range(typeof(decimal), "0", "0.01", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Fraction { get; set; }
-    [Range(typeof(DateTime), "2020-01-01", "2020-01-01T00:00:00.002", MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateTime Moment { get; set; }
-    [Range(typeof(DateOnly), "2020-01-01", "2020-01-03", MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateOnly Day { get; set; }
+    [Range(typeof(decimal), "0", "0.01", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Fraction { get; set; }
+    [Range(typeof(DateTime), "2020-01-01", "2020-01-01T00:00:00.002", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateTime Moment { get; set; }
+    [Range(typeof(DateOnly), "2020-01-01", "2020-01-03", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateOnly Day { get; set; }
 }
 
 /// <summary>Exclusive limits that a <see cref="float"/> can't hold exactly: the validator compares as <see cref="double"/> or, with a float operand, as <see cref="float"/>.</summary>
 public sealed class FloatWindow
 {
     [Range(0.1, 1.0, MinimumIsExclusive = true, MaximumIsExclusive = true)] public float AsDouble { get; set; }
-    [Range(typeof(float), "0.1", "0.7", MinimumIsExclusive = true, MaximumIsExclusive = true)] public float AsFloat { get; set; }
+    [Range(typeof(float), "0.1", "0.7", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public float AsFloat { get; set; }
     [Range(0.1, 0.7)] public float Inclusive { get; set; }
-    [Range(typeof(decimal), "1", "2", MinimumIsExclusive = true)] public decimal AboveOne { get; set; }
+    [Range(typeof(decimal), "1", "2", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true)] public decimal AboveOne { get; set; }
 }
 
 /// <summary>A <see cref="Half"/> next to an excluded limit: halves near 100 are 0.0625 apart, so rounding can land on it. (<c>RangeAttribute</c> can't validate a <see cref="Half"/>, so the tests compare.)</summary>
@@ -34,15 +34,15 @@ public sealed class HalfWindow
 /// <summary><c>[Range]</c>s narrower than two decimals, and limits a <see cref="double"/> can't tell apart.</summary>
 public sealed class Narrow
 {
-    [Range(typeof(decimal), "0.001", "0.009")] public decimal Rate { get; set; }
-    [Range(typeof(decimal), "0.0000000000000000001", "0.0000000000000000009")] public decimal Tiny { get; set; }
-    [Range(typeof(decimal), "0", "0.000000000000000001", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Open { get; set; }
-    [Range(typeof(decimal), "0.1000000000000000001", "0.1000000000000000009")] public decimal Precise { get; set; }
-    [Range(typeof(decimal), "1000000000.001", "1000000000.009")] public decimal Large { get; set; }
-    [Range(typeof(long), "-9223372036854775808", "-9223372036854775806", MinimumIsExclusive = true, MaximumIsExclusive = true)] public long Edge { get; set; }
-    [Range(typeof(ulong), "18446744073709551610", "18446744073709551614", MinimumIsExclusive = true)] public ulong Top { get; set; }
-    [Range(typeof(decimal), "1000000000000000000000000000", "1000000000000000000000000001", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Huge { get; set; }
-    [Range(typeof(decimal), "1000000000000000000000000000.1", "1000000000000000000000000000.3", MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal HugeTenth { get; set; }
+    [Range(typeof(decimal), "0.001", "0.009", ParseLimitsInInvariantCulture = true)] public decimal Rate { get; set; }
+    [Range(typeof(decimal), "0.0000000000000000001", "0.0000000000000000009", ParseLimitsInInvariantCulture = true)] public decimal Tiny { get; set; }
+    [Range(typeof(decimal), "0", "0.000000000000000001", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Open { get; set; }
+    [Range(typeof(decimal), "0.1000000000000000001", "0.1000000000000000009", ParseLimitsInInvariantCulture = true)] public decimal Precise { get; set; }
+    [Range(typeof(decimal), "1000000000.001", "1000000000.009", ParseLimitsInInvariantCulture = true)] public decimal Large { get; set; }
+    [Range(typeof(long), "-9223372036854775808", "-9223372036854775806", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public long Edge { get; set; }
+    [Range(typeof(ulong), "18446744073709551610", "18446744073709551614", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true)] public ulong Top { get; set; }
+    [Range(typeof(decimal), "1000000000000000000000000000", "1000000000000000000000000001", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal Huge { get; set; }
+    [Range(typeof(decimal), "1000000000000000000000000000.1", "1000000000000000000000000000.3", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public decimal HugeTenth { get; set; }
 }
 
 /// <summary>Excluded limits that leave no value of the member's type.</summary>
@@ -54,13 +54,13 @@ public sealed class NoWholeNumber
 /// <inheritdoc cref="NoWholeNumber"/>
 public sealed class NoDay
 {
-    [Range(typeof(DateOnly), "2020-01-01", "2020-01-02", MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateOnly Day { get; set; }
+    [Range(typeof(DateOnly), "2020-01-01", "2020-01-02", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true, MaximumIsExclusive = true)] public DateOnly Day { get; set; }
 }
 
 /// <inheritdoc cref="NoWholeNumber"/>
 public sealed class NoMoment
 {
-    [Range(typeof(DateTime), "2020-01-01", "2020-01-01", MinimumIsExclusive = true)] public DateTime At { get; set; }
+    [Range(typeof(DateTime), "2020-01-01", "2020-01-01", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true)] public DateTime At { get; set; }
 }
 
 /// <inheritdoc cref="NoWholeNumber"/>
@@ -72,13 +72,13 @@ public sealed class NoFraction
 /// <inheritdoc cref="NoWholeNumber"/>
 public sealed class NoDecimal
 {
-    [Range(typeof(decimal), "1", "1", MinimumIsExclusive = true)] public decimal Amount { get; set; }
+    [Range(typeof(decimal), "1", "1", ParseLimitsInInvariantCulture = true, MinimumIsExclusive = true)] public decimal Amount { get; set; }
 }
 
 /// <summary>A <see cref="long"/> range entirely above <see cref="long.MaxValue"/>.</summary>
 public sealed class BeyondLong
 {
-    [Range(typeof(long), "9223372036854775808", "9223372036854775809")] public long Count { get; set; }
+    [Range(typeof(long), "9223372036854775808", "9223372036854775809", ParseLimitsInInvariantCulture = true)] public long Count { get; set; }
 }
 
 [FakeFor<OpenWindow>]

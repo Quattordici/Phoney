@@ -85,9 +85,14 @@ public sealed class TypeArgumentGeneratorTests
         var (driver, _, diagnostics) = GeneratorHarness.Run(Builder, """
             namespace Shop;
             public abstract class Shape { }
+            public sealed class Box<T> { public T? Value { get; set; } }
+            public sealed class Outer<T> { public sealed class Inner { public T? Value { get; set; } } }
             public static class Usage
             {
                 public static T Make<T>() where T : class => Testing.Factory.Create<T>().Generate();
+                public static Box<T[]> Array<T>() => Testing.Factory.Create<Box<T[]>>().Generate();
+                public static Box<T[][]> Jagged<T>() => Testing.Factory.Create<Box<T[][]>>().Generate();
+                public static Outer<T>.Inner Nested<T>() => Testing.Factory.Create<Outer<T>.Inner>().Generate();
                 public static Shape Abstract() => Testing.Factory.Create<Shape>().Generate();
                 public static System.Uri Framework() => Testing.Factory.Create<System.Uri>().Generate();
             }
