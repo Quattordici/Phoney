@@ -8,10 +8,10 @@ namespace Phoney.SourceGenerator.Tests;
 /// <summary>Runs <see cref="FakeForGenerator"/> over source text with the Phoney runtime referenced.</summary>
 internal static class GeneratorHarness
 {
-    public static (GeneratorDriver Driver, Compilation Output, ImmutableArray<Diagnostic> Diagnostics) Run(string source)
+    public static (GeneratorDriver Driver, Compilation Output, ImmutableArray<Diagnostic> Diagnostics) Run(params string[] sources)
     {
         GeneratorDriver driver = CSharpGeneratorDriver.Create(new FakeForGenerator());
-        driver = driver.RunGeneratorsAndUpdateCompilation(Compile(source), out var output, out var diagnostics);
+        driver = driver.RunGeneratorsAndUpdateCompilation(Compile(sources), out var output, out var diagnostics);
         return (driver, output, diagnostics);
     }
 

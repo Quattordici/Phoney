@@ -111,19 +111,29 @@ internal sealed class MemberModel
 internal sealed class ModelBuilder
 {
     private readonly Compilation _compilation;
-    private readonly INamedTypeSymbol _owner;
+    private readonly ISymbol _owner;
+    private readonly string _ownerName;
     private readonly List<DiagnosticInfo> _diagnostics;
-    private readonly LocationInfo _location;
     private readonly Queue<INamedTypeSymbol> _queue = new();
     private readonly HashSet<INamedTypeSymbol> _seen = new(SymbolEqualityComparer.Default);
 
     public ModelBuilder(Compilation compilation, INamedTypeSymbol owner, List<DiagnosticInfo> diagnostics, LocationInfo location)
+        : this(compilation, owner, owner.Name, diagnostics, location)
+    {
+    }
+
+    /// <summary>Builds models that must be accessible within <paramref name="owner"/>: a type, or an assembly for models emitted at its top level.</summary>
+    public ModelBuilder(Compilation compilation, ISymbol owner, string ownerName, List<DiagnosticInfo> diagnostics, LocationInfo location)
     {
         _compilation = compilation;
         _owner = owner;
+        _ownerName = ownerName;
         _diagnostics = diagnostics;
-        _location = location;
+        DiagnosticLocation = location;
     }
+
+    /// <summary>Where diagnostics for the types built next are reported.</summary>
+    public LocationInfo DiagnosticLocation { get; set; }
 
     /// <summary>Models built so far, requested types first.</summary>
     public List<TypeModel> Models { get; } = new();
@@ -168,7 +178,7 @@ internal sealed class ModelBuilder
         if (type.IsAbstract || type.TypeKind is not (TypeKind.Class or TypeKind.Struct))
             return Skip(type, "only concrete classes, records and structs can be generated");
         if (!_compilation.IsSymbolAccessibleWithin(type, _owner))
-            return Skip(type, $"it is not accessible from '{_owner.Name}'");
+            return Skip(type, $"it is not accessible from '{_ownerName}'");
 
         var writable = WritableMembers(type);
         var constructor = ChooseConstructor(type);
@@ -283,7 +293,7 @@ internal sealed class ModelBuilder
     /// <summary>Reports PHONEY002 for a type that cannot be generated.</summary>
     private TypeModel? Skip(INamedTypeSymbol type, string reason)
     {
-        _diagnostics.Add(new DiagnosticInfo(Diagnostics.CannotGenerate, _location, type.ToDisplayString(), reason));
+        _diagnostics.Add(new DiagnosticInfo(Diagnostics.CannotGenerate, DiagnosticLocation, type.ToDisplayString(), reason));
         return null;
     }
 

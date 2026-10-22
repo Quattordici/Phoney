@@ -355,10 +355,11 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>PHONEY008: an earlier call in the same chain set the same member, and this one replaces it.</summary>
     private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
-        if (HasEarlierInChain(call, symbols, earlier =>
-                SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path))
+        if (EarlierInChain(call, symbols, earlier =>
+                SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path) is { } replaced)
         {
-            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, selector.Path));
+            // The replaced call goes along so the code fix can remove it.
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, additionalLocations: new[] { replaced.Syntax.GetLocation() }, selector.Path));
         }
     }
 
@@ -372,25 +373,25 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         if (call.TargetMethod.TypeArguments.FirstOrDefault() is not { } type)
             return;
         var method = call.TargetMethod.Name;
-        if (HasEarlierInChain(call, symbols, earlier =>
-                earlier.TargetMethod.Name == method && earlier.TargetMethod.TypeArguments.FirstOrDefault() is { } previous && SymbolEqualityComparer.Default.Equals(previous, type)))
+        if (EarlierInChain(call, symbols, earlier =>
+                earlier.TargetMethod.Name == method && earlier.TargetMethod.TypeArguments.FirstOrDefault() is { } previous && SymbolEqualityComparer.Default.Equals(previous, type)) is { } replaced)
         {
-            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, AnalyzerSupport.NameLocation(call), type.Name));
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, AnalyzerSupport.NameLocation(call), additionalLocations: new[] { replaced.Syntax.GetLocation() }, type.Name));
         }
     }
 
-    /// <summary>Whether a generator call earlier in the same fluent chain (not in a variable the chain started from) satisfies <paramref name="matches"/>.</summary>
-    private static bool HasEarlierInChain(IInvocationOperation call, Symbols symbols, Func<IInvocationOperation, bool> matches)
+    /// <summary>The nearest generator call earlier in the same fluent chain (not in a variable the chain started from) that satisfies <paramref name="matches"/>.</summary>
+    private static IInvocationOperation? EarlierInChain(IInvocationOperation call, Symbols symbols, Func<IInvocationOperation, bool> matches)
     {
         var receiver = call.Instance;
         while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, symbols.Generator))
         {
             if (matches(earlier))
-                return true;
+                return earlier;
             receiver = earlier.Instance;
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>Whether the chain starts with <c>new ObjectGenerator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>

@@ -661,6 +661,16 @@ var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 });
 - The generator writes a model for each listed type and every type it contains and registers them at startup, so `Fake.For<Customer>()` uses them too. **Generated and reflection models produce identical data for the same seed.**
 - `Fake.For`, `One`, `Many` and `Populate` fall back to reflection and are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`), so the compiler flags them in trimmed and AOT apps. **`Fake.ForGenerated<T>()`** is the same facade without reflection, and throws with the fix when the type has no model.
 - Subtypes need models too: `[JsonDerivedType]` types get them automatically, and `[FakeSubtype<IShape, Circle>]` generates one and registers the subtype. NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
+- Generic helpers (test-data builders, factories in a shared package) can mark their type parameter with **`[FakeForTypeArgument]`**: every project that passes a concrete type for it, in a base class or an explicit generic call, gets a generated, registered model for that type without listing it in `[FakeFor]`. Type arguments inferred from method arguments are not seen.
+
+  ```csharp
+  public abstract class TestDataBuilder<[FakeForTypeArgument] T> where T : class
+  {
+      public T Build() => Fake.ForGenerated<T>().Generate();
+  }
+
+  internal sealed class CustomerBuilder : TestDataBuilder<Customer>; // Customer gets a model
+  ```
 
 <details>
 <summary>Diagnostics</summary>
@@ -680,7 +690,19 @@ var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 });
 | PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`, `Where(x => …, 0)`, `WithNormalDistribution(x => x.Age, 40, -5)`…) |
 | PHONEY012 | Info | `Fake.For<T>()`, `One`, `Many` or `Populate` generate a type with reflection because no `[FakeFor<T>]` covers it |
 
-The IDE fixes **PHONEY001** (make the class and its containing types `partial`) and **PHONEY012** (add `[FakeFor<T>]` to the class that already lists types, or create one). PHONEY012 is only a suggestion, since reflection is fine unless the app is trimmed or AOT compiled. The advisory rules (PHONEY004–008 and 010–012) are in the category `Phoney.Usage`, and the generator's (001–003 and 009) in `Phoney`, so you can tone down all advisory rules at once:
+The IDE offers fixes for these rules:
+
+| Id | Fix |
+|---|---|
+| PHONEY001 | make the class and its containing types `partial` |
+| PHONEY004 | add `.Ignore(x => x.Member)` before `.Strict()` for every member without a value |
+| PHONEY005 | assign the result back: `gen = gen.With(...)`, `point = gen.Populate(point)` (when that variable, field or property can take it) |
+| PHONEY006 | dispose the scope: `using var _ = Fake.Seeded(1);` |
+| PHONEY008 | remove the earlier rule or registration, which has no effect |
+| PHONEY009 | remove the `[FakeSubtype]` registration, which the generator leaves out anyway |
+| PHONEY012 | add `[FakeFor<T>]` to the class that already lists types, or create one |
+
+The other rules need a decision a fix can't make, such as which value, seed or constructor to use. PHONEY012 is only a suggestion, since reflection is fine unless the app is trimmed or AOT compiled. The advisory rules (PHONEY004–008 and 010–012) are in the category `Phoney.Usage`, and the generator's (001–003 and 009) in `Phoney`, so you can tone down all advisory rules at once:
 
 ```ini
 [*.cs]

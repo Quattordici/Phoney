@@ -45,6 +45,19 @@ public struct Coordinates
 [FakeFor<Coordinates>]
 public static partial class TestFakes;
 
+public sealed class BuiltThroughTypeArgument
+{
+    public string FirstName { get; set; } = "";
+    public string Email { get; set; } = "";
+}
+
+public abstract class GenericBuilder<[FakeForTypeArgument] T> where T : class
+{
+    public T Build() => Fake.ForGenerated<T>().Generate();
+}
+
+public sealed class TypeArgumentBuilder : GenericBuilder<BuiltThroughTypeArgument>;
+
 public sealed class SourceGeneratedTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
@@ -95,6 +108,15 @@ public sealed class SourceGeneratedTests
         ModelRegistry.IsRegistered<MemberAddress>().ShouldBeTrue();
         ModelRegistry.IsRegistered<Membership>().ShouldBeTrue();
         ModelRegistry.For<Member>().GetType().Name.ShouldStartWith("__PhoneyModel_");
+    }
+
+    [Test]
+    public void Type_arguments_of_marked_type_parameters_get_generated_models()
+    {
+        var built = new TypeArgumentBuilder().Build();
+
+        built.Email.ShouldContain("@");
+        ModelRegistry.Generated<BuiltThroughTypeArgument>().GetType().Name.ShouldStartWith("__PhoneyModel_");
     }
 
     [Test]
