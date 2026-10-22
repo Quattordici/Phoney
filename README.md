@@ -15,7 +15,7 @@
 - **76 locales** imported from faker.js (`@faker-js/faker` 10.6.0), kept up to date by an automated sync pipeline.
 - **One line to a value or a fully populated object**: `Fake.Person.FullName()`, `Fake.Many<Customer>(100)`. Name conventions fill `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… and the names, email and avatar of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members or reach into nested ones (`.With(x => x.Lines.Each().Sku, …)`), uniqueness, conditions, numbering, weighted choices, subtypes and `[JsonDerivedType]`, strict mode checked at compile time, custom conventions and locales, faker.js-style templates.
-- **Property checks that shrink**: `Fake.For<Order>().Check(o => Pricing.Total(o) >= 0)` tests a property on a hundred realistic orders and, when one fails, shrinks it to the simplest order your own rules can make that still fails, with the seed to replay it.
+- **Property checks that shrink**: `Fake.For<Order>().Check(o => Pricing.Total(o) >= 0)` tests a property on a hundred realistic orders and, when one fails, shrinks it to the simplest order your own rules can make that still fails, with the seed to replay it. `Fake.Check((Order o, int discount) => …)` and TUnit's `[FakeCheck]` do the same for parameters.
 - **Test-focused**: invalid and boundary data from your data annotations, `[FakeData]` for xUnit, NUnit, MSTest and TUnit, replayable random tests (`PHONEY_SEED=… dotnet test`), a `TimeProvider` for "now", and stable stand-ins for real data (`Fake.Keyed("customer:42")`, `Pseudonymize`).
 - **Data from files and to files**: fill members from the rows of a CSV or JSON file, or write generated objects as CSV or JSON.
 - **Fast**: array-indexed, allocation-free lookups, templates parsed once, and a **source generator** that makes generation reflection free, trim and Native AOT safe ([benchmarks](#performance)).
@@ -26,7 +26,7 @@
 | `Phoney` | fakers, generators, the source generator and the analyzers | [![NuGet](https://img.shields.io/nuget/v/Phoney.svg?label=)](https://www.nuget.org/packages/Phoney) |
 | `Phoney.MSTest` | [`[FakeData]` for MSTest](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.MSTest.svg?label=)](https://www.nuget.org/packages/Phoney.MSTest) |
 | `Phoney.NUnit` | [`[FakeData]` for NUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NUnit.svg?label=)](https://www.nuget.org/packages/Phoney.NUnit) |
-| `Phoney.TUnit` | [`[FakeData]` and `[FakeSeed]` for TUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.TUnit.svg?label=)](https://www.nuget.org/packages/Phoney.TUnit) |
+| `Phoney.TUnit` | [`[FakeData]`, `[FakeSeed]` and `[FakeCheck]` for TUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.TUnit.svg?label=)](https://www.nuget.org/packages/Phoney.TUnit) |
 | `Phoney.Xunit` | [`[FakeData]` for xUnit.net v3](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.Xunit.svg?label=)](https://www.nuget.org/packages/Phoney.Xunit) |
 | `Phoney.DependencyInjection` | [`services.AddPhoney()`, `IFaker`, injectable generators](#dependency-injection-and-aspnet-core) | [![NuGet](https://img.shields.io/nuget/v/Phoney.DependencyInjection.svg?label=)](https://www.nuget.org/packages/Phoney.DependencyInjection) |
 | `Phoney.EntityFrameworkCore` | [`HasFakeData` seed data](#ef-core-seeding) | [![NuGet](https://img.shields.io/nuget/v/Phoney.EntityFrameworkCore.svg?label=)](https://www.nuget.org/packages/Phoney.EntityFrameworkCore) |
@@ -716,6 +716,30 @@ Replay: PHONEY_SEED=286532772 dotnet test, or Seed(286532772) on the generator.
 - **Replayable**: the seed is the generator's `Seed(…)`, else `PHONEY_SEED`, else a new random one, and the report says how to replay it. The tested objects are those `Generate(count)` makes for that seed, and shrinking is deterministic, so the same seed finds and shrinks the same counterexample. Checking doesn't move the generator's own sequence.
 - `FakeCheckException<T>` has `Counterexample`, `Original`, `Seed`, `Index`, `Tested` and `ShrinkSteps`. `Check(property, count: 1_000, maxShrinks: 5_000)` tests more objects and shrinks further; `maxShrinks: 0` reports the original object. `CheckAsync` takes a `CancellationToken`. A chain that ends in `Check` is analysed like one that ends in `Generate` (**PHONEY004**, **PHONEY010**, **PHONEY011**).
 
+### Checking parameters
+
+`Fake.Check` checks a lambda of up to four parameters. They are filled like `[FakeData]` fills test parameters (by name, type and data annotations, and the values of one row agree), and a failing row is shrunk the same way:
+
+```csharp
+Fake.Check((OrderLine line, [Range(0, 1000)] int discount) => Pricing.Total(line, discount) >= 0);
+Fake.Check((string email, [Range(18, 99)] int age) => Signup.Validate(email, age).ShouldBeEmpty());
+await Fake.CheckAsync(async (Customer customer) => await api.Register(customer));
+```
+
+```text
+FakeCheckException<Object[]>: The property failed for row number 1 of 100 (seed 355719690, shrunk in 25 steps).
+Counterexample:
+  line = OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }, discount = 11
+Because: the property returned false
+Original:
+  line = OrderLine { Sku = "BDH-75099", Quantity = 37, Price = 303.75 }, discount = 629
+Replay: PHONEY_SEED=355719690 dotnet test.
+```
+
+- The seed is the facade's when it is seeded (`Fake.Seeded`, `[FakeSeed]`), else `PHONEY_SEED`, else a new random one. `Counterexample` and `Original` are the rows (`object?[]`), in parameter order.
+- For more parameters, or to pin the seed in code, use the generator underneath: `Fake.Arguments(method).Seed(42).Check(row => …)` (also `Check(Action<object?[]>)` and `CheckAsync`).
+- In TUnit, `[Test, FakeCheck]` turns a test method into such a check: the test runs once per row and fails with the shrunk row. See [`[FakeCheck]`](#property-checks-in-tunit).
+
 ## Test data in xUnit, NUnit, MSTest and TUnit
 
 `Phoney.Xunit` ([xUnit.net](https://xunit.net) v3), `Phoney.NUnit`, `Phoney.MSTest` and `Phoney.TUnit` ([TUnit](https://tunit.dev)) add `[FakeData]`, which fills test parameters the way Phoney fills the members of an object. They share their options, seeds and rules, so a test gets the same values whichever framework runs it.
@@ -748,6 +772,26 @@ public async Task Places_order(Customer customer, string email, [Range(1, 10)] i
 - Interface and abstract parameters get a subtype from `Fake.Subtypes` or `[JsonDerivedType]`. Test data is created while the framework discovers tests, so register conventions and subtypes before that: in a module initializer, or in TUnit a `[Before(TestDiscovery)]` hook.
 - xUnit, NUnit and MSTest fill method parameters; TUnit also fills constructor parameters and `required` properties.
 - Supported versions: **xUnit.net v3 3.0** and later (3.x and 4.x), **NUnit 4.0** and later (4.x and 5.x), **MSTest 4.0** and later (4.0 changed the data source interface, so 3.x is not supported) and **TUnit 1.10** and later.
+
+### Property checks in TUnit
+
+`[FakeCheck]` (in `Phoney.TUnit`) runs a test once for each of 100 generated rows of its parameters and, when it fails for one, shrinks the row and fails with the simplest one:
+
+```csharp
+[Test, FakeCheck]
+public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
+    Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
+// FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
+// Counterexample:
+//   order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }] }, discount = 2
+// …
+// Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
+```
+
+- Parameters are filled like `[FakeData]` fills them, but the rows are **new on every run**, so the suite explores more data over time; `[FakeCheck(Seed = 812734)]` or `PHONEY_SEED` replays a failure and its shrinking exactly.
+- Options: `Count` (default 100), `MaxShrinks` (default 1000, 0 reports the original row), `Seed`, `Locale`, `NullProbability` and `ReferenceDate`.
+- The rows run one after another on one instance of the test class, inside the executor the test already has (`[TestExecutor<T>]`) and inside `[FakeSeed]`. TUnit lists one test with a sample row.
+- xUnit, NUnit and MSTest can use `Fake.Check` inside a test for now.
 
 ### Replayable random data
 

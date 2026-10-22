@@ -1061,14 +1061,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public void Check(Action<T> property, int count = 100, int maxShrinks = 1000)
     {
         ArgumentNullException.ThrowIfNull(property);
-        Check(
-            item => PropertyCheck<T>.Outcome.Of(() =>
-            {
-                property(item);
-                return true;
-            }),
-            count,
-            maxShrinks);
+        Check(item => PropertyCheck<T>.Outcome.Of(() => property(item)), count, maxShrinks);
     }
 
     /// <summary>
@@ -1087,36 +1080,16 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentNullException.ThrowIfNull(property);
         var check = StartCheck(count, maxShrinks, out var checking);
-        foreach (var item in check.Objects())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                await property(item).ConfigureAwait(false);
-                check.Report(PropertyCheck<T>.Outcome.Passed);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-#pragma warning disable CA1031 // any exception is the property failing; it becomes the inner exception of the report
-            catch (Exception e)
-            {
-                check.Report(PropertyCheck<T>.Outcome.Threw(e));
-            }
-#pragma warning restore CA1031
-        }
-
-        EndCheck(check, checking, count);
+        await check.RunAsync(property, cancellationToken).ConfigureAwait(false);
+        EndCheck(checking, count);
     }
 
     /// <summary>The synchronous check: every object of <see cref="PropertyCheck{T}.Objects"/> through <paramref name="evaluate"/>.</summary>
     private void Check(Func<T, PropertyCheck<T>.Outcome> evaluate, int count, int maxShrinks)
     {
         var check = StartCheck(count, maxShrinks, out var checking);
-        foreach (var item in check.Objects())
-            check.Report(evaluate(item));
-        EndCheck(check, checking, count);
+        check.Run(evaluate);
+        EndCheck(checking, count);
     }
 
     /// <summary>
@@ -1140,11 +1113,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             seed);
     }
 
-    /// <summary>Throws the failure of a check, or verifies the rules when the property held for every object.</summary>
-    private static void EndCheck(PropertyCheck<T> check, ObjectGenerator<T> checking, int count)
+    /// <summary>Verifies the rules once the property held for every object.</summary>
+    private static void EndCheck(ObjectGenerator<T> checking, int count)
     {
-        if (check.Failure is { } failure)
-            throw failure;
         if (count > 0)
             checking.VerifyUsage();
     }

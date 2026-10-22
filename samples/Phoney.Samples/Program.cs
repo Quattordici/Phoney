@@ -148,6 +148,17 @@ catch (FakeCheckException<Customer> e)
     Console.WriteLine($"Failed for customer {e.Index + 1}, shrunk in {e.ShrinkSteps} steps to {shrunk.FirstName} {shrunk.LastName} with {shrunk.Orders.Count} order(s) totalling {shrunk.Orders.Sum(o => o.Total)}");
 }
 
+try
+{
+    // The parameters of a lambda are generated like test parameters ([FakeData]) and a failing set is shrunk the same way (seeded here so the output is stable).
+    using var seeded = Fake.Seeded(4);
+    Fake.Check((Order order, [Range(0, 100)] int discount) => order.Total * (100 - discount) / 100 > 1);
+}
+catch (FakeCheckException<object?[]> e)
+{
+    Console.WriteLine($"Fake.Check failed for row {e.Index + 1}; simplest failing discount: {e.Counterexample[1]}");
+}
+
 // 8. Time from a TimeProvider -----------------------------------------------------------------
 Console.WriteLine("\n== TimeProvider");
 var clock = new FixedClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));

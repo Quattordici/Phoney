@@ -82,7 +82,7 @@ public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
     protected override IEnumerable<Func<object?[]?>> GenerateDataSources(DataGeneratorMetadata dataGeneratorMetadata)
     {
         ArgumentNullException.ThrowIfNull(dataGeneratorMetadata);
-        var arguments = dataGeneratorMetadata.MembersToGenerate.Select(ToArgument).ToList();
+        var arguments = dataGeneratorMetadata.MembersToGenerate.Select(TestArguments.From).ToList();
         return Rows(CreateGenerator(arguments, dataGeneratorMetadata.TestInformation), Count);
     }
 
@@ -116,33 +116,4 @@ public sealed class FakeDataAttribute : UntypedDataSourceGeneratorAttribute
 
     /// <summary>The class and method of the test, the identity the seed is derived from.</summary>
     private static string TestName(MethodMetadata? test) => FakeDataOptions.TestName(test?.Class?.Type, test?.Name ?? "");
-
-    /// <summary>
-    /// Describes a parameter or property TUnit asks for, preferring its reflection info (which carries data
-    /// annotations and nullability) and falling back to the type and name from TUnit's metadata.
-    /// </summary>
-    private static FakeArgument ToArgument(IMemberMetadata member) => member switch
-    {
-        ParameterMetadata parameter => TryReflectionInfo(() => parameter.ReflectionInfo) is { } info
-            ? FakeArgument.From(info)
-            : new FakeArgument(parameter.Name, parameter.Type, parameter.IsNullable),
-        PropertyMetadata property => TryReflectionInfo(() => property.ReflectionInfo) is { } info
-            ? FakeArgument.From(info)
-            : new FakeArgument(property.Name, property.Type, property.IsNullable),
-        _ => throw new NotSupportedException($"[FakeData] can't generate '{member.Name}' ({member.GetType().Name})."),
-    };
-
-    /// <summary>Reflection info can be unavailable (or fail to resolve) in TUnit's source-generated mode.</summary>
-    private static T? TryReflectionInfo<T>(Func<T?> read)
-        where T : class
-    {
-        try
-        {
-            return read();
-        }
-        catch (Exception e) when (e is InvalidOperationException or NotSupportedException or MissingMemberException)
-        {
-            return null;
-        }
-    }
 }

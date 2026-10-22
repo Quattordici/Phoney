@@ -13,12 +13,9 @@ namespace Phoney.Generation;
 /// Without a <see cref="Seed"/> the seed is derived from the test's name and the generated arguments, so every run and machine gets the same values;
 /// the <c>PHONEY_SEED</c> environment variable moves the derived seeds of a whole suite at once (see <see cref="FakeSeed"/>).
 /// </remarks>
-public sealed class FakeDataOptions
+public sealed class FakeDataOptions : FakeArgumentOptions
 {
     private int _count = 1;
-    private double _nullProbability;
-    private string? _referenceDateText;
-    private DateTimeOffset? _referenceDate;
 
     /// <summary>Number of test cases to generate. Default 1.</summary>
     public int Count
@@ -29,33 +26,6 @@ public sealed class FakeDataOptions
 
     /// <summary>Seed for the values, or <see langword="null"/> (the default) to derive a stable one from the test's name.</summary>
     public long? Seed { get; set; }
-
-    /// <summary>Locale of the data, e.g. <c>sv</c> or <c>de-AT</c>. Default: <see cref="Fake.Locale"/>.</summary>
-    public string? Locale { get; set; }
-
-    /// <summary>Probability (0–1) that nullable parameters (<c>string?</c>, <c>int?</c>…) are <see langword="null"/>. Default 0.</summary>
-    public double NullProbability
-    {
-        get => _nullProbability;
-        set => _nullProbability = value is >= 0 and <= 1 ? value : throw new ArgumentOutOfRangeException(nameof(NullProbability), value, "Must be between 0 and 1.");
-    }
-
-    /// <summary>The point in time relative dates are computed from, in ISO 8601 (<c>2030-01-01</c>, UTC unless it has an offset). Default: <see cref="Faker.DefaultSeededReferenceDate"/>.</summary>
-    /// <exception cref="ArgumentException">The text is not a date, so the test would otherwise fail later with a bare <see cref="FormatException"/>.</exception>
-    public string? ReferenceDate
-    {
-        get => _referenceDateText;
-        set
-        {
-            if (value is null)
-                _referenceDate = null;
-            else if (DateText.TryParse(value, out var date))
-                _referenceDate = date;
-            else
-                throw new ArgumentException($"ReferenceDate '{value}' is not a date with a day; use ISO 8601, such as 2030-01-01 or 2030-01-01T12:00:00Z.", nameof(ReferenceDate));
-            _referenceDateText = value;
-        }
-    }
 
     /// <summary>Creates the generator of the test's rows, with the <c>PHONEY_SEED</c> environment variable (if set) moving the derived seed.</summary>
     /// <param name="arguments">The parameters or properties to fill.</param>
@@ -74,14 +44,7 @@ public sealed class FakeDataOptions
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentException.ThrowIfNullOrWhiteSpace(testName);
-        var generator = new ArgumentGenerator(arguments)
-            .Seed(ResolveSeed(Seed, testName, arguments, environmentSeed))
-            .NullProbability(NullProbability);
-        if (Locale is { } locale)
-            generator = generator.Locale(locale);
-        if (_referenceDate is { } date)
-            generator = generator.ReferenceDate(date);
-        return generator;
+        return Configure(new ArgumentGenerator(arguments).Seed(ResolveSeed(Seed, testName, arguments, environmentSeed)));
     }
 
     /// <summary>
