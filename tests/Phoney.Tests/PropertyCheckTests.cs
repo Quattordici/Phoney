@@ -20,6 +20,11 @@ public sealed class CartLine
 
 public sealed record CheckedPoint(int X, int Y);
 
+public sealed class CheckedCatalog
+{
+    public Dictionary<string, CartLine> BySku { get; set; } = [];
+}
+
 public sealed record CheckedFolder
 {
     public string Name { get; set; } = "";
@@ -293,6 +298,49 @@ public sealed class PropertyCheckTests
         var failure = Should.Throw<FakeCheckException<CheckedPoint>>(() => Fake.For<CheckedPoint>().Seed(3).Check(p => p.X < 0));
 
         failure.Message.ShouldContain("CheckedPoint { X = ");
+    }
+
+    [Test]
+    public void A_tuple_counterexample_describes_each_of_its_elements()
+    {
+        var failure = Should.Throw<FakeCheckException<(CartLine Line, int Discount)>>(() =>
+            Fake.For<(CartLine Line, int Discount)>().Seed(1).Check(t => t.Line.Quantity * 10 - t.Discount >= 0));
+
+        failure.Message.ShouldContain("""
+              (CartLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }, 11)
+            """);
+    }
+
+    [Test]
+    public void A_dictionary_counterexample_describes_its_values_in_key_order()
+    {
+        var failure = Should.Throw<FakeCheckException<CheckedCatalog>>(() => Fake.For<CheckedCatalog>().Seed(1).Check(c => c.BySku.Count < 1));
+
+        failure.Message.ShouldContain("""
+              CheckedCatalog { BySku = ["a" = CartLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }] }
+            """);
+        failure.Message.ShouldContain("""
+              CheckedCatalog { BySku = ["amo" = CartLine { Sku = "NYH-42845", Quantity = 14, Price = 430.5 }, "tumultus" = CartLine { Sku = "PUA-48411", Quantity = 23, Price = 929.93 }, "una" = CartLine { Sku = "WHJ-36870", Quantity = 41, Price = 288.32 }] }
+            """);
+    }
+
+    [Test]
+    public void A_large_dictionary_shows_its_lowest_keys_in_order_and_then_an_ellipsis()
+    {
+        var numbers = new Dictionary<int, string>();
+        for (var i = 15; i >= 1; i--)
+            numbers[i] = $"n{i}";
+
+        ObjectDescription.Of(numbers).ShouldBe("""[1 = "n1", 2 = "n2", 3 = "n3", 4 = "n4", 5 = "n5", 6 = "n6", 7 = "n7", 8 = "n8", 9 = "n9", 10 = "n10", …]""");
+    }
+
+    [Test]
+    public void Keys_that_refuse_to_be_compared_are_described_in_the_dictionary_order()
+    {
+        var pairs = new Dictionary<Tuple<object>, int> { [Tuple.Create<object>(new object())] = 1, [Tuple.Create<object>(new object())] = 2 };
+
+        ObjectDescription.Of(pairs).ShouldStartWith("[(");
+        ObjectDescription.Of(pairs).ShouldEndWith(" = 2]");
     }
 
     [Test]
