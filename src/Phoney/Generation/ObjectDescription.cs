@@ -65,11 +65,23 @@ internal static class ObjectDescription
         path.Remove(value);
     }
 
-    private static IEnumerable Entries(IDictionary dictionary)
+    /// <summary>
+    /// The entries of <paramref name="dictionary"/> in key order (ordinal for strings), so equal dictionaries are described alike and the first
+    /// <see cref="MaxElements"/> are the same ones whatever order they were added in. Keys that can't be compared keep the dictionary's order.
+    /// </summary>
+    private static List<DictionaryEntry> Entries(IDictionary dictionary)
     {
-        var entries = dictionary.GetEnumerator();
-        while (entries.MoveNext())
-            yield return entries.Entry;
+        var entries = new List<DictionaryEntry>(dictionary.Count);
+        var enumerator = dictionary.GetEnumerator();
+        while (enumerator.MoveNext())
+            entries.Add(enumerator.Entry);
+
+        var keyType = entries[0].Key.GetType();
+        if (entries.TrueForAll(e => e.Key is string))
+            entries.Sort((a, b) => string.CompareOrdinal((string)a.Key, (string)b.Key));
+        else if (entries.TrueForAll(e => e.Key.GetType() == keyType && e.Key is IComparable))
+            entries.Sort((a, b) => ((IComparable)a.Key).CompareTo(b.Key));
+        return entries;
     }
 
     private static void AppendTuple(StringBuilder text, ITuple tuple, int depth, HashSet<object> path)
