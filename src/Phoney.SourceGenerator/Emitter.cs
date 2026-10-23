@@ -327,8 +327,13 @@ internal static class Emitter
     /// <summary>The indentation of <paramref name="depth"/> levels.</summary>
     private static string Indent(int depth) => new(' ', 4 * depth);
 
-    /// <summary>The <c>scope.Get</c> call that reads member <paramref name="index"/> through the generator's rules.</summary>
-    private static string Get(int index, MemberModel m) => $"scope.Get({index}, static s0 => {m.Value})";
+    /// <summary>
+    /// The <c>scope.Get</c> call that reads member <paramref name="index"/> through the generator's rules. The member's type is
+    /// passed explicitly: inferred from the fallback it would be the type the model creates (<c>List&lt;T&gt;</c> for an
+    /// <c>IReadOnlyCollection&lt;T&gt;</c>), and a rule's value of another type of that member (a collection expression's
+    /// read-only array, a LINQ query) would fail the cast.
+    /// </summary>
+    private static string Get(int index, MemberModel m) => $"scope.Get<{m.TypeName}>({index}, static s0 => {m.Value})";
 
     /// <summary>The member name as C# source: a reserved keyword (<c>class</c>, <c>event</c>) needs its <c>@</c>, which the symbol's name leaves out.</summary>
     private static string Identifier(string name) => SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None ? name : "@" + name;
