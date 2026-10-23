@@ -58,6 +58,17 @@ public abstract class GenericBuilder<[FakeForTypeArgument] T> where T : class
 
 public sealed class TypeArgumentBuilder : GenericBuilder<BuiltThroughTypeArgument>;
 
+// Members declared as an interface or read-only collection: a rule's value is typed as the member, not as the type the model would create.
+public sealed record InterfaceTypedBag
+{
+    public IReadOnlyCollection<MemberAddress> Addresses { get; init; } = [];
+    public IEnumerable<string> Tags { get; init; } = [];
+    public IReadOnlyDictionary<string, int> Counts { get; init; } = new Dictionary<string, int>();
+}
+
+[FakeFor<InterfaceTypedBag>]
+public static partial class InterfaceTypedFakes;
+
 public sealed class SourceGeneratedTests
 {
     private static readonly DateTimeOffset Reference = new(2025, 6, 1, 0, 0, 0, TimeSpan.Zero);
@@ -117,6 +128,37 @@ public sealed class SourceGeneratedTests
 
         built.Email.ShouldContain("@");
         ModelRegistry.Generated<BuiltThroughTypeArgument>().GetType().Name.ShouldStartWith("__PhoneyModel_");
+    }
+
+    [Test]
+    public void Rules_give_interface_typed_members_any_value_of_the_member_type()
+    {
+        // Collection expressions for IReadOnlyCollection<T>/IEnumerable<T> are compiler-made read-only arrays, not the List<T> a model creates.
+        IReadOnlyCollection<MemberAddress> addresses = [new("Main 1", "Oslo", "0150")];
+        IReadOnlyDictionary<string, int> counts = new SortedDictionary<string, int> { ["a"] = 1 };
+
+        var bag = InterfaceTypedFakes.InterfaceTypedBag
+            .With(x => x.Addresses, _ => [.. addresses])
+            .With(x => x.Tags, ["x", "y"])
+            .With(x => x.Counts, counts)
+            .Generate();
+
+        bag.Addresses.ShouldHaveSingleItem().City.ShouldBe("Oslo");
+        bag.Tags.ShouldBe(["x", "y"]);
+        bag.Counts.ShouldBeSameAs(counts);
+    }
+
+    [Test]
+    public void Generated_and_reflection_models_take_the_same_interface_typed_rule_values()
+    {
+        string[] tags = ["a", "b"];
+
+        var generated = InterfaceTypedFakes.InterfaceTypedBag.Seed(4).With(x => x.Tags, _ => tags.Where(t => t != "b")).Generate();
+        var reflected = new ObjectGenerator<InterfaceTypedBag>(new ReflectionModel<InterfaceTypedBag>()).Seed(4).With(x => x.Tags, _ => tags.Where(t => t != "b")).Generate();
+
+        generated.Tags.ShouldBe(["a"]);
+        reflected.Tags.ShouldBe(generated.Tags);
+        generated.Addresses.Select(a => a.City).ShouldBe(reflected.Addresses.Select(a => a.City));
     }
 
     [Test]

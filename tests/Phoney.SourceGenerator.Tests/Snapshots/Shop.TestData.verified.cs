@@ -40,7 +40,7 @@ static partial class TestData
 
         public override global::Shop.Swish Create(global::Phoney.Generation.FakeScope scope)
         {
-            var v0 = scope.Include(0) ? scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Phone)) : default(string);
+            var v0 = scope.Include(0) ? scope.Get<string>(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Phone)) : default(string);
             var o = new global::Shop.Swish();
             if (scope.Include(0)) o.Phone = v0;
             return o;
@@ -108,15 +108,15 @@ static partial class TestData
 
         public override global::Shop.Customer Create(global::Phoney.Generation.FakeScope scope)
         {
-            var v0 = scope.Include(0) ? scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c0)) : default(global::Shop.Status);
-            var v1 = scope.Include(1) ? scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id)) : default(int);
-            var v2 = scope.Include(2) ? scope.Get(2, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c2)) : default(string);
-            var v3 = scope.Include(3) ? scope.Get(3, static s0 => (s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c3))) : default(string);
-            var v4 = scope.Include(4) ? scope.Get(4, static s0 => (decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c4)) : default(decimal?);
-            var v5 = scope.Include(5) ? scope.Get(5, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email)) : default(string);
-            var v6 = scope.Include(6) ? scope.Get(6, static s0 => s0.Nested<global::Shop.Address>()) : default(global::Shop.Address);
-            var v7 = scope.Include(7) ? scope.Get(7, static s0 => s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c7)) : default(global::System.Collections.Generic.List<global::Shop.Order>);
-            var v8 = scope.Include(8) ? scope.Get(8, static s0 => (s0.MaybeNull() ? null : s0.Nested<global::Shop.IPayment>())) : default(global::Shop.IPayment);
+            var v0 = scope.Include(0) ? scope.Get<global::Shop.Status>(0, static s0 => global::Phoney.Generation.ConventionValues.Enum<global::Shop.Status>(s0, global::Phoney.Generation.ConventionKind.None, __c0)) : default(global::Shop.Status);
+            var v1 = scope.Include(1) ? scope.Get<int>(1, static s0 => global::Phoney.Generation.ConventionValues.Number<int>(s0, global::Phoney.Generation.ConventionKind.Id)) : default(int);
+            var v2 = scope.Include(2) ? scope.Get<string>(2, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.FirstName, __c2)) : default(string);
+            var v3 = scope.Include(3) ? scope.Get<string>(3, static s0 => (s0.MaybeNull() ? null : global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Username, __c3))) : default(string);
+            var v4 = scope.Include(4) ? scope.Get<decimal?>(4, static s0 => (decimal?)global::Phoney.Generation.ConventionValues.Number<decimal>(s0, global::Phoney.Generation.ConventionKind.Price, __c4)) : default(decimal?);
+            var v5 = scope.Include(5) ? scope.Get<string>(5, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email)) : default(string);
+            var v6 = scope.Include(6) ? scope.Get<global::Shop.Address>(6, static s0 => s0.Nested<global::Shop.Address>()) : default(global::Shop.Address);
+            var v7 = scope.Include(7) ? scope.Get<global::System.Collections.Generic.List<global::Shop.Order>>(7, static s0 => s0.List<global::Shop.Order>(static s1 => s1.Nested<global::Shop.Order>(), __c7)) : default(global::System.Collections.Generic.List<global::Shop.Order>);
+            var v8 = scope.Include(8) ? scope.Get<global::Shop.IPayment>(8, static s0 => (s0.MaybeNull() ? null : s0.Nested<global::Shop.IPayment>())) : default(global::Shop.IPayment);
             var o = new global::Shop.Customer()
             {
                 Email = v5,
@@ -222,8 +222,8 @@ static partial class TestData
 
         public override global::Shop.Address Create(global::Phoney.Generation.FakeScope scope)
         {
-            var v0 = scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.StreetAddress, __c0));
-            var v1 = scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email, __c1));
+            var v0 = scope.Get<string>(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.StreetAddress, __c0));
+            var v1 = scope.Get<string>(1, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.Email, __c1));
             var o = new global::Shop.Address(v0, v1);
             return o;
         }
@@ -288,9 +288,9 @@ static partial class TestData
 
         public override global::Shop.Order Create(global::Phoney.Generation.FakeScope scope)
         {
-            var v0 = scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.Guid(s0, global::Phoney.Generation.ConventionKind.Id));
-            var v1 = scope.Get(1, static s0 => global::Phoney.Generation.ConventionValues.DateTime(s0, global::Phoney.Generation.ConventionKind.PastDate));
-            var v2 = scope.Include(2) ? scope.Get(2, static s0 => (s0.MaybeNull() ? null : s0.Nested<global::Shop.Customer>())) : default(global::Shop.Customer);
+            var v0 = scope.Get<global::System.Guid>(0, static s0 => global::Phoney.Generation.ConventionValues.Guid(s0, global::Phoney.Generation.ConventionKind.Id));
+            var v1 = scope.Get<global::System.DateTime>(1, static s0 => global::Phoney.Generation.ConventionValues.DateTime(s0, global::Phoney.Generation.ConventionKind.PastDate));
+            var v2 = scope.Include(2) ? scope.Get<global::Shop.Customer>(2, static s0 => (s0.MaybeNull() ? null : s0.Nested<global::Shop.Customer>())) : default(global::Shop.Customer);
             var o = new global::Shop.Order(v0, v1);
             if (scope.Include(2)) o.Customer = v2;
             return o;
@@ -358,7 +358,7 @@ static partial class TestData
 
         public override global::Shop.Card Create(global::Phoney.Generation.FakeScope scope)
         {
-            var v0 = scope.Include(0) ? scope.Get(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.CreditCardNumber)) : default(string);
+            var v0 = scope.Include(0) ? scope.Get<string>(0, static s0 => global::Phoney.Generation.ConventionValues.String(s0, global::Phoney.Generation.ConventionKind.CreditCardNumber)) : default(string);
             var o = new global::Shop.Card();
             if (scope.Include(0)) o.CreditCardNumber = v0;
             return o;
