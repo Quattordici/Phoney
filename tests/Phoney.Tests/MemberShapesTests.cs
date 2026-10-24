@@ -138,4 +138,44 @@ public sealed class MemberShapesTests
     [Arguments("", false)]
     public void Framework_types_are_the_ones_in_System_and_Microsoft_namespaces(string ns, bool expected) =>
         MemberShapes.IsFrameworkNamespace(ns).ShouldBe(expected);
+
+    [Test]
+    public void A_key_value_pair_has_a_key_and_a_value()
+    {
+        MemberShapes.CompositePartNames("System.Collections.Generic.KeyValuePair`2", 2).ShouldBe(["Key", "Value"]);
+        MemberShapes.CompositePartNames("System.Collections.Generic.KeyValuePair`2", 3).ShouldBeNull();
+    }
+
+    [Test]
+    [Arguments("System.ValueTuple`1", 1)]
+    [Arguments("System.ValueTuple`4", 4)]
+    [Arguments("System.ValueTuple`7", 7)]
+    [Arguments("System.Tuple`1", 1)]
+    [Arguments("System.Tuple`3", 3)]
+    [Arguments("System.Tuple`7", 7)]
+    public void A_tuple_has_numbered_items(string metadataName, int arity) =>
+        MemberShapes.CompositePartNames(metadataName, arity).ShouldBe(Enumerable.Range(1, arity).Select(i => "Item" + i));
+
+    [Test]
+    [Arguments("System.ValueTuple`8", 8)]
+    [Arguments("System.Tuple`8", 8)]
+    [Arguments("System.ValueTuple", 0)]
+    [Arguments("System.Foo.Tuple`2", 2)]
+    [Arguments("MyApp.Tuple`2", 2)]
+    [Arguments("System.Collections.Generic.List`1", 1)]
+    [Arguments("", 0)]
+    public void Other_types_are_not_composites(string metadataName, int arity) =>
+        MemberShapes.CompositePartNames(metadataName, arity).ShouldBeNull();
+
+    [Test]
+    public void The_names_match_the_real_framework_types()
+    {
+        foreach (var type in new[] { typeof(KeyValuePair<int, string>), typeof(ValueTuple<int, string>), typeof(Tuple<int, string, bool>) })
+        {
+            var names = MemberShapes.CompositePartNames(type.GetGenericTypeDefinition().FullName!, type.GetGenericArguments().Length);
+            names.ShouldNotBeNull(type.Name);
+            foreach (var name in names)
+                (type.GetProperty(name) is not null || type.GetField(name) is not null).ShouldBeTrue(type.Name + "." + name);
+        }
+    }
 }

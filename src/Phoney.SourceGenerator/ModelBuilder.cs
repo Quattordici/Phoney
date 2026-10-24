@@ -515,7 +515,7 @@ internal sealed class ModelBuilder
     /// <summary>
     /// The parts of a <c>ValueTuple</c>, <c>Tuple</c> (up to seven) or <c>KeyValuePair</c>, the names their conventions are matched with (<c>Item1</c>… or <c>Key</c>, <c>Value</c>) and the
     /// type to construct (a tuple type written <c>(int, string)</c> is constructed as <c>ValueTuple&lt;int, string&gt;</c>); <see langword="null"/> for other types.
-    /// Mirrors <c>ReflectionTypeModel.CompositeParts</c>.
+    /// The part names come from <c>MemberShapes.CompositePartNames</c>, which <c>ReflectionTypeModel.CompositeParts</c> uses too.
     /// </summary>
     private static (List<ITypeSymbol> Types, string[] Names, string TypeName)? CompositeParts(INamedTypeSymbol type)
     {
@@ -523,23 +523,10 @@ internal sealed class ModelBuilder
             return null;
         var definition = FullName(type.OriginalDefinition); // the metadata name: a tuple type displays as "(T1, T2)", not as System.ValueTuple<T1, T2>
         var arguments = type.TypeArguments.ToList();
-        string prefix;
-        string[] names;
-        if (definition == "System.Collections.Generic.KeyValuePair`2")
-        {
-            prefix = "global::System.Collections.Generic.KeyValuePair";
-            names = new[] { "Key", "Value" };
-        }
-        else if (arguments.Count <= 7 && (definition.StartsWith("System.ValueTuple`", StringComparison.Ordinal) || definition.StartsWith("System.Tuple`", StringComparison.Ordinal)))
-        {
-            prefix = "global::" + definition.Substring(0, definition.IndexOf('`'));
-            names = Enumerable.Range(1, arguments.Count).Select(i => "Item" + i).ToArray();
-        }
-        else
-        {
+        if (MemberShapes.CompositePartNames(definition, arguments.Count) is not { } names)
             return null;
-        }
 
+        var prefix = "global::" + definition.Substring(0, definition.IndexOf('`'));
         return (arguments, names, prefix + "<" + string.Join(", ", arguments.Select(Fq)) + ">");
     }
 

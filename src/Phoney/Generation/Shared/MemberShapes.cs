@@ -79,6 +79,23 @@ internal static class MemberShapes
     /// <summary>Looks up a generated collection by the metadata name of its open generic type (<c>System.Collections.Generic.List`1</c>).</summary>
     public static bool TryCollection(string metadataName, out CollectionShape shape) => Catalog.Shapes.TryGetValue(metadataName, out shape);
 
+    /// <summary>
+    /// The names of the parts of a <c>KeyValuePair</c> (<c>Key</c>, <c>Value</c>) or of a <c>ValueTuple</c> or <c>Tuple</c> of up to seven items (<c>Item1</c>…), which conventions
+    /// are matched with, from the metadata name of the open generic type and its number of type arguments; <see langword="null"/> for other types.
+    /// </summary>
+    public static string[]? CompositePartNames(string metadataName, int arity)
+    {
+        if (metadataName == "System.Collections.Generic.KeyValuePair`2")
+            return arity == 2 ? new[] { "Key", "Value" } : null;
+        if (arity < 1 || arity > 7 || !(metadataName.StartsWith("System.ValueTuple`", StringComparison.Ordinal) || metadataName.StartsWith("System.Tuple`", StringComparison.Ordinal)))
+            return null;
+
+        var names = new string[arity];
+        for (var i = 0; i < arity; i++)
+            names[i] = "Item" + (i + 1);
+        return names;
+    }
+
     /// <summary>The metadata names of all generated collections.</summary>
     public static IReadOnlyCollection<string> CollectionNames => Catalog.Shapes.Keys;
 

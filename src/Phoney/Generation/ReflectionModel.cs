@@ -341,23 +341,9 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
     {
         if (!type.IsGenericType)
             return null;
-        var definition = type.GetGenericTypeDefinition();
         var types = type.GetGenericArguments();
-        string[] names;
-        if (definition == typeof(KeyValuePair<,>))
-        {
-            names = ["Key", "Value"];
-        }
-        else if (types.Length <= 7 && definition.Namespace == "System" && definition.Name.StartsWith(definition.IsValueType ? "ValueTuple`" : "Tuple`", StringComparison.Ordinal))
-        {
-            names = new string[types.Length];
-            for (var i = 0; i < names.Length; i++)
-                names[i] = "Item" + (i + 1);
-        }
-        else
-        {
+        if (MemberShapes.CompositePartNames(type.GetGenericTypeDefinition().FullName ?? "", types.Length) is not { } names)
             return null;
-        }
 
         return type.GetConstructor(types) is { } constructor ? (types, names, constructor) : null;
     }
