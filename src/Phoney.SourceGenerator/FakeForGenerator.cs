@@ -85,17 +85,7 @@ public sealed class FakeForGenerator : IIncrementalGenerator
     private static bool IsTypeArgumentRoot(INamedTypeSymbol type) =>
         type is { TypeKind: TypeKind.Class or TypeKind.Struct, IsAbstract: false, SpecialType: SpecialType.None } &&
         !ModelBuilder.IsFrameworkType(type) &&
-        !ContainsTypeParameter(type);
-
-    /// <summary>Whether a type refers to a type parameter anywhere: itself, its type arguments, array element types or containing types.</summary>
-    private static bool ContainsTypeParameter(ITypeSymbol type) => type switch
-    {
-        ITypeParameterSymbol => true,
-        IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType),
-        INamedTypeSymbol named => named.TypeArguments.Any(ContainsTypeParameter) ||
-                                  (named.ContainingType is { } containing && ContainsTypeParameter(containing)),
-        _ => false,
-    };
+        !ModelBuilder.ContainsTypeParameter(type);
 
     /// <summary>Builds one class with the models of all discovered type arguments, registered at startup like <c>[FakeFor]</c> models.</summary>
     private static GenerationResult? AnalyzeTypeArguments(

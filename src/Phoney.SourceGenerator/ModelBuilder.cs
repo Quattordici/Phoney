@@ -353,49 +353,6 @@ internal sealed class ModelBuilder
         };
     }
 
-    private const string Immutable = "global::System.Collections.Immutable.";
-    private const string Frozen = "global::System.Collections.Frozen.";
-
-    /// <summary>A collection made by passing the built one to its constructor.</summary>
-    private const string ByConstructor = "new {type}({p})";
-
-    /// <summary>
-    /// The collections that are built like a list ('L'), set ('S') or dictionary ('D') and converted: how to make one from the built collection <c>{p}</c>.
-    /// Mirrors <c>CollectionTypes</c> and <c>CollectionConverters</c> in the runtime; <c>{type}</c> is the member's type, <c>{T}</c>/<c>{K}</c> and <c>{V}</c> its type arguments.
-    /// </summary>
-    private static readonly Dictionary<string, (char Kind, string Convert)> OtherCollections = new()
-    {
-        ["System.Collections.Immutable.ImmutableArray<T>"] = ('L', Immutable + "ImmutableArray.CreateRange<{T}>({p})"),
-        ["System.Collections.Immutable.ImmutableList<T>"] = ('L', Immutable + "ImmutableList.CreateRange<{T}>({p})"),
-        ["System.Collections.Immutable.IImmutableList<T>"] = ('L', Immutable + "ImmutableList.CreateRange<{T}>({p})"),
-        ["System.Collections.ObjectModel.ReadOnlyCollection<T>"] = ('L', ByConstructor),
-        ["System.Collections.ObjectModel.Collection<T>"] = ('L', ByConstructor),
-        ["System.Collections.ObjectModel.ObservableCollection<T>"] = ('L', ByConstructor),
-        ["System.Collections.Immutable.ImmutableQueue<T>"] = ('L', Immutable + "ImmutableQueue.CreateRange<{T}>({p})"),
-        ["System.Collections.Immutable.IImmutableQueue<T>"] = ('L', Immutable + "ImmutableQueue.CreateRange<{T}>({p})"),
-        ["System.Collections.Immutable.ImmutableStack<T>"] = ('L', Immutable + "ImmutableStack.CreateRange<{T}>({p})"),
-        ["System.Collections.Immutable.IImmutableStack<T>"] = ('L', Immutable + "ImmutableStack.CreateRange<{T}>({p})"),
-        ["System.Collections.Generic.Queue<T>"] = ('L', ByConstructor),
-        ["System.Collections.Generic.Stack<T>"] = ('L', ByConstructor),
-        ["System.Collections.Generic.LinkedList<T>"] = ('L', ByConstructor),
-        ["System.Collections.Concurrent.ConcurrentBag<T>"] = ('L', ByConstructor),
-        ["System.Collections.Concurrent.ConcurrentQueue<T>"] = ('L', ByConstructor),
-        ["System.Collections.Concurrent.ConcurrentStack<T>"] = ('L', ByConstructor),
-        ["System.Collections.Immutable.ImmutableHashSet<T>"] = ('S', Immutable + "ImmutableHashSet.CreateRange<{T}>({p})"),
-        ["System.Collections.Immutable.IImmutableSet<T>"] = ('S', Immutable + "ImmutableHashSet.CreateRange<{T}>({p})"),
-        ["System.Collections.Immutable.ImmutableSortedSet<T>"] = ('S', Immutable + "ImmutableSortedSet.CreateRange<{T}>({p})"),
-        ["System.Collections.Generic.SortedSet<T>"] = ('S', ByConstructor),
-        ["System.Collections.Frozen.FrozenSet<T>"] = ('S', Frozen + "FrozenSet.ToFrozenSet<{T}>({p})"),
-        ["System.Collections.Immutable.ImmutableDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableDictionary.CreateRange<{K}, {V}>({p})"),
-        ["System.Collections.Immutable.IImmutableDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableDictionary.CreateRange<{K}, {V}>({p})"),
-        ["System.Collections.Immutable.ImmutableSortedDictionary<TKey, TValue>"] = ('D', Immutable + "ImmutableSortedDictionary.CreateRange<{K}, {V}>({p})"),
-        ["System.Collections.ObjectModel.ReadOnlyDictionary<TKey, TValue>"] = ('D', ByConstructor),
-        ["System.Collections.Generic.SortedDictionary<TKey, TValue>"] = ('D', ByConstructor),
-        ["System.Collections.Generic.SortedList<TKey, TValue>"] = ('D', ByConstructor),
-        ["System.Collections.Concurrent.ConcurrentDictionary<TKey, TValue>"] = ('D', ByConstructor),
-        ["System.Collections.Frozen.FrozenDictionary<TKey, TValue>"] = ('D', Frozen + "FrozenDictionary.ToFrozenDictionary<{K}, {V}>({p})"),
-    };
-
     /// <summary>The value expression for a member of <paramref name="type"/>; mirrors <c>ReflectionTypeModel.Producer</c>.</summary>
     private string Value(ITypeSymbol type, string memberName, ConventionKind kind, bool nullableReference, int depth, string? constraints = null, bool required = false)
     {
@@ -524,44 +481,41 @@ internal sealed class ModelBuilder
     {
         var s = "s" + depth;
         var next = "s" + (depth + 1);
-        var definition = generic.OriginalDefinition.ToDisplayString();
+        if (!MemberShapes.TryCollection(FullName(generic.OriginalDefinition), out var shape))
+            return null;
+
         var args = generic.TypeArguments;
-        // Other collections are built like a list, set or dictionary and converted, as the reflection model does (see CollectionTypes).
-        if (OtherCollections.TryGetValue(definition, out var other))
+        // A dictionary's key is written before its value, as the reflection model draws them.
+        var key = shape.Kind == CollectionKind.Dictionary ? Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1) : "";
+        var element = Element(shape.Kind == CollectionKind.Dictionary ? args[1] : args[0], singular, depth);
+        if (shape.Conversion == CollectionConversion.None)
         {
-            var convert = "l" + depth;
-            var body = other.Convert.Replace("{type}", fq).Replace("{T}", Fq(args[0])).Replace("{K}", Fq(args[0])).Replace("{V}", args.Length > 1 ? Fq(args[1]) : "").Replace("{p}", convert);
-            switch (other.Kind)
+            return shape.Kind switch
             {
-                case 'L':
-                    return $"{s}.ListAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0], singular, depth)}{extra})";
-                case 'S':
-                    return $"{s}.SetAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {Element(args[0], singular, depth)}{extra})";
-                default:
-                    var otherKey = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
-                    return $"{s}.DictionaryAs<{fq}, {Fq(args[0])}, {Fq(args[1])}>(static {convert} => {body}, static {next} => {otherKey}, static {next} => {Element(args[1], singular, depth)}{extra})";
-            }
+                CollectionKind.List => $"{s}.List<{Fq(args[0])}>(static {next} => {element}{extra})",
+                CollectionKind.Set => $"{s}.Set<{Fq(args[0])}>(static {next} => {element}{extra})",
+                _ => $"{s}.Dictionary<{Fq(args[0])}, {Fq(args[1])}>(static {next} => {key}, static {next} => {element}{extra})",
+            };
         }
 
-        switch (definition)
+        // Other collections are built like a list, set or dictionary and converted, as the reflection model does (see MemberShapes).
+        var convert = "l" + depth;
+        var typeArguments = shape.Kind == CollectionKind.Dictionary ? Fq(args[0]) + ", " + Fq(args[1]) : Fq(args[0]);
+        var body = shape.Conversion == CollectionConversion.Factory
+            ? $"global::{generic.OriginalDefinition.ContainingNamespace.ToDisplayString()}.{shape.Builder}.{shape.Method}<{typeArguments}>({convert})"
+            : $"new {fq}({convert})";
+        return shape.Kind switch
         {
-            case "System.Collections.Generic.List<T>" or "System.Collections.Generic.IList<T>" or "System.Collections.Generic.ICollection<T>"
-                or "System.Collections.Generic.IEnumerable<T>" or "System.Collections.Generic.IReadOnlyList<T>" or "System.Collections.Generic.IReadOnlyCollection<T>":
-                return $"{s}.List<{Fq(args[0])}>(static {next} => {Element(args[0], singular, depth)}{extra})";
-            case "System.Collections.Generic.HashSet<T>" or "System.Collections.Generic.ISet<T>" or "System.Collections.Generic.IReadOnlySet<T>":
-                return $"{s}.Set<{Fq(args[0])}>(static {next} => {Element(args[0], singular, depth)}{extra})";
-            case "System.Collections.Generic.Dictionary<TKey, TValue>" or "System.Collections.Generic.IDictionary<TKey, TValue>" or "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>":
-                var key = Value(args[0], singular + "Key", ConventionKind.None, false, depth + 1);
-                return $"{s}.Dictionary<{Fq(args[0])}, {Fq(args[1])}>(static {next} => {key}, static {next} => {Element(args[1], singular, depth)}{extra})";
-            default:
-                return null;
-        }
+            CollectionKind.List => $"{s}.ListAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {element}{extra})",
+            CollectionKind.Set => $"{s}.SetAs<{fq}, {Fq(args[0])}>(static {convert} => {body}, static {next} => {element}{extra})",
+            _ => $"{s}.DictionaryAs<{fq}, {Fq(args[0])}, {Fq(args[1])}>(static {convert} => {body}, static {next} => {key}, static {next} => {element}{extra})",
+        };
     }
 
     /// <summary>
     /// The parts of a <c>ValueTuple</c>, <c>Tuple</c> (up to seven) or <c>KeyValuePair</c>, the names their conventions are matched with (<c>Item1</c>… or <c>Key</c>, <c>Value</c>) and the
     /// type to construct (a tuple type written <c>(int, string)</c> is constructed as <c>ValueTuple&lt;int, string&gt;</c>); <see langword="null"/> for other types.
-    /// Mirrors <c>ReflectionTypeModel.CompositeParts</c>.
+    /// The part names come from <c>MemberShapes.CompositePartNames</c>, which <c>ReflectionTypeModel.CompositeParts</c> uses too.
     /// </summary>
     private static (List<ITypeSymbol> Types, string[] Names, string TypeName)? CompositeParts(INamedTypeSymbol type)
     {
@@ -569,23 +523,10 @@ internal sealed class ModelBuilder
             return null;
         var definition = FullName(type.OriginalDefinition); // the metadata name: a tuple type displays as "(T1, T2)", not as System.ValueTuple<T1, T2>
         var arguments = type.TypeArguments.ToList();
-        string prefix;
-        string[] names;
-        if (definition == "System.Collections.Generic.KeyValuePair`2")
-        {
-            prefix = "global::System.Collections.Generic.KeyValuePair";
-            names = new[] { "Key", "Value" };
-        }
-        else if (arguments.Count <= 7 && (definition.StartsWith("System.ValueTuple`", StringComparison.Ordinal) || definition.StartsWith("System.Tuple`", StringComparison.Ordinal)))
-        {
-            prefix = "global::" + definition.Substring(0, definition.IndexOf('`'));
-            names = Enumerable.Range(1, arguments.Count).Select(i => "Item" + i).ToArray();
-        }
-        else
-        {
+        if (MemberShapes.CompositePartNames(definition, arguments.Count) is not { } names)
             return null;
-        }
 
+        var prefix = "global::" + definition.Substring(0, definition.IndexOf('`'));
         return (arguments, names, prefix + "<" + string.Join(", ", arguments.Select(Fq)) + ">");
     }
 
@@ -632,9 +573,18 @@ internal sealed class ModelBuilder
         !ContainsTypeParameter(named) &&
         ConventionRules.AdaptedCategoryOf(FullName(named)) == TypeCategory.Other;
 
-    /// <summary>Whether a type is, or has among its type arguments, a type parameter (an open generic type, for which no model can be generated).</summary>
-    private static bool ContainsTypeParameter(ITypeSymbol type) =>
-        type is ITypeParameterSymbol || (type is INamedTypeSymbol { IsGenericType: true } named && named.TypeArguments.Any(ContainsTypeParameter));
+    /// <summary>
+    /// Whether a type refers to a type parameter anywhere: itself, its type arguments, array element types or containing types (an open generic type, for which no model
+    /// can be generated).
+    /// </summary>
+    internal static bool ContainsTypeParameter(ITypeSymbol type) => type switch
+    {
+        ITypeParameterSymbol => true,
+        IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType),
+        INamedTypeSymbol named => named.TypeArguments.Any(ContainsTypeParameter) ||
+                                  (named.ContainingType is { } containing && ContainsTypeParameter(containing)),
+        _ => false,
+    };
 
     /// <summary>
     /// The add-on method producing an adapted type (<c>global::Phoney.NodaTime.NodaTimeValues.Instant</c>), or
@@ -667,8 +617,7 @@ internal sealed class ModelBuilder
     /// <summary>Types in System.* namespaces are not populated recursively (their constructors expect real data).</summary>
     internal static bool IsFrameworkType(INamedTypeSymbol type)
     {
-        var ns = type.ContainingNamespace?.ToDisplayString() ?? "";
-        return ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) || ns.StartsWith("Microsoft.", StringComparison.Ordinal);
+        return MemberShapes.IsFrameworkNamespace(type.ContainingNamespace?.ToDisplayString() ?? "");
     }
 
     /// <summary>Fully qualified display name (<c>global::…</c>).</summary>
@@ -686,17 +635,6 @@ internal sealed class ModelBuilder
     /// <summary>Whether a reference type is annotated nullable (<c>string?</c>).</summary>
     private static bool IsNullableReference(ITypeSymbol type, NullableAnnotation annotation) =>
         type.IsReferenceType && annotation == NullableAnnotation.Annotated;
-
-    /// <summary>Public settable/init properties and non-readonly fields, base class first, in declaration order.</summary>
-    /// <summary>The collections whose elements can be added to the instance a read-only member holds; mirrors <c>CollectionTypes.IsFillable</c> in the runtime.</summary>
-    private static readonly HashSet<string> FillableCollections = new(StringComparer.Ordinal)
-    {
-        "System.Collections.Generic.List<T>", "System.Collections.Generic.IList<T>", "System.Collections.Generic.ICollection<T>", "System.Collections.Generic.HashSet<T>",
-        "System.Collections.Generic.ISet<T>", "System.Collections.ObjectModel.Collection<T>", "System.Collections.ObjectModel.ObservableCollection<T>",
-        "System.Collections.Generic.SortedSet<T>", "System.Collections.Generic.LinkedList<T>", "System.Collections.Generic.Dictionary<TKey, TValue>",
-        "System.Collections.Generic.IDictionary<TKey, TValue>", "System.Collections.Generic.SortedDictionary<TKey, TValue>", "System.Collections.Generic.SortedList<TKey, TValue>",
-        "System.Collections.Concurrent.ConcurrentDictionary<TKey, TValue>",
-    };
 
     /// <summary>Public properties without a public setter and readonly fields that hold a collection that can be added to, base class members first, in declaration order.</summary>
     private static List<ISymbol> FilledMembers(INamedTypeSymbol type)
@@ -734,8 +672,9 @@ internal sealed class ModelBuilder
     /// </summary>
     private static IEnumerable<ISymbol> InReflectionOrder(INamedTypeSymbol type) => type.GetMembers().OrderBy(m => m is IFieldSymbol ? 0 : 1);
 
-    private static bool IsFillable(ITypeSymbol type) => type is INamedTypeSymbol { IsGenericType: true } named && FillableCollections.Contains(named.OriginalDefinition.ToDisplayString());
+    private static bool IsFillable(ITypeSymbol type) => type is INamedTypeSymbol { IsGenericType: true } named && MemberShapes.TryCollection(FullName(named.OriginalDefinition), out var shape) && shape.Fillable;
 
+    /// <summary>Public settable/init properties and non-readonly fields, base class first, in declaration order.</summary>
     private static List<ISymbol> WritableMembers(INamedTypeSymbol type)
     {
         var chain = new List<INamedTypeSymbol>();
