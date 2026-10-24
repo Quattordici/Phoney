@@ -27,5 +27,7 @@
   <ItemGroup>
     <!-- The convention table is shared with the runtime so both paths choose the same values. -->
     <Compile Include="../Phoney/Generation/Shared/ConventionRules.cs" Link="Shared/ConventionRules.cs" />
+    <!-- So are the generated collection shapes: one table decides which member types are collections and how they are converted. -->
+    <Compile Include="../Phoney/Generation/Shared/MemberShapes.cs" Link="Shared/MemberShapes.cs" />
   </ItemGroup>
 </Project>

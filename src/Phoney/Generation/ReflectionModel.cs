@@ -331,11 +331,7 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
     void IPopulateTarget<object>.FillAt(object instance, int member, object? values, bool replace) => FillObject(instance, member, values, replace);
 
     /// <summary>Framework types (System.*, Microsoft.*) are not populated recursively; their constructors expect real data.</summary>
-    private static bool IsFrameworkType(Type type)
-    {
-        var ns = type.Namespace ?? "";
-        return ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) || ns.StartsWith("Microsoft.", StringComparison.Ordinal);
-    }
+    private static bool IsFrameworkType(Type type) => MemberShapes.IsFrameworkNamespace(type.Namespace ?? "");
 
     /// <summary>
     /// The parts of a <see cref="ValueTuple"/>, <see cref="Tuple"/> (up to seven) or <see cref="KeyValuePair{TKey, TValue}"/>, the names their conventions are matched with

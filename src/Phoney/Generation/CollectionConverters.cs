@@ -1,5 +1,3 @@
-using System.Collections.Frozen;
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -12,26 +10,6 @@ namespace Phoney.Generation;
 /// </summary>
 internal static class CollectionConverters
 {
-    /// <summary>Immutable and frozen collections are made by static factory methods, the others by a constructor.</summary>
-    private static readonly Dictionary<Type, (Type Builder, string Method)> Factories = new()
-    {
-        [typeof(ImmutableArray<>)] = (typeof(ImmutableArray), nameof(ImmutableArray.CreateRange)),
-        [typeof(ImmutableList<>)] = (typeof(ImmutableList), nameof(ImmutableList.CreateRange)),
-        [typeof(IImmutableList<>)] = (typeof(ImmutableList), nameof(ImmutableList.CreateRange)),
-        [typeof(ImmutableQueue<>)] = (typeof(ImmutableQueue), nameof(ImmutableQueue.CreateRange)),
-        [typeof(IImmutableQueue<>)] = (typeof(ImmutableQueue), nameof(ImmutableQueue.CreateRange)),
-        [typeof(ImmutableStack<>)] = (typeof(ImmutableStack), nameof(ImmutableStack.CreateRange)),
-        [typeof(IImmutableStack<>)] = (typeof(ImmutableStack), nameof(ImmutableStack.CreateRange)),
-        [typeof(ImmutableHashSet<>)] = (typeof(ImmutableHashSet), nameof(ImmutableHashSet.CreateRange)),
-        [typeof(IImmutableSet<>)] = (typeof(ImmutableHashSet), nameof(ImmutableHashSet.CreateRange)),
-        [typeof(ImmutableSortedSet<>)] = (typeof(ImmutableSortedSet), nameof(ImmutableSortedSet.CreateRange)),
-        [typeof(ImmutableDictionary<,>)] = (typeof(ImmutableDictionary), nameof(ImmutableDictionary.CreateRange)),
-        [typeof(IImmutableDictionary<,>)] = (typeof(ImmutableDictionary), nameof(ImmutableDictionary.CreateRange)),
-        [typeof(ImmutableSortedDictionary<,>)] = (typeof(ImmutableSortedDictionary), nameof(ImmutableSortedDictionary.CreateRange)),
-        [typeof(FrozenSet<>)] = (typeof(FrozenSet), nameof(FrozenSet.ToFrozenSet)),
-        [typeof(FrozenDictionary<,>)] = (typeof(FrozenDictionary), nameof(FrozenDictionary.ToFrozenDictionary)),
-    };
-
     /// <summary>
     /// A delegate that converts an instance of <paramref name="source"/> (what was built) into a <paramref name="target"/> (the member's type),
     /// or <see langword="null"/> when <paramref name="source"/> already is one.
@@ -46,11 +24,16 @@ internal static class CollectionConverters
 
         var input = Expression.Parameter(typeof(object), "built");
         var built = Expression.Convert(input, source);
-        Expression create = Factories.TryGetValue(target.GetGenericTypeDefinition(), out var factory)
-            ? FromFactory(factory.Builder, factory.Method, target, built)
+        Expression create = CollectionTypes.ShapeOf(target) is { Conversion: CollectionConversion.Factory } factory
+            ? FromFactory(Builder(target, factory), factory.Method!, target, built)
             : FromConstructor(target, built);
         return Expression.Lambda<Func<object, object>>(Expression.Convert(create, typeof(object)), input).Compile();
     }
+
+    /// <summary>The static class that holds the factory, found next to the collection type (<c>ImmutableArray</c> for <c>ImmutableArray&lt;T&gt;</c>).</summary>
+    [RequiresUnreferencedCode("Finds the builder class of a collection type.")]
+    private static Type Builder(Type target, CollectionShape shape) =>
+        target.Assembly.GetType(target.Namespace + "." + shape.Builder) ?? throw Unsupported(target);
 
     [RequiresUnreferencedCode("Finds factory methods of collection builders.")]
     [RequiresDynamicCode("Instantiates generic methods over runtime types.")]
