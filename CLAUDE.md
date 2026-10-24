@@ -99,3 +99,17 @@ dotnet run -c Release --project benchmarks/Phoney.Benchmarks -- --filter '*'
 - The build enforces parts of this for `src/**`: `src/BannedSymbols.txt` (BannedApiAnalyzers, RS0030) bans `System.Random`, `DateTime`/`DateTimeOffset` clocks, `Guid.NewGuid` and `Environment.TickCount`. A deliberate use (the system-clock fallback, the random base seed of an unseeded generator) needs `#pragma warning disable RS0030 // reason`. `.editorconfig` also makes the performance rules (CA18xx…) and the culture rules (CA1304/1305/1309–1311) warnings for `src/**`, so new code must pass them or justify a suppression. `tools/Phoney.DevAnalyzers` (not shipped, referenced by `src/Directory.Build.props`) reports PHONEYDEV001 for `foreach`, spreads and order-sensitive LINQ over `HashSet`, `Dictionary`, the concurrent/immutable/frozen dictionaries and sets and their `Keys`/`Values`: sort first (`Order`/`OrderBy` with an ordinal comparer), keep an ordered list next to the set, or `#pragma warning disable PHONEYDEV001 // why the order can't matter`. It doesn't see interfaces (`IDictionary`, `ISet`), so review those.
 - `Phoney` and `Phoney.DependencyInjection`/`Phoney.NodaTime` are `IsAotCompatible`. `Phoney.EntityFrameworkCore` and `Phoney.TUnit` use reflection by design (`HasFakeData`, `[FakeData]`), so they only enable the trim/AOT analyzers and annotate or justify each reflection use; don't claim AOT compatibility for them.
 - README is user-facing documentation for every feature (add-on packages also in their own `src/<Package>/README.md`) and also contains the generated locale table between `<!-- locales:start/end -->` markers. Keep `samples/Phoney.Samples` showing the core features.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `Quattordici/Phoney`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
