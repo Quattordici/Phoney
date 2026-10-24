@@ -573,9 +573,18 @@ internal sealed class ModelBuilder
         !ContainsTypeParameter(named) &&
         ConventionRules.AdaptedCategoryOf(FullName(named)) == TypeCategory.Other;
 
-    /// <summary>Whether a type is, or has among its type arguments, a type parameter (an open generic type, for which no model can be generated).</summary>
-    private static bool ContainsTypeParameter(ITypeSymbol type) =>
-        type is ITypeParameterSymbol || (type is INamedTypeSymbol { IsGenericType: true } named && named.TypeArguments.Any(ContainsTypeParameter));
+    /// <summary>
+    /// Whether a type refers to a type parameter anywhere: itself, its type arguments, array element types or containing types (an open generic type, for which no model
+    /// can be generated).
+    /// </summary>
+    internal static bool ContainsTypeParameter(ITypeSymbol type) => type switch
+    {
+        ITypeParameterSymbol => true,
+        IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType),
+        INamedTypeSymbol named => named.TypeArguments.Any(ContainsTypeParameter) ||
+                                  (named.ContainingType is { } containing && ContainsTypeParameter(containing)),
+        _ => false,
+    };
 
     /// <summary>
     /// The add-on method producing an adapted type (<c>global::Phoney.NodaTime.NodaTimeValues.Instant</c>), or
