@@ -29,5 +29,7 @@
     <Compile Include="../Phoney/Generation/Shared/ConventionRules.cs" Link="Shared/ConventionRules.cs" />
     <!-- So are the generated collection shapes: one table decides which member types are collections and how they are converted. -->
     <Compile Include="../Phoney/Generation/Shared/MemberShapes.cs" Link="Shared/MemberShapes.cs" />
+    <!-- And the rules for merging data annotations, so the reflection model and the generator read the same constraints. -->
+    <Compile Include="../Phoney/Generation/Shared/ConstraintState.cs" Link="Shared/ConstraintState.cs" />
   </ItemGroup>
 </Project>

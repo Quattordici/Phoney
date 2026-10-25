@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Reflection;
 
 namespace Phoney.Generation;
@@ -51,17 +50,13 @@ public sealed class MemberConstraints
     public object?[]? DeniedValues { get; init; }
 
     /// <summary>Whether the annotations alone define the value (format, pattern, range or allowed values), which satisfies strict mode.</summary>
-    public bool DefinesValue => Format is not null || Pattern is not null || RangeMin is not null || AllowedValues is not null || Base64;
+    public bool DefinesValue => ConstraintState.Defines(Format is not null, Pattern is not null, RangeMin is not null, AllowedValues is not null, Base64);
 
     /// <summary>Reads the supported data annotations; <see langword="null"/> when there are none.</summary>
     /// <param name="attributes">Attributes of the member (and, for constructor parameters, of the matching property).</param>
     internal static MemberConstraints? From(IEnumerable<Attribute> attributes)
     {
-        int? min = null, max = null;
-        string? rangeMin = null, rangeMax = null, pattern = null;
-        bool rangeMinExclusive = false, rangeMaxExclusive = false;
-        ConventionKind? format = null;
-        bool base64 = false, required = false;
+        var state = new ConstraintState();
         object?[]? allowed = null, denied = null;
 
         foreach (var attribute in attributes)
@@ -69,69 +64,69 @@ public sealed class MemberConstraints
             switch (attribute)
             {
                 case StringLengthAttribute a:
-                    max = Stricter(max, a.MaximumLength, Math.Min);
-                    if (a.MinimumLength > 0)
-                        min = Stricter(min, a.MinimumLength, Math.Max);
+                    state.StringLength(a.MaximumLength, a.MinimumLength);
                     break;
-                case MaxLengthAttribute { Length: > 0 } a:
-                    max = Stricter(max, a.Length, Math.Min);
+                case MaxLengthAttribute a:
+                    state.MaxLengthAnnotation(a.Length);
                     break;
                 case MinLengthAttribute a:
-                    min = Stricter(min, a.Length, Math.Max);
+                    state.MinLength(a.Length);
                     break;
                 case LengthAttribute a:
-                    (min, max) = (Stricter(min, a.MinimumLength, Math.Max), Stricter(max, a.MaximumLength, Math.Min));
+                    state.Length(a.MinimumLength, a.MaximumLength);
                     break;
                 case RangeAttribute a:
-                    rangeMin = Invariant(a.Minimum);
-                    rangeMax = Invariant(a.Maximum);
-                    (rangeMinExclusive, rangeMaxExclusive) = (a.MinimumIsExclusive, a.MaximumIsExclusive);
+                    state.Range(ConstraintState.Invariant(a.Minimum), ConstraintState.Invariant(a.Maximum));
+                    if (a.MinimumIsExclusive)
+                        state.ExclusiveMinimum();
+                    if (a.MaximumIsExclusive)
+                        state.ExclusiveMaximum();
                     break;
                 case RegularExpressionAttribute a:
-                    pattern = a.Pattern;
+                    state.RegularExpression(a.Pattern);
                     break;
                 case EmailAddressAttribute:
-                    format = ConventionKind.Email;
+                    state.Format(ConventionKind.Email);
                     break;
                 case PhoneAttribute:
-                    format = ConventionKind.Phone;
+                    state.Format(ConventionKind.Phone);
                     break;
                 case UrlAttribute:
-                    format = ConventionKind.Url;
+                    state.Format(ConventionKind.Url);
                     break;
                 case CreditCardAttribute:
-                    format = ConventionKind.CreditCardNumber;
+                    state.Format(ConventionKind.CreditCardNumber);
                     break;
                 case Base64StringAttribute:
-                    base64 = true;
+                    state.Base64();
                     break;
                 case RequiredAttribute:
-                    required = true;
+                    state.Required();
                     break;
                 case AllowedValuesAttribute a:
+                    state.AllowedValues();
                     allowed = a.Values;
                     break;
                 case DeniedValuesAttribute a:
+                    state.DeniedValues();
                     denied = a.Values;
                     break;
             }
         }
 
-        var found = min is not null || max is not null || rangeMin is not null || pattern is not null || format is not null
-            || base64 || required || allowed is not null || denied is not null;
-        return found
+        return state.Any
             ? new MemberConstraints
             {
-                MinLength = min,
-                MaxLength = max,
-                RangeMin = rangeMin,
-                RangeMax = rangeMax,
-                RangeMinExclusive = rangeMinExclusive,
-                RangeMaxExclusive = rangeMaxExclusive,
-                Pattern = pattern,
-                Format = format,
-                Base64 = base64,
-                Required = required,
+                MinLength = state.MinLengthValue,
+                MaxLength = state.MaxLengthValue,
+                RangeMin = state.RangeMin,
+                RangeMax = state.RangeMax,
+                RangeMinExclusive = state.RangeMinExclusive,
+                RangeMaxExclusive = state.RangeMaxExclusive,
+                Pattern = state.Pattern,
+                Format = state.FormatKind,
+                Base64 = state.IsBase64,
+                Required = state.IsRequired,
                 AllowedValues = allowed,
                 DeniedValues = denied,
             }
@@ -158,15 +153,5 @@ public sealed class MemberConstraints
         MemberInfo member => Attribute.GetCustomAttributes(member, inherit: true),
         ParameterInfo parameter => Attribute.GetCustomAttributes(parameter, inherit: true),
         _ => provider.GetCustomAttributes(inherit: true).OfType<Attribute>(),
-    };
-
-    /// <summary>Several length annotations all apply, so the strictest limit wins, whatever order the attributes come in.</summary>
-    private static int Stricter(int? current, int value, Func<int, int, int> pick) => current is { } c ? pick(c, value) : value;
-
-    private static string? Invariant(object? value) => value switch
-    {
-        null => null,
-        IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
-        _ => value.ToString(),
     };
 }

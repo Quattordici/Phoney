@@ -3,12 +3,13 @@ using System.Globalization;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Phoney.Generation;
 
 namespace Phoney.SourceGenerator;
 
 /// <summary>
-/// Reads data annotations from symbols into a C# object initializer for <c>MemberConstraints</c>, mirroring
-/// <c>MemberConstraints.From</c> in the runtime so generated and reflection models enforce the same rules.
+/// Reads data annotations from symbols into a C# object initializer for <c>MemberConstraints</c>. It merges them with the same <c>ConstraintState</c> as
+/// <c>MemberConstraints.From</c> in the runtime, so generated and reflection models enforce the same rules.
 /// </summary>
 internal static class ConstraintReader
 {
@@ -29,17 +30,12 @@ internal static class ConstraintReader
         return builder.Build();
     }
 
-    /// <summary>Collects the parts of the initializer, annotation by annotation.</summary>
+    /// <summary>Reads the annotations into a <see cref="ConstraintState"/> and writes what it holds as the parts of the initializer.</summary>
     private sealed class Builder
     {
-        private readonly Dictionary<string, string> _parts = new();
-        private readonly List<string> _order = []; // the order the initializer is written in: first set, first written
-
-        // Several length annotations all apply, so the strictest limits win, whatever order they are written in.
-        private int? _minLength;
-        private int? _maxLength;
-        private string? _format;
-        private bool _required;
+        private readonly ConstraintState _state = new();
+        private string? _allowed;
+        private string? _denied;
 
         public void Add(AttributeData attribute)
         {
@@ -49,66 +45,82 @@ internal static class ConstraintReader
                 case Ns + "StringLengthAttribute":
                     AddStringLength(attribute);
                     break;
-                case Ns + "MaxLengthAttribute" when args.Length == 1 && args[0].Value is int max && max > 0:
-                    Max(max);
+                case Ns + "MaxLengthAttribute" when args.Length == 1 && args[0].Value is int max:
+                    _state.MaxLengthAnnotation(max);
                     break;
                 case Ns + "MinLengthAttribute" when args.Length == 1 && args[0].Value is int min:
-                    Min(min);
+                    _state.MinLength(min);
                     break;
                 case Ns + "LengthAttribute" when args.Length == 2 && args[0].Value is int lower && args[1].Value is int upper:
-                    Min(lower);
-                    Max(upper);
+                    _state.Length(lower, upper);
                     break;
                 case Ns + "RangeAttribute":
                     AddRange(attribute);
                     break;
                 case Ns + "RegularExpressionAttribute" when args.Length == 1 && args[0].Value is string pattern:
-                    Set("Pattern", Literal(pattern));
+                    _state.RegularExpression(pattern);
                     break;
                 case Ns + "EmailAddressAttribute":
-                    _format = "Email";
+                    _state.Format(ConventionKind.Email);
                     break;
                 case Ns + "PhoneAttribute":
-                    _format = "Phone";
+                    _state.Format(ConventionKind.Phone);
                     break;
                 case Ns + "UrlAttribute":
-                    _format = "Url";
+                    _state.Format(ConventionKind.Url);
                     break;
                 case Ns + "CreditCardAttribute":
-                    _format = "CreditCardNumber";
+                    _state.Format(ConventionKind.CreditCardNumber);
                     break;
                 case Ns + "Base64StringAttribute":
-                    Set("Base64", "true");
+                    _state.Base64();
                     break;
                 case Ns + "RequiredAttribute":
-                    _required = true;
-                    Set("Required", "true");
+                    _state.Required();
                     break;
                 case Ns + "AllowedValuesAttribute":
-                    Set("AllowedValues", Values(args));
+                    _state.AllowedValues();
+                    _allowed = Values(args);
                     break;
                 case Ns + "DeniedValuesAttribute":
-                    Set("DeniedValues", Values(args));
+                    _state.DeniedValues();
+                    _denied = Values(args);
                     break;
             }
         }
 
         public Result Build()
         {
-            if (_format is not null)
-                Set("Format", "global::Phoney.Generation.ConventionKind." + _format);
-            var initializer = _parts.Count == 0 ? null : string.Join(", ", _order.Select(key => $"{key} = {_parts[key]}"));
-            var definesValue = _format is not null || _parts.ContainsKey("Pattern") || _parts.ContainsKey("RangeMin") || _parts.ContainsKey("AllowedValues") || _parts.ContainsKey("Base64");
-            return new Result(initializer, _format, _required, definesValue);
+            var parts = _state.SetKeys.Select(Part).Where(p => p is not null).Select(p => p!).ToList();
+            if (_state.FormatKind is { } format)
+                parts.Add("Format = global::Phoney.Generation.ConventionKind." + format);
+            return new Result(parts.Count == 0 ? null : string.Join(", ", parts), _state.FormatKind?.ToString(), _state.IsRequired, _state.DefinesValue);
         }
+
+        /// <summary>The initializer part for a constraint that was set, or <see langword="null"/> for a flag that was set and then cleared.</summary>
+        private string? Part(string key) => key switch
+        {
+            "MinLength" => $"MinLength = {Int(_state.MinLengthValue!.Value)}",
+            "MaxLength" => $"MaxLength = {Int(_state.MaxLengthValue!.Value)}",
+            "RangeMin" => $"RangeMin = {Literal(_state.RangeMin)}",
+            "RangeMax" => $"RangeMax = {Literal(_state.RangeMax)}",
+            "RangeMinExclusive" => _state.RangeMinExclusive ? "RangeMinExclusive = true" : null,
+            "RangeMaxExclusive" => _state.RangeMaxExclusive ? "RangeMaxExclusive = true" : null,
+            "Pattern" => $"Pattern = {Literal(_state.Pattern)}",
+            "Base64" => "Base64 = true",
+            "Required" => "Required = true",
+            "AllowedValues" => $"AllowedValues = {_allowed}",
+            "DeniedValues" => $"DeniedValues = {_denied}",
+            _ => null,
+        };
 
         private void AddStringLength(AttributeData attribute)
         {
             var args = attribute.ConstructorArguments;
-            if (args.Length == 1 && args[0].Value is int max)
-                Max(max);
-            foreach (var named in attribute.NamedArguments.Where(n => n.Key == "MinimumLength" && n.Value.Value is int and > 0))
-                Min((int)named.Value.Value!);
+            if (args.Length != 1 || args[0].Value is not int max)
+                return;
+            var minimum = attribute.NamedArguments.Where(n => n.Key == "MinimumLength" && n.Value.Value is int).Select(n => (int)n.Value.Value!).LastOrDefault();
+            _state.StringLength(max, minimum);
         }
 
         private void AddRange(AttributeData attribute)
@@ -118,29 +130,14 @@ internal static class ConstraintReader
             var bounds = args.Length == 3 ? args.Skip(1).ToArray() : args.ToArray();
             if (bounds.Length != 2)
                 return;
-            Set("RangeMin", Literal(Invariant(bounds[0].Value)));
-            Set("RangeMax", Literal(Invariant(bounds[1].Value)));
+            _state.Range(ConstraintState.Invariant(bounds[0].Value), ConstraintState.Invariant(bounds[1].Value));
             foreach (var named in attribute.NamedArguments.Where(n => n.Key is "MinimumIsExclusive" or "MaximumIsExclusive" && n.Value.Value is true))
-                Set(named.Key == "MinimumIsExclusive" ? "RangeMinExclusive" : "RangeMaxExclusive", "true");
-        }
-
-        private void Set(string key, string value)
-        {
-            if (!_parts.ContainsKey(key))
-                _order.Add(key);
-            _parts[key] = value;
-        }
-
-        private void Min(int value)
-        {
-            _minLength = _minLength is { } current && current > value ? current : value;
-            Set("MinLength", Int(_minLength.Value));
-        }
-
-        private void Max(int value)
-        {
-            _maxLength = _maxLength is { } current && current < value ? current : value;
-            Set("MaxLength", Int(_maxLength.Value));
+            {
+                if (named.Key == "MinimumIsExclusive")
+                    _state.ExclusiveMinimum();
+                else
+                    _state.ExclusiveMaximum();
+            }
         }
 
         /// <summary><c>params object?[]</c> arguments as an <c>object[]</c> expression.</summary>
@@ -160,16 +157,8 @@ internal static class ConstraintReader
             if (constant.IsNull)
                 return "null";
             if (constant.Type is { TypeKind: TypeKind.Enum } enumType)
-                return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){Invariant(constant.Value)}";
+                return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){ConstraintState.Invariant(constant.Value)}";
             return constant.ToCSharpString();
         }
-
-        private static string? Invariant(object? value) => value switch
-        {
-            null => null,
-            double d => d.ToString("R", CultureInfo.InvariantCulture),
-            System.IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
-            _ => value.ToString(),
-        };
     }
 }
