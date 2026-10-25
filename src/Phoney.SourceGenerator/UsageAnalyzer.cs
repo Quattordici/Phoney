@@ -26,17 +26,6 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>What a count, size or depth that may not be negative must be.</summary>
     private const string AtLeastZero = "at least 0";
 
-    /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
-    private static readonly HashSet<string> TypeRules = new(StringComparer.Ordinal) { "WithGeneratorFor", "Subtype" };
-
-    /// <summary><c>Unique</c>, which alone accepts a combination of members.</summary>
-    private const string UniqueMethod = "Unique";
-
-    private static readonly HashSet<string> RuleMethods = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", UniqueMethod, "Invalid", "Boundary", "Sequence", "Cycle" };
-
-    /// <summary>The rules that occupy a member's one rule slot; <c>Unique</c> is kept separately and combines with them.</summary>
-    private static readonly HashSet<string> SlotRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Invalid", "Boundary", "Sequence", "Cycle" };
-
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(
@@ -143,7 +132,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 Check(context, call, "count", v => v >= 0, AtLeastZero);
                 Check(context, call, "maxShrinks", v => v >= 0, AtLeastZero);
                 break;
-            case UniqueMethod or "Where":
+            case RuleCatalog.Unique or "Where":
                 Check(context, call, "maxAttempts", v => v >= 1, "at least 1");
                 break;
             case "WithNormalDistribution": // NumberModule.ValidateNormal
@@ -247,20 +236,20 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     {
         CheckDiscarded(context, call, symbols);
         var name = call.TargetMethod.Name;
-        if (TypeRules.Contains(name))
+        if (RuleCatalog.IsTypeRule(name))
         {
             CheckTypeRuleReplaced(context, call, symbols);
             return;
         }
 
-        if (!RuleMethods.Contains(name) && !IsMemberCondition(call.TargetMethod))
+        if (!RuleCatalog.IsMemberRule(name) && !IsMemberCondition(call.TargetMethod))
             return;
 
         var selector = RuleSelector.Read(call);
         if (selector.Kind == SelectorKind.Unknown)
             return;
         CheckRule(context, call, selector, symbols);
-        if (selector.Kind == SelectorKind.Member && SlotRules.Contains(name))
+        if (selector.Kind == SelectorKind.Member && RuleCatalog.OccupiesSlot(name))
             CheckReplaced(context, call, selector, symbols);
     }
 
@@ -293,7 +282,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static void CheckCombination(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
         var method = call.TargetMethod;
-        if (method.Name != UniqueMethod)
+        if (method.Name != RuleCatalog.Unique)
         {
             Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
             return;
@@ -310,7 +299,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>Why a rule can't be given to a member of a nested object, or <see langword="null"/> when it can.</summary>
     private static string? NestedRuleProblem(IMethodSymbol method, RuleSelector selector) => method.Name switch
     {
-        UniqueMethod => $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.",
+        RuleCatalog.Unique => $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.",
         "Sequence" or "Cycle" => $"{method.Name} must select a member of the generated type directly, like x => x.Name: it numbers the generated objects, so it can't give a value to '{selector.Path}' in a nested object.",
         "Where" => $"Where must select a member of the generated type directly, like x => x.Name: a condition on a member applies to the generated object's own members, not to '{selector.Path}' in a nested object.",
         _ when IsDependentRule(method) => $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.",
@@ -356,7 +345,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
         if (EarlierInChain(call, symbols, earlier =>
-                SlotRules.Contains(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path) is { } replaced)
+                RuleCatalog.OccupiesSlot(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path) is { } replaced)
         {
             // The replaced call goes along so the code fix can remove it.
             context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, additionalLocations: new[] { replaced.Syntax.GetLocation() }, selector.Path));
