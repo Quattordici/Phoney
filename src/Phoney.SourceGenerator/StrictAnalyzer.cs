@@ -22,8 +22,6 @@ namespace Phoney.SourceGenerator;
 [DiagnosticAnalyzer(Microsoft.CodeAnalysis.LanguageNames.CSharp)]
 public sealed class StrictAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly HashSet<string> MemberRules = new(StringComparer.Ordinal) { "With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", "Unique", "Invalid", "Boundary", "Sequence", "Cycle" };
-
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Diagnostics.StrictUncovered);
 
@@ -123,7 +121,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         public bool Read(IInvocationOperation call)
         {
             var name = call.TargetMethod.Name;
-            if (MemberRules.Contains(name))
+            if (RuleCatalog.IsMemberRule(name))
                 return ReadMemberRule(call);
             switch (name)
             {
