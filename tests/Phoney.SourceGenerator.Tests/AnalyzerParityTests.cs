@@ -30,6 +30,11 @@ public sealed class AnalyzerParityTests
 
     public record Shipment(string Carrier, int Boxes = 1, double Weight = 2.5);
 
+    /// <summary>Arguments the rows pass by name, so the methods they call get a static array; the analyzer's compilation defines the same fields.</summary>
+    private static readonly string[] Letters = ["a"];
+
+    private static readonly int[] Numbers = [1, 2];
+
     /// <summary>The same types, written out for the analyzer's compilation.</summary>
     private const string Types = """
         using System;
@@ -55,6 +60,9 @@ public sealed class AnalyzerParityTests
 
         public static class Calls
         {
+            private static readonly string[] Letters = ["a"];
+            private static readonly int[] Numbers = [1, 2];
+
             public static void All()
             {
 
@@ -165,14 +173,14 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Product>().With(p => p.Name, "x").Generate()),
             R(() => Fake.For<Product>().With(p => p.Address!.Street, "x").Ignore(p => p.Address!.Street).Generate()),
             R(() => Fake.For<Product>().With(p => p.Addresses.Each().Street, "x").Generate()),
-            R(() => Fake.For<Product>().WithOneOf(p => p.Addresses.Each().Street, new[] { "a" }).Generate()),
+            R(() => Fake.For<Product>().WithOneOf(p => p.Addresses.Each().Street, Letters).Generate()),
             R(() => Fake.For<Product>().With(p => p.Address!, Fake.For<Address>()).Generate()),
             R(() => Fake.For<Product>().Unique(p => new { p.Name, p.Id }).Generate()),
             R(() => Fake.For<Product>().Where(p => p.Name != null).Where(p => p.Name != null, 5).Where(p => p.Name, n => n != null).Generate()),
-            R(() => Fake.For<Product>().Sequence(p => p.Name, i => "n" + i).Cycle(p => p.Id, new[] { 1, 2 }).Generate()),
+            R(() => Fake.For<Product>().Sequence(p => p.Name, i => "n" + i).Cycle(p => p.Id, Numbers).Generate()),
             R(() => Fake.For<Product>().With(p => p.Code, "x").Generate()),
             R(() => Fake.For<Product>().Ignore(p => p.Code).Generate()),
-            R(() => Fake.For<Product>().WithOneOf(p => p.Code, new[] { "a" }).Generate()),
+            R(() => Fake.For<Product>().WithOneOf(p => p.Code, Letters).Generate()),
             R(() => Fake.For<Product>().Unique(p => p.Code).Generate()),
             R(() => Fake.For<Product>().With(p => p.Name.Length, 3).Generate()),
             R(() => Fake.For<Product>().Ignore(p => p.Name.ToUpper()).Generate()),
@@ -187,7 +195,7 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Product>().Where(p => p.Code, c => true).Generate()),
             R(() => Fake.For<Product>().Where(p => p.Address!.Street, s => true).Generate()),
             R(() => Fake.For<Product>().Sequence(p => p.Code, i => "x").Generate()),
-            R(() => Fake.For<Product>().Cycle(p => p.Address!.Street, new[] { "a" }).Generate()),
+            R(() => Fake.For<Product>().Cycle(p => p.Address!.Street, Letters).Generate()),
         ];
 
         (await Disagreements(rows, new UsageAnalyzer(), "PHONEY007", CannotBeApplied, cancellationToken)).ShouldBeEmpty();
@@ -204,7 +212,7 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Product>().Ignore(p => p.Flavor).Ignore(p => p.Shelf).Strict().Generate()),
             R(() => Fake.For<Product>().WithEveryMemberOfType<string>("n").WithEveryMemberOfType<int>(1).Strict().Generate()),
             R(() => Fake.For<Product>().WithConvention<string>(n => n == "Flavor", f => "x").WithConvention<int>(n => n == "Shelf", f => 1).Strict().Generate()),
-            R(() => Fake.For<Product>().Sequence(p => p.Shelf, i => (int)i).Cycle(p => p.Flavor, new[] { "a" }).Strict().Generate()),
+            R(() => Fake.For<Product>().Sequence(p => p.Shelf, i => (int)i).Cycle(p => p.Flavor, Letters).Strict().Generate()),
             R(() => Fake.For<Product>().With(p => p.Flavor, "a").With(p => p.Shelf, 1).WithNameConventions(false).Strict().Generate()),
             R(() => Fake.For<Product>().With(p => p.Address!.Street, "a").Strict().Generate()),
             R(() => Fake.For<Product>().Unique(p => p.Flavor).Unique(p => p.Shelf).Strict().Generate()),
