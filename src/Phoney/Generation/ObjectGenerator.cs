@@ -66,14 +66,14 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public ObjectGenerator<T> Seed(long seed) => DeriveRun(_config with { Seed = seed });
 
     /// <summary>Sets the point in time relative dates are computed from (default: now, or a fixed date when seeded).</summary>
-    public ObjectGenerator<T> ReferenceDate(DateTimeOffset referenceDate) => DeriveRun(_config with { ReferenceDate = referenceDate });
+    public ObjectGenerator<T> ReferenceDate(DateTimeOffset referenceDate) => DeriveRun(_config with { Clock = _config.Clock with { Date = referenceDate } });
 
     /// <summary>
     /// Reads "now" for relative dates from <paramref name="timeProvider"/> (e.g. a <c>FakeTimeProvider</c>), also when
     /// seeded. An explicit <see cref="ReferenceDate"/> takes precedence.
     /// </summary>
     public ObjectGenerator<T> TimeProvider(TimeProvider timeProvider) =>
-        DeriveRun(_config with { TimeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) });
+        DeriveRun(_config with { Clock = _config.Clock with { Clock = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) } });
 
     /// <summary>Sets a member to a fixed value.</summary>
     public ObjectGenerator<T> With<TValue>(Expression<Func<T, TValue>> member, TValue value) =>
@@ -1232,12 +1232,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // pooled faker would be reseeded under them by later runs, silently changing seeded data (a nested run also needs its own while the parent's
         // is in use). The facade's per-call cost is in compiling rules, which Fresh() shares; keep a generator to avoid the faker too.
         var faker = new Faker(data, new SeededRandom(0) { Tape = parentFaker?.Random.Tape }); // a nested object's draws belong to the checked object's tape
-        // Explicit date, else the configured clock, else the parent's date (nested generators), else a fixed date for
-        // seeded generators so their relative dates don't drift with the clock; unseeded generators use the current time.
-        if (_config.ReferenceDate is null && _config.TimeProvider is { } clock)
-            faker.TimeProvider = clock;
-        else if ((_config.ReferenceDate ?? parentFaker?.ReferenceDate ?? (_config.Seed is not null || stableDates ? Faker.DefaultSeededReferenceDate : null)) is { } date)
-            faker.ReferenceDate = date;
+        _config.Clock.Apply(faker, parentFaker, _config.Seed is not null || stableDates);
         return new Run(this, compiled, faker, seed ?? BaseSeed);
     }
 
@@ -1805,8 +1800,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     private sealed record Config(
         string? Locale,
         long? Seed,
-        DateTimeOffset? ReferenceDate,
-        TimeProvider? TimeProvider,
+        RunClock Clock,
         ImmutableDictionary<string, Rule> Rules,
         int RuleCount,
         ImmutableDictionary<string, PathSpec> PathRules,
@@ -1828,7 +1822,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
 #pragma warning disable S2743 // one default configuration per T is intended
         public static readonly Config Default = new(
-            null, null, null, null,
+            null, null, default,
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
             0,
             ImmutableDictionary.Create<string, PathSpec>(StringComparer.Ordinal),
