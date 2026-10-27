@@ -1236,13 +1236,6 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         return new Run(this, compiled, faker, seed ?? BaseSeed);
     }
 
-    /// <summary>The app-wide type generators with this generator's own on top, or <see langword="null"/> when there are none.</summary>
-    private static ImmutableDictionary<Type, INestedGenerator>? MergedTypeGenerators(ImmutableDictionary<Type, INestedGenerator> own)
-    {
-        var all = FakeGenerators.All.SetItems(own);
-        return all.IsEmpty ? null : all;
-    }
-
     /// <summary>Binds the rules (by member name) to the model's member indices and validates them.</summary>
     private Compiled Compile()
     {
@@ -1257,7 +1250,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var rules = RuleDecisions(members, known, dependent);
         var unique = UniqueAttempts(known);
         var feed = _config.Feed is { } feedSettings ? FeedDecisions(feedSettings, members, rules) : null;
-        var conventions = _config.Conventions.AddRange(FakeConventions.All);
+        var conventions = registrations.ConventionsWith(_config.Conventions);
         var slots = SlotBinder.Bind(members, new SlotSources
         {
             Rules = rules,
@@ -1280,9 +1273,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
         var settings = _config.Settings with
         {
-            Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
+            Subtypes = registrations.SubtypesWith(_config.Subtypes),
             Conventions = NestedConventions.For(conventions, usage, _config.Settings.ParameterDefaults),
-            TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
+            TypeGenerators = registrations.GeneratorsWith(_config.TypeGenerators),
             Usage = usage,
         };
         return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries, combinations, registrations);
@@ -1774,7 +1767,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 if (Volatile.Read(ref _compiled) is { } own)
                     return own;
                 // Rules compiled by the generator this one was copied from, while the app-wide registrations are still the ones they were compiled with.
-                return shared?.Compiled is { } inherited && inherited.Registrations == Registrations.Current
+                return shared?.Compiled is { } inherited && inherited.Registrations.IsSameAs(Registrations.Current)
                     ? Interlocked.CompareExchange(ref _compiled, inherited, null) ?? inherited
                     : null;
             }
@@ -1922,10 +1915,4 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             (member == "Values" && owner.IsGenericType && owner.GetGenericTypeDefinition() is var d && (d == typeof(Dictionary<,>) || d == typeof(IDictionary<,>) || d == typeof(IReadOnlyDictionary<,>)))
             || (member == "Value" && Nullable.GetUnderlyingType(owner) is not null);
     }
-}
-
-/// <summary>The app-wide registrations a generator's rules were compiled with (compared by reference: they are immutable snapshots).</summary>
-internal readonly record struct Registrations(object Conventions, object Subtypes, object Generators)
-{
-    public static Registrations Current => new(FakeConventions.All, FakeSubtypes.All, FakeGenerators.All);
 }

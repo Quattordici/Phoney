@@ -38,7 +38,24 @@ public sealed class ArgumentGenerator
 
     /// <summary>Creates a generator for <paramref name="arguments"/>.</summary>
     public ArgumentGenerator(IEnumerable<FakeArgument> arguments)
-        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], null, null, default, GenerationSettings.Default with { Subtypes = FakeSubtypes.All, Conventions = NestedConventions.For(FakeConventions.All), TypeGenerators = FakeGenerators.All.IsEmpty ? null : FakeGenerators.All }, CheckSeed.GeneratorPin, null)
+        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], Registrations.Current)
+    {
+    }
+
+    private ArgumentGenerator(ImmutableArray<FakeArgument> arguments, Registrations registrations)
+        : this(
+            arguments,
+            null,
+            null,
+            default,
+            GenerationSettings.Default with
+            {
+                Subtypes = registrations.Subtypes,
+                Conventions = NestedConventions.For(registrations.Conventions),
+                TypeGenerators = registrations.GeneratorsWith(ImmutableDictionary<Type, INestedGenerator>.Empty),
+            },
+            CheckSeed.GeneratorPin,
+            [.. arguments.Select(argument => CreateProducer(argument, registrations))])
     {
     }
 
@@ -50,7 +67,7 @@ public sealed class ArgumentGenerator
         RunClock clock,
         GenerationSettings settings,
         string replayHint,
-        Func<FakeScope, object?>[]? producers)
+        Func<FakeScope, object?>[] producers)
 #pragma warning restore S107
     {
         _arguments = arguments;
@@ -59,7 +76,7 @@ public sealed class ArgumentGenerator
         _clock = clock;
         _settings = settings;
         _replayHint = replayHint;
-        _producers = producers ?? [.. arguments.Select(CreateProducer)];
+        _producers = producers;
     }
 
     /// <summary>The arguments each row contains, in order.</summary>
@@ -252,7 +269,7 @@ public sealed class ArgumentGenerator
     /// The value producer for one argument, chosen exactly like for an object member: a custom convention
     /// (<see cref="Fake.Conventions"/>), else a format annotation or the name convention, with the annotations applied.
     /// </summary>
-    private static Func<FakeScope, object?> CreateProducer(FakeArgument argument)
+    private static Func<FakeScope, object?> CreateProducer(FakeArgument argument, Registrations registrations)
     {
         var constraints = argument.Attributes is { } attributes ? MemberConstraints.Read(attributes) : null;
         var name = ReflectionTypeModel.Capitalize(argument.Name);
@@ -260,7 +277,7 @@ public sealed class ArgumentGenerator
         var convention = constraints?.Format ?? ConventionRules.Match(name, category, "");
 
         var member = new FakeMember(name, argument.Type, convention) { Constraints = constraints };
-        if (FakeConventions.All.FirstOrDefault(c => c.Matches(member)) is { } custom)
+        if (registrations.Conventions.FirstOrDefault(c => c.Matches(member)) is { } custom)
             return custom.Factory;
 
         return ReflectionTypeModel.Producer(argument.Type, name, convention, argument.Nullable && constraints?.Required != true, constraints);
