@@ -64,18 +64,11 @@ internal static class SlotBinder
         if (sources.ParameterDefaults && !unique && sources.Filtered?.Contains(index) != true && ParameterDefaults.Decision(member) is { } declared)
             return declared;
 
-        if (sources.Conventions is not null)
-        {
-            foreach (var convention in sources.Conventions)
-            {
-                if (convention.Matches(member))
-                {
-                    sources.Usage?.Convention(convention);
-                    return new SlotDecision(RuleKind.Convention, convention.Factory);
-                }
-            }
-        }
+        var convention = sources.Conventions?.FirstOrDefault(c => c.Matches(member));
+        if (convention is null)
+            return null;
 
-        return null;
+        sources.Usage?.Convention(convention);
+        return new SlotDecision(RuleKind.Convention, convention.Factory);
     }
 }
