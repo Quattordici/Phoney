@@ -82,40 +82,28 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
 
     /// <summary>Slots for the members of <paramref name="model"/> that a convention or declared default matches, or <see langword="null"/> when none does.</summary>
     public RuleSlot?[]? SlotsFor(Type type, IFakeModel model) =>
-        _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(conventions, model.Members, usage, parameterDefaults));
+        _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(model.Members));
 
-    /// <summary>Binds declared defaults, then the first matching convention to each member, like the root object's rules in <c>ObjectGenerator&lt;T&gt;.Compile</c>.</summary>
-    private static RuleSlot?[]? Bind(ImmutableList<CustomConvention> conventions, IReadOnlyList<FakeMember> members, RuleUsage? usage, bool parameterDefaults)
+    /// <summary>
+    /// The sources a nested object's members are bound from: declared defaults, then the first matching convention, in the order <see cref="SlotBinder"/> applies them
+    /// to the root object. <paramref name="rules"/> are rules for specific members that come before both (path rules).
+    /// </summary>
+    public SlotSources Sources(IReadOnlyDictionary<int, SlotDecision>? rules = null) =>
+        new() { Rules = rules, ParameterDefaults = parameterDefaults, Conventions = conventions, Usage = usage };
+
+    private RuleSlot?[]? Bind(IReadOnlyList<FakeMember> members)
     {
-        RuleSlot?[]? slots = null;
-        for (var i = 0; i < members.Count; i++)
-        {
-            if (parameterDefaults && ParameterDefaults.Slot(members[i]) is { } declared)
-            {
-                slots ??= new RuleSlot?[members.Count];
-                slots[i] = declared;
-                continue;
-            }
-
-            if (conventions.FirstOrDefault(c => c.Matches(members[i])) is not { } match)
-                continue;
-            usage?.Convention(match);
-            slots ??= new RuleSlot?[members.Count];
-            slots[i] = new RuleSlot(RuleKind.Convention, match.Factory, unique: false, maxAttempts: 0);
-        }
-
-        if (slots is not null)
-            RuleSlot.MarkGivenValues(members, slots);
-        return slots;
+        var slots = SlotBinder.Bind(members, Sources());
+        return Array.Exists(slots, slot => slot is not null) ? slots : null;
     }
 }
 
 /// <summary>The declared defaults of optional constructor parameters, for <c>ObjectGenerator&lt;T&gt;.WithParameterDefaults</c>.</summary>
 internal static class ParameterDefaults
 {
-    /// <summary>A constant slot with the member's declared default, or <see langword="null"/> when it is not an optional constructor parameter.</summary>
-    public static RuleSlot? Slot(FakeMember member) =>
-        member is { IsConstructorParameter: true, HasDefaultValue: true } ? new RuleSlot(RuleKind.Constant, member.DefaultValue, unique: false, maxAttempts: 0) : null;
+    /// <summary>A constant with the member's declared default, or <see langword="null"/> when it is not an optional constructor parameter.</summary>
+    public static SlotDecision? Decision(FakeMember member) =>
+        member is { IsConstructorParameter: true, HasDefaultValue: true } ? new SlotDecision(RuleKind.Constant, member.DefaultValue) : null;
 }
 
 #pragma warning disable S2326 // the source generator reads T: it is the type to generate a model for

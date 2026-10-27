@@ -71,31 +71,61 @@ internal enum GivenValue
     CountryCode,
 }
 
-/// <summary>A rule bound to a member index for one compiled generator.</summary>
-internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int maxAttempts, Func<Faker, object?>? boxedFactory = null)
+/// <summary>
+/// A rule bound to a member for one compiled generator. A slot never changes once it exists: the root-only flags (a condition, an object retry, a recorded key part)
+/// come from the <c>With…</c> methods, which make a new slot, so slots can be shared between threads, nested objects and path positions without anyone writing to them.
+/// </summary>
+internal sealed class RuleSlot
 {
-    private readonly HashSet<object?>? _seen = unique ? [] : null;
+    private readonly HashSet<object?>? _seen;
+
+    /// <summary>Binds <paramref name="kind"/> and <paramref name="value"/> to <paramref name="member"/>.</summary>
+    public RuleSlot(FakeMember member, RuleKind kind, object? value, bool unique = false, int maxAttempts = 0, Func<Faker, object?>? boxedFactory = null)
+    {
+        Kind = kind;
+        Value = value;
+        BoxedFactory = boxedFactory;
+        MaxAttempts = maxAttempts;
+        MemberName = member.Name;
+        Gives = kind is RuleKind.Constant or RuleKind.Factory or RuleKind.Convention ? GivenValueOf(member.Convention) : GivenValue.None;
+        _seen = unique ? [] : null;
+    }
+
+    private RuleSlot(RuleSlot other, Func<object?, bool>? filter, int filterAttempts, bool retriesObject, bool recordsKeyPart)
+    {
+        Kind = other.Kind;
+        Value = other.Value;
+        BoxedFactory = other.BoxedFactory;
+        MaxAttempts = other.MaxAttempts;
+        MemberName = other.MemberName;
+        Gives = other.Gives;
+        _seen = other.Unique ? [] : null;
+        Filter = filter;
+        FilterAttempts = filterAttempts;
+        RetriesObject = retriesObject;
+        RecordsKeyPart = recordsKeyPart;
+    }
 
     /// <summary>How the rule produces values.</summary>
-    public RuleKind Kind { get; } = kind;
+    public RuleKind Kind { get; }
 
     /// <summary>The constant, delegate or generator, depending on <see cref="Kind"/>.</summary>
-    public object? Value { get; } = value;
+    public object? Value { get; }
 
     /// <summary>For <see cref="RuleKind.Factory"/>: the factory returning <see cref="object"/>, for untyped (reflection) callers.</summary>
-    public Func<Faker, object?>? BoxedFactory { get; } = boxedFactory;
+    public Func<Faker, object?>? BoxedFactory { get; }
 
     /// <summary>Whether produced values must be unique.</summary>
     public bool Unique => _seen is not null;
 
-    /// <summary>A condition from <c>Where(x =&gt; x.Member, …)</c> that produced values must satisfy, or <see langword="null"/>. Set while the generator compiles, before the slot is shared.</summary>
-    public Func<object?, bool>? Filter { get; set; }
+    /// <summary>A condition from <c>Where(x =&gt; x.Member, …)</c> that produced values must satisfy, or <see langword="null"/>.</summary>
+    public Func<object?, bool>? Filter { get; }
 
     /// <summary>Attempts per value before <see cref="Filter"/> gives up.</summary>
-    public int FilterAttempts { get; set; }
+    public int FilterAttempts { get; }
 
     /// <summary>The name of the member the slot belongs to, for the messages of <see cref="Unique"/> and <see cref="Filter"/>.</summary>
-    public string? MemberName { get; set; }
+    public string MemberName { get; }
 
     /// <summary>How many values may be produced for one result: the smallest limit of the checks that apply (uniqueness, condition).</summary>
     public int Attempts => (Unique, Filter) switch
@@ -106,44 +136,41 @@ internal sealed class RuleSlot(RuleKind kind, object? value, bool unique, int ma
     };
 
     /// <summary>Attempts per value before uniqueness gives up.</summary>
-    public int MaxAttempts { get; } = maxAttempts;
+    public int MaxAttempts { get; }
 
     /// <summary>
     /// Whether a duplicate makes the whole object be generated again instead of the member: set for members whose value comes from the object's
     /// <see cref="Identity"/>, where drawing the member again returns the same cached value (and the name, email and address must keep agreeing).
     /// </summary>
-    public bool RetriesObject { get; set; }
+    public bool RetriesObject { get; }
 
     /// <summary>Whether the produced value is kept on the scope for a <see cref="UniqueCombination"/> (a constructor parameter, which can't be read back from the object).</summary>
-    public bool RecordsKeyPart { get; set; }
+    public bool RecordsKeyPart { get; }
 
     /// <summary>
     /// What the produced value tells the object about itself, when a rule, feed or custom convention gives the member its value: the creation time
     /// (<see cref="FakeScope.Created"/>) that the "updated" and later dates are built around, or the age the birthdate is drawn for.
     /// </summary>
-    public GivenValue Gives { get; private set; }
+    public GivenValue Gives { get; }
 
-    /// <summary>
-    /// Marks the slots of "created"-style date and age members whose values come from a rule, feed or custom convention (see <see cref="Gives"/>).
-    /// Called while slots are bound, before they are shared.
-    /// </summary>
-    internal static void MarkGivenValues(IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
+    /// <summary>The same slot with a <c>Where</c> condition on the produced values.</summary>
+    public RuleSlot WithFilter(Func<object?, bool> filter, int attempts) => new(this, filter, attempts, RetriesObject, RecordsKeyPart);
+
+    /// <summary>The same slot, where a duplicate generates the whole object again.</summary>
+    public RuleSlot WithObjectRetry() => new(this, Filter, FilterAttempts, retriesObject: true, RecordsKeyPart);
+
+    /// <summary>The same slot, keeping the produced value on the scope for a unique combination.</summary>
+    public RuleSlot WithKeyPart() => new(this, Filter, FilterAttempts, RetriesObject, recordsKeyPart: true);
+
+    /// <summary>What a rule, feed or custom convention that gives a member of this convention its value tells the object (see <see cref="Gives"/>).</summary>
+    private static GivenValue GivenValueOf(ConventionKind convention) => convention switch
     {
-        for (var i = 0; i < slots.Length; i++)
-        {
-            if (slots[i] is { Kind: RuleKind.Constant or RuleKind.Factory or RuleKind.Convention } slot)
-            {
-                slot.Gives = members[i].Convention switch
-                {
-                    ConventionKind.PastDate => GivenValue.Created,
-                    ConventionKind.Age => GivenValue.Age,
-                    ConventionKind.Country => GivenValue.Country,
-                    ConventionKind.CountryCode => GivenValue.CountryCode,
-                    _ => GivenValue.None,
-                };
-            }
-        }
-    }
+        ConventionKind.PastDate => GivenValue.Created,
+        ConventionKind.Age => GivenValue.Age,
+        ConventionKind.Country => GivenValue.Country,
+        ConventionKind.CountryCode => GivenValue.CountryCode,
+        _ => GivenValue.None,
+    };
 
     /// <summary>Records <paramref name="value"/>; false when it was produced before.</summary>
     public bool TryClaim(object? value)
