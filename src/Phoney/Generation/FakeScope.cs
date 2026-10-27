@@ -253,8 +253,10 @@ public sealed class FakeScope
         {
             foreach (var slot in _slots)
             {
-                if (slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode })
-                    identity.Give(slot.Gives, slot.Value);
+                if (slot is not { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode })
+                    continue;
+
+                identity.Give(slot.Gives, slot.Value);
             }
         }
 
