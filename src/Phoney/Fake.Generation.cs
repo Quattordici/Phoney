@@ -138,15 +138,28 @@ public static partial class Fake
     }
 
     /// <summary>Applies the facade's seed, locale, reference date and clock to a new generator.</summary>
-    private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator)
+    private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator) =>
+        Facade() switch
+        {
+            { Seed: { } seed } facade => generator.Seed(seed).ReferenceDate(facade.ReferenceDate).Locale(facade.Locale!),
+            { Clock: { } clock } => generator.TimeProvider(clock),
+            _ => generator,
+        };
+
+    /// <summary>
+    /// What a new generator takes from the facade: when it is seeded a seed from its own sequence (so the generator is reproducible too, and this is the
+    /// only draw it costs), its reference date and locale; otherwise only its clock.
+    /// </summary>
+    private static FacadeSettings Facade()
     {
         if (!IsSeeded)
-            return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;
+            return new FacadeSettings(null, default, null, TimeProvider);
 
-        // A seeded facade seeds its generators from its own sequence, so they are reproducible too.
         var faker = Faker;
-        return generator.Seed(faker.Random.Long(long.MinValue, long.MaxValue)).ReferenceDate(faker.ReferenceDate).Locale(faker.Locale);
+        return new FacadeSettings(faker.Random.Long(long.MinValue, long.MaxValue), faker.ReferenceDate, faker.Locale, null);
     }
+
+    private readonly record struct FacadeSettings(long? Seed, DateTimeOffset ReferenceDate, string? Locale, TimeProvider? Clock);
 
     /// <summary>
     /// Starts a generator for the parameters of <paramref name="method"/>, e.g. to feed a test method. The values of a
@@ -167,10 +180,11 @@ public static partial class Fake
     public static ArgumentGenerator Arguments(IEnumerable<FakeArgument> arguments)
     {
         var generator = new ArgumentGenerator(arguments);
-        if (!IsSeeded)
-            return TimeProvider is { } clock ? generator.TimeProvider(clock) : generator;
-
-        var faker = Faker;
-        return generator.Seed(faker.Random.Long(long.MinValue, long.MaxValue)).ReferenceDate(faker.ReferenceDate).Locale(faker.Locale);
+        return Facade() switch
+        {
+            { Seed: { } seed } facade => generator.Seed(seed).ReferenceDate(facade.ReferenceDate).Locale(facade.Locale!),
+            { Clock: { } clock } => generator.TimeProvider(clock),
+            _ => generator,
+        };
     }
 }
