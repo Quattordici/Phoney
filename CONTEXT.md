@@ -68,6 +68,9 @@ Rerunning a failed test with the seed it reported (`PHONEY_SEED`), so random tes
 **Reference date**:
 The "now" that relative dates (past, recent, birthdates, ages) are computed from. A seeded Faker or Generator has a fixed one, so its dates do not change from day to day.
 
+**Run clock**:
+What a Generator gives the Faker of each run to take its Reference date from: an explicit date, else a clock (`TimeProvider`). The order is explicit date, then clock, then (for a nested Generator) the parent's date, then the fixed seeded date, then the system clock.
+
 ### Values that agree
 
 **Identity**:
