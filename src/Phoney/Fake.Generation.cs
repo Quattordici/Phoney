@@ -141,7 +141,7 @@ public static partial class Fake
     private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator) =>
         Facade() switch
         {
-            { Seed: { } seed } facade => generator.Seed(seed).ReferenceDate(facade.ReferenceDate).Locale(facade.Locale!),
+            { NewSeed: { } seed } facade => generator.Seed(seed).ReferenceDate(facade.Date).Locale(facade.LocaleCode!),
             { Clock: { } clock } => generator.TimeProvider(clock),
             _ => generator,
         };
@@ -159,7 +159,7 @@ public static partial class Fake
         return new FacadeSettings(faker.Random.Long(long.MinValue, long.MaxValue), faker.ReferenceDate, faker.Locale, null);
     }
 
-    private readonly record struct FacadeSettings(long? Seed, DateTimeOffset ReferenceDate, string? Locale, TimeProvider? Clock);
+    private readonly record struct FacadeSettings(long? NewSeed, DateTimeOffset Date, string? LocaleCode, TimeProvider? Clock);
 
     /// <summary>
     /// Starts a generator for the parameters of <paramref name="method"/>, e.g. to feed a test method. The values of a
@@ -182,7 +182,7 @@ public static partial class Fake
         var generator = new ArgumentGenerator(arguments);
         return Facade() switch
         {
-            { Seed: { } seed } facade => generator.Seed(seed).ReferenceDate(facade.ReferenceDate).Locale(facade.Locale!),
+            { NewSeed: { } seed } facade => generator.Seed(seed).ReferenceDate(facade.Date).Locale(facade.LocaleCode!),
             { Clock: { } clock } => generator.TimeProvider(clock),
             _ => generator,
         };

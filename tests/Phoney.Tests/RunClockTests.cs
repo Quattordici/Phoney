@@ -12,6 +12,14 @@ public sealed class RunClockTests
     private static readonly DateTimeOffset Explicit = new(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Now = new(2031, 3, 15, 12, 0, 0, TimeSpan.Zero);
 
+    // CreatedAt of row 0 of Seed(1), by the reference date it is relative to.
+    private static readonly Dictionary<DateTimeOffset, string> FirstRowOf = new()
+    {
+        [Faker.DefaultSeededReferenceDate] = "2024-08-14T01:47:22.4000000Z",
+        [Now] = "2030-10-26T22:57:53.9770000Z",
+        [Explicit] = "2019-08-14T10:57:53.9770000Z",
+    };
+
     private sealed class Stamped
     {
         public DateTimeOffset Seen { get; set; }
@@ -68,6 +76,8 @@ public sealed class RunClockTests
             generator = generator.TimeProvider(new ManualTimeProvider(Now));
 
         generator.Generate(5).ShouldBe(Arguments().Seed(1).ReferenceDate(expected).Generate(5), new RowComparer());
+        var createdAt = ((DateTime)generator.Generate(1)[0]![0]!).ToString("O");
+        createdAt.ShouldBe(FirstRowOf[expected]); // the exact value for seed 1, so a change in both paths shows too
     }
 
     [Test]
