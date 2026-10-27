@@ -76,8 +76,11 @@ The person, address and timeline shared by all members of one generated object, 
 **Profile**:
 A standalone coherent value you ask a Faker for (`PersonProfile`, `AddressProfile`).
 
+**Timeline**:
+The creation time of one generated object, drawn once, that its updated and later dates are built around, so a last-updated date is never before the created date. Part of the Identity.
+
 **Causal timeline**:
-A timeline across a whole graph, in which each nested object is created after the object that contains it.
+A Timeline across a whole graph, in which each nested object is created after the object that contains it.
 
 **National id**:
 A personal, company or VAT number with valid check digits for a country. Structurally valid, not issued.

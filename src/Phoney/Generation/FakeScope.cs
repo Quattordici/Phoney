@@ -200,7 +200,6 @@ public sealed class FakeScope
     private readonly FakeScope? _parent;
     private readonly Type _type;
     private Identity? _identity;
-    private IdentityHints? _hints;
 
     internal FakeScope(Faker faker, GenerationSettings settings, RuleSlot?[]? slots, long index, Type type, FakeScope? parent = null, PathNode?[]? children = null)
     {
@@ -230,155 +229,58 @@ public sealed class FakeScope
     internal GenerationSettings Settings { get; }
 
     /// <summary>The person or place this object describes; shared by name, email, avatar, birthdate, age and address conventions.</summary>
-    internal Identity Identity => _identity ??= CreateIdentity();
+    internal Identity Identity
+    {
+        get
+        {
+            _identity ??= new Identity(Faker);
+            if (!_identity.IsSettled)
+                Settle(_identity);
+            return _identity;
+        }
+    }
+
+    /// <summary>The identity before its person is drawn: it collects what rules give and what populated objects keep.</summary>
+    private Identity Facts => _identity ??= new Identity(Faker);
 
     /// <summary>
-    /// Creates the identity; an age, country or country code a constant rule gives is handed to it first, so the birthdate is drawn for that age and the
+    /// Settles the identity; an age, country or country code a constant rule gives is handed to it first, so the birthdate is drawn for that age and the
     /// other country member matches even when it is declared first. A constant draws nothing, so taking it early moves no draws.
     /// </summary>
-    private Identity CreateIdentity()
+    private void Settle(Identity identity)
     {
-        foreach (var slot in (_slots ?? []).Where(static slot => slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode }))
-            GiveIdentity(slot!.Gives, slot.Value);
-
-        return new Identity(Faker, _hints);
-    }
-
-    /// <summary>Hands a value a rule gives to the identity (see <see cref="GiveAge"/> and <see cref="GiveCountry"/>).</summary>
-    private void GiveIdentity(GivenValue given, object? value)
-    {
-        if (given == GivenValue.Age)
-            GiveAge(value);
-        else
-            GiveCountry(given, value);
-    }
-
-    /// <summary>
-    /// Makes a given country name or code the one the other country member of the object matches, while that one isn't produced yet. The first one counts.
-    /// </summary>
-    private void GiveCountry(GivenValue given, object? value)
-    {
-        if (value is not string { Length: > 0 } text)
-            return;
-        if (_identity is { } identity)
+        if (_slots is not null)
         {
-            identity.GiveCountry(given == GivenValue.Country ? text : null, given == GivenValue.CountryCode ? text : null);
-            return;
-        }
-
-        var hints = _hints ??= new IdentityHints();
-        if (given == GivenValue.Country)
-            hints.Country ??= text;
-        else
-            hints.CountryCode ??= text;
-    }
-
-    /// <summary>
-    /// Makes <paramref name="value"/> (a whole number) the age the object's birthdate is drawn for, while the birthdate isn't drawn yet. The first one counts;
-    /// a negative age, or one too old for the reference date, is left to the rule and the birthdate drawn as usual.
-    /// </summary>
-    private void GiveAge(object? value)
-    {
-        int? given = value switch
-        {
-            int i => i,
-            long l and >= 0 and <= int.MaxValue => (int)l,
-            short h => h,
-            byte b => b,
-            sbyte sb => sb,
-            ushort us => us,
-            uint ui and <= int.MaxValue => (int)ui,
-            _ => null,
-        };
-        if (given is not { } age || age < 0 || age >= Faker.ReferenceDate.UtcDateTime.Year)
-            return;
-        if (_identity is { } identity)
-            identity.GiveAge(age);
-        else
-            (_hints ??= new IdentityHints()).Age ??= age;
-    }
-
-    /// <summary>
-    /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
-    /// between it and the reference date, so <c>UpdatedAt</c> is never before <c>CreatedAt</c>. With causal timelines a nested
-    /// object is created between its parent's creation and the reference date (still one draw). A creation time the object is
-    /// given (<see cref="GiveCreated"/>) replaces the drawn one, which is still drawn so that the values after it stay the same.
-    /// </summary>
-    internal DateTimeOffset Created
-    {
-        get
-        {
-            if (!_hasCreated)
+            foreach (var slot in _slots)
             {
-                if (!_createdGiven)
-                    GiveConstantCreated();
-                var drawn = Settings.CausalTimelines && _parent is { } parent
-                    ? Faker.Date.Between(parent.Created, Later(parent.Created, Faker.ReferenceDate))
-                    : Faker.Date.Past();
-                if (!_createdGiven)
-                    _created = drawn;
-                _hasCreated = true;
+                if (slot is not { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode })
+                    continue;
+
+                identity.Give(slot.Gives, slot.Value);
             }
-
-            return _created;
         }
+
+        identity.Settle();
     }
 
-    /// <summary>The creation time the object was given (see <see cref="GiveCreated"/>), or <see langword="null"/> when it is drawn.</summary>
-    internal DateTimeOffset? GivenCreated
-    {
-        get
-        {
-            if (!_createdGiven && !_hasCreated)
-                GiveConstantCreated(); // a future date declared before the "created" member: a constant draws nothing, so taking it early moves no draws
-            return _createdGiven ? _created : null;
-        }
-    }
+    /// <summary>The object's creation time, drawn once (see <see cref="Timeline"/>); with causal timelines a nested object is created after its parent.</summary>
+    internal DateTimeOffset Created => _timeline.Created(Faker, Settings.CausalTimelines ? _parent : null, _slots);
 
-    /// <summary>
-    /// Makes <paramref name="value"/> (a <see cref="DateTimeOffset"/>, <see cref="DateTime"/> or <see cref="DateOnly"/>; anything else is ignored) the object's
-    /// creation time: the value a rule gives a "created"-style member, or the one an object being populated keeps. The first one counts, and only while no
-    /// date of the object has been built around a drawn creation time yet. A <see cref="DateTime"/> that isn't local is read as UTC.
-    /// </summary>
-    private void GiveCreated<TValue>(TValue value)
-    {
-        if (_createdGiven || _hasCreated)
-            return;
-        DateTimeOffset? given = value switch
-        {
-            DateTimeOffset moment => moment,
-            DateTime { Kind: DateTimeKind.Local } local => new DateTimeOffset(local),
-            DateTime time => new DateTimeOffset(DateTime.SpecifyKind(time, DateTimeKind.Utc)),
-            DateOnly day => new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
-            _ => null,
-        };
-        if (given is { } created)
-        {
-            _created = created;
-            _createdGiven = true;
-        }
-    }
-
-    /// <summary>
-    /// Gives the object the creation time of a constant rule before a date declared ahead of the "created" member is built around a drawn one.
-    /// A constant draws nothing, so taking it early moves no draws; factories and conventions draw, so they count only when their member is reached.
-    /// </summary>
-    private void GiveConstantCreated()
-    {
-        if (_slots is not null && System.Array.Find(_slots, static slot => slot is { Gives: GivenValue.Created, Kind: RuleKind.Constant }) is { } constant)
-            GiveCreated(constant.Value);
-    }
+    /// <summary>The creation time the object was given, or <see langword="null"/> when it is drawn.</summary>
+    internal DateTimeOffset? GivenCreated => _timeline.Given(_slots);
 
     /// <summary>The later of two moments.</summary>
     internal static DateTimeOffset Later(DateTimeOffset first, DateTimeOffset second) => first > second ? first : second;
 
     /// <summary>Whether a "created"-style member already received <see cref="Created"/>.</summary>
-    internal bool CreatedClaimed { get; set; }
+    internal bool CreatedClaimed
+    {
+        get => _timeline.Claimed;
+        set => _timeline.Claimed = value;
+    }
 
-    // A scope is allocated for every object, so its state is kept compact: no nullable structs, -1 for "no forced count".
-    private DateTimeOffset _created;
-    private bool _hasCreated;
-    private bool _createdGiven;
+    // A scope is allocated for every object, so its state is kept compact: the timeline is a struct, -1 for "no forced count".
+    private Timeline _timeline;
     private int _forcedCount = -1;
 
     /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
@@ -456,53 +358,11 @@ public sealed class FakeScope
     {
         if (value is null)
             return;
-        var hints = _hints ??= new IdentityHints();
-        switch (member.Convention)
-        {
-            case ConventionKind.FirstName when value is string first:
-                hints.FirstName = first;
-                break;
-            case ConventionKind.LastName when value is string last:
-                hints.LastName = last;
-                break;
-            case ConventionKind.PastDate:
-                GiveCreated(value); // the object's own creation time: its updated and later dates are generated after it
-                break;
-            case ConventionKind.Country when value is string country && country.Length > 0:
-                hints.Country = country;
-                break;
-            case ConventionKind.CountryCode when value is string code && code.Length > 0:
-                hints.CountryCode = code;
-                break;
-            case ConventionKind.Age:
-                GiveAge(value); // the birthdate is drawn for it, unless a kept birthdate says otherwise
-                break;
-            case ConventionKind.BirthDate:
-                hints.BirthDate = value switch
-                {
-                    DateOnly d => d,
-                    DateTime t => DateOnly.FromDateTime(t),
-                    DateTimeOffset o => DateOnly.FromDateTime(o.UtcDateTime),
-                    _ => hints.BirthDate,
-                };
-                break;
-            default:
-                // A sex/gender enum with Female and Male members says which names and avatar fit the person.
-                if (value is Enum e && (member.Convention is ConventionKind.Sex or ConventionKind.Gender || IsSexEnum(e.GetType())))
-                {
-                    var name = e.ToString();
-                    if (name.Equals("Female", StringComparison.OrdinalIgnoreCase))
-                        hints.Sex = Modules.Sex.Female;
-                    else if (name.Equals("Male", StringComparison.OrdinalIgnoreCase))
-                        hints.Sex = Modules.Sex.Male;
-                }
-
-                break;
-        }
+        if (member.Convention == ConventionKind.PastDate)
+            _timeline.Give(value); // the object's own creation time: its updated and later dates are generated after it
+        else
+            Facts.Adopt(member, value);
     }
-
-    private static bool IsSexEnum(Type type) =>
-        type.Name.Contains("Gender", StringComparison.OrdinalIgnoreCase) || type.Name.Contains("Sex", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Populates an existing nested object through the model of its runtime type (so a <c>Circle</c> in an <c>IShape</c>
@@ -553,9 +413,9 @@ public sealed class FakeScope
         if (slot.RecordsKeyPart)
             (_keyParts ??= [])[member] = value;
         if (slot.Gives == GivenValue.Created)
-            GiveCreated(value);
+            _timeline.Give(value);
         else if (slot.Gives != GivenValue.None)
-            GiveIdentity(slot.Gives, value);
+            Facts.Give(slot.Gives, value);
         return value;
     }
 
@@ -949,24 +809,41 @@ internal interface INestedGenerator
 }
 
 /// <summary>
-/// The person (and home) an object describes, created on first use so unrelated objects pay nothing. Each part is
+/// The person (and home) an object describes, created on first use so unrelated objects pay nothing. It first collects what rules give and what a populated
+/// object keeps (<see cref="Give"/>, <see cref="Adopt"/>), which draw nothing; <see cref="Settle"/> then draws the person's sex, and from there each part is
 /// generated when first needed, so conventions only consume randomness for members the type actually has.
 /// </summary>
-internal sealed class Identity(Faker faker, IdentityHints? hints)
+internal sealed class Identity(Faker faker)
 {
-    private string? _firstName = hints?.FirstName;
-    private string? _lastName = hints?.LastName;
+    private Sex? _sex;
+    private string? _firstName;
+    private string? _lastName;
     private string? _username;
     private string? _email;
-    private DateOnly? _birthDate = hints?.BirthDate;
-    private int? _age = hints?.Age;
+    private DateOnly? _birthDate;
+    private int? _age;
     private AddressProfile? _address;
-    private string? _country = hints?.Country;
-    private string? _countryCode = hints?.CountryCode;
+    private string? _country;
+    private string? _countryCode;
     private string? _nationalId;
 
+    /// <summary>Whether the person is drawn (see <see cref="Settle"/>).</summary>
+    public bool IsSettled { get; private set; }
+
+    /// <summary>Draws the person's sex, unless a kept value says it; every part drawn after it relies on it. Does nothing when already settled.</summary>
+    public Identity Settle()
+    {
+        if (!IsSettled)
+        {
+            _sex ??= faker.Person.Sex();
+            IsSettled = true;
+        }
+
+        return this;
+    }
+
     /// <summary>The person's sex; drives gendered names, avatars and sex/gender enums.</summary>
-    public Sex Sex { get; } = hints?.Sex ?? faker.Person.Sex();
+    public Sex Sex => Settle()._sex!.Value;
 
     /// <summary>First name, matching <see cref="Sex"/>.</summary>
     public string FirstName => _firstName ??= faker.Person.FirstName(Sex);
@@ -983,20 +860,114 @@ internal sealed class Identity(Faker faker, IdentityHints? hints)
     /// <summary>Date of birth (18–80 years before the reference date).</summary>
     public DateOnly BirthDate => _birthDate ??= _age is { } age ? faker.Date.Birthdate(age, age) : faker.Date.Birthdate(); // one draw either way
 
-    /// <summary>Draws <see cref="BirthDate"/> for <paramref name="age"/>, when it isn't drawn (or given) yet and no age was given before.</summary>
-    public void GiveAge(int age)
+    /// <summary>
+    /// Takes in a value a rule gives a member: an age (a whole number the birthdate is drawn for, unless the birthdate is drawn or kept; a negative age, or
+    /// one too old for the reference date, is left to the rule), or a country name or code (the other country member then matches it). The first one counts.
+    /// </summary>
+    public void Give(GivenValue given, object? value)
     {
+        if (given == GivenValue.Age)
+            GiveAge(value);
+        else
+            GiveCountry(given, value);
+    }
+
+    /// <summary>
+    /// Takes in a value that is kept as it is while populating (a set <c>FirstName</c>, birthdate or sex/gender enum), so generated values that belong to the
+    /// same person (email, username, age) agree with it. Must be called before any value is generated.
+    /// </summary>
+    public void Adopt(FakeMember member, object? value)
+    {
+        if (value is null)
+            return;
+        switch (member.Convention)
+        {
+            case ConventionKind.FirstName when value is string first:
+                _firstName = first;
+                break;
+            case ConventionKind.LastName when value is string last:
+                _lastName = last;
+                break;
+            case ConventionKind.Country when value is string { Length: > 0 } country:
+                _country = country;
+                break;
+            case ConventionKind.CountryCode when value is string { Length: > 0 } code:
+                _countryCode = code;
+                break;
+            case ConventionKind.Age:
+                GiveAge(value); // the birthdate is drawn for it, unless a kept birthdate says otherwise
+                break;
+            case ConventionKind.BirthDate:
+                _birthDate = value switch
+                {
+                    DateOnly d => d,
+                    DateTime t => DateOnly.FromDateTime(t),
+                    DateTimeOffset o => DateOnly.FromDateTime(o.UtcDateTime),
+                    _ => _birthDate,
+                };
+                break;
+            default:
+                // A sex/gender enum with Female and Male members says which names and avatar fit the person.
+                if (value is Enum e && (member.Convention is ConventionKind.Sex or ConventionKind.Gender || IsSexEnum(e.GetType())))
+                {
+                    var name = e.ToString();
+                    if (name.Equals("Female", StringComparison.OrdinalIgnoreCase))
+                        _sex = Modules.Sex.Female;
+                    else if (name.Equals("Male", StringComparison.OrdinalIgnoreCase))
+                        _sex = Modules.Sex.Male;
+                }
+
+                break;
+        }
+    }
+
+    private static bool IsSexEnum(Type type) =>
+        type.Name.Contains("Gender", StringComparison.OrdinalIgnoreCase) || type.Name.Contains("Sex", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Makes <paramref name="value"/> (a whole number) the age the birthdate is drawn for, while the birthdate isn't drawn yet. The first one counts;
+    /// a negative age, or one too old for the reference date, is left to the rule and the birthdate drawn as usual.
+    /// </summary>
+    private void GiveAge(object? value)
+    {
+        int? given = value switch
+        {
+            int i => i,
+            long l and >= 0 and <= int.MaxValue => (int)l,
+            short h => h,
+            byte b => b,
+            sbyte sb => sb,
+            ushort us => us,
+            uint ui and <= int.MaxValue => (int)ui,
+            _ => null,
+        };
+        if (given is not { } age || age < 0 || age >= faker.ReferenceDate.UtcDateTime.Year)
+            return;
         if (_birthDate is null)
             _age ??= age;
     }
 
-    /// <summary>Makes a country name or code the object is given the one the other country member matches, when no country or code is known yet.</summary>
-    public void GiveCountry(string? country, string? code)
+    /// <summary>
+    /// Makes a given country name or code the one the other country member matches, while that one isn't produced yet. Before the identity is settled each
+    /// of the two is kept on its own; once it is, the first one counts and the other is left to match it.
+    /// </summary>
+    private void GiveCountry(GivenValue given, object? value)
     {
+        if (value is not string { Length: > 0 } text)
+            return;
+        if (!IsSettled)
+        {
+            if (given == GivenValue.Country)
+                _country ??= text;
+            else
+                _countryCode ??= text;
+            return;
+        }
+
         if (_country is not null || _countryCode is not null)
             return;
-        _country = country;
-        _countryCode = code;
+        _country = given == GivenValue.Country ? text : null;
+        _countryCode = given == GivenValue.CountryCode ? text : null;
     }
 
     /// <summary>Age in whole years at the reference date, matching <see cref="BirthDate"/>.</summary>
@@ -1038,25 +1009,4 @@ internal sealed class Identity(Faker faker, IdentityHints? hints)
     /// <summary>Whole years between <paramref name="birthDate"/> and <paramref name="today"/>.</summary>
     internal static int AgeAt(DateOnly birthDate, DateOnly today) =>
         today.Year - birthDate.Year - (today < birthDate.AddYears(today.Year - birthDate.Year) ? 1 : 0);
-}
-
-/// <summary>Values of an object that is being populated and already has them, which its identity must agree with.</summary>
-internal sealed class IdentityHints
-{
-    public string? FirstName { get; set; }
-
-    public string? LastName { get; set; }
-
-    public DateOnly? BirthDate { get; set; }
-
-    /// <summary>A country a populated object keeps, which a generated country code matches.</summary>
-    public string? Country { get; set; }
-
-    /// <summary>A country code a populated object keeps, which a generated country matches.</summary>
-    public string? CountryCode { get; set; }
-
-    /// <summary>An age a rule gives or a populated object keeps; a <see cref="BirthDate"/> wins over it.</summary>
-    public int? Age { get; set; }
-
-    public Sex? Sex { get; set; }
 }
