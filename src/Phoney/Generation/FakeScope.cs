@@ -249,8 +249,14 @@ public sealed class FakeScope
     /// </summary>
     private void Settle(Identity identity)
     {
-        foreach (var slot in (_slots ?? []).Where(static slot => slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode }))
-            identity.Give(slot!.Gives, slot.Value);
+        if (_slots is not null)
+        {
+            foreach (var slot in _slots)
+            {
+                if (slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode })
+                    identity.Give(slot.Gives, slot.Value);
+            }
+        }
 
         identity.Settle();
     }

@@ -8,7 +8,7 @@ public sealed class IdentityTests
 {
     private static readonly FakeMember Age = new("Age", typeof(int), ConventionKind.Age);
     private static readonly FakeMember FirstName = new("FirstName", typeof(string), ConventionKind.FirstName);
-    private static readonly FakeMember Gender = new("Gender", typeof(string), ConventionKind.Gender);
+    private static readonly FakeMember Gender = new("Gender", typeof(Sex), ConventionKind.Gender);
 
     [Test]
     public void The_person_is_drawn_when_the_identity_is_settled_and_not_before()
@@ -42,8 +42,9 @@ public sealed class IdentityTests
         identity.Give(GivenValue.Age, 100_000);
         identity.Give(GivenValue.Age, "thirty");
 
-        var age = Identity.AgeAt(identity.Settle().BirthDate, DateOnly.FromDateTime(new Faker(seed: 9).ReferenceDate.UtcDateTime));
-        age.ShouldBeInRange(18, 80);
+        var expected = new Faker(seed: 9);
+        expected.Person.Sex();
+        identity.Settle().BirthDate.ShouldBe(expected.Date.Birthdate());
     }
 
     [Test]
@@ -61,11 +62,13 @@ public sealed class IdentityTests
     {
         var identity = new Identity(new Faker(seed: 9));
         identity.Adopt(FirstName, "Ada");
-        identity.Adopt(Gender, "Female");
+        var drawn = new Faker(seed: 9).Person.Sex();
+        var kept = drawn == Sex.Female ? Sex.Male : Sex.Female;
+        identity.Adopt(Gender, kept);
 
         var settled = identity.Settle();
         settled.FirstName.ShouldBe("Ada");
-        settled.Sex.ShouldBe(Sex.Female);
+        settled.Sex.ShouldBe(kept);
         settled.Email.ShouldStartWith("Ada", Case.Insensitive);
     }
 
