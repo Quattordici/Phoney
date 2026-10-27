@@ -233,10 +233,10 @@ public sealed class FakeScope
     {
         get
         {
-            var identity = Facts;
-            if (!identity.IsSettled)
-                Settle(identity);
-            return identity;
+            _identity ??= new Identity(Faker);
+            if (!_identity.IsSettled)
+                Settle(_identity);
+            return _identity;
         }
     }
 
