@@ -298,87 +298,24 @@ public sealed class FakeScope
             (_hints ??= new IdentityHints()).Age ??= age;
     }
 
-    /// <summary>
-    /// The object's creation time: the first "created"-style date member gets it, and "updated"-style members fall
-    /// between it and the reference date, so <c>UpdatedAt</c> is never before <c>CreatedAt</c>. With causal timelines a nested
-    /// object is created between its parent's creation and the reference date (still one draw). A creation time the object is
-    /// given (<see cref="GiveCreated"/>) replaces the drawn one, which is still drawn so that the values after it stay the same.
-    /// </summary>
-    internal DateTimeOffset Created
-    {
-        get
-        {
-            if (!_hasCreated)
-            {
-                if (!_createdGiven)
-                    GiveConstantCreated();
-                var drawn = Settings.CausalTimelines && _parent is { } parent
-                    ? Faker.Date.Between(parent.Created, Later(parent.Created, Faker.ReferenceDate))
-                    : Faker.Date.Past();
-                if (!_createdGiven)
-                    _created = drawn;
-                _hasCreated = true;
-            }
+    /// <summary>The object's creation time, drawn once (see <see cref="Timeline"/>); with causal timelines a nested object is created after its parent.</summary>
+    internal DateTimeOffset Created => _timeline.Created(Faker, Settings.CausalTimelines ? _parent : null, _slots);
 
-            return _created;
-        }
-    }
-
-    /// <summary>The creation time the object was given (see <see cref="GiveCreated"/>), or <see langword="null"/> when it is drawn.</summary>
-    internal DateTimeOffset? GivenCreated
-    {
-        get
-        {
-            if (!_createdGiven && !_hasCreated)
-                GiveConstantCreated(); // a future date declared before the "created" member: a constant draws nothing, so taking it early moves no draws
-            return _createdGiven ? _created : null;
-        }
-    }
-
-    /// <summary>
-    /// Makes <paramref name="value"/> (a <see cref="DateTimeOffset"/>, <see cref="DateTime"/> or <see cref="DateOnly"/>; anything else is ignored) the object's
-    /// creation time: the value a rule gives a "created"-style member, or the one an object being populated keeps. The first one counts, and only while no
-    /// date of the object has been built around a drawn creation time yet. A <see cref="DateTime"/> that isn't local is read as UTC.
-    /// </summary>
-    private void GiveCreated<TValue>(TValue value)
-    {
-        if (_createdGiven || _hasCreated)
-            return;
-        DateTimeOffset? given = value switch
-        {
-            DateTimeOffset moment => moment,
-            DateTime { Kind: DateTimeKind.Local } local => new DateTimeOffset(local),
-            DateTime time => new DateTimeOffset(DateTime.SpecifyKind(time, DateTimeKind.Utc)),
-            DateOnly day => new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
-            _ => null,
-        };
-        if (given is { } created)
-        {
-            _created = created;
-            _createdGiven = true;
-        }
-    }
-
-    /// <summary>
-    /// Gives the object the creation time of a constant rule before a date declared ahead of the "created" member is built around a drawn one.
-    /// A constant draws nothing, so taking it early moves no draws; factories and conventions draw, so they count only when their member is reached.
-    /// </summary>
-    private void GiveConstantCreated()
-    {
-        if (_slots is not null && System.Array.Find(_slots, static slot => slot is { Gives: GivenValue.Created, Kind: RuleKind.Constant }) is { } constant)
-            GiveCreated(constant.Value);
-    }
+    /// <summary>The creation time the object was given, or <see langword="null"/> when it is drawn.</summary>
+    internal DateTimeOffset? GivenCreated => _timeline.Given(_slots);
 
     /// <summary>The later of two moments.</summary>
     internal static DateTimeOffset Later(DateTimeOffset first, DateTimeOffset second) => first > second ? first : second;
 
     /// <summary>Whether a "created"-style member already received <see cref="Created"/>.</summary>
-    internal bool CreatedClaimed { get; set; }
+    internal bool CreatedClaimed
+    {
+        get => _timeline.Claimed;
+        set => _timeline.Claimed = value;
+    }
 
-    // A scope is allocated for every object, so its state is kept compact: no nullable structs, -1 for "no forced count".
-    private DateTimeOffset _created;
-    private bool _hasCreated;
-    private bool _createdGiven;
+    // A scope is allocated for every object, so its state is kept compact: the timeline is a struct, -1 for "no forced count".
+    private Timeline _timeline;
     private int _forcedCount = -1;
 
     /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
@@ -466,7 +403,7 @@ public sealed class FakeScope
                 hints.LastName = last;
                 break;
             case ConventionKind.PastDate:
-                GiveCreated(value); // the object's own creation time: its updated and later dates are generated after it
+                _timeline.Give(value); // the object's own creation time: its updated and later dates are generated after it
                 break;
             case ConventionKind.Country when value is string country && country.Length > 0:
                 hints.Country = country;
@@ -553,7 +490,7 @@ public sealed class FakeScope
         if (slot.RecordsKeyPart)
             (_keyParts ??= [])[member] = value;
         if (slot.Gives == GivenValue.Created)
-            GiveCreated(value);
+            _timeline.Give(value);
         else if (slot.Gives != GivenValue.None)
             GiveIdentity(slot.Gives, value);
         return value;
