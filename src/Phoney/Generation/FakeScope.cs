@@ -69,6 +69,12 @@ internal enum GivenValue
 
     /// <summary>The address's country code.</summary>
     CountryCode,
+
+    /// <summary>The person's date of birth.</summary>
+    BirthDate,
+
+    /// <summary>The person's sex (a sex or gender enum).</summary>
+    Sex,
 }
 
 /// <summary>
@@ -87,7 +93,7 @@ internal sealed class RuleSlot
         BoxedFactory = boxedFactory;
         MaxAttempts = maxAttempts;
         MemberName = member.Name;
-        Gives = kind is RuleKind.Constant or RuleKind.Factory or RuleKind.Convention ? GivenValueOf(member.Convention) : GivenValue.None;
+        Gives = kind is RuleKind.Constant or RuleKind.Factory or RuleKind.Convention ? GivenValueOf(member) : GivenValue.None;
         _seen = unique ? [] : null;
     }
 
@@ -162,13 +168,16 @@ internal sealed class RuleSlot
     /// <summary>The same slot, keeping the produced value on the scope for a unique combination.</summary>
     public RuleSlot WithKeyPart() => new(this, Filter, FilterAttempts, RetriesObject, recordsKeyPart: true);
 
-    /// <summary>What a rule, feed or custom convention that gives a member of this convention its value tells the object (see <see cref="Gives"/>).</summary>
-    private static GivenValue GivenValueOf(ConventionKind convention) => convention switch
+    /// <summary>What a rule, feed or custom convention that gives <paramref name="member"/> its value tells the object (see <see cref="Gives"/>).</summary>
+    private static GivenValue GivenValueOf(FakeMember member) => member.Convention switch
     {
         ConventionKind.PastDate => GivenValue.Created,
         ConventionKind.Age => GivenValue.Age,
         ConventionKind.Country => GivenValue.Country,
         ConventionKind.CountryCode => GivenValue.CountryCode,
+        ConventionKind.BirthDate => GivenValue.BirthDate,
+        ConventionKind.Sex or ConventionKind.Gender => GivenValue.Sex,
+        _ when Identity.IsSexEnum(member.Type) => GivenValue.Sex, // an enum such as Gender { Female, Male } is the person's sex whatever the member is called
         _ => GivenValue.None,
     };
 
@@ -253,7 +262,7 @@ public sealed class FakeScope
         {
             foreach (var slot in _slots)
             {
-                if (slot is not { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode })
+                if (slot is not { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode or GivenValue.BirthDate or GivenValue.Sex })
                     continue;
 
                 identity.Give(slot.Gives, slot.Value);
@@ -816,6 +825,8 @@ internal interface INestedGenerator
 internal sealed class Identity(Faker faker)
 {
     private Sex? _sex;
+    private Sex? _givenSex;
+    private DateOnly? _givenBirthDate;
     private string? _firstName;
     private string? _lastName;
     private string? _username;
@@ -835,7 +846,12 @@ internal sealed class Identity(Faker faker)
     {
         if (!IsSettled)
         {
-            _sex ??= faker.Person.Sex();
+            if (_sex is null)
+            {
+                var drawn = faker.Person.Sex(); // drawn even when a rule gave the sex, so everything drawn after it stays where it was
+                _sex = _givenSex ?? drawn;
+            }
+
             IsSettled = true;
         }
 
@@ -858,18 +874,40 @@ internal sealed class Identity(Faker faker)
     public string Email => _email ??= faker.Internet.Email(FirstName, LastName);
 
     /// <summary>Date of birth (18–80 years before the reference date).</summary>
-    public DateOnly BirthDate => _birthDate ??= _age is { } age ? faker.Date.Birthdate(age, age) : faker.Date.Birthdate(); // one draw either way
+    public DateOnly BirthDate => _birthDate ??= DrawBirthDate();
+
+    /// <summary>The birthdate: one draw whatever decides it, then a birthdate a rule gave replaces the drawn one.</summary>
+    private DateOnly DrawBirthDate()
+    {
+        var drawn = _age is { } age ? faker.Date.Birthdate(age, age) : faker.Date.Birthdate();
+        return _givenBirthDate ?? drawn;
+    }
 
     /// <summary>
-    /// Takes in a value a rule gives a member: an age (a whole number the birthdate is drawn for, unless the birthdate is drawn or kept; a negative age, or
-    /// one too old for the reference date, is left to the rule), or a country name or code (the other country member then matches it). The first one counts.
+    /// Takes in a value a rule gives a member: an age (a whole number the birthdate is drawn for, unless the birthdate is drawn, given or kept; a negative
+    /// age, or one too old for the reference date, is left to the rule), a birthdate (a date; it wins over a given age), a sex (a <see cref="Sex"/> or an enum with
+    /// <c>Female</c> and <c>Male</c> members; anything else is ignored), or a country name or code (the other country member then matches it). The first one
+    /// counts, and only while that part of the person isn't drawn yet. A given birthdate or sex replaces the drawn one but its draw still happens.
     /// </summary>
     public void Give(GivenValue given, object? value)
     {
-        if (given == GivenValue.Age)
-            GiveAge(value);
-        else
-            GiveCountry(given, value);
+        switch (given)
+        {
+            case GivenValue.Age:
+                GiveAge(value);
+                break;
+            case GivenValue.BirthDate:
+                if (_birthDate is null)
+                    _givenBirthDate ??= DateOf(value);
+                break;
+            case GivenValue.Sex:
+                if (_sex is null)
+                    _givenSex ??= SexOf(value);
+                break;
+            default:
+                GiveCountry(given, value);
+                break;
+        }
     }
 
     /// <summary>
@@ -898,31 +936,42 @@ internal sealed class Identity(Faker faker)
                 GiveAge(value); // the birthdate is drawn for it, unless a kept birthdate says otherwise
                 break;
             case ConventionKind.BirthDate:
-                _birthDate = value switch
-                {
-                    DateOnly d => d,
-                    DateTime t => DateOnly.FromDateTime(t),
-                    DateTimeOffset o => DateOnly.FromDateTime(o.UtcDateTime),
-                    _ => _birthDate,
-                };
+                _birthDate = DateOf(value) ?? _birthDate;
                 break;
             default:
                 // A sex/gender enum with Female and Male members says which names and avatar fit the person.
                 if (value is Enum e && (member.Convention is ConventionKind.Sex or ConventionKind.Gender || IsSexEnum(e.GetType())))
-                {
-                    var name = e.ToString();
-                    if (name.Equals("Female", StringComparison.OrdinalIgnoreCase))
-                        _sex = Modules.Sex.Female;
-                    else if (name.Equals("Male", StringComparison.OrdinalIgnoreCase))
-                        _sex = Modules.Sex.Male;
-                }
-
+                    _sex = SexOf(e) ?? _sex;
                 break;
         }
     }
 
-    private static bool IsSexEnum(Type type) =>
-        type.Name.Contains("Gender", StringComparison.OrdinalIgnoreCase) || type.Name.Contains("Sex", StringComparison.OrdinalIgnoreCase);
+    private static DateOnly? DateOf(object? value) => value switch
+    {
+        DateOnly d => d,
+        DateTime t => DateOnly.FromDateTime(t),
+        DateTimeOffset o => DateOnly.FromDateTime(o.UtcDateTime),
+        _ => null,
+    };
+
+    /// <summary>The sex an enum value names (its <c>Female</c> or <c>Male</c> member, whatever the enum is called), or <see langword="null"/> for anything else.</summary>
+    private static Sex? SexOf(object? value)
+    {
+        if (value is not Enum e)
+            return null;
+        var name = e.ToString();
+        if (name.Equals("Female", StringComparison.OrdinalIgnoreCase))
+            return Modules.Sex.Female;
+        return name.Equals("Male", StringComparison.OrdinalIgnoreCase) ? Modules.Sex.Male : null;
+    }
+
+    /// <summary>Whether <paramref name="type"/> (or the type under a nullable) is an enum whose name says it holds the person's sex or gender.</summary>
+    internal static bool IsSexEnum(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        return type.IsEnum
+            && (type.Name.Contains("Gender", StringComparison.OrdinalIgnoreCase) || type.Name.Contains("Sex", StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// Makes <paramref name="value"/> (a whole number) the age the birthdate is drawn for, while the birthdate isn't drawn yet. The first one counts;
