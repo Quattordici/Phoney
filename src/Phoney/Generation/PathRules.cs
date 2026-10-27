@@ -63,8 +63,7 @@ internal sealed class PathNode
     private PathBinding Create(Type type, IFakeModel model, NestedConventions? conventions)
     {
         var members = model.Members;
-        var fromConventions = conventions?.SlotsFor(type, model);
-        var slots = fromConventions is null ? new RuleSlot?[members.Count] : (RuleSlot?[])fromConventions.Clone();
+        var rules = new Dictionary<int, SlotDecision>();
         for (var i = 0; i < members.Count; i++)
         {
             if (!_rules.TryGetValue(members[i].Name, out var found))
@@ -72,9 +71,11 @@ internal sealed class PathNode
             var (rule, usage) = found;
             usage?.MarkUsed(); // the model gets or skips every member of an object created here, so binding is applying
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(type.Name, members[i], (ConstraintRequest)rule.Value!) : rule.Value;
-            slots[i] = new RuleSlot(members[i], rule.Kind, value, boxedFactory: rule.Boxed);
+            rules[i] = new SlotDecision(rule.Kind, value, rule.Boxed);
         }
 
+        // Path rules come first, then what a nested object of this type gets anyway (declared defaults, conventions).
+        var slots = SlotBinder.Bind(members, conventions?.Sources(rules) ?? new SlotSources { Rules = rules });
         return new PathBinding(slots, ChildrenFor(members));
     }
 }
