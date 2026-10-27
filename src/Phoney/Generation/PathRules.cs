@@ -72,10 +72,9 @@ internal sealed class PathNode
             var (rule, usage) = found;
             usage?.MarkUsed(); // the model gets or skips every member of an object created here, so binding is applying
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(type.Name, members[i], (ConstraintRequest)rule.Value!) : rule.Value;
-            slots[i] = new RuleSlot(rule.Kind, value, unique: false, maxAttempts: 0, rule.Boxed);
+            slots[i] = new RuleSlot(members[i], rule.Kind, value, boxedFactory: rule.Boxed);
         }
 
-        RuleSlot.MarkGivenValues(members, slots);
         return new PathBinding(slots, ChildrenFor(members));
     }
 }

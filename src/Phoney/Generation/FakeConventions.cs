@@ -101,11 +101,9 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
                 continue;
             usage?.Convention(match);
             slots ??= new RuleSlot?[members.Count];
-            slots[i] = new RuleSlot(RuleKind.Convention, match.Factory, unique: false, maxAttempts: 0);
+            slots[i] = new RuleSlot(members[i], RuleKind.Convention, match.Factory);
         }
 
-        if (slots is not null)
-            RuleSlot.MarkGivenValues(members, slots);
         return slots;
     }
 }
@@ -113,9 +111,12 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
 /// <summary>The declared defaults of optional constructor parameters, for <c>ObjectGenerator&lt;T&gt;.WithParameterDefaults</c>.</summary>
 internal static class ParameterDefaults
 {
+    /// <summary>A constant with the member's declared default, or <see langword="null"/> when it is not an optional constructor parameter.</summary>
+    public static SlotDecision? Decision(FakeMember member) =>
+        member is { IsConstructorParameter: true, HasDefaultValue: true } ? new SlotDecision(RuleKind.Constant, member.DefaultValue) : null;
+
     /// <summary>A constant slot with the member's declared default, or <see langword="null"/> when it is not an optional constructor parameter.</summary>
-    public static RuleSlot? Slot(FakeMember member) =>
-        member is { IsConstructorParameter: true, HasDefaultValue: true } ? new RuleSlot(RuleKind.Constant, member.DefaultValue, unique: false, maxAttempts: 0) : null;
+    public static RuleSlot? Slot(FakeMember member) => Decision(member) is { } declared ? new RuleSlot(member, declared.Kind, declared.Value) : null;
 }
 
 #pragma warning disable S2326 // the source generator reads T: it is the type to generate a model for
