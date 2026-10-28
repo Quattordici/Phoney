@@ -30,7 +30,7 @@ public sealed class GivenBirthdateAndSexTests
 
         female.ShouldAllBe(c => c.Gender == Gender.Female);
         male.ShouldAllBe(c => c.Gender == Gender.Male);
-        female.Zip(male).Count(pair => pair.First.FirstName != pair.Second.FirstName).ShouldBeGreaterThan(35); // the same draws pick from the other list; a few names are on both
+        female.Zip(male).Count(pair => pair.First.FirstName != pair.Second.FirstName).ShouldBe(42); // the same draws pick from the other list; 8 names are on both
     }
 
     [Test]

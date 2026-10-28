@@ -142,16 +142,16 @@ public sealed class IdentityTests
     [Test]
     public void A_given_sex_is_the_sex_but_its_draw_still_happens()
     {
-        var drawn = new Faker(seed: 9).Person.Sex();
-        var given = drawn == Sex.Female ? Sex.Male : Sex.Female;
+        new Faker(seed: 9).Person.Sex().ShouldBe(Sex.Female); // seed 9 draws a woman, so the given man below really replaces it
         var identity = new Identity(new Faker(seed: 9));
-        identity.Give(GivenValue.Sex, given);
+        identity.Give(GivenValue.Sex, Sex.Male);
 
-        identity.Settle().Sex.ShouldBe(given);
+        identity.Settle().Sex.ShouldBe(Sex.Male);
+        identity.FirstName.ShouldBe("Calvin"); // the draw after the discarded sex draw, from the male names
 
         var expected = new Faker(seed: 9);
-        expected.Person.Sex(); // still drawn, so the name after it is the one the drawn sex would have got
-        identity.FirstName.ShouldBe(expected.Person.FirstName(given));
+        expected.Person.Sex();
+        expected.Person.FirstName(Sex.Male).ShouldBe("Calvin");
     }
 
     [Test]
