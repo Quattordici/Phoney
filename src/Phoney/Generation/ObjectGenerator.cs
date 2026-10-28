@@ -66,14 +66,14 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public ObjectGenerator<T> Seed(long seed) => DeriveRun(_config with { Seed = seed });
 
     /// <summary>Sets the point in time relative dates are computed from (default: now, or a fixed date when seeded).</summary>
-    public ObjectGenerator<T> ReferenceDate(DateTimeOffset referenceDate) => DeriveRun(_config with { ReferenceDate = referenceDate });
+    public ObjectGenerator<T> ReferenceDate(DateTimeOffset referenceDate) => DeriveRun(_config with { Clock = _config.Clock with { Date = referenceDate } });
 
     /// <summary>
     /// Reads "now" for relative dates from <paramref name="timeProvider"/> (e.g. a <c>FakeTimeProvider</c>), also when
     /// seeded. An explicit <see cref="ReferenceDate"/> takes precedence.
     /// </summary>
     public ObjectGenerator<T> TimeProvider(TimeProvider timeProvider) =>
-        DeriveRun(_config with { TimeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) });
+        DeriveRun(_config with { Clock = _config.Clock with { Clock = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) } });
 
     /// <summary>Sets a member to a fixed value.</summary>
     public ObjectGenerator<T> With<TValue>(Expression<Func<T, TValue>> member, TValue value) =>
@@ -1232,20 +1232,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // pooled faker would be reseeded under them by later runs, silently changing seeded data (a nested run also needs its own while the parent's
         // is in use). The facade's per-call cost is in compiling rules, which Fresh() shares; keep a generator to avoid the faker too.
         var faker = new Faker(data, new SeededRandom(0) { Tape = parentFaker?.Random.Tape }); // a nested object's draws belong to the checked object's tape
-        // Explicit date, else the configured clock, else the parent's date (nested generators), else a fixed date for
-        // seeded generators so their relative dates don't drift with the clock; unseeded generators use the current time.
-        if (_config.ReferenceDate is null && _config.TimeProvider is { } clock)
-            faker.TimeProvider = clock;
-        else if ((_config.ReferenceDate ?? parentFaker?.ReferenceDate ?? (_config.Seed is not null || stableDates ? Faker.DefaultSeededReferenceDate : null)) is { } date)
-            faker.ReferenceDate = date;
+        _config.Clock.Apply(faker, parentFaker, _config.Seed is not null || stableDates);
         return new Run(this, compiled, faker, seed ?? BaseSeed);
-    }
-
-    /// <summary>The app-wide type generators with this generator's own on top, or <see langword="null"/> when there are none.</summary>
-    private static ImmutableDictionary<Type, INestedGenerator>? MergedTypeGenerators(ImmutableDictionary<Type, INestedGenerator> own)
-    {
-        var all = FakeGenerators.All.SetItems(own);
-        return all.IsEmpty ? null : all;
     }
 
     /// <summary>Binds the rules (by member name) to the model's member indices and validates them.</summary>
@@ -1262,7 +1250,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var rules = RuleDecisions(members, known, dependent);
         var unique = UniqueAttempts(known);
         var feed = _config.Feed is { } feedSettings ? FeedDecisions(feedSettings, members, rules) : null;
-        var conventions = _config.Conventions.AddRange(FakeConventions.All);
+        var conventions = registrations.ConventionsWith(_config.Conventions);
         var slots = SlotBinder.Bind(members, new SlotSources
         {
             Rules = rules,
@@ -1285,9 +1273,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
         var settings = _config.Settings with
         {
-            Subtypes = FakeSubtypes.All.SetItems(_config.Subtypes),
+            Subtypes = registrations.SubtypesWith(_config.Subtypes),
             Conventions = NestedConventions.For(conventions, usage, _config.Settings.ParameterDefaults),
-            TypeGenerators = MergedTypeGenerators(_config.TypeGenerators),
+            TypeGenerators = registrations.GeneratorsWith(_config.TypeGenerators),
             Usage = usage,
         };
         return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries, combinations, registrations);
@@ -1779,7 +1767,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 if (Volatile.Read(ref _compiled) is { } own)
                     return own;
                 // Rules compiled by the generator this one was copied from, while the app-wide registrations are still the ones they were compiled with.
-                return shared?.Compiled is { } inherited && inherited.Registrations == Registrations.Current
+                return shared?.Compiled is { } inherited && inherited.Registrations.IsSameAs(Registrations.Current)
                     ? Interlocked.CompareExchange(ref _compiled, inherited, null) ?? inherited
                     : null;
             }
@@ -1805,8 +1793,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     private sealed record Config(
         string? Locale,
         long? Seed,
-        DateTimeOffset? ReferenceDate,
-        TimeProvider? TimeProvider,
+        RunClock Clock,
         ImmutableDictionary<string, Rule> Rules,
         int RuleCount,
         ImmutableDictionary<string, PathSpec> PathRules,
@@ -1828,7 +1815,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
 #pragma warning disable S2743 // one default configuration per T is intended
         public static readonly Config Default = new(
-            null, null, null, null,
+            null, null, default,
             ImmutableDictionary.Create<string, Rule>(StringComparer.Ordinal),
             0,
             ImmutableDictionary.Create<string, PathSpec>(StringComparer.Ordinal),
@@ -1928,10 +1915,4 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             (member == "Values" && owner.IsGenericType && owner.GetGenericTypeDefinition() is var d && (d == typeof(Dictionary<,>) || d == typeof(IDictionary<,>) || d == typeof(IReadOnlyDictionary<,>)))
             || (member == "Value" && Nullable.GetUnderlyingType(owner) is not null);
     }
-}
-
-/// <summary>The app-wide registrations a generator's rules were compiled with (compared by reference: they are immutable snapshots).</summary>
-internal readonly record struct Registrations(object Conventions, object Subtypes, object Generators)
-{
-    public static Registrations Current => new(FakeConventions.All, FakeSubtypes.All, FakeGenerators.All);
 }
