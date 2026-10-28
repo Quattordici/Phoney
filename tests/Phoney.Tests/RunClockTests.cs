@@ -15,9 +15,9 @@ public sealed class RunClockTests
     // CreatedAt of row 0 of Seed(1), by the reference date it is relative to.
     private static readonly Dictionary<DateTimeOffset, string> FirstRowOf = new()
     {
-        [Faker.DefaultSeededReferenceDate] = "2024-08-14T01:47:22.4000000Z",
-        [Now] = "2030-10-26T22:57:53.9770000Z",
-        [Explicit] = "2019-08-14T10:57:53.9770000Z",
+        [Faker.DefaultSeededReferenceDate] = "2024-12-06T08:51:15.4910000Z",
+        [Now] = "2031-02-17T22:32:06.1020000Z",
+        [Explicit] = "2019-12-06T10:32:06.1020000Z",
     };
 
     private sealed class Stamped
@@ -75,9 +75,9 @@ public sealed class RunClockTests
         if (clock)
             generator = generator.TimeProvider(new ManualTimeProvider(Now));
 
-        generator.Generate(5).ShouldBe(Arguments().Seed(1).ReferenceDate(expected).Generate(5), new RowComparer());
-        var createdAt = ((DateTime)generator.Generate(1)[0]![0]!).ToString("O");
-        createdAt.ShouldBe(FirstRowOf[expected]); // the exact value for seed 1, so a change in both paths shows too
+        var rows = generator.Generate(5);
+        rows.ShouldBe(Arguments().Seed(1).ReferenceDate(expected).Generate(5), new RowComparer());
+        ((DateTime)rows[0]![0]!).ToString("O").ShouldBe(FirstRowOf[expected]); // the exact value of row 0 for seed 1, so a change in both paths shows too
     }
 
     [Test]
