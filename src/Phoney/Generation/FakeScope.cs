@@ -425,8 +425,9 @@ public sealed class FakeScope
             _timeline.Give(value);
         else if (slot.Gives != GivenValue.None)
         {
-            Facts.Give(slot.Gives, value);
-            DrawGiven(slot.Gives, value);
+            object? given = value; // boxed once for both
+            Facts.Give(slot.Gives, given);
+            DrawGiven(slot.Gives, given);
         }
 
         return value;
