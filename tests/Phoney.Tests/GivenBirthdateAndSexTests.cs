@@ -53,6 +53,47 @@ public sealed class GivenBirthdateAndSexTests
         ruled.Select(c => c.FirstName).ShouldBe(plain.Select(c => c.FirstName));
     }
 
+    // A random member sits between the one a rule gives and the first one that reads the person.
+    private sealed class SexThenScore
+    {
+        public Gender Gender { get; set; }
+
+        public int Score { get; set; }
+
+        public string FirstName { get; set; } = "";
+    }
+
+    private sealed class BirthdateThenScore
+    {
+        public DateOnly DateOfBirth { get; set; }
+
+        public int Score { get; set; }
+
+        public int Age { get; set; }
+    }
+
+    [Test]
+    public void A_sex_rule_draws_the_person_where_the_member_is_so_members_after_it_do_not_move()
+    {
+        var plain = Fake.For<SexThenScore>().Seed(7).Generate(20);
+        var ruled = Fake.For<SexThenScore>().Seed(7).With(x => x.Gender, Gender.Female).Generate(20);
+        var ruledByFactory = Fake.For<SexThenScore>().Seed(7).With(x => x.Gender, _ => Gender.Female).Generate(20);
+
+        ruled.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
+        ruledByFactory.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
+    }
+
+    [Test]
+    public void A_birthdate_rule_draws_the_birthdate_where_the_member_is_so_members_after_it_do_not_move()
+    {
+        var plain = Fake.For<BirthdateThenScore>().Seed(7).Generate(20);
+        var ruled = Fake.For<BirthdateThenScore>().Seed(7).With(x => x.DateOfBirth, Born).Generate(20);
+        var ruledByFactory = Fake.For<BirthdateThenScore>().Seed(7).With(x => x.DateOfBirth, _ => Born).Generate(20);
+
+        ruled.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
+        ruledByFactory.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
+    }
+
     // A seeded generator's dates are relative to the default seeded reference date.
     private static int AgeAtReference(DateOnly born) =>
         Phoney.Generation.Identity.AgeAt(born, DateOnly.FromDateTime(Faker.DefaultSeededReferenceDate.UtcDateTime));

@@ -424,8 +424,24 @@ public sealed class FakeScope
         if (slot.Gives == GivenValue.Created)
             _timeline.Give(value);
         else if (slot.Gives != GivenValue.None)
+        {
             Facts.Give(slot.Gives, value);
+            DrawGiven(slot.Gives);
+        }
+
         return value;
+    }
+
+    /// <summary>
+    /// Draws the sex or birthdate a rule just gave, where its member is, as the member's convention would have: the draw is part of the object's sequence either way,
+    /// and leaving it for whoever reads the person next would move everything generated in between.
+    /// </summary>
+    private void DrawGiven(GivenValue given)
+    {
+        if (given == GivenValue.Sex)
+            _ = Identity;
+        else if (given == GivenValue.BirthDate)
+            _ = Identity.BirthDate;
     }
 
     // Values of constructor parameters that are part of a unique combination, by member index (see RuleSlot.RecordsKeyPart).
