@@ -28,8 +28,7 @@ public sealed class ArgumentGenerator
     private readonly Func<FakeScope, object?>[] _producers;
     private readonly string? _locale;
     private readonly long? _seed;
-    private readonly DateTimeOffset? _referenceDate;
-    private readonly TimeProvider? _timeProvider;
+    private readonly RunClock _clock;
     private readonly GenerationSettings _settings;
     private readonly string _replayHint;
 #pragma warning disable RS0030 // Base seed of an unseeded generator; a configured seed replaces it.
@@ -39,7 +38,24 @@ public sealed class ArgumentGenerator
 
     /// <summary>Creates a generator for <paramref name="arguments"/>.</summary>
     public ArgumentGenerator(IEnumerable<FakeArgument> arguments)
-        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], null, null, null, null, GenerationSettings.Default with { Subtypes = FakeSubtypes.All, Conventions = NestedConventions.For(FakeConventions.All), TypeGenerators = FakeGenerators.All.IsEmpty ? null : FakeGenerators.All }, CheckSeed.GeneratorPin, null)
+        : this([.. arguments ?? throw new ArgumentNullException(nameof(arguments))], Registrations.Current)
+    {
+    }
+
+    private ArgumentGenerator(ImmutableArray<FakeArgument> arguments, Registrations registrations)
+        : this(
+            arguments,
+            null,
+            null,
+            default,
+            GenerationSettings.Default with
+            {
+                Subtypes = registrations.Subtypes,
+                Conventions = NestedConventions.For(registrations.Conventions),
+                TypeGenerators = registrations.GeneratorsWith(ImmutableDictionary<Type, INestedGenerator>.Empty),
+            },
+            CheckSeed.GeneratorPin,
+            [.. arguments.Select(argument => CreateProducer(argument, registrations))])
     {
     }
 
@@ -48,21 +64,19 @@ public sealed class ArgumentGenerator
         ImmutableArray<FakeArgument> arguments,
         string? locale,
         long? seed,
-        DateTimeOffset? referenceDate,
-        TimeProvider? timeProvider,
+        RunClock clock,
         GenerationSettings settings,
         string replayHint,
-        Func<FakeScope, object?>[]? producers)
+        Func<FakeScope, object?>[] producers)
 #pragma warning restore S107
     {
         _arguments = arguments;
         _locale = locale;
         _seed = seed;
-        _referenceDate = referenceDate;
-        _timeProvider = timeProvider;
+        _clock = clock;
         _settings = settings;
         _replayHint = replayHint;
-        _producers = producers ?? [.. arguments.Select(CreateProducer)];
+        _producers = producers;
     }
 
     /// <summary>The arguments each row contains, in order.</summary>
@@ -78,11 +92,11 @@ public sealed class ArgumentGenerator
     public ArgumentGenerator Seed(long seed) => With(seed: seed);
 
     /// <summary>The point in time relative dates (past, recent, birthdates, ages) are computed from.</summary>
-    public ArgumentGenerator ReferenceDate(DateTimeOffset referenceDate) => With(referenceDate: referenceDate);
+    public ArgumentGenerator ReferenceDate(DateTimeOffset referenceDate) => With(clock: _clock with { Date = referenceDate });
 
     /// <summary>Reads "now" for relative dates from <paramref name="timeProvider"/>, also when seeded; an explicit <see cref="ReferenceDate"/> takes precedence.</summary>
     public ArgumentGenerator TimeProvider(TimeProvider timeProvider) =>
-        With(timeProvider: timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)));
+        With(clock: _clock with { Clock = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) });
 
     /// <summary>Probability (0–1) that nullable arguments (<c>int?</c>, <c>string?</c>…) are <see langword="null"/>. Default 0.</summary>
     public ArgumentGenerator NullProbability(double probability)
@@ -243,20 +257,19 @@ public sealed class ArgumentGenerator
 
     private Faker CreateFaker()
     {
-        var faker = new Faker(LocaleStore.Get(_locale ?? Fake.Locale), new SeededRandom(0)) { TimeProvider = _referenceDate is null ? _timeProvider : null };
-        if (faker.TimeProvider is null && (_referenceDate ?? (_seed is not null ? Faker.DefaultSeededReferenceDate : null)) is { } date)
-            faker.ReferenceDate = date;
+        var faker = new Faker(LocaleStore.Get(_locale ?? Fake.Locale), new SeededRandom(0));
+        _clock.Apply(faker, null, _seed is not null);
         return faker;
     }
 
-    private ArgumentGenerator With(string? locale = null, long? seed = null, DateTimeOffset? referenceDate = null, TimeProvider? timeProvider = null, GenerationSettings? settings = null, string? replayHint = null) =>
-        new(_arguments, locale ?? _locale, seed ?? _seed, referenceDate ?? _referenceDate, timeProvider ?? _timeProvider, settings ?? _settings, replayHint ?? _replayHint, _producers);
+    private ArgumentGenerator With(string? locale = null, long? seed = null, RunClock? clock = null, GenerationSettings? settings = null, string? replayHint = null) =>
+        new(_arguments, locale ?? _locale, seed ?? _seed, clock ?? _clock, settings ?? _settings, replayHint ?? _replayHint, _producers);
 
     /// <summary>
     /// The value producer for one argument, chosen exactly like for an object member: a custom convention
     /// (<see cref="Fake.Conventions"/>), else a format annotation or the name convention, with the annotations applied.
     /// </summary>
-    private static Func<FakeScope, object?> CreateProducer(FakeArgument argument)
+    private static Func<FakeScope, object?> CreateProducer(FakeArgument argument, Registrations registrations)
     {
         var constraints = argument.Attributes is { } attributes ? MemberConstraints.Read(attributes) : null;
         var name = ReflectionTypeModel.Capitalize(argument.Name);
@@ -264,7 +277,7 @@ public sealed class ArgumentGenerator
         var convention = constraints?.Format ?? ConventionRules.Match(name, category, "");
 
         var member = new FakeMember(name, argument.Type, convention) { Constraints = constraints };
-        if (FakeConventions.All.FirstOrDefault(c => c.Matches(member)) is { } custom)
+        if (registrations.Conventions.FirstOrDefault(c => c.Matches(member)) is { } custom)
             return custom.Factory;
 
         return ReflectionTypeModel.Producer(argument.Type, name, convention, argument.Nullable && constraints?.Required != true, constraints);
