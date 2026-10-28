@@ -63,6 +63,15 @@ public sealed class GivenBirthdateAndSexTests
         public string FirstName { get; set; } = "";
     }
 
+    private sealed class TextGenderThenScore
+    {
+        public string Gender { get; set; } = "";
+
+        public int Score { get; set; }
+
+        public string FirstName { get; set; } = "";
+    }
+
     private sealed class BirthdateThenScore
     {
         public DateOnly DateOfBirth { get; set; }
@@ -81,6 +90,7 @@ public sealed class GivenBirthdateAndSexTests
 
         ruled.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
         ruledByFactory.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
+        string.Join(',', plain.Take(6).Select(c => c.Score)).ShouldBe("5,2,1,2,3,4"); // the exact scores of seed 7, which the rules must not move
     }
 
     [Test]
@@ -92,6 +102,18 @@ public sealed class GivenBirthdateAndSexTests
 
         ruled.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
         ruledByFactory.Select(c => c.Score).ShouldBe(plain.Select(c => c.Score));
+        string.Join(',', plain.Take(6).Select(c => c.Score)).ShouldBe("2,1,2,1,2,4"); // the exact scores of seed 7, which the rules must not move
+    }
+
+    [Test]
+    public void A_value_that_names_no_sex_leaves_the_object_as_it_was()
+    {
+        // A text gender is not read as a sex (as when populating), so the rule must not make the person settle earlier than it did.
+        var before = Fake.For<TextGenderThenScore>().Seed(7).With(x => x.Gender, "Female").Generate(20);
+        var bare = Fake.For<TextGenderThenScore>().Seed(7).Ignore(x => x.Gender).Generate(20);
+
+        before.Select(c => c.Score).ShouldBe(bare.Select(c => c.Score));
+        before.Select(c => c.FirstName).ShouldBe(bare.Select(c => c.FirstName));
     }
 
     // A seeded generator's dates are relative to the default seeded reference date.

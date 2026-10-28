@@ -426,7 +426,7 @@ public sealed class FakeScope
         else if (slot.Gives != GivenValue.None)
         {
             Facts.Give(slot.Gives, value);
-            DrawGiven(slot.Gives);
+            DrawGiven(slot.Gives, value);
         }
 
         return value;
@@ -434,13 +434,16 @@ public sealed class FakeScope
 
     /// <summary>
     /// Draws the sex or birthdate a rule just gave, where its member is, as the member's convention would have: the draw is part of the object's sequence either way,
-    /// and leaving it for whoever reads the person next would move everything generated in between.
+    /// and leaving it for whoever reads the person next would move everything generated in between. A value the identity can't use (a text for a sex) is not
+    /// taken in, so it doesn't draw either, and the object is as it was without the rule.
     /// </summary>
-    private void DrawGiven(GivenValue given)
+    private void DrawGiven(GivenValue given, object? value)
     {
+        if (!Identity.CanGive(given, value))
+            return;
         if (given == GivenValue.Sex)
             _ = Identity;
-        else if (given == GivenValue.BirthDate)
+        else
             _ = Identity.BirthDate;
     }
 
@@ -968,6 +971,14 @@ internal sealed class Identity(Faker faker)
         DateTime t => DateOnly.FromDateTime(t),
         DateTimeOffset o => DateOnly.FromDateTime(o.UtcDateTime),
         _ => null,
+    };
+
+    /// <summary>Whether <see cref="Give"/> can use <paramref name="value"/> as <paramref name="given"/>, for the kinds that are drawn where their member is (a birthdate, a sex).</summary>
+    internal static bool CanGive(GivenValue given, object? value) => given switch
+    {
+        GivenValue.BirthDate => DateOf(value) is not null,
+        GivenValue.Sex => SexOf(value) is not null,
+        _ => false,
     };
 
     /// <summary>The sex an enum value names (its <c>Female</c> or <c>Male</c> member, whatever the enum is called), or <see langword="null"/> for anything else.</summary>
