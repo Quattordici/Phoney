@@ -23,7 +23,7 @@ internal sealed class UniqueCombination(int[] members, string[] names, bool[] re
     {
         var values = new object?[members.Length];
         for (var i = 0; i < members.Length; i++)
-            values[i] = recorded[i] && scope.TryGetKeyPart(members[i], out var value) ? value : read(members[i]);
+            values[i] = recorded[i] && scope.Ledger is { } ledger && ledger.TryGetKeyPart(members[i], out var value) ? value : read(members[i]);
         return values;
     }
 
