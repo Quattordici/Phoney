@@ -118,16 +118,20 @@ internal readonly struct TypeFacts
 internal static partial class ValueShapes
 {
     /// <summary>The shape of a non-nullable type (look through <c>Nullable&lt;T&gt;</c> first).</summary>
-    public static ValueShape Of(TypeFacts type)
-    {
-        if (type.Form == TypeForm.Array)
-            return type.ArrayRank switch
-            {
-                1 => type.OfBytes ? ValueShape.Bytes : ValueShape.Array,
-                2 => ValueShape.Grid,
-                _ => ValueShape.None,
-            };
+    public static ValueShape Of(TypeFacts type) =>
+        type.Form == TypeForm.Array ? ArrayShape(type) : KnownShape(type) ?? ApplicationShape(type);
 
+    /// <summary>One dimension is an array (or bytes), two a grid; more are not generated.</summary>
+    private static ValueShape ArrayShape(TypeFacts type) => type.ArrayRank switch
+    {
+        1 => type.OfBytes ? ValueShape.Bytes : ValueShape.Array,
+        2 => ValueShape.Grid,
+        _ => ValueShape.None,
+    };
+
+    /// <summary>The shape of a type Phoney knows by name: scalars, byte memory, tuples, add-on dates, collections; <see langword="null"/> for other types.</summary>
+    private static ValueShape? KnownShape(TypeFacts type)
+    {
         if (ConventionRules.CategoryOf(type.Name, type.Form == TypeForm.Enum) != TypeCategory.Other)
             return ValueShape.Scalar;
         if (type.Arity == 1 && type.OfBytes && type.Name is "System.Memory`1" or "System.ReadOnlyMemory`1")
@@ -138,6 +142,12 @@ internal static partial class ValueShapes
             return ValueShape.Adapted;
         if (type.Arity > 0 && MemberShapes.TryCollection(type.Name, out _))
             return ValueShape.Collection;
+        return null;
+    }
+
+    /// <summary>Any other type: left alone in the framework, created (or one of its subtypes) in the application.</summary>
+    private static ValueShape ApplicationShape(TypeFacts type)
+    {
         if (MemberShapes.IsFrameworkNamespace(type.Namespace))
             return ValueShape.Framework;
 
