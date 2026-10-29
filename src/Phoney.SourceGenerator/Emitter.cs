@@ -209,7 +209,7 @@ internal static class Emitter
         var i2 = i1 + Step;
         // Declared before __members uses them.
         foreach (var m in members.Where(m => m.Constraints is not null))
-            sb.Append(i1).AppendLine($"private static readonly global::Phoney.Generation.MemberConstraints {m.ConstraintsField} = new() {{ {m.Constraints} }};");
+            sb.Append(i1).AppendLine($"private static readonly global::Phoney.Generation.MemberConstraints {m.ConstraintsField} = {m.Constraints};");
         if (members.Any(m => m.Constraints is not null))
             sb.AppendLine();
 

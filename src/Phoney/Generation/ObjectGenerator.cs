@@ -1654,6 +1654,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             var item = config.Factory is { } factory ? ApplyRules(factory(faker), scope) : model.Create(scope);
             foreach (var (member, rule) in compiled.Dependent)
                 item = model.Set(item, member, rule(faker, item));
+            if (config.Factory is null) // the factory decides the members no rule is for
+                item = Comparisons.Apply(model, item, scope);
             return Finish(item);
         }
 
@@ -1701,7 +1703,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                     item = model.Set(item, member, rule(faker, item));
             }
 
-            return Finish(item);
+            return Finish(Comparisons.Apply(model, item, scope));
         }
     }
 

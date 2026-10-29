@@ -267,14 +267,14 @@ public sealed class ArgumentGenerator
 
     /// <summary>
     /// The value producer for one argument, chosen exactly like for an object member: a custom convention
-    /// (<see cref="Fake.Conventions"/>), else a format annotation or the name convention, with the annotations applied.
+    /// (<see cref="Fake.Conventions"/>), else a format annotation, a <c>[DataType]</c> or the name convention, with the annotations applied.
     /// </summary>
     private static Func<FakeScope, object?> CreateProducer(FakeArgument argument, Registrations registrations)
     {
-        var constraints = argument.Attributes is { } attributes ? MemberConstraints.Read(attributes) : null;
+        var annotations = argument.Attributes is { } attributes ? MemberConstraints.Read(attributes) : default;
+        var constraints = annotations.Constraints;
         var name = ReflectionTypeModel.Capitalize(argument.Name);
-        var category = FakeMember.ConventionCategory(argument.Type);
-        var convention = constraints?.Format ?? ConventionRules.Match(name, category, "");
+        var convention = annotations.Convention(name, argument.Type, "");
 
         var member = new FakeMember(name, argument.Type, convention) { Constraints = constraints };
         if (registrations.Conventions.FirstOrDefault(c => c.Matches(member)) is { } custom)

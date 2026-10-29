@@ -73,6 +73,37 @@ public sealed class Ticket
     public string Contact { get; set; } = "";
 }
 
+public enum Tier
+{
+    Free = 1,
+    Pro = 2,
+}
+
+/// <summary>An annotation built on a standard one, which the generated model constructs.</summary>
+public sealed class SkuAttribute() : System.ComponentModel.DataAnnotations.RegularExpressionAttribute("^[A-Z]{3}-[0-9]{4}$");
+
+public sealed class Signup
+{
+    public string Password { get; set; } = "";
+
+#pragma warning disable IL2026 // the BCL marks [Compare] because its validator looks the property up by name; Phoney reads it through the generated model
+    [System.ComponentModel.DataAnnotations.Compare(nameof(Password))]
+#pragma warning restore IL2026
+    public string ConfirmPassword { get; set; } = "";
+
+    [System.ComponentModel.DataAnnotations.EnumDataType(typeof(Tier))]
+    public string Tier { get; set; } = "";
+
+    [System.ComponentModel.DataAnnotations.FileExtensions(Extensions = "pdf")]
+    public string Resume { get; set; } = "";
+
+    [System.ComponentModel.DataAnnotations.DataType(System.ComponentModel.DataAnnotations.DataType.EmailAddress)]
+    public string Contact { get; set; } = "";
+
+    [Sku]
+    public string Sku { get; set; } = "";
+}
+
 public sealed class Folder
 {
     public string Title { get; set; } = "";
@@ -112,5 +143,5 @@ public sealed class Shipment
 [FakeFor<Shipment>]
 internal static partial class ShipmentFakes;
 
-[FakeFor<Folder>, FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeSubtype<IInsurance, Policy>]
+[FakeFor<Folder>, FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeFor<Signup>, FakeSubtype<IInsurance, Policy>]
 internal static partial class Fakes;

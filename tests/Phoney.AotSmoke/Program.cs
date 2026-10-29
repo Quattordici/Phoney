@@ -87,6 +87,12 @@ var edges = Fakes.Ticket.Seed(6).BoundaryCases();
 if (!edges.Where(c => c.Member == "Seats").Select(c => c.Value.Seats).Order().SequenceEqual([1, 8]) || !edges.Where(c => c.Member == "Code").Select(c => c.Value.Code.Length).Order().SequenceEqual([2, 6]))
     throw new InvalidOperationException("boundary cases were wrong: " + string.Join("; ", edges));
 
+// [Compare], [EnumDataType], [FileExtensions], [DataType] and an annotation built on [RegularExpression], through a generated model, no reflection.
+var signups = Fakes.Signup.Seed(5).Generate(20);
+if (signups.Any(s => s.ConfirmPassword != s.Password || s.Tier is not ("Free" or "Pro") || !s.Resume.EndsWith(".pdf", StringComparison.Ordinal)
+    || !s.Contact.Contains('@') || s.Sku.Length != 8 || s.Sku[3] != '-'))
+    throw new InvalidOperationException("annotations were not honoured: " + string.Join("; ", signups.Select(s => $"{s.ConfirmPassword}/{s.Password} {s.Tier} {s.Resume} {s.Contact} {s.Sku}")));
+
 // Rules for members of nested objects (paths through objects and collections), through generated models, no reflection.
 var oslo2 = Fakes.Person.Seed(7)
     .With(p => p.Home.City, "Oslo")

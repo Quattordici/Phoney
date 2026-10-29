@@ -137,4 +137,57 @@ public sealed class ConstraintStateTests
             System.Globalization.CultureInfo.CurrentCulture = previous;
         }
     }
+
+    [Test]
+    public void File_extensions_are_read_like_the_validator_reads_them()
+    {
+        var listed = new ConstraintState();
+        listed.FileExtensions(" .PDF, docx,,");
+        listed.Extensions.ShouldBe(["pdf", "docx"]);
+
+        var defaults = new ConstraintState();
+        defaults.FileExtensions(null);
+        defaults.Extensions.ShouldBe(["png", "jpg", "jpeg", "gif"]);
+        defaults.DefinesValue.ShouldBeTrue();
+    }
+
+    [Test]
+    public void A_comparison_or_an_enum_data_type_defines_the_value()
+    {
+        var compared = new ConstraintState();
+        compared.Compare("Password");
+        (compared.CompareWith, compared.DefinesValue).ShouldBe(("Password", true));
+
+        var coded = new ConstraintState();
+        coded.EnumDataType();
+        coded.DefinesValue.ShouldBeTrue();
+    }
+
+    [Test]
+    [Arguments(10, TypeCategory.String, ConventionKind.Email)]
+    [Arguments(5, TypeCategory.String, ConventionKind.Phone)]
+    [Arguments(15, TypeCategory.String, ConventionKind.ZipCode)]
+    [Arguments(13, TypeCategory.Uri, ConventionKind.ImageUrl)]
+    [Arguments(6, TypeCategory.Decimal, ConventionKind.Price)]
+    [Arguments(6, TypeCategory.String, null)]
+    [Arguments(10, TypeCategory.Int32, null)]
+    [Arguments(0, TypeCategory.String, null)]
+    public void A_data_type_picks_a_convention_for_the_types_it_describes(int dataType, TypeCategory category, ConventionKind? expected)
+    {
+        var state = new ConstraintState();
+        state.DataType(dataType);
+
+        state.DeclaredConvention(category).ShouldBe(expected);
+        state.Any.ShouldBeFalse(); // a hint, not a validation rule
+    }
+
+    [Test]
+    public void A_format_annotation_wins_over_a_data_type()
+    {
+        var state = new ConstraintState();
+        state.DataType(5); // PhoneNumber
+        state.Format(ConventionKind.Email);
+
+        state.DeclaredConvention(TypeCategory.String).ShouldBe(ConventionKind.Email);
+    }
 }

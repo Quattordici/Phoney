@@ -145,8 +145,10 @@ public interface IFakeModel
 /// <see cref="Set"/> and <see cref="Fallback"/>, so reflection and generated models fill an object identically.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public abstract class FakeModel<T> : IFakeModel, IPopulateTarget<T>
+public abstract class FakeModel<T> : IFakeModel, IPopulateTarget<T>, IComparedMembers
 {
+    private Comparisons.Pair[]? _compared;
+
     /// <summary>The members, indexed as used by <see cref="FakeScope.Get{TValue}"/>.</summary>
     public abstract IReadOnlyList<FakeMember> Members { get; }
 
@@ -197,6 +199,8 @@ public abstract class FakeModel<T> : IFakeModel, IPopulateTarget<T>
 
     /// <inheritdoc />
     object IFakeModel.SetMember(object instance, int member, object? value) => Set((T)instance, member, value)!;
+
+    Comparisons.Pair[] IComparedMembers.Compared => _compared ??= Comparisons.PairsOf(Members);
 
     bool IPopulateTarget<T>.IsUnsetAt(T instance, int member) => IsUnset(instance, member);
 
@@ -277,6 +281,7 @@ internal static class Populator
             {
                 current[i] = target.ValueAt(instance, i);
                 scope.Adopt(members[i], current[i]);
+                scope.Keep(i);
             }
         }
 

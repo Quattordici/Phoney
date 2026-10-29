@@ -106,6 +106,40 @@ public sealed class FakeForGeneratorTests
     }
 
     [Test]
+    public void Annotations_derived_from_supported_ones_are_constructed_with_the_others(CancellationToken cancellationToken)
+    {
+        var (driver, output, diagnostics) = GeneratorHarness.Run("""
+            using System.ComponentModel.DataAnnotations;
+            using Phoney.Generation;
+            public enum Plan { Free, Pro }
+            public sealed class ShortTextAttribute() : StringLengthAttribute(8);
+            public sealed class DatedAttribute(System.Type type, string min, string max) : RangeAttribute(type, min, max);
+            public class Holder
+            {
+                private sealed class SecretAttribute() : RegularExpressionAttribute("^[a-z]+$");
+                public sealed class Item { [Secret, MaxLength(4)] public string Code { get; set; } = ""; }
+            }
+            public sealed class Form
+            {
+                [ShortText(MinimumLength = 3), Required] public string Label { get; set; } = "";
+                [Dated(typeof(System.DateTime), "2020-01-01", "2020-12-31")] public System.DateTime Day { get; set; }
+                [Compare(nameof(Label)), DataType(DataType.EmailAddress)] public string Again { get; set; } = "";
+                [FileExtensions(Extensions = "pdf, .DOCX")] public string File { get; set; } = "";
+            }
+            [FakeFor<Form>, FakeFor<Holder.Item>] public static partial class Data;
+            """);
+        diagnostics.ShouldBeEmpty();
+        output.GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
+        var source = driver.GetRunResult().GeneratedTrees.Single().ToString();
+        source.ShouldContain("MemberConstraints.Of(new global::ShortTextAttribute() { MinimumLength = 3 }, new global::System.ComponentModel.DataAnnotations.RequiredAttribute())");
+        source.ShouldContain("MemberConstraints.Of(new global::DatedAttribute(typeof(global::System.DateTime), \"2020-01-01\", \"2020-12-31\"))");
+        source.ShouldContain("new() { Compare = \"Label\" }");
+        source.ShouldContain("new() { FileExtensions = new string[] { \"pdf\", \"docx\" } }");
+        source.ShouldContain("new() { MaxLength = 4 }"); // an annotation generated code can't construct is left out, as before
+        source.ShouldContain("FakeMember(\"Again\", typeof(string), global::Phoney.Generation.ConventionKind.Email)");
+    }
+
+    [Test]
     public void Members_named_like_keywords_compile(CancellationToken cancellationToken)
     {
         var (driver, output, diagnostics) = GeneratorHarness.Run("""

@@ -37,7 +37,7 @@ internal static class ConstraintCases
         {
             throw new InvalidOperationException(request.Boundary
                 ? $"{owner}.{member.Name} has no limits to sit on: add [Range], [StringLength], [MinLength] or [MaxLength] to it."
-                : $"{owner}.{member.Name} has no data annotations that can be broken: add [Range], [StringLength], [MinLength], [MaxLength], [Required], [RegularExpression], [EmailAddress], [AllowedValues] or [DeniedValues] to it.");
+                : $"{owner}.{member.Name} has no data annotations that can be broken: add [Range], [StringLength], [MinLength], [MaxLength], [Required], [RegularExpression], [EmailAddress], [AllowedValues], [DeniedValues], [EnumDataType] or [FileExtensions] to it.");
         }
 
         if (request.Index is { } index)
@@ -73,6 +73,8 @@ internal static class ConstraintCases
 
         if (shape == Shape.Number && c.AllowedValues is { Length: > 0 } allowed && NotAllowedNumber(type, allowed) is { } number)
             cases.Add(new("not one of the allowed values", Replace(number)));
+        if (shape == Shape.Number && c.EnumType is { } enumType && NotInEnum(type, enumType, c.EnumNumbers) is { } undefined)
+            cases.Add(new($"not a value of {enumType.Name} ({undefined})", Replace(undefined)));
         if (c.DeniedValues?.FirstOrDefault(d => d is not null && type.IsInstanceOfType(d)) is { } denied)
             cases.Add(new($"a denied value ({denied})", Replace(denied)));
         return cases;
@@ -149,6 +151,13 @@ internal static class ConstraintCases
 
         if (c.Base64 && Rejected(new Base64StringAttribute(), c) is { } notBase64)
             cases.Add(new("not valid base64", Replace(notBase64)));
+
+        if (c.EnumType is { } enumType && Rejected(new EnumDataTypeAttribute(enumType), c) is { } notAName)
+            cases.Add(new($"not a name of {enumType.Name}", Replace(notAName)));
+
+        if (c.FileExtensions is { Length: > 0 } extensions
+            && Rejected(new FileExtensionsAttribute { Extensions = string.Join(',', extensions) }, c, OtherFileNames) is { } otherFile)
+            cases.Add(new($"a file name without one of the extensions ({string.Join(", ", extensions)})", Replace(otherFile)));
 
         if (c.AllowedValues is { Length: > 0 } allowed)
         {
@@ -288,10 +297,42 @@ internal static class ConstraintCases
         }
     }
 
-    /// <summary>The first of the bad texts, fitted to the length limits, that <paramref name="attribute"/> rejects; <see langword="null"/> if it accepts them all.</summary>
-    private static string? Rejected(ValidationAttribute attribute, MemberConstraints c)
+    /// <summary>
+    /// A number of the member's type that <c>[EnumDataType]</c> rejects, checked with the real validator: one above the largest value, one below the smallest, or, for a
+    /// flags enum where both are combinations of its flags, the first power of two above the largest value (a flag it doesn't have).
+    /// </summary>
+    private static object? NotInEnum(Type type, Type enumType, decimal[] values)
     {
-        foreach (var candidate in BadTexts)
+        var validator = new EnumDataTypeAttribute(enumType);
+        var max = values.Max();
+        var flag = 1m;
+        while (flag <= max)
+            flag *= 2;
+        decimal[] candidates = [max + 1, values.Min() - 1, flag];
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var number = ToNumber(type, candidate);
+                if (!validator.IsValid(number))
+                    return number;
+            }
+            catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException or ArgumentException)
+            {
+                // a number the member's type can't hold, or one the enum's type can't
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>File names with extensions that most <c>[FileExtensions]</c> lists leave out.</summary>
+    private static readonly string[] OtherFileNames = ["notes.txt", "setup.exe", "archive.zip", "no-extension"];
+
+    /// <summary>The first of the bad texts, fitted to the length limits, that <paramref name="attribute"/> rejects; <see langword="null"/> if it accepts them all.</summary>
+    private static string? Rejected(ValidationAttribute attribute, MemberConstraints c, string[]? candidates = null)
+    {
+        foreach (var candidate in candidates ?? BadTexts)
         {
             var text = Fit(candidate, c);
             try

@@ -394,8 +394,24 @@ public sealed class FakeScope
         var model = ModelRegistry.Get(type);
         if (model is null)
             return existing;
-        return model.PopulateObject(existing, new FakeScope(Faker, Settings, Settings.Conventions?.SlotsFor(type, model), Faker.Random.Long(0, int.MaxValue), type, this), mode);
+        var nested = new FakeScope(Faker, Settings, Settings.Conventions?.SlotsFor(type, model), Faker.Random.Long(0, int.MaxValue), type, this);
+        return Comparisons.Apply(model, model.PopulateObject(existing, nested, mode), nested)!;
     }
+
+    /// <summary>The name of the type being generated, for messages.</summary>
+    internal string TypeName => _type.Name;
+
+    /// <summary>Whether something other than the member's own producer gives <paramref name="member"/> its value: a rule, the feed, a custom convention, an ignore.</summary>
+    internal bool HasSource(int member) => _slots?[member] is { Kind: not RuleKind.Default };
+
+    // The members whose values Populate kept, by index (see Keep).
+    private List<int>? _kept;
+
+    /// <summary>Records that <c>Populate</c> keeps the value <paramref name="member"/> already has.</summary>
+    internal void Keep(int member) => (_kept ??= []).Add(member);
+
+    /// <summary>Whether <c>Populate</c> kept the value of <paramref name="member"/>.</summary>
+    internal bool IsKept(int member) => _kept?.Contains(member) == true;
 
     /// <summary>Whether the model should set <paramref name="member"/> while creating the object.</summary>
     /// <remarks>False for ignored members and for members set afterwards by dependent rules.</remarks>
@@ -729,7 +745,8 @@ public sealed class FakeScope
         if (model is null)
             return CutOff();
         var (slots, children) = RulesFor(type, model);
-        return model.CreateObject(new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children));
+        var nested = new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children);
+        return Comparisons.Apply(model, model.CreateObject(nested), nested);
     }
 
     /// <summary>
