@@ -775,7 +775,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             throw new ArgumentException($"{typeof(TParent).Name} can't be the parent: no object on the path to {foreignKey.Body} is a {typeof(TParent).Name}.", nameof(key));
 
         var parentKey = new ParentKey([.. steps.Select(s => s.Member.Name)], typeof(TParent), parent => key((TParent)parent));
-        return Derive(_config with { ParentKeys = _config.ParentKeys.RemoveAll(k => k.Name == parentKey.Name).Add(parentKey) });
+        return Derive(_config with { ParentKeys = Generation.ParentKeys.Add(_config.ParentKeys, parentKey) });
     }
 
     /// <summary>
