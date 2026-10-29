@@ -37,6 +37,13 @@ internal static class Comparisons
     {
         foreach (var (member, other) in pairs)
         {
+            if (scope.IsComparisonBroken(member))
+            {
+                if (other >= 0 && target.ValueAt(instance, member) is string own && Equals(own, target.ValueAt(instance, other)))
+                    instance = target.WithValueAt(instance, member, Different(own));
+                continue;
+            }
+
             if (scope.HasSource(member))
                 continue;
             if (other < 0)
@@ -50,6 +57,15 @@ internal static class Comparisons
         }
 
         return instance;
+    }
+
+    /// <summary>The text with its last character changed (the length stays, so the member's length limits still hold).</summary>
+    private static string Different(string text)
+    {
+        if (text.Length == 0)
+            return "x";
+        var last = text[^1] == 'z' ? 'a' : (char)(text[^1] + 1);
+        return string.Concat(text.AsSpan(0, text.Length - 1), new ReadOnlySpan<char>(in last));
     }
 
     private static InvalidOperationException Unpaired(FakeScope scope, FakeMember member) => new(

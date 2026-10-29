@@ -62,6 +62,27 @@ public static class ConventionValues
         });
     }
 
+    /// <summary>
+    /// Produces a value the member's own validation attributes (<see cref="MemberConstraints.Validators"/>) accept, drawing it again while one rejects it (up to 100 times).
+    /// The first value is the one the member would have without them, so they only change the draws of objects whose value they reject.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Every value was rejected: the attributes leave (almost) nothing the member's producer gives.</exception>
+    public static T Validated<T>(FakeScope scope, MemberConstraints? constraints, Func<FakeScope, T> produce)
+    {
+        if (constraints?.Validators is not { Length: > 0 } validators)
+            return produce(scope);
+        for (var attempt = 0; attempt <= 100; attempt++)
+        {
+            var value = produce(scope);
+            if (Array.TrueForAll(validators, v => v.IsValid(value)))
+                return value;
+        }
+
+        var names = string.Join(", ", validators.Select(v => "[" + (v.GetType().Name is var n && n.EndsWith("Attribute", StringComparison.Ordinal) ? n[..^"Attribute".Length] : n) + "]"));
+        throw new InvalidOperationException(
+            $"Phoney cannot generate a value for {scope.TypeName} that {names} accepts: 101 values in a row were rejected. Add a rule with .With(...) for this member that gives valid values.");
+    }
+
     private static TItem OneOf<TItem>(FakeScope scope, TItem[] items) => items[scope.Faker.Random.Index(items.Length)];
 
     /// <summary>

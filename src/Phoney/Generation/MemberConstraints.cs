@@ -58,6 +58,12 @@ public sealed class MemberConstraints
     /// <summary>From <c>[FileExtensions]</c>: the value is a file name with one of these extensions (lower case, without the dot).</summary>
     public string[]? FileExtensions { get; init; }
 
+    /// <summary>
+    /// Validation attributes Phoney has no generator for (your own <c>[Even]</c>, <c>[CustomValidation]</c>): a value they reject is drawn again. Those that need the
+    /// whole object (<see cref="ValidationAttribute.RequiresValidationContext"/>) can't judge one member and are left out.
+    /// </summary>
+    public ValidationAttribute[]? Validators { get; init; }
+
     /// <summary>Whether the annotations alone define the value (format, pattern, range, allowed values, enum names, file extensions or a comparison), which satisfies strict mode.</summary>
     public bool DefinesValue => ConstraintState.Defines(Format is not null, Pattern is not null, RangeMin is not null, AllowedValues is not null || EnumType is not null,
         Base64 || FileExtensions is not null || Compare is not null);
@@ -78,11 +84,21 @@ public sealed class MemberConstraints
 
     /// <summary>
     /// The validation rules of annotations a generated model constructs: those that derive from a supported annotation (<c>class SkuAttribute() : RegularExpressionAttribute("…")</c>)
-    /// get their values from their constructor, so the source generator can't read them, and the member's other annotations are merged with them as reflection merges them.
+    /// get their values from their constructor, so the source generator can't read them, and other validation attributes are checked by calling them (<see cref="Validators"/>);
+    /// the member's other annotations are merged with them as reflection merges them.
     /// </summary>
     /// <param name="attributes">The member's supported annotations, in the order they are declared.</param>
     /// <returns>The merged rules, or <see langword="null"/> when there are none.</returns>
     public static MemberConstraints? Of(params Attribute[] attributes) => Annotations(attributes).Constraints;
+
+    private static void Range(ConstraintState state, RangeAttribute range)
+    {
+        state.Range(ConstraintState.Invariant(range.Minimum), ConstraintState.Invariant(range.Maximum));
+        if (range.MinimumIsExclusive)
+            state.ExclusiveMinimum();
+        if (range.MaximumIsExclusive)
+            state.ExclusiveMaximum();
+    }
 
     /// <summary>Reads the supported data annotations: the validation rules and the <c>[DataType]</c> hint.</summary>
     /// <param name="attributes">Attributes of the member (and, for constructor parameters, of the matching property).</param>
@@ -91,6 +107,8 @@ public sealed class MemberConstraints
         var state = new ConstraintState();
         object?[]? allowed = null, denied = null;
         Type? enumType = null;
+        List<ValidationAttribute>? validators = null;
+        var custom = false;
 
         foreach (var attribute in attributes)
         {
@@ -109,11 +127,7 @@ public sealed class MemberConstraints
                     state.Length(a.MinimumLength, a.MaximumLength);
                     break;
                 case RangeAttribute a:
-                    state.Range(ConstraintState.Invariant(a.Minimum), ConstraintState.Invariant(a.Maximum));
-                    if (a.MinimumIsExclusive)
-                        state.ExclusiveMinimum();
-                    if (a.MaximumIsExclusive)
-                        state.ExclusiveMaximum();
+                    Range(state, a);
                     break;
                 case RegularExpressionAttribute a:
                     state.RegularExpression(a.Pattern);
@@ -154,13 +168,19 @@ public sealed class MemberConstraints
                 case FileExtensionsAttribute a:
                     state.FileExtensions(a.Extensions);
                     break;
-                case DataTypeAttribute { DataType: not DataType.Custom } a when a.GetType() == typeof(DataTypeAttribute): // a hint the source generator reads too
-                    state.DataType((int)a.DataType);
+                case DataTypeAttribute a when a.GetType() == typeof(DataTypeAttribute): // a hint the source generator reads too
+                    if (a.DataType != DataType.Custom)
+                        state.DataType((int)a.DataType);
+                    break;
+                case ValidationAttribute other: // none of the above: values it rejects are drawn again
+                    custom = true;
+                    if (!other.RequiresValidationContext)
+                        (validators ??= []).Add(other);
                     break;
             }
         }
 
-        var constraints = state.Any
+        var constraints = state.Any || custom
             ? new MemberConstraints
             {
                 MinLength = state.MinLengthValue,
@@ -178,6 +198,7 @@ public sealed class MemberConstraints
                 Compare = state.CompareWith,
                 EnumType = enumType,
                 FileExtensions = state.Extensions?.ToArray(),
+                Validators = validators?.ToArray(),
             }
             : null;
         return new MemberAnnotations(constraints, state.DataTypeValue);

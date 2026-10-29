@@ -37,7 +37,7 @@ internal static class ConstraintCases
         {
             throw new InvalidOperationException(request.Boundary
                 ? $"{owner}.{member.Name} has no limits to sit on: add [Range], [StringLength], [MinLength] or [MaxLength] to it."
-                : $"{owner}.{member.Name} has no data annotations that can be broken: add [Range], [StringLength], [MinLength], [MaxLength], [Required], [RegularExpression], [EmailAddress], [AllowedValues], [DeniedValues], [EnumDataType] or [FileExtensions] to it.");
+                : $"{owner}.{member.Name} has no data annotations that can be broken: add [Range], [StringLength], [MinLength], [MaxLength], [Required], [RegularExpression], [EmailAddress], [AllowedValues], [DeniedValues], [EnumDataType], [FileExtensions] or [Compare] to it.");
         }
 
         if (request.Index is { } index)
@@ -77,6 +77,8 @@ internal static class ConstraintCases
             cases.Add(new($"not a value of {enumType.Name} ({undefined})", Replace(undefined)));
         if (c.DeniedValues?.FirstOrDefault(d => d is not null && type.IsInstanceOfType(d)) is { } denied)
             cases.Add(new($"a denied value ({denied})", Replace(denied)));
+        if (shape == Shape.String && c.Compare is { } other)
+            cases.Add(new($"differs from {other}", BreakComparison));
         return cases;
     }
 
@@ -379,6 +381,17 @@ internal static class ConstraintCases
         {
             scope.ForceNextCollectionCount(null); // a member that stayed null never asked for the count
         }
+    };
+
+    /// <summary>
+    /// Keeps the member's own value instead of the one <c>[Compare]</c> copies; <see cref="Comparisons"/> changes it once the object is made if it happens to be the
+    /// other member's value too.
+    /// </summary>
+    private static Produce BreakComparison { get; } = (scope, valid) =>
+    {
+        var value = valid(scope);
+        scope.BreakComparison();
+        return value;
     };
 
     /// <summary>Replaces the member's value, after producing the valid one so later members draw the same randomness as in a valid object.</summary>

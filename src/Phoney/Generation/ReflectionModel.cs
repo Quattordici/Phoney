@@ -395,10 +395,17 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>,
     /// <summary>Builds the value producer for a member type: scalar conventions, collections, nested objects.</summary>
     internal static Func<FakeScope, object?> Producer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints = null)
     {
+        var produce = ValueProducer(type, memberName, convention, nullableReference, constraints);
+        return constraints?.Validators is { Length: > 0 } ? s => ConventionValues.Validated(s, constraints, produce) : produce;
+    }
+
+    /// <summary>The producer of <see cref="Producer"/> before the member's own validation attributes check it.</summary>
+    private static Func<FakeScope, object?> ValueProducer(Type type, string memberName, ConventionKind convention, bool nullableReference, MemberConstraints? constraints)
+    {
         var underlying = Nullable.GetUnderlyingType(type);
         if (underlying is not null)
         {
-            var inner = Producer(underlying, memberName, convention, false, constraints);
+            var inner = ValueProducer(underlying, memberName, convention, false, constraints);
             if (constraints?.Required == true)
                 return inner;
             return s => s.MaybeNull() ? null : inner(s);

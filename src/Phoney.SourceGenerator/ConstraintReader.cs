@@ -25,7 +25,8 @@ internal static class ConstraintReader
     /// <param name="DataType">The <c>DataType</c> of a <c>[DataType]</c> annotation, as a number, if any.</param>
     /// <param name="Required">Whether the member is <c>[Required]</c>.</param>
     /// <param name="DefinesValue">Whether the annotations alone define the value, like <c>MemberConstraints.DefinesValue</c>.</param>
-    public readonly record struct Result(string? Expression, ConventionKind? Format, int? DataType, bool Required, bool DefinesValue)
+    /// <param name="HasValidators">Whether a validation attribute Phoney has no generator for was read, so values are checked with it (<c>ConventionValues.Validated</c>).</param>
+    public readonly record struct Result(string? Expression, ConventionKind? Format, int? DataType, bool Required, bool DefinesValue, bool HasValidators)
     {
         /// <summary>The convention of a member, like <c>MemberAnnotations.Convention</c>: the one the annotations declare, else the one the name gives.</summary>
         public ConventionKind Convention(string name, TypeCategory category, string ownerName) =>
@@ -57,6 +58,7 @@ internal static class ConstraintReader
         private readonly ConstraintState _state = new();
         private readonly List<AttributeData> _read = [];
         private bool _derived;
+        private bool _validators;
         private string? _allowed;
         private string? _denied;
         private string? _enumType;
@@ -72,6 +74,14 @@ internal static class ConstraintReader
                 _read.Add(attribute);
                 _derived = true;
                 Declare(supported);
+                return;
+            }
+            else if (name != Ns + "DataTypeAttribute" && IsValidator(attribute.AttributeClass) && Constructible(attribute))
+            {
+                // A rule Phoney has no generator for: the generated model constructs it and draws a value again while it rejects it, as reflection does.
+                _read.Add(attribute);
+                _derived = true;
+                _validators = true;
                 return;
             }
 
@@ -148,7 +158,7 @@ internal static class ConstraintReader
                 expression = "global::Phoney.Generation.MemberConstraints.Of(" + string.Join(", ", _read.Select(Construct)) + ")";
             else if (parts.Count > 0)
                 expression = "new() { " + string.Join(", ", parts) + " }";
-            return new Result(expression, _state.FormatKind, _state.DataTypeValue, _state.IsRequired, _state.DefinesValue);
+            return new Result(expression, _state.FormatKind, _state.DataTypeValue, _state.IsRequired, _state.DefinesValue, _validators);
         }
 
         /// <summary>The supported annotation <paramref name="type"/> derives from, or <see langword="null"/>.</summary>
@@ -161,6 +171,18 @@ internal static class ConstraintReader
             }
 
             return null;
+        }
+
+        /// <summary>Whether <paramref name="type"/> is a <c>ValidationAttribute</c>.</summary>
+        private static bool IsValidator(INamedTypeSymbol? type)
+        {
+            for (var t = type?.BaseType; t is not null; t = t.BaseType)
+            {
+                if (t.ToDisplayString() == Ns + "ValidationAttribute")
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>Whether generated code can construct the annotation as it is written.</summary>
