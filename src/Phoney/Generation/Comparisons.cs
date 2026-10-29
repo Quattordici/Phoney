@@ -50,10 +50,9 @@ internal static class Comparisons
             if (other < 0)
                 throw Unpaired(scope, target.Members[member]);
 
-            var memberKept = ledger?.IsKept(member) == true;
-            if (!memberKept)
+            if (ledger?.IsKept(member) != true)
                 instance = target.WithValueAt(instance, member, target.ValueAt(instance, other));
-            else if (ledger?.IsKept(other) != true && !scope.HasSource(other) && target.Members[other].IsSettable)
+            else if (!ledger.IsKept(other) && !scope.HasSource(other) && target.Members[other].IsSettable)
                 instance = target.WithValueAt(instance, other, target.ValueAt(instance, member));
         }
 
