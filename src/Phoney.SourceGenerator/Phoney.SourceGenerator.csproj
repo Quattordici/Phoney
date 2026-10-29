@@ -31,5 +31,7 @@
     <Compile Include="../Phoney/Generation/Shared/MemberShapes.cs" Link="Shared/MemberShapes.cs" />
     <!-- And the rules for merging data annotations, so the reflection model and the generator read the same constraints. -->
     <Compile Include="../Phoney/Generation/Shared/ConstraintState.cs" Link="Shared/ConstraintState.cs" />
+    <!-- And how a value of a member type is made, so both models dispatch the same way (ValueShapes.Symbols.cs reads the facts from symbols). -->
+    <Compile Include="../Phoney/Generation/Shared/ValueShapes.cs" Link="Shared/ValueShapes.cs" />
   </ItemGroup>
 </Project>

@@ -24,4 +24,8 @@
     <ProjectReference Include="../../src/Phoney/Phoney.csproj" />
     <ProjectReference Include="../../src/Phoney.SourceGenerator/Phoney.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- One table of member types for both models: this project reads them through its own model, the other one through the other. -->
+    <Compile Include="../Shared/ValueShapeCases.cs" Link="Shared/ValueShapeCases.cs" />
+  </ItemGroup>
 </Project>
