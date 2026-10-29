@@ -694,11 +694,11 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
         var name = MemberName(member);
         Func<object?, bool> accepts = value => predicate((TValue)value!);
-        var filter = new MemberFilter(accepts, maxAttempts);
+        var filter = new MemberCondition(accepts, maxAttempts);
         if (_config.MemberFilters.TryGetValue(name, out var existing))
         {
             var earlier = existing.Accepts;
-            filter = new MemberFilter(value => earlier(value) && accepts(value), Math.Min(existing.MaxAttempts, maxAttempts));
+            filter = new MemberCondition(value => earlier(value) && accepts(value), Math.Min(existing.MaxAttempts, maxAttempts));
         }
 
         return Derive(_config with { MemberFilters = _config.MemberFilters.SetItem(name, filter) });
@@ -1249,26 +1249,23 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var dependent = new List<(int Member, Func<Faker, T, object?> Rule)>();
         var rules = RuleDecisions(members, known, dependent);
         var unique = UniqueAttempts(known);
-        var feed = _config.Feed is { } feedSettings ? FeedDecisions(feedSettings, members, rules) : null;
+        var feed = _config.Feed is { } feedSettings ? FeedSource.Decisions(typeof(T).Name, feedSettings, BaseSeed, members, rules) : null;
         var conventions = registrations.ConventionsWith(_config.Conventions);
-        var slots = SlotBinder.Bind(members, new SlotSources
+        var plan = MemberPlan.Build(members, new MemberPlanInputs
         {
             Rules = rules,
             Feed = feed,
             Unique = unique,
-            Filtered = FilteredIndices(known),
             ParameterDefaults = _config.Settings.ParameterDefaults,
             Conventions = conventions,
             Usage = usage,
+            Conditions = _config.MemberFilters,
+            UniqueKeys = _config.UniqueKeys,
+            Strict = _config.Strict,
+            NameConventions = _config.Settings.WithNameConventions,
+            CreatesWithFactory = _config.Factory is not null,
+            TypeName = typeof(T).Name,
         });
-        if (_config.Strict)
-            CheckStrict(members, slots);
-        BindMemberFilters(members, known, slots); // after the strict check, so a member that only has a condition does not count as covered
-
-        var objectRetries = IdentityRetries(members, slots);
-        var combinations = UniqueCombinations(members, known, slots);
-        foreach (var attempts in combinations.Select(c => c.MaxAttempts))
-            objectRetries = objectRetries == 0 ? attempts : Math.Min(objectRetries, attempts);
 
         // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
         var settings = _config.Settings with
@@ -1278,7 +1275,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             TypeGenerators = registrations.GeneratorsWith(_config.TypeGenerators),
             Usage = usage,
         };
-        return new Compiled(slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, objectRetries, combinations, registrations);
+        return new Compiled(plan.Slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, plan.ObjectRetries, plan.Combinations, registrations);
     }
 
     /// <summary>The explicit rules by member index, in the order they were added; the rules that depend on the object are also collected in <paramref name="dependent"/>.</summary>
@@ -1315,19 +1312,6 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         return unique;
     }
 
-    /// <summary>The members that have a <c>Where</c> condition; a condition on a name that is not a member is reported when the conditions are bound.</summary>
-    private HashSet<int> FilteredIndices(Dictionary<string, int> known)
-    {
-        var filtered = new HashSet<int>();
-        foreach (var name in _config.MemberFilters.Keys.Order(StringComparer.Ordinal))
-        {
-            if (known.TryGetValue(name, out var index))
-                filtered.Add(index);
-        }
-
-        return filtered;
-    }
-
     /// <summary>A rule that reads the object, checked against members that are set before the object exists.</summary>
     private static Func<Faker, T, object?> DependentRule(FakeMember member, Rule rule)
     {
@@ -1336,188 +1320,6 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         if (member.FillsExisting)
             throw new InvalidOperationException($"{typeof(T).Name}.{member.Name} is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
         return (Func<Faker, T, object?>)rule.Value!;
-    }
-
-    /// <summary>A strict generator needs a rule, convention or annotation for every scalar member.</summary>
-    private void CheckStrict(IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
-    {
-        var uncovered = members
-            .Where((m, i) => slots[i] is null && m.IsScalar && m.Constraints?.DefinesValue != true
-                && (m.Convention == ConventionKind.None || !_config.Settings.WithNameConventions))
-            .Select(m => m.Name)
-            .ToList();
-        if (uncovered.Count > 0)
-        {
-            throw new InvalidOperationException(
-                $"Strict generator for {typeof(T).Name}: no rule or convention for {string.Join(", ", uncovered)}. Add .With(...) or .Ignore(...) for them.");
-        }
-    }
-
-    /// <summary>Puts the conditions of <c>Where(x =&gt; x.Member, …)</c> on the slots of their members.</summary>
-    private void BindMemberFilters(IReadOnlyList<FakeMember> members, Dictionary<string, int> known, RuleSlot?[] slots)
-    {
-        foreach (var (name, filter) in _config.MemberFilters.OrderBy(f => f.Key, StringComparer.Ordinal))
-        {
-            if (!known.TryGetValue(name, out var index))
-                throw new InvalidOperationException($"{typeof(T).Name}.{name} can't be generated: it is not a public settable member or constructor parameter, so a Where condition on it has nothing to check.");
-            CheckFilterable(name, members[index], slots[index]);
-            slots[index] = (slots[index] ?? new RuleSlot(members[index], RuleKind.Default, null)).WithFilter(filter.Accepts, filter.MaxAttempts);
-        }
-    }
-
-    /// <summary>A member condition needs a member that is drawn on its own and can be drawn again.</summary>
-    private void CheckFilterable(string name, FakeMember member, RuleSlot? slot)
-    {
-        if (slot is { Kind: RuleKind.Ignore })
-            throw new InvalidOperationException($"{typeof(T).Name}.{name} is ignored, so its Where condition has nothing to check. Remove the Ignore or the condition.");
-        if (slot is { Kind: RuleKind.Dependent })
-            throw new InvalidOperationException($"{typeof(T).Name}.{name} depends on the object, so it is set after the object is created and a Where condition on it can't draw it again. Check it with .Where(x => …) on the object instead.");
-        if (_config.Factory is not null)
-            throw new InvalidOperationException($"{typeof(T).Name}.{name} has a Where condition, but CreateWith decides the values of the objects it creates. Check the object with .Where(x => …) instead.");
-
-        if (_config.Settings.WithNameConventions && slot is null or { Kind: RuleKind.Default } && ConventionValues.IsIdentityBound(member.Convention))
-        {
-            throw new InvalidOperationException(
-                $"{typeof(T).Name}.{name} comes from the object's identity (one name, email, address and birthdate per object, so that they agree), and drawing it again gives the same value. "
-                + $"Give it a value with .With(x => x.{name}, f => …) and filter that, or check the whole object with .Where(x => …).");
-        }
-    }
-
-    /// <summary>
-    /// A unique member read from the object's identity can't be drawn again on its own (the identity is cached, and name, email and address must agree),
-    /// so a duplicate generates the whole object again; returns the strictest limit of such members (0 for none).
-    /// </summary>
-    private int IdentityRetries(IReadOnlyList<FakeMember> members, RuleSlot?[] slots)
-    {
-        var objectRetries = 0;
-        for (var i = 0; i < slots.Length; i++)
-        {
-            if (slots[i] is { Kind: RuleKind.Default, Unique: true } unique && _config.Settings.WithNameConventions && ConventionValues.IsIdentityBound(members[i].Convention))
-            {
-                slots[i] = unique.WithObjectRetry();
-                objectRetries = objectRetries == 0 ? unique.MaxAttempts : Math.Min(objectRetries, unique.MaxAttempts);
-            }
-        }
-
-        return objectRetries;
-    }
-
-    /// <summary>
-    /// Binds the combinations of <c>Unique(x =&gt; new { … })</c> to member indices. Settable members are read from the finished object; constructor parameters
-    /// can't be read back, so their slot keeps the value it produces (after the strict check, so this doesn't count as a rule for the member).
-    /// </summary>
-    private UniqueCombination[] UniqueCombinations(IReadOnlyList<FakeMember> members, Dictionary<string, int> known, RuleSlot?[] slots)
-    {
-        if (_config.UniqueKeys.IsEmpty)
-            return [];
-
-        var combinations = new List<UniqueCombination>(_config.UniqueKeys.Count);
-        foreach (var (key, attempts) in _config.UniqueKeys.OrderBy(k => k.Key, StringComparer.Ordinal))
-        {
-            var names = key.Split(',');
-            var indices = new int[names.Length];
-            var recorded = new bool[names.Length];
-            for (var i = 0; i < names.Length; i++)
-            {
-                if (!known.TryGetValue(names[i], out indices[i]))
-                    throw new InvalidOperationException($"{typeof(T).Name}.{names[i]} is not a generated member, so it can't be part of a unique combination.");
-                var member = members[indices[i]];
-                recorded[i] = !member.IsSettable && !member.FillsExisting;
-                if (!recorded[i])
-                    continue;
-                if (_config.Factory is not null)
-                {
-                    throw new InvalidOperationException(
-                        $"{typeof(T).Name}.{names[i]} is a constructor parameter, and CreateWith creates the objects, so its value can't be read for the unique combination. Make the member settable, or leave it out of the combination.");
-                }
-
-                slots[indices[i]] = (slots[indices[i]] ?? new RuleSlot(member, RuleKind.Default, null)).WithKeyPart();
-            }
-
-            combinations.Add(new UniqueCombination(indices, names, recorded, attempts));
-        }
-
-        return [.. combinations];
-    }
-
-    /// <summary>
-    /// Gives each member that has a column in the feed (and no rule of its own) its values, converted once now so that a bad value fails here, with its row and column,
-    /// instead of in the middle of a run. The slot picks the row from the object's position.
-    /// </summary>
-    private Dictionary<int, SlotDecision> FeedDecisions(FeedSettings settings, IReadOnlyList<FakeMember> members, Dictionary<int, SlotDecision> rules)
-    {
-        var feed = settings.Feed;
-        var decisions = new Dictionary<int, SlotDecision>();
-        var unknown = new List<string>();
-        for (var column = 0; column < feed.Columns.Count; column++)
-        {
-            var index = FeedMemberIndex(members, feed.Columns[column]);
-            if (index < 0)
-            {
-                unknown.Add(feed.Columns[column]);
-                continue;
-            }
-
-            if (rules.ContainsKey(index))
-                continue; // a rule for the member wins
-
-            var values = FeedColumn(feed, column, members[index]);
-            var rowOf = RowSelector(settings.Order, values.Length);
-            decisions[index] = new SlotDecision(RuleKind.Convention, (Func<FakeScope, object?>)(scope => values[rowOf(scope.Index)]));
-        }
-
-        if (unknown.Count > 0 && !settings.IgnoreUnknownColumns)
-        {
-            throw new InvalidOperationException(
-                $"The feed has columns that {typeof(T).Name} has no member for: {string.Join(", ", unknown.Select(c => $"'{c}'"))}. Its members are {string.Join(", ", members.Select(m => m.Name))}. "
-                + "Rename the columns (case, spaces and underscores don't matter), or pass ignoreUnknownColumns: true to skip them.");
-        }
-
-        return decisions;
-    }
-
-    /// <summary>The index of the member a feed column is for (case, spaces and underscores don't matter), or -1 when there is none.</summary>
-    private static int FeedMemberIndex(IReadOnlyList<FakeMember> members, string column)
-    {
-        var name = DataFeed.Normalize(column);
-        for (var i = 0; i < members.Count; i++)
-        {
-            if (DataFeed.Normalize(members[i].Name) == name)
-                return i;
-        }
-
-        return -1;
-    }
-
-    /// <summary>Every value of a feed column converted to the member's type.</summary>
-    /// <exception cref="InvalidOperationException">A value can't be converted; the message names its row and column.</exception>
-    private static object?[] FeedColumn(DataFeed feed, int column, FakeMember member)
-    {
-        var values = new object?[feed.Count];
-        for (var row = 0; row < values.Length; row++)
-        {
-            try
-            {
-                values[row] = FeedValues.Convert(feed.Value(row, column), member.Type);
-            }
-            catch (FormatException e)
-            {
-                throw new InvalidOperationException(
-                    $"Feed row {row + 1}, column '{feed.Columns[column]}' (value '{feed.Value(row, column)}') can't be used for {typeof(T).Name}.{member.Name} ({member.Type.Name}): {e.Message}.", e);
-            }
-        }
-
-        return values;
-    }
-
-    /// <summary>The row an object takes: its position modulo the number of rows, or a hash of the generator's seed and the position.</summary>
-    private Func<long, int> RowSelector(FeedOrder order, int rows)
-    {
-        if (order == FeedOrder.InOrder)
-            return index => (int)(index % rows);
-
-        var seed = unchecked(BaseSeed ^ 0x5EEDFEEDL);
-        return index => (int)((ulong)SeededRandom.DeriveSeed(seed, index) % (ulong)rows);
     }
 
     /// <summary>Registers the graph-dependent rules this generator was given (in a stable order) so their use can be recorded; path rules register while their nodes are built.</summary>
@@ -1707,12 +1509,6 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         }
     }
 
-    /// <summary>The feed of <see cref="WithFeed"/> and how it is used.</summary>
-    private sealed record FeedSettings(DataFeed Feed, FeedOrder Order, bool IgnoreUnknownColumns);
-
-    /// <summary>A condition on one member from <c>Where(x =&gt; x.Member, …)</c> and how often the member may be drawn again for it.</summary>
-    private sealed record MemberFilter(Func<object?, bool> Accepts, int MaxAttempts);
-
     /// <summary>A condition from <see cref="Where(Func{T, bool}, int)"/> and how often an object may be generated again for it.</summary>
     private sealed record Filter(Func<T, bool> Predicate, int MaxAttempts)
     {
@@ -1806,7 +1602,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         ImmutableDictionary<Type, INestedGenerator> TypeGenerators,
         ImmutableList<Action<Faker, T>> AfterCreate,
         ImmutableList<Filter> Filters,
-        ImmutableDictionary<string, MemberFilter> MemberFilters,
+        ImmutableDictionary<string, MemberCondition> MemberFilters,
         Func<Faker, T>? Factory,
         bool Strict,
         bool Verify,
@@ -1828,7 +1624,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             ImmutableDictionary<Type, INestedGenerator>.Empty,
             [],
             [],
-            ImmutableDictionary.Create<string, MemberFilter>(StringComparer.Ordinal),
+            ImmutableDictionary.Create<string, MemberCondition>(StringComparer.Ordinal),
             null,
             false,
             false,
