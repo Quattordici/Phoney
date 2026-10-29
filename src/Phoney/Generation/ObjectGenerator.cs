@@ -1362,16 +1362,37 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         /// <summary>Creates an object from <paramref name="itemSeed"/> (and attempts derived from it), as item <paramref name="index"/>.</summary>
         public T CreateFrom(long index, FakeScope? parent, long itemSeed)
         {
-            var filters = generator._config.Filters;
-            if (filters.IsEmpty && compiled.ObjectRetries == 0)
-                return CreateOnce(index, parent, itemSeed, out _);
+            return MayRetry ? CreateAccepted(index, parent, itemSeed) : CreateOnce(index, parent, itemSeed).Item;
+        }
 
+        // Apart from CreateFrom, so the closure is only allocated when an object may be made again (captured parameters are allocated on entry).
+        private T CreateAccepted(long index, FakeScope? parent, long itemSeed) =>
+            Accepted(default!, itemSeed, PopulateMode.All, (_, attemptSeed) => CreateOnce(index, parent, attemptSeed));
+
+        /// <summary>Whether an object can be rejected and made again: by a condition, a unique identity member or a unique combination.</summary>
+        private bool MayRetry => !generator._config.Filters.IsEmpty || compiled.ObjectRetries != 0;
+
+        /// <summary>
+        /// The first attempt whose object the conditions accept and whose unique values are new; attempt <c>k</c> makes the object from
+        /// <see cref="Filter.AttemptSeed"/>, starting from the object the attempt before it returned. <paramref name="mode"/> is how much an attempt makes again
+        /// (creating makes everything); with less than <see cref="PopulateMode.All"/> a rejected object can't be made again, so it throws.
+        /// </summary>
+        private T Accepted(T item, long itemSeed, PopulateMode mode, Func<T, long, (T Item, FakeScope Scope)> attempt)
+        {
+            var filters = generator._config.Filters;
             var limit = AttemptLimit(filters);
-            for (var attempt = 0; attempt < limit; attempt++)
+            for (var i = 0; i < limit; i++)
             {
-                var item = CreateOnce(index, parent, Filter.AttemptSeed(itemSeed, attempt), out var scope);
+                (item, var scope) = attempt(item, Filter.AttemptSeed(itemSeed, i));
                 if (Filter.Accepts(filters, item) && scope.TryClaimPending(CombinationsOf(item, scope)))
                     return item;
+                if (mode != PopulateMode.All)
+                {
+                    // The values filled in are now set, so a second pass would keep them: there is nothing to draw again.
+                    throw new InvalidOperationException(
+                        $"Could not populate a {typeof(T).Name} with a unique {UniqueNames()}: the value was produced before, and PopulateMode.{mode} can't generate the object again. "
+                        + "Use PopulateMode.All, or give the member values with .With(…).");
+                }
             }
 
             throw Exhausted(filters, limit);
@@ -1417,48 +1438,36 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         /// <summary>Populates <paramref name="instance"/> from <paramref name="itemSeed"/> (and attempts derived from it), as item <paramref name="index"/>.</summary>
         public T PopulateFrom(T instance, long index, PopulateMode mode, long itemSeed)
         {
-            var filters = generator._config.Filters;
-            if (filters.IsEmpty && compiled.ObjectRetries == 0)
-                return PopulateOnce(instance, index, mode, itemSeed, out _);
+            if (!MayRetry)
+                return PopulateOnce(instance, index, mode, itemSeed).Item;
 
-            if (mode != PopulateMode.All && !filters.IsEmpty)
+            if (mode != PopulateMode.All && !generator._config.Filters.IsEmpty)
             {
                 throw new InvalidOperationException(
                     $"A Where condition can't be combined with PopulateMode.{mode}: the values {typeof(T).Name} keeps can't be generated again when the condition rejects the object. Use PopulateMode.All, or Generate().");
             }
 
-            var limit = AttemptLimit(filters);
-            var item = instance;
-            for (var attempt = 0; attempt < limit; attempt++)
-            {
-                item = PopulateOnce(item, index, mode, Filter.AttemptSeed(itemSeed, attempt), out var scope);
-                if (Filter.Accepts(filters, item) && scope.TryClaimPending(CombinationsOf(item, scope)))
-                    return item;
-                if (mode != PopulateMode.All)
-                {
-                    // The values filled in are now set, so a second pass would keep them: there is nothing to draw again.
-                    throw new InvalidOperationException(
-                        $"Could not populate a {typeof(T).Name} with a unique {UniqueNames()}: the value was produced before, and PopulateMode.{mode} can't generate the object again. "
-                        + "Use PopulateMode.All, or give the member values with .With(…).");
-                }
-            }
-
-            throw Exhausted(filters, limit);
+            return PopulateAccepted(instance, index, mode, itemSeed);
         }
 
-        private T CreateOnce(long index, FakeScope? parent, long itemSeed, out FakeScope scope)
+        // Apart from PopulateFrom, like CreateAccepted.
+        private T PopulateAccepted(T instance, long index, PopulateMode mode, long itemSeed) =>
+            Accepted(instance, itemSeed, mode, (item, attemptSeed) => PopulateOnce(item, index, mode, attemptSeed));
+
+        private (T Item, FakeScope Scope) CreateOnce(long index, FakeScope? parent, long itemSeed)
         {
             faker.Random.Reseed(itemSeed);
-            var config = generator._config;
-            var model = generator._model;
-            scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent, compiled.RootChildren);
+            var factory = generator._config.Factory;
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent, compiled.RootChildren);
+            var item = factory is null ? generator._model.Create(scope) : ApplyRules(factory(faker), scope);
+            return (Complete(item, scope, PopulateMode.All, compare: factory is null), scope); // a factory decides the members no rule is for
+        }
 
-            var item = config.Factory is { } factory ? ApplyRules(factory(faker), scope) : model.Create(scope);
-            foreach (var (member, rule) in compiled.Dependent)
-                item = model.Set(item, member, rule(faker, item));
-            if (config.Factory is null) // the factory decides the members no rule is for
-                item = Comparisons.Apply(model, item, scope);
-            return Finish(item);
+        private (T Item, FakeScope Scope) PopulateOnce(T instance, long index, PopulateMode mode, long itemSeed)
+        {
+            faker.Random.Reseed(itemSeed);
+            var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), null, compiled.RootChildren);
+            return (Complete(generator._model.Populate(instance, scope, mode), scope, mode, compare: true), scope);
         }
 
         /// <summary>Applies the explicit rules to an object a factory created; the factory decides everything else.</summary>
@@ -1479,10 +1488,22 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             return item;
         }
 
-        /// <summary>The steps that run on every finished object, created or populated: back-references, parent keys, then the AfterCreate actions.</summary>
-        private T Finish(T item)
+        /// <summary>
+        /// The steps that run on every object once its members are produced, created or populated, in this order: the dependent rules (only for members
+        /// <paramref name="mode"/> fills), <c>[Compare]</c>, back-references, parent keys, then the AfterCreate actions. Dependent rules and AfterCreate draw, so the order is part of the seed.
+        /// </summary>
+        private T Complete(T item, FakeScope scope, PopulateMode mode, bool compare)
         {
             var config = generator._config;
+            var model = generator._model;
+            foreach (var (member, rule) in compiled.Dependent)
+            {
+                if (mode == PopulateMode.All || model.IsUnset(item, member))
+                    item = model.Set(item, member, rule(faker, item));
+            }
+
+            if (compare)
+                item = Comparisons.Apply(model, item, scope);
             if (config.BackReferences && item is not null)
                 Phoney.Generation.BackReferences.Apply(item);
             if (!config.ParentKeys.IsEmpty && item is not null)
@@ -1490,22 +1511,6 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             foreach (var action in config.AfterCreate)
                 action(faker, item);
             return item;
-        }
-
-        private T PopulateOnce(T instance, long index, PopulateMode mode, long itemSeed, out FakeScope scope)
-        {
-            faker.Random.Reseed(itemSeed);
-            var model = generator._model;
-            scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), null, compiled.RootChildren);
-
-            var item = model.Populate(instance, scope, mode);
-            foreach (var (member, rule) in compiled.Dependent)
-            {
-                if (mode == PopulateMode.All || model.IsUnset(item, member))
-                    item = model.Set(item, member, rule(faker, item));
-            }
-
-            return Finish(Comparisons.Apply(model, item, scope));
         }
     }
 
