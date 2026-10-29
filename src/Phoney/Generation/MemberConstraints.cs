@@ -177,7 +177,7 @@ public sealed class MemberConstraints
                 DeniedValues = denied,
                 Compare = state.CompareWith,
                 EnumType = enumType,
-                FileExtensions = state.Extensions is { } extensions ? [.. extensions] : null,
+                FileExtensions = state.Extensions?.ToArray(),
             }
             : null;
         return new MemberAnnotations(constraints, state.DataTypeValue);

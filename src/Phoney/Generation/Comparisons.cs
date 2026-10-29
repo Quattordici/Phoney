@@ -22,10 +22,11 @@ internal static class Comparisons
         instance is null || ((IComparedMembers)model).Compared is not { Length: > 0 } pairs ? instance : Apply(model, instance, scope, pairs);
 
     /// <summary>Makes the compared members of a finished nested object equal.</summary>
-    public static object? Apply(IFakeModel model, object? instance, FakeScope scope) =>
-        instance is null || (model is IComparedMembers known ? known.Compared : PairsOf(model.Members)) is not { Length: > 0 } pairs
-            ? instance
-            : Apply(new Untyped(model), instance, scope, pairs);
+    public static object? Apply(IFakeModel model, object? instance, FakeScope scope)
+    {
+        var pairs = model is IComparedMembers known ? known.Compared : PairsOf(model.Members);
+        return instance is null || pairs.Length == 0 ? instance : Apply(new Untyped(model), instance, scope, pairs);
+    }
 
     /// <summary>
     /// For each pair: a rule, feed or custom convention for the compared member wins; otherwise it takes the other member's value, unless only it was kept by

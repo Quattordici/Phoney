@@ -223,7 +223,7 @@ internal sealed class ConstraintState
     /// </summary>
     public void FileExtensions(string? extensions)
     {
-        var list = string.IsNullOrWhiteSpace(extensions) ? "png,jpg,jpeg,gif" : extensions!;
+        var list = extensions is { } listed && !string.IsNullOrWhiteSpace(listed) ? listed : "png,jpg,jpeg,gif";
         Extensions = list.Replace(" ", "").Replace(".", "").ToLowerInvariant().Split([','], StringSplitOptions.RemoveEmptyEntries);
         Touch("FileExtensions");
     }

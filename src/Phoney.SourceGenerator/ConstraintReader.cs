@@ -143,9 +143,11 @@ internal static class ConstraintReader
             var parts = _state.SetKeys.Select(Part).Where(p => p is not null).Select(p => p!).ToList();
             if (_state.FormatKind is { } format)
                 parts.Add("Format = global::Phoney.Generation.ConventionKind." + format);
-            var expression = _derived
-                ? "global::Phoney.Generation.MemberConstraints.Of(" + string.Join(", ", _read.Select(Construct)) + ")"
-                : parts.Count == 0 ? null : "new() { " + string.Join(", ", parts) + " }";
+            string? expression = null;
+            if (_derived)
+                expression = "global::Phoney.Generation.MemberConstraints.Of(" + string.Join(", ", _read.Select(Construct)) + ")";
+            else if (parts.Count > 0)
+                expression = "new() { " + string.Join(", ", parts) + " }";
             return new Result(expression, _state.FormatKind, _state.DataTypeValue, _state.IsRequired, _state.DefinesValue);
         }
 
