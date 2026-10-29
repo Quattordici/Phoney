@@ -1,4 +1,4 @@
-using System.Collections;
+using System.Collections.Immutable;
 
 namespace Phoney.Generation;
 
@@ -13,53 +13,55 @@ internal sealed record ParentKey(string[] Path, Type Parent, Func<object, object
 }
 
 /// <summary>
-/// Sets the foreign keys of <c>WithParentKey</c> on a finished object graph. Like <see cref="BackReferences"/>, it walks settable members with the models of
-/// the objects' runtime types, so reflection and generated models agree, and it draws nothing, so seeds don't move.
+/// Sets the foreign keys of <c>WithParentKey</c> on a finished object graph, one key at a time along its path. It walks like every <see cref="ObjectGraph"/>,
+/// so reflection and generated models agree, and it draws nothing, so seeds don't move.
 /// </summary>
-internal static class ParentKeys
+internal sealed class ParentKeys : ObjectGraph
 {
-    /// <summary>Applies <paramref name="keys"/> to the graph below <paramref name="root"/>, shallower foreign keys first (a deeper one may copy a key set by them).</summary>
-    public static void Apply(object root, IReadOnlyList<ParentKey> keys)
+    // The key being applied; one walk per key, each from the root.
+    private ParentKey _key = null!;
+
+    private ParentKeys()
     {
-        var ancestors = new List<object>();
-        foreach (var key in keys.OrderBy(k => k.Path.Length))
-            Visit(root, key, 0, ancestors);
     }
 
-    private static void Visit(object node, ParentKey key, int depth, List<object> ancestors)
+    /// <summary>
+    /// <paramref name="keys"/> with <paramref name="key"/> in place of a key for the same foreign key, kept shallowest first (a deeper key may copy a key set
+    /// by a shallower one), and in the order they were added among keys of the same depth.
+    /// </summary>
+    public static ImmutableList<ParentKey> Add(ImmutableList<ParentKey> keys, ParentKey key)
     {
-        if (ModelRegistry.Get(node.GetType()) is not { } model || IndexOf(model, key.Path[depth]) is not (>= 0 and var index))
+        keys = keys.RemoveAll(k => k.Name == key.Name);
+        var at = keys.FindLastIndex(k => k.Path.Length <= key.Path.Length) + 1;
+        return keys.Insert(at, key);
+    }
+
+    /// <summary>Applies <paramref name="keys"/>, ordered by <see cref="Add"/>, to the graph below <paramref name="root"/>.</summary>
+    public static void Apply(object root, ImmutableList<ParentKey> keys)
+    {
+        var walk = new ParentKeys();
+        foreach (var key in keys)
+        {
+            walk._key = key;
+            walk.Visit(root);
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void Visit(object node)
+    {
+        if (ModelOf(node) is not { } model || IndexOf(model, _key.Path[Depth]) is not (>= 0 and var index))
             return;
         var member = model.Members[index];
-        if (depth == key.Path.Length - 1)
+        if (Depth == _key.Path.Length - 1)
         {
-            if (member.IsSettable && Nearest(ancestors, key.Parent) is { } parent)
-                model.SetMember(node, index, key.Key(parent));
+            if (member.IsSettable && Nearest(_key.Parent) is { } parent)
+                model.SetMember(node, index, _key.Key(parent));
             return;
         }
 
-        if ((member.IsSettable || member.FillsExisting) && model.GetMember(node, index) is { } value)
-            VisitChildren(node, value, CollectionTypes.IsGeneratedCollection(member.Type), key, depth, ancestors);
-    }
-
-    /// <summary>Visits <paramref name="value"/> (each element when it is a collection) one level deeper, with <paramref name="node"/> as the nearest ancestor.</summary>
-    private static void VisitChildren(object node, object value, bool isCollection, ParentKey key, int depth, List<object> ancestors)
-    {
-        ancestors.Add(node);
-        if (isCollection)
-        {
-            foreach (var element in value is IDictionary dictionary ? dictionary.Values : (IEnumerable)value)
-            {
-                if (element is not null)
-                    Visit(element, key, depth + 1, ancestors);
-            }
-        }
-        else
-        {
-            Visit(value, key, depth + 1, ancestors);
-        }
-
-        ancestors.RemoveAt(ancestors.Count - 1);
+        if (IsWalkable(member) && model.GetMember(node, index) is { } value)
+            Descend(node, member, value);
     }
 
     private static int IndexOf(IFakeModel model, string name)
@@ -72,17 +74,5 @@ internal static class ParentKeys
         }
 
         return -1;
-    }
-
-    /// <summary>The closest object above the foreign key's owner that is a <paramref name="type"/>.</summary>
-    private static object? Nearest(List<object> ancestors, Type type)
-    {
-        for (var i = ancestors.Count - 1; i >= 0; i--)
-        {
-            if (type.IsInstanceOfType(ancestors[i]))
-                return ancestors[i];
-        }
-
-        return null;
     }
 }
