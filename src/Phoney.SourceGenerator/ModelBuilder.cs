@@ -347,7 +347,7 @@ internal sealed class ModelBuilder
             Type = type,
             IsScalar = Category(type) != TypeCategory.Other || AdapterCall(Unwrap(type)) is not null,
             DefinesValue = constraints.DefinesValue,
-            IsNested = IsNestable(type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType ? nullableType.TypeArguments[0] : type) || IsPolymorphic(type),
+            IsNested = ValueShapes.IsNested(ValueShapes.Of(Unwrap(type))),
         };
     }
 
@@ -372,7 +372,7 @@ internal sealed class ModelBuilder
         return nullableReference ? $"({s}.MaybeNull() ? null : {value})" : value;
     }
 
-    /// <summary>Value expression for a non-nullable <paramref name="type"/>: scalars, byte arrays, collections, nested objects.</summary>
+    /// <summary>Value expression for a non-nullable <paramref name="type"/>, by its <see cref="ValueShape"/>; mirrors <c>ReflectionTypeModel.NonNullProducer</c>.</summary>
     /// <param name="type">The member type.</param>
     /// <param name="memberName">The member name (singularized for collection elements).</param>
     /// <param name="kind">The convention.</param>
@@ -384,71 +384,59 @@ internal sealed class ModelBuilder
         var s = "s" + depth;
         var fq = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var k = "global::Phoney.Generation.ConventionKind." + kind;
-        if (ScalarValue(Category(type), fq, $"({s}, {k}{extra})") is { } scalar)
-            return scalar;
-
-        if (BytesValue(type, fq, s, constraints) is { } bytes)
-            return bytes;
-
-        // Tuples and key/value pairs: every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
-        if (type is INamedTypeSymbol composite && CompositeParts(composite) is { } parts)
-        {
-            var arguments = new List<string>();
-            for (var i = 0; i < parts.Types.Count; i++)
-                arguments.Add(Value(parts.Types[i], parts.Names[i], ConventionRules.Match(parts.Names[i], ConventionCategory(parts.Types[i]), ""), false, depth));
-            return $"new {parts.TypeName}({string.Join(", ", arguments)})";
-        }
-
-        // Date and time types of add-on packages (NodaTime) are produced by the add-on from the member's convention.
-        if (AdapterCall(type) is { } adapter)
-            return $"{adapter}({s}, {k}{extra})";
 
         // Collections: elements use the singular member name for conventions ("Emails" → email addresses).
         var singular = memberName.EndsWith("s", StringComparison.Ordinal) ? memberName.Substring(0, memberName.Length - 1) : memberName;
         var next = "s" + (depth + 1);
-
-        if (type is IArrayTypeSymbol { Rank: 1 } array)
-            return $"{s}.Array<{Fq(array.ElementType)}>(static {next} => {Element(array.ElementType, singular, depth)}{extra})";
-
-        // Two-dimensional arrays are filled row by row; more dimensions are not generated (left default, like other types without a generator).
-        if (type is IArrayTypeSymbol { Rank: 2 } grid)
-            return $"{s}.Array2<{Fq(grid.ElementType)}>(static {next} => {Element(grid.ElementType, singular, depth)})";
-
-        if (type is INamedTypeSymbol { IsGenericType: true } generic && CollectionValue(generic, fq, singular, depth, extra) is { } collection)
-            return collection;
-
-        return ObjectValue(type, fq, s);
+        switch (ValueShapes.Of(type))
+        {
+            case ValueShape.Scalar:
+                return ScalarValue(Category(type), fq, $"({s}, {k}{extra})") ?? $"default({fq})";
+            case ValueShape.Bytes:
+                return BytesValue(type, fq, s, constraints);
+            case ValueShape.Composite:
+                // Every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
+                var parts = CompositeParts((INamedTypeSymbol)type)!.Value;
+                var arguments = new List<string>();
+                for (var i = 0; i < parts.Types.Count; i++)
+                    arguments.Add(Value(parts.Types[i], parts.Names[i], ConventionRules.Match(parts.Names[i], ConventionCategory(parts.Types[i]), ""), false, depth));
+                return $"new {parts.TypeName}({string.Join(", ", arguments)})";
+            case ValueShape.Adapted:
+                // Produced by the add-on (NodaTime) from the member's convention; without the add-on it is created like any other object.
+                return AdapterCall(type) is { } adapter ? $"{adapter}({s}, {k}{extra})" : NestedValue(type, fq, s);
+            case ValueShape.Array:
+                var array = (IArrayTypeSymbol)type;
+                return $"{s}.Array<{Fq(array.ElementType)}>(static {next} => {Element(array.ElementType, singular, depth)}{extra})";
+            case ValueShape.Grid:
+                // Filled row by row; more dimensions are not generated (left default, like other types without a generator).
+                var grid = (IArrayTypeSymbol)type;
+                return $"{s}.Array2<{Fq(grid.ElementType)}>(static {next} => {Element(grid.ElementType, singular, depth)})";
+            case ValueShape.Collection:
+                return CollectionValue((INamedTypeSymbol)type, fq, singular, depth, extra)!;
+            case ValueShape.Object:
+                return NestedValue(type, fq, s);
+            case ValueShape.Polymorphic:
+                // Interfaces and abstract classes are created as one of their subtypes at runtime (null when there are none).
+                AddDerivedTypes((INamedTypeSymbol)type);
+                return $"{s}.Nested<{fq}>()";
+            default:
+                return $"default({fq})";
+        }
     }
 
-    /// <summary>The value expression of <c>byte[]</c>, <c>Memory&lt;byte&gt;</c> and <c>ReadOnlyMemory&lt;byte&gt;</c>, or <see langword="null"/> for other types.</summary>
-    private static string? BytesValue(ITypeSymbol type, string fq, string s, string? constraints)
+    /// <summary>The value expression of <c>byte[]</c>, <c>Memory&lt;byte&gt;</c> and <c>ReadOnlyMemory&lt;byte&gt;</c>.</summary>
+    private static string BytesValue(ITypeSymbol type, string fq, string s, string? constraints)
     {
-        if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte, Rank: 1 })
+        if (type is IArrayTypeSymbol)
             return constraints is null ? $"{s}.Bytes()" : $"{s}.Bytes({constraints})";
-        return type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } memory && memory.TypeArguments[0].SpecialType == SpecialType.System_Byte &&
-            memory.OriginalDefinition.ToDisplayString() is "System.Memory<T>" or "System.ReadOnlyMemory<T>"
-            ? $"new {fq}({s}.Bytes())"
-            : null;
+        return $"new {fq}({s}.Bytes())";
     }
 
-    /// <summary>The value expression of a type that is not a scalar or collection: a nested object, one of its subtypes, or its default.</summary>
-    private string ObjectValue(ITypeSymbol type, string fq, string s)
+    /// <summary>The value expression of a nested object, whose model is generated too.</summary>
+    private string NestedValue(ITypeSymbol type, string fq, string s)
     {
-        // An adapted date type without its add-on is created like any other object, as before the add-on existed.
-        if (IsNestable(type) || (type is INamedTypeSymbol { IsAbstract: false, TypeKind: TypeKind.Class or TypeKind.Struct } && ConventionRules.AdaptedCategoryOf(FullName(type)) != TypeCategory.Other))
-        {
-            Enqueue((INamedTypeSymbol)type);
-            return $"{s}.Nested<{fq}>()";
-        }
-
-        // Interfaces and abstract classes are created as one of their subtypes at runtime (null when there are none).
-        if (IsPolymorphic(type))
-        {
-            AddDerivedTypes((INamedTypeSymbol)type);
-            return $"{s}.Nested<{fq}>()";
-        }
-
-        return $"default({fq})";
+        Enqueue((INamedTypeSymbol)type);
+        return $"{s}.Nested<{fq}>()";
     }
 
     /// <summary>The call that produces a scalar of <paramref name="category"/> with <paramref name="arguments"/>, or <see langword="null"/> for other types.</summary>
@@ -562,20 +550,6 @@ internal sealed class ModelBuilder
             DerivedTypes[key] = derived;
         }
     }
-
-    /// <summary>User interfaces and abstract classes (also generic ones), which are generated as one of their subtypes.</summary>
-    internal static bool IsPolymorphic(ITypeSymbol type) =>
-        type is INamedTypeSymbol { SpecialType: SpecialType.None } named &&
-        (named.TypeKind == TypeKind.Interface || (named.TypeKind == TypeKind.Class && named.IsAbstract)) &&
-        !IsFrameworkType(named);
-
-    /// <summary>Objects Phoney recurses into: concrete user types, closed generic ones included (framework types are left default, adapted date types are values).</summary>
-    private static bool IsNestable(ITypeSymbol type) =>
-        type is INamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct, IsAbstract: false } named &&
-        named.SpecialType == SpecialType.None &&
-        !IsFrameworkType(named) &&
-        !ContainsTypeParameter(named) &&
-        ConventionRules.AdaptedCategoryOf(FullName(named)) == TypeCategory.Other;
 
     /// <summary>
     /// Whether a type refers to a type parameter anywhere: itself, its type arguments, array element types or containing types (an open generic type, for which no model

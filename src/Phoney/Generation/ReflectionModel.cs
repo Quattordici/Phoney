@@ -207,14 +207,8 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>,
             };
         }
 
-        /// <summary>Whether a member of this type is created and populated recursively; mirrors the last branch of <see cref="NonNullProducer"/>.</summary>
-        private static bool IsNestedType(Type type)
-        {
-            type = Nullable.GetUnderlyingType(type) ?? type;
-            if (FakeMember.ConventionCategory(type) != TypeCategory.Other || type == typeof(byte[]) || CollectionTypes.ElementType(type, out _) is not null)
-                return false;
-            return !IsFrameworkType(type);
-        }
+        /// <summary>Whether a member of this type is created and populated recursively.</summary>
+        private static bool IsNestedType(Type type) => ValueShapes.IsNested(ValueShapes.Of(Nullable.GetUnderlyingType(type) ?? type));
 
         /// <summary>Compiled member setter; reflection for structs (in-place on the box) and without a JIT.</summary>
         private static Action<object, object?> CreateSetter(Type type, MemberInfo member)
@@ -335,9 +329,6 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>,
 
     void IPopulateTarget<object>.FillAt(object instance, int member, object? values, bool replace) => FillObject(instance, member, values, replace);
 
-    /// <summary>Framework types (System.*, Microsoft.*) are not populated recursively; their constructors expect real data.</summary>
-    private static bool IsFrameworkType(Type type) => MemberShapes.IsFrameworkNamespace(type.Namespace ?? "");
-
     /// <summary>
     /// The parts of a <see cref="ValueTuple"/>, <see cref="Tuple"/> (up to seven) or <see cref="KeyValuePair{TKey, TValue}"/>, the names their conventions are matched with
     /// (<c>Item1</c>… or <c>Key</c>, <c>Value</c>) and the constructor taking them; <see langword="null"/> for other types.
@@ -415,53 +406,49 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>,
         return nullableReference ? s => s.MaybeNull() ? null : produce(s) : produce;
     }
 
-    /// <summary>Producer for a non-nullable type: scalars, byte arrays, collections, then nested objects.</summary>
+    /// <summary>Producer for a non-nullable type, by its <see cref="ValueShape"/>; <c>ModelBuilder.NonNull</c> writes the same for generated models.</summary>
     private static Func<FakeScope, object?> NonNullProducer(Type type, string memberName, ConventionKind convention, MemberConstraints? constraints)
     {
-        var category = FakeMember.ScalarCategory(type);
-        if (category != TypeCategory.Other)
-            return s => ConventionValues.Boxed(s, type, category, convention, constraints);
-
-        if (BytesProducer(type, constraints) is { } bytes)
-            return bytes;
-
-        // Tuples and key/value pairs: every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
-        if (CompositeParts(type) is { } composite)
-            return CompositeProducer(composite);
-
-        // Two-dimensional arrays are filled row by row; more dimensions are not generated (the member stays null, as for other types without a generator).
-        if (type.IsArray && type.GetArrayRank() > 1)
-            return type.GetArrayRank() == 2 ? Array2Producer(type.GetElementType()!, memberName) : static _ => null;
-
-        // Date and time types of add-on packages (NodaTime) are produced from the built-in type their category names.
-        if (ScalarAdapters.TryGet(type, out var adapter))
-            return s => adapter(s, convention, constraints);
-
-        var element = CollectionTypes.ElementType(type, out var key);
-        if (element is not null)
-            return CollectionProducer(type, element, key, memberName, constraints);
-
-        // Framework types are not populated recursively (a struct among them keeps its default value, which is what a generated model leaves too);
-        // other classes, closed generic ones (Envelope<Order>) included, are created as nested objects, and interfaces and abstract classes go through their subtypes.
-        if (IsFrameworkType(type))
+        switch (ValueShapes.Of(type))
         {
-            if (!type.IsValueType)
+            case ValueShape.Scalar:
+                var category = FakeMember.ScalarCategory(type);
+                return s => ConventionValues.Boxed(s, type, category, convention, constraints);
+            case ValueShape.Bytes:
+                return BytesProducer(type, constraints);
+            case ValueShape.Composite:
+                // Every part is produced like a member of its own type, in order, by the name Item1… (Key, Value).
+                return CompositeProducer(CompositeParts(type)!.Value);
+            case ValueShape.Adapted:
+                // Produced by the add-on (NodaTime) from the built-in type its category names; without the add-on it is created like any other object.
+                if (ScalarAdapters.TryGet(type, out var adapter))
+                    return s => adapter(s, convention, constraints);
+                return s => s.NestedObject(type);
+            case ValueShape.Array or ValueShape.Collection:
+                var element = CollectionTypes.ElementType(type, out var key)!;
+                return CollectionProducer(type, element, key, memberName, constraints);
+            case ValueShape.Grid:
+                return Array2Producer(type.GetElementType()!, memberName);
+            case ValueShape.Framework when type.IsValueType:
+                // A framework struct keeps its default value, which is what a generated model leaves too.
+                var unset = Activator.CreateInstance(type);
+                return _ => unset;
+            case ValueShape.Object or ValueShape.Polymorphic:
+                // Closed generic classes (Envelope<Order>) included; interfaces and abstract classes go through their subtypes.
+                return s => s.NestedObject(type);
+            default:
                 return static _ => null;
-            var unset = Activator.CreateInstance(type);
-            return _ => unset;
         }
-
-        return s => s.NestedObject(type);
     }
 
-    /// <summary>Producer for <c>byte[]</c>, <c>Memory&lt;byte&gt;</c> and <c>ReadOnlyMemory&lt;byte&gt;</c>, or <see langword="null"/> for other types.</summary>
-    private static Func<FakeScope, object?>? BytesProducer(Type type, MemberConstraints? constraints)
+    /// <summary>Producer for <c>byte[]</c>, <c>Memory&lt;byte&gt;</c> and <c>ReadOnlyMemory&lt;byte&gt;</c>.</summary>
+    private static Func<FakeScope, object?> BytesProducer(Type type, MemberConstraints? constraints)
     {
         if (type == typeof(byte[]))
             return constraints is null ? static s => s.Bytes() : s => s.Bytes(constraints);
         if (type == typeof(Memory<byte>))
             return static s => new Memory<byte>(s.Bytes());
-        return type == typeof(ReadOnlyMemory<byte>) ? static s => new ReadOnlyMemory<byte>(s.Bytes()) : null;
+        return static s => new ReadOnlyMemory<byte>(s.Bytes());
     }
 
     /// <summary>The singular of a collection member's name, which its elements use for conventions ("Emails" → email addresses).</summary>

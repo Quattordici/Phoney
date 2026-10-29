@@ -36,4 +36,8 @@
     <ProjectReference Include="../../src/Phoney.CodeFixes/Phoney.CodeFixes.csproj" />
     <ProjectReference Include="../../tools/Phoney.DevAnalyzers/Phoney.DevAnalyzers.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- One table of member types for both models: this project reads them through its own model, the other one through the other. -->
+    <Compile Include="../Shared/ValueShapeCases.cs" Link="Shared/ValueShapeCases.cs" />
+  </ItemGroup>
 </Project>
