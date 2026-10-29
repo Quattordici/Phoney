@@ -91,6 +91,15 @@ public sealed class MemberConstraints
     /// <returns>The merged rules, or <see langword="null"/> when there are none.</returns>
     public static MemberConstraints? Of(params Attribute[] attributes) => Annotations(attributes).Constraints;
 
+    private static void Range(ConstraintState state, RangeAttribute range)
+    {
+        state.Range(ConstraintState.Invariant(range.Minimum), ConstraintState.Invariant(range.Maximum));
+        if (range.MinimumIsExclusive)
+            state.ExclusiveMinimum();
+        if (range.MaximumIsExclusive)
+            state.ExclusiveMaximum();
+    }
+
     /// <summary>Reads the supported data annotations: the validation rules and the <c>[DataType]</c> hint.</summary>
     /// <param name="attributes">Attributes of the member (and, for constructor parameters, of the matching property).</param>
     internal static MemberAnnotations Annotations(IEnumerable<Attribute> attributes)
@@ -118,11 +127,7 @@ public sealed class MemberConstraints
                     state.Length(a.MinimumLength, a.MaximumLength);
                     break;
                 case RangeAttribute a:
-                    state.Range(ConstraintState.Invariant(a.Minimum), ConstraintState.Invariant(a.Maximum));
-                    if (a.MinimumIsExclusive)
-                        state.ExclusiveMinimum();
-                    if (a.MaximumIsExclusive)
-                        state.ExclusiveMaximum();
+                    Range(state, a);
                     break;
                 case RegularExpressionAttribute a:
                     state.RegularExpression(a.Pattern);
