@@ -8,7 +8,7 @@ public sealed class TimelineTests
     private static readonly DateTimeOffset Given = new(2020, 3, 4, 5, 6, 7, TimeSpan.Zero);
 
     private static RuleSlot ConstantCreated(object value) =>
-        new(new FakeMember("CreatedAt", typeof(DateTimeOffset), ConventionKind.PastDate), RuleKind.Constant, value);
+        new(new FakeMember("CreatedAt", typeof(DateTimeOffset), ConventionKind.PastDate), new SlotDecision(RuleKind.Constant, value));
 
     [Test]
     public void Draws_the_creation_time_once()

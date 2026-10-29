@@ -75,7 +75,7 @@ internal sealed class PathNode
         }
 
         // Path rules come first, then what a nested object of this type gets anyway (declared defaults, conventions).
-        var slots = SlotBinder.Bind(members, conventions?.Sources(rules) ?? new SlotSources { Rules = rules });
+        var slots = MemberPlan.Build(members, conventions?.Sources(rules) ?? new MemberPlanInputs { Rules = rules }).Slots;
         return new PathBinding(slots, ChildrenFor(members));
     }
 }

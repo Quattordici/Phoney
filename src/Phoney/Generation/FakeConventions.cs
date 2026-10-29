@@ -85,15 +85,15 @@ internal sealed class NestedConventions(ImmutableList<CustomConvention> conventi
         _slots.TryGetValue(type, out var slots) ? slots : _slots.GetOrAdd(type, Bind(model.Members));
 
     /// <summary>
-    /// The sources a nested object's members are bound from: declared defaults, then the first matching convention, in the order <see cref="SlotBinder"/> applies them
+    /// The sources a nested object's members are bound from: declared defaults, then the first matching convention, in the order <see cref="MemberPlan"/> applies them
     /// to the root object. <paramref name="rules"/> are rules for specific members that come before both (path rules).
     /// </summary>
-    public SlotSources Sources(IReadOnlyDictionary<int, SlotDecision>? rules = null) =>
+    public MemberPlanInputs Sources(IReadOnlyDictionary<int, SlotDecision>? rules = null) =>
         new() { Rules = rules, ParameterDefaults = parameterDefaults, Conventions = conventions, Usage = usage };
 
     private RuleSlot?[]? Bind(IReadOnlyList<FakeMember> members)
     {
-        var slots = SlotBinder.Bind(members, Sources());
+        var slots = MemberPlan.Build(members, Sources()).Slots;
         return Array.Exists(slots, slot => slot is not null) ? slots : null;
     }
 }
