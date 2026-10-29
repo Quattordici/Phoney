@@ -1,180 +1,8 @@
 using System.Collections;
-using System.Collections.Immutable;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using Phoney.Data;
-using Phoney.Modules;
 
 namespace Phoney.Generation;
-
-/// <summary>Options shared by every object created in one generation run.</summary>
-internal sealed record GenerationSettings(
-    bool WithNameConventions,
-    double NullProbability,
-    int MinCollectionSize,
-    int MaxCollectionSize,
-    int MaxDepth,
-    ImmutableDictionary<Type, ImmutableArray<Type>> Subtypes,
-    NestedConventions? Conventions = null,
-    ImmutableDictionary<Type, INestedGenerator>? TypeGenerators = null,
-    RuleUsage? Usage = null,
-    bool CausalTimelines = false,
-    bool ParameterDefaults = false)
-{
-    public static readonly GenerationSettings Default = new(true, 0, 1, 3, 4, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty);
-}
-
-/// <summary>How a generator rule produces a member's value.</summary>
-internal enum RuleKind
-{
-    /// <summary>A fixed value.</summary>
-    Constant,
-
-    /// <summary><c>Func&lt;Faker, TValue&gt;</c>.</summary>
-    Factory,
-
-    /// <summary><c>Func&lt;Faker, T, TValue&gt;</c>, applied after the object exists.</summary>
-    Dependent,
-
-    /// <summary>Leave the member at its default value.</summary>
-    Ignore,
-
-    /// <summary>A nested <see cref="ObjectGenerator{T}"/>.</summary>
-    Generator,
-
-    /// <summary><c>Func&lt;FakeScope, object?&gt;</c> from a custom convention.</summary>
-    Convention,
-
-    /// <summary>The model's own convention or type default (used to attach uniqueness without a rule).</summary>
-    Default,
-
-    /// <summary>A value that breaks or sits on the limit of the member's data annotations, built from the member's normal value.</summary>
-    Constraint,
-}
-
-/// <summary>What a value that a rule gives a member tells the object about itself (see <see cref="RuleSlot.Gives"/>).</summary>
-internal enum GivenValue
-{
-    /// <summary>Nothing.</summary>
-    None,
-
-    /// <summary>The object's creation time.</summary>
-    Created,
-
-    /// <summary>The person's age.</summary>
-    Age,
-
-    /// <summary>The address's country name.</summary>
-    Country,
-
-    /// <summary>The address's country code.</summary>
-    CountryCode,
-
-    /// <summary>The person's date of birth.</summary>
-    BirthDate,
-
-    /// <summary>The person's sex (a sex or gender enum).</summary>
-    Sex,
-}
-
-/// <summary>
-/// A rule bound to a member for one compiled generator. A slot never changes once it exists: <see cref="MemberPlan"/> makes it once with everything it carries,
-/// so slots can be shared between threads, nested objects and path positions without anyone writing to them.
-/// </summary>
-internal sealed class RuleSlot
-{
-    private readonly HashSet<object?>? _seen;
-
-    /// <summary>Binds <paramref name="decision"/> to <paramref name="member"/>, with the <paramref name="checks"/> of its produced values.</summary>
-    public RuleSlot(FakeMember member, SlotDecision decision, SlotChecks checks = default)
-    {
-        Kind = decision.Kind;
-        Value = decision.Value;
-        BoxedFactory = decision.Boxed;
-        MaxAttempts = checks.UniqueAttempts;
-        MemberName = member.Name;
-        Gives = Kind is RuleKind.Constant or RuleKind.Factory or RuleKind.Convention ? GivenValueOf(member) : GivenValue.None;
-        _seen = checks.UniqueAttempts > 0 ? [] : null;
-        Filter = checks.Filter;
-        FilterAttempts = checks.FilterAttempts;
-        RetriesObject = checks.RetriesObject;
-        RecordsKeyPart = checks.RecordsKeyPart;
-    }
-
-    /// <summary>How the rule produces values.</summary>
-    public RuleKind Kind { get; }
-
-    /// <summary>The constant, delegate or generator, depending on <see cref="Kind"/>.</summary>
-    public object? Value { get; }
-
-    /// <summary>For <see cref="RuleKind.Factory"/>: the factory returning <see cref="object"/>, for untyped (reflection) callers.</summary>
-    public Func<Faker, object?>? BoxedFactory { get; }
-
-    /// <summary>Whether produced values must be unique.</summary>
-    public bool Unique => _seen is not null;
-
-    /// <summary>A condition from <c>Where(x =&gt; x.Member, …)</c> that produced values must satisfy, or <see langword="null"/>.</summary>
-    public Func<object?, bool>? Filter { get; }
-
-    /// <summary>Attempts per value before <see cref="Filter"/> gives up.</summary>
-    public int FilterAttempts { get; }
-
-    /// <summary>The name of the member the slot belongs to, for the messages of <see cref="Unique"/> and <see cref="Filter"/>.</summary>
-    public string MemberName { get; }
-
-    /// <summary>How many values may be produced for one result: the smallest limit of the checks that apply (uniqueness, condition).</summary>
-    public int Attempts => (Unique, Filter) switch
-    {
-        (false, _) => FilterAttempts,
-        (true, null) => MaxAttempts,
-        _ => Math.Min(MaxAttempts, FilterAttempts),
-    };
-
-    /// <summary>Attempts per value before uniqueness gives up.</summary>
-    public int MaxAttempts { get; }
-
-    /// <summary>
-    /// Whether a duplicate makes the whole object be generated again instead of the member: set for members whose value comes from the object's
-    /// <see cref="Identity"/>, where drawing the member again returns the same cached value (and the name, email and address must keep agreeing).
-    /// </summary>
-    public bool RetriesObject { get; }
-
-    /// <summary>Whether the produced value is kept on the scope for a <see cref="UniqueCombination"/> (a constructor parameter, which can't be read back from the object).</summary>
-    public bool RecordsKeyPart { get; }
-
-    /// <summary>
-    /// What the produced value tells the object about itself, when a rule, feed or custom convention gives the member its value: the creation time
-    /// (<see cref="FakeScope.Created"/>) that the "updated" and later dates are built around, or the age the birthdate is drawn for.
-    /// </summary>
-    public GivenValue Gives { get; }
-
-    /// <summary>What a rule, feed or custom convention that gives <paramref name="member"/> its value tells the object (see <see cref="Gives"/>).</summary>
-    private static GivenValue GivenValueOf(FakeMember member) => member.Convention switch
-    {
-        ConventionKind.PastDate => GivenValue.Created,
-        ConventionKind.Age => GivenValue.Age,
-        ConventionKind.Country => GivenValue.Country,
-        ConventionKind.CountryCode => GivenValue.CountryCode,
-        ConventionKind.BirthDate => GivenValue.BirthDate,
-        ConventionKind.Sex or ConventionKind.Gender => GivenValue.Sex,
-        _ when Identity.IsSexEnum(member.Type) => GivenValue.Sex, // an enum such as Gender { Female, Male } is the person's sex whatever the member is called
-        _ => GivenValue.None,
-    };
-
-    /// <summary>Records <paramref name="value"/>; false when it was produced before.</summary>
-    public bool TryClaim(object? value)
-    {
-        lock (_seen!)
-            return _seen.Add(value);
-    }
-
-    /// <summary>Whether <paramref name="value"/> was produced before, without recording it.</summary>
-    public bool IsClaimed(object? value)
-    {
-        lock (_seen!)
-            return _seen.Contains(value);
-    }
-}
 
 /// <summary>
 /// The context of one object being generated: the faker, the generator's rules, the object's coherent identity
@@ -272,8 +100,22 @@ public sealed class FakeScope
     private Timeline _timeline;
     private int _forcedCount = -1;
 
-    /// <summary>Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit).</summary>
-    internal void ForceNextCollectionCount(int? count) => _forcedCount = count ?? -1;
+    /// <summary>
+    /// Makes the next collection created in this scope get exactly <paramref name="count"/> elements (to break or hit a length limit), without a draw, until the
+    /// returned value is disposed: a member that stays <see langword="null"/> never asks for the count, and the next member must not get it.
+    /// </summary>
+    internal ForcedCount ForceCount(int count)
+    {
+        _forcedCount = count;
+        return new ForcedCount(this);
+    }
+
+    /// <summary>Ends a <see cref="ForceCount"/>.</summary>
+    internal readonly struct ForcedCount(FakeScope scope) : IDisposable
+    {
+        /// <inheritdoc/>
+        public void Dispose() => scope._forcedCount = -1;
+    }
 
     // Set when NestedObject returns null because the object can't exist here (depth limit, cycle, no subtype or model), so collections leave that element out.
 #pragma warning disable S1450 // set by NestedObject and read by TryElement, two separate calls
@@ -384,23 +226,17 @@ public sealed class FakeScope
     /// <summary>Whether something other than the member's own producer gives <paramref name="member"/> its value: a rule, the feed, a custom convention, an ignore.</summary>
     internal bool HasSource(int member) => _slots?[member] is { Kind: not RuleKind.Default };
 
-    // The members whose values Populate kept, by index (see Keep).
-    private List<int>? _kept;
+    // Created on the first record: most objects keep, break, record and claim nothing.
+    private ObjectLedger? _ledger;
+
+    /// <summary>What this object recorded about its members, or <see langword="null"/> when it recorded nothing.</summary>
+    internal ObjectLedger? Ledger => _ledger;
 
     /// <summary>Records that <c>Populate</c> keeps the value <paramref name="member"/> already has.</summary>
-    internal void Keep(int member) => (_kept ??= []).Add(member);
-
-    /// <summary>Whether <c>Populate</c> kept the value of <paramref name="member"/>.</summary>
-    internal bool IsKept(int member) => _kept?.Contains(member) == true;
-
-    // The members whose [Compare] an Invalid case breaks, by index (see BreakComparison).
-    private List<int>? _brokenComparisons;
+    internal void Keep(int member) => (_ledger ??= new()).Keep(member);
 
     /// <summary>Records that the member being produced must differ from the member its <c>[Compare]</c> names (an <c>Invalid</c> case).</summary>
-    internal void BreakComparison() => (_brokenComparisons ??= []).Add(_member);
-
-    /// <summary>Whether an <c>Invalid</c> case breaks the <c>[Compare]</c> of <paramref name="member"/>.</summary>
-    internal bool IsComparisonBroken(int member) => _brokenComparisons?.Contains(member) == true;
+    internal void BreakComparison() => (_ledger ??= new()).BreakComparison(_member);
 
     /// <summary>Whether the model should set <paramref name="member"/> while creating the object.</summary>
     /// <remarks>False for ignored members and for members set afterwards by dependent rules.</remarks>
@@ -425,7 +261,7 @@ public sealed class FakeScope
         else
             value = ProduceChecked(slot, fallback);
         if (slot.RecordsKeyPart)
-            (_keyParts ??= [])[member] = value;
+            (_ledger ??= new()).RecordKeyPart(member, value);
         if (slot.Gives == GivenValue.Created)
             _timeline.Give(value);
         else if (slot.Gives != GivenValue.None)
@@ -453,16 +289,6 @@ public sealed class FakeScope
             _ = Identity.BirthDate;
     }
 
-    // Values of constructor parameters that are part of a unique combination, by member index (see RuleSlot.RecordsKeyPart).
-    private Dictionary<int, object?>? _keyParts;
-
-    /// <summary>The value produced for <paramref name="member"/> when it is part of a unique combination.</summary>
-    internal bool TryGetKeyPart(int member, out object? value)
-    {
-        value = null;
-        return _keyParts is not null && _keyParts.TryGetValue(member, out value);
-    }
-
     /// <summary>Produces a value that has to be unique or satisfy a condition, drawing the member again until it does.</summary>
     private TValue ProduceChecked<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback)
     {
@@ -485,20 +311,11 @@ public sealed class FakeScope
                 + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");
     }
 
-    // Unique identity values of this object, claimed only once the whole object is accepted (see RuleSlot.RetriesObject).
-    private List<(RuleSlot Slot, object? Value)>? _pendingClaims;
-
-    /// <summary>Whether a unique identity value of this object was produced before, so the object has to be generated again.</summary>
-    internal bool HasDuplicate { get; private set; }
-
     /// <summary>Produces a unique identity value once; a duplicate marks the object for another attempt instead of drawing the member again.</summary>
     private TValue ProduceForObjectRetry<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback)
     {
         var value = Produce(slot, fallback);
-        if (slot.IsClaimed(value))
-            HasDuplicate = true;
-        else
-            (_pendingClaims ??= []).Add((slot, value));
+        (_ledger ??= new()).Produced(slot, value);
         return value;
     }
 
@@ -506,37 +323,9 @@ public sealed class FakeScope
     /// Claims the unique identity values and <paramref name="combinations"/> of an accepted object; false when one was produced before or another thread
     /// claimed one of them first (the object is then generated again).
     /// </summary>
-    internal bool TryClaimPending(IReadOnlyList<(UniqueCombination Combination, object?[] Values)>? combinations = null)
-    {
-        if (HasDuplicate)
-            return false;
-        if (_pendingClaims is null && combinations is null)
-            return true;
-
-        // All or nothing, so an object that loses one value to another thread doesn't keep the others claimed. Only root scopes have such slots,
-        // and they share the generator's slots array, so it serialises the claims of every object of the run.
-        lock (_slots!)
-        {
-            foreach (var (slot, value) in _pendingClaims ?? [])
-            {
-                if (slot.IsClaimed(value))
-                    return false;
-            }
-
-            foreach (var (combination, values) in combinations ?? [])
-            {
-                if (combination.IsClaimed(values))
-                    return false;
-            }
-
-            foreach (var (slot, value) in _pendingClaims ?? [])
-                slot.TryClaim(value);
-            foreach (var (combination, values) in combinations ?? [])
-                combination.Claim(values);
-        }
-
-        return true;
-    }
+    internal bool TryClaimPending(IReadOnlyList<(UniqueCombination Combination, object?[] Values)>? combinations = null) =>
+        // Only root scopes have unique slots, and they share the generator's slots array, so it serialises the claims of every object of the run.
+        ObjectLedger.TryClaim(_ledger, _slots!, combinations);
 
     /// <summary>Untyped <see cref="Get{TValue}"/> used by the reflection model.</summary>
     internal object? GetObject(int member, Func<FakeScope, object?> fallback) => Get(member, fallback);
@@ -826,270 +615,4 @@ public sealed class FakeScope
 
     [return: NotNullIfNotNull(nameof(value))]
     private static TValue Convert<TValue>(object? value) => value is null ? default! : (TValue)value;
-}
-
-/// <summary>A generator that can create objects nested inside another generator's objects.</summary>
-internal interface INestedGenerator
-{
-    /// <summary>The type of the objects the generator creates.</summary>
-    Type GeneratedType { get; }
-
-    /// <summary>
-    /// Why the generator can't create nested objects (it verifies its rules, which only happens at its own <c>Generate</c>; it numbers its objects, and every nested
-    /// object is position 0), or <see langword="null"/>. Registering it anyway would silently do the wrong thing, so <c>With</c>, <c>WithGeneratorFor</c> and <c>Fake.Generators</c> refuse it.
-    /// </summary>
-    string? CannotBeNested { get; }
-
-    object? CreateNested(FakeScope parent);
-}
-
-/// <summary>
-/// The person (and home) an object describes, created on first use so unrelated objects pay nothing. It first collects what rules give and what a populated
-/// object keeps (<see cref="Give"/>, <see cref="Adopt"/>), which draw nothing; <see cref="Settle"/> then draws the person's sex, and from there each part is
-/// generated when first needed, so conventions only consume randomness for members the type actually has.
-/// </summary>
-internal sealed class Identity(Faker faker)
-{
-    private Sex? _sex;
-    private Sex? _givenSex;
-    private DateOnly? _givenBirthDate;
-    private string? _firstName;
-    private string? _lastName;
-    private string? _username;
-    private string? _email;
-    private DateOnly? _birthDate;
-    private int? _age;
-    private AddressProfile? _address;
-    private string? _country;
-    private string? _countryCode;
-    private string? _nationalId;
-
-    /// <summary>Whether the person is drawn (see <see cref="Settle"/>).</summary>
-    public bool IsSettled { get; private set; }
-
-    /// <summary>Draws the person's sex, unless a kept value says it; every part drawn after it relies on it. Does nothing when already settled.</summary>
-    public Identity Settle()
-    {
-        if (!IsSettled)
-        {
-            if (_sex is null)
-            {
-                var drawn = faker.Person.Sex(); // drawn even when a rule gave the sex, so everything drawn after it stays where it was
-                _sex = _givenSex ?? drawn;
-            }
-
-            IsSettled = true;
-        }
-
-        return this;
-    }
-
-    /// <summary>The person's sex; drives gendered names, avatars and sex/gender enums.</summary>
-    public Sex Sex => Settle()._sex!.Value;
-
-    /// <summary>First name, matching <see cref="Sex"/>.</summary>
-    public string FirstName => _firstName ??= faker.Person.FirstName(Sex);
-
-    /// <summary>Last name, matching <see cref="Sex"/> where the locale has gendered last names.</summary>
-    public string LastName => _lastName ??= faker.Person.LastName(Sex);
-
-    /// <summary>Username derived from the names.</summary>
-    public string Username => _username ??= faker.Internet.Username(FirstName, LastName);
-
-    /// <summary>Email address derived from the names.</summary>
-    public string Email => _email ??= faker.Internet.Email(FirstName, LastName);
-
-    /// <summary>Date of birth (18–80 years before the reference date).</summary>
-    public DateOnly BirthDate => _birthDate ??= DrawBirthDate();
-
-    /// <summary>The birthdate: one draw whatever decides it, then a birthdate a rule gave replaces the drawn one.</summary>
-    private DateOnly DrawBirthDate()
-    {
-        var drawn = _age is { } age ? faker.Date.Birthdate(age, age) : faker.Date.Birthdate();
-        return _givenBirthDate ?? drawn;
-    }
-
-    /// <summary>
-    /// Takes in a value a rule gives a member: an age (a whole number the birthdate is drawn for, unless the birthdate is drawn, given or kept; a negative
-    /// age, or one too old for the reference date, is left to the rule), a birthdate (a date; it wins over a given age), a sex (a <see cref="Sex"/> or an enum with
-    /// <c>Female</c> and <c>Male</c> members; anything else is ignored), or a country name or code (the other country member then matches it). The first one
-    /// counts, and only while that part of the person isn't drawn yet. A given birthdate or sex replaces the drawn one but its draw still happens.
-    /// </summary>
-    public void Give(GivenValue given, object? value)
-    {
-        switch (given)
-        {
-            case GivenValue.Age:
-                GiveAge(value);
-                break;
-            case GivenValue.BirthDate:
-                if (_birthDate is null)
-                    _givenBirthDate ??= DateOf(value);
-                break;
-            case GivenValue.Sex:
-                if (_sex is null)
-                    _givenSex ??= SexOf(value);
-                break;
-            default:
-                GiveCountry(given, value);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Takes in a value that is kept as it is while populating (a set <c>FirstName</c>, birthdate or sex/gender enum), so generated values that belong to the
-    /// same person (email, username, age) agree with it. Must be called before any value is generated.
-    /// </summary>
-    public void Adopt(FakeMember member, object? value)
-    {
-        if (value is null)
-            return;
-        switch (member.Convention)
-        {
-            case ConventionKind.FirstName when value is string first:
-                _firstName = first;
-                break;
-            case ConventionKind.LastName when value is string last:
-                _lastName = last;
-                break;
-            case ConventionKind.Country when value is string { Length: > 0 } country:
-                _country = country;
-                break;
-            case ConventionKind.CountryCode when value is string { Length: > 0 } code:
-                _countryCode = code;
-                break;
-            case ConventionKind.Age:
-                GiveAge(value); // the birthdate is drawn for it, unless a kept birthdate says otherwise
-                break;
-            case ConventionKind.BirthDate:
-                _birthDate = DateOf(value) ?? _birthDate;
-                break;
-            default:
-                // A sex/gender enum with Female and Male members says which names and avatar fit the person.
-                if (value is Enum e && (member.Convention is ConventionKind.Sex or ConventionKind.Gender || IsSexEnum(e.GetType())))
-                    _sex = SexOf(e) ?? _sex;
-                break;
-        }
-    }
-
-    private static DateOnly? DateOf(object? value) => value switch
-    {
-        DateOnly d => d,
-        DateTime t => DateOnly.FromDateTime(t),
-        DateTimeOffset o => DateOnly.FromDateTime(o.UtcDateTime),
-        _ => null,
-    };
-
-    /// <summary>Whether <see cref="Give"/> can use <paramref name="value"/> as <paramref name="given"/>, for the kinds that are drawn where their member is (a birthdate, a sex).</summary>
-    internal static bool CanGive(GivenValue given, object? value) => given switch
-    {
-        GivenValue.BirthDate => DateOf(value) is not null,
-        GivenValue.Sex => SexOf(value) is not null,
-        _ => false,
-    };
-
-    /// <summary>The sex an enum value names (its <c>Female</c> or <c>Male</c> member, whatever the enum is called), or <see langword="null"/> for anything else.</summary>
-    private static Sex? SexOf(object? value)
-    {
-        if (value is not Enum e)
-            return null;
-        var name = e.ToString();
-        if (name.Equals("Female", StringComparison.OrdinalIgnoreCase))
-            return Modules.Sex.Female;
-        return name.Equals("Male", StringComparison.OrdinalIgnoreCase) ? Modules.Sex.Male : null;
-    }
-
-    /// <summary>Whether <paramref name="type"/> (or the type under a nullable) is an enum whose name says it holds the person's sex or gender.</summary>
-    internal static bool IsSexEnum(Type type)
-    {
-        type = Nullable.GetUnderlyingType(type) ?? type;
-        return type.IsEnum
-            && (type.Name.Contains("Gender", StringComparison.OrdinalIgnoreCase) || type.Name.Contains("Sex", StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Makes <paramref name="value"/> (a whole number) the age the birthdate is drawn for, while the birthdate isn't drawn yet. The first one counts;
-    /// a negative age, or one too old for the reference date, is left to the rule and the birthdate drawn as usual.
-    /// </summary>
-    private void GiveAge(object? value)
-    {
-        int? given = value switch
-        {
-            int i => i,
-            long l and >= 0 and <= int.MaxValue => (int)l,
-            short h => h,
-            byte b => b,
-            sbyte sb => sb,
-            ushort us => us,
-            uint ui and <= int.MaxValue => (int)ui,
-            _ => null,
-        };
-        if (given is not { } age || age < 0 || age >= faker.ReferenceDate.UtcDateTime.Year)
-            return;
-        if (_birthDate is null)
-            _age ??= age;
-    }
-
-    /// <summary>
-    /// Makes a given country name or code the one the other country member matches, while that one isn't produced yet. Before the identity is settled each
-    /// of the two is kept on its own; once it is, the first one counts and the other is left to match it.
-    /// </summary>
-    private void GiveCountry(GivenValue given, object? value)
-    {
-        if (value is not string { Length: > 0 } text)
-            return;
-        if (!IsSettled)
-        {
-            if (given == GivenValue.Country)
-                _country ??= text;
-            else
-                _countryCode ??= text;
-            return;
-        }
-
-        if (_country is not null || _countryCode is not null)
-            return;
-        _country = given == GivenValue.Country ? text : null;
-        _countryCode = given == GivenValue.CountryCode ? text : null;
-    }
-
-    /// <summary>Age in whole years at the reference date, matching <see cref="BirthDate"/>.</summary>
-    public int Age => AgeAt(BirthDate, DateOnly.FromDateTime(faker.ReferenceDate.UtcDateTime));
-
-    /// <summary>One address, so street, city, zip code, state and country agree.</summary>
-    public AddressProfile Address => _address ??= faker.Location.Address();
-
-    /// <summary>
-    /// The address's country, or in a locale without a country of its own (<c>en</c>, <c>de</c>…) a drawn one that names the same country as a
-    /// <see cref="CountryCode"/> the object already has. It is drawn either way, so every member after it draws what it drew before.
-    /// </summary>
-    public string Country()
-    {
-        if (Address.Country is { } own)
-            return own;
-        var drawn = faker.Location.Country();
-        if (_countryCode is { } code && CountryNames.NameOf(code) is { } name && faker.Data.TryStrings(DataKeys.LocationCountry) is { } names && Array.IndexOf((string[])names.Values, name) >= 0)
-            return name;
-        _country ??= drawn;
-        return drawn;
-    }
-
-    /// <summary>The address's country code, or a drawn one that matches a <see cref="Country"/> the object already has (see there).</summary>
-    public string CountryCode()
-    {
-        if (Address.CountryCode is { } own)
-            return own;
-        var drawn = faker.Location.CountryCode();
-        if (_country is { } country && CountryNames.CodeOf(country) is { } code)
-            return code;
-        _countryCode ??= drawn;
-        return drawn;
-    }
-
-    /// <summary>The locale country's personal identity number, encoding <see cref="BirthDate"/> and <see cref="Sex"/>; empty when the country has no scheme.</summary>
-    public string NationalId => _nationalId ??= faker.NationalId.TryPerson(BirthDate, Sex) ?? "";
-
-    /// <summary>Whole years between <paramref name="birthDate"/> and <paramref name="today"/>.</summary>
-    internal static int AgeAt(DateOnly birthDate, DateOnly today) =>
-        today.Year - birthDate.Year - (today < birthDate.AddYears(today.Year - birthDate.Year) ? 1 : 0);
 }

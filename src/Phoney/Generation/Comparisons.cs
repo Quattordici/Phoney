@@ -35,9 +35,10 @@ internal static class Comparisons
     private static T Apply<T, TTarget>(TTarget target, T instance, FakeScope scope, Pair[] pairs)
         where TTarget : IPopulateTarget<T>
     {
+        var ledger = scope.Ledger;
         foreach (var (member, other) in pairs)
         {
-            if (scope.IsComparisonBroken(member))
+            if (ledger?.IsComparisonBroken(member) == true)
             {
                 if (other >= 0 && target.ValueAt(instance, member) is string own && Equals(own, target.ValueAt(instance, other)))
                     instance = target.WithValueAt(instance, member, Different(own));
@@ -49,10 +50,10 @@ internal static class Comparisons
             if (other < 0)
                 throw Unpaired(scope, target.Members[member]);
 
-            var memberKept = scope.IsKept(member);
+            var memberKept = ledger?.IsKept(member) == true;
             if (!memberKept)
                 instance = target.WithValueAt(instance, member, target.ValueAt(instance, other));
-            else if (!scope.IsKept(other) && !scope.HasSource(other) && target.Members[other].IsSettable)
+            else if (ledger?.IsKept(other) != true && !scope.HasSource(other) && target.Members[other].IsSettable)
                 instance = target.WithValueAt(instance, other, target.ValueAt(instance, member));
         }
 

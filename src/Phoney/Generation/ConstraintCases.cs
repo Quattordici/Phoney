@@ -372,15 +372,8 @@ internal static class ConstraintCases
     /// <summary>The member's collection built with an exact number of elements.</summary>
     private static Func<int, Produce> Count { get; } = count => (scope, valid) =>
     {
-        scope.ForceNextCollectionCount(count);
-        try
-        {
+        using (scope.ForceCount(count))
             return valid(scope);
-        }
-        finally
-        {
-            scope.ForceNextCollectionCount(null); // a member that stayed null never asked for the count
-        }
     };
 
     /// <summary>
