@@ -3,6 +3,12 @@ namespace Phoney.Generation;
 /// <summary>What produces a member's value, before it is bound to the member as a <see cref="RuleSlot"/>.</summary>
 internal readonly record struct SlotDecision(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null);
 
+/// <summary>
+/// How a member's produced values are checked, besides who produces them: uniqueness (attempts per value, 0 for none), a <c>Where</c> condition, whether a duplicate
+/// generates the whole object again, and whether the value is kept for a unique combination.
+/// </summary>
+internal readonly record struct SlotChecks(int UniqueAttempts = 0, Func<object?, bool>? Filter = null, int FilterAttempts = 0, bool RetriesObject = false, bool RecordsKeyPart = false);
+
 /// <summary>A condition from <c>Where(x =&gt; x.Member, …)</c> and the attempts allowed per value.</summary>
 internal sealed record MemberCondition(Func<object?, bool> Accepts, int MaxAttempts);
 
@@ -85,7 +91,27 @@ internal sealed class MemberPlan
         var keys = inputs.UniqueKeys is { Count: > 0 } k ? k.OrderBy(f => f.Key, StringComparer.Ordinal).ToList() : null;
         var known = conditions is null && keys is null ? null : IndexByName(members);
 
-        var policies = new Policy[members.Count];
+        var policies = Policies(members.Count, inputs, known, conditions);
+        var decisions = new SlotDecision?[members.Count];
+        for (var i = 0; i < decisions.Length; i++)
+            decisions[i] = Decide(members[i], i, policies[i], inputs);
+
+        if (inputs.Strict)
+            CheckStrict(members, decisions, policies, inputs);
+        foreach (var (name, filter) in conditions ?? [])
+            BindCondition(members, known!, decisions, policies, inputs, name, filter);
+        var combinations = keys is null ? [] : BindCombinations(members, known!, policies, inputs, keys);
+
+        var slots = MakeSlots(members, decisions, policies, inputs, out var objectRetries);
+        foreach (var combination in combinations)
+            objectRetries = Smallest(objectRetries, combination.MaxAttempts);
+        return new MemberPlan(slots, objectRetries, combinations);
+    }
+
+    /// <summary>What is known about each member's checks before its source is decided: uniqueness, and whether a condition names it.</summary>
+    private static Policy[] Policies(int count, MemberPlanInputs inputs, Dictionary<string, int>? known, List<KeyValuePair<string, MemberCondition>>? conditions)
+    {
+        var policies = new Policy[count];
         if (inputs.Unique is not null)
         {
             foreach (var (index, attempts) in inputs.Unique)
@@ -98,18 +124,14 @@ internal sealed class MemberPlan
                 policies[index].Conditioned = true;
         }
 
-        var decisions = new SlotDecision?[members.Count];
-        for (var i = 0; i < decisions.Length; i++)
-            decisions[i] = Decide(members[i], i, policies[i], inputs);
+        return policies;
+    }
 
-        if (inputs.Strict)
-            CheckStrict(members, decisions, policies, inputs);
-        foreach (var (name, filter) in conditions ?? [])
-            BindCondition(members, known!, decisions, policies, inputs, name, filter);
-        var combinations = keys is null ? [] : BindCombinations(members, known!, policies, inputs, keys);
-
+    /// <summary>The finished slots, and the smallest limit of the unique identity members that generate the whole object again (0 for none).</summary>
+    private static RuleSlot?[] MakeSlots(IReadOnlyList<FakeMember> members, SlotDecision?[] decisions, Policy[] policies, MemberPlanInputs inputs, out int objectRetries)
+    {
         var slots = new RuleSlot?[members.Count];
-        var objectRetries = 0;
+        objectRetries = 0;
         for (var i = 0; i < slots.Length; i++)
         {
             var policy = policies[i];
@@ -126,13 +148,10 @@ internal sealed class MemberPlan
             if (retriesObject)
                 objectRetries = Smallest(objectRetries, policy.UniqueAttempts);
 
-            slots[i] = new RuleSlot(members[i], decision.Kind, decision.Value, policy.Unique, policy.UniqueAttempts, decision.Boxed,
-                policy.Filter?.Accepts, policy.Filter?.MaxAttempts ?? 0, retriesObject, policy.RecordsKeyPart);
+            slots[i] = new RuleSlot(members[i], decision, new SlotChecks(policy.UniqueAttempts, policy.Filter?.Accepts, policy.Filter?.MaxAttempts ?? 0, retriesObject, policy.RecordsKeyPart));
         }
 
-        foreach (var combination in combinations)
-            objectRetries = Smallest(objectRetries, combination.MaxAttempts);
-        return new MemberPlan(slots, objectRetries, combinations);
+        return slots;
     }
 
     private static int Smallest(int limit, int attempts) => limit == 0 ? attempts : Math.Min(limit, attempts);

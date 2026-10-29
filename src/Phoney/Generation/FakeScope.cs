@@ -85,22 +85,20 @@ internal sealed class RuleSlot
 {
     private readonly HashSet<object?>? _seen;
 
-    /// <summary>Binds <paramref name="kind"/> and <paramref name="value"/> to <paramref name="member"/>, with the checks of the root object's member.</summary>
-    public RuleSlot(
-        FakeMember member, RuleKind kind, object? value, bool unique = false, int maxAttempts = 0, Func<Faker, object?>? boxedFactory = null,
-        Func<object?, bool>? filter = null, int filterAttempts = 0, bool retriesObject = false, bool recordsKeyPart = false)
+    /// <summary>Binds <paramref name="decision"/> to <paramref name="member"/>, with the <paramref name="checks"/> of its produced values.</summary>
+    public RuleSlot(FakeMember member, SlotDecision decision, SlotChecks checks = default)
     {
-        Kind = kind;
-        Value = value;
-        BoxedFactory = boxedFactory;
-        MaxAttempts = maxAttempts;
+        Kind = decision.Kind;
+        Value = decision.Value;
+        BoxedFactory = decision.Boxed;
+        MaxAttempts = checks.UniqueAttempts;
         MemberName = member.Name;
-        Gives = kind is RuleKind.Constant or RuleKind.Factory or RuleKind.Convention ? GivenValueOf(member) : GivenValue.None;
-        _seen = unique ? [] : null;
-        Filter = filter;
-        FilterAttempts = filterAttempts;
-        RetriesObject = retriesObject;
-        RecordsKeyPart = recordsKeyPart;
+        Gives = Kind is RuleKind.Constant or RuleKind.Factory or RuleKind.Convention ? GivenValueOf(member) : GivenValue.None;
+        _seen = checks.UniqueAttempts > 0 ? [] : null;
+        Filter = checks.Filter;
+        FilterAttempts = checks.FilterAttempts;
+        RetriesObject = checks.RetriesObject;
+        RecordsKeyPart = checks.RecordsKeyPart;
     }
 
     /// <summary>How the rule produces values.</summary>
