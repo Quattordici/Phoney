@@ -57,12 +57,53 @@ internal sealed class ConstraintState
     /// <summary>Whether a list of denied values was given.</summary>
     public bool HasDeniedValues { get; private set; }
 
-    /// <summary>Whether the annotations alone define the value (format, pattern, range, allowed values or base64), which satisfies strict mode.</summary>
-    public bool DefinesValue => Defines(FormatKind is not null, Pattern is not null, RangeMin is not null, HasAllowedValues, IsBase64);
+    /// <summary>The member that <c>[Compare]</c> names: this member repeats its value.</summary>
+    public string? CompareWith { get; private set; }
+
+    /// <summary>Whether <c>[EnumDataType]</c> was read (the enum type itself stays with the reader that has it).</summary>
+    public bool HasEnumType { get; private set; }
+
+    /// <summary>The extensions of <c>[FileExtensions]</c>, lower case and without dots, as the validator compares them.</summary>
+    public IReadOnlyList<string>? Extensions { get; private set; }
+
+    /// <summary>The <c>DataType</c> value of a <c>[DataType]</c> annotation, a hint about what the value is that validates nothing.</summary>
+    public int? DataTypeValue { get; private set; }
+
+    /// <summary>Whether the annotations alone define the value (format, pattern, range, allowed values, base64, enum names, file extensions or a comparison), which satisfies strict mode.</summary>
+    public bool DefinesValue => Defines(FormatKind is not null, Pattern is not null, RangeMin is not null, HasAllowedValues || HasEnumType, IsBase64 || Extensions is not null || CompareWith is not null);
 
     /// <summary>The one rule for <see cref="DefinesValue"/>, for readers that hold the merged constraints in another shape.</summary>
-    public static bool Defines(bool hasFormat, bool hasPattern, bool hasRange, bool hasAllowedValues, bool isBase64) =>
-        hasFormat || hasPattern || hasRange || hasAllowedValues || isBase64;
+    public static bool Defines(bool hasFormat, bool hasPattern, bool hasRange, bool hasAllowedValues, bool isGenerated) =>
+        hasFormat || hasPattern || hasRange || hasAllowedValues || isGenerated;
+
+    /// <summary>
+    /// The convention the annotations declare for a member of <paramref name="category"/>: a format annotation, else what a <c>[DataType]</c> describes;
+    /// <see langword="null"/> leaves it to the member's name.
+    /// </summary>
+    public ConventionKind? DeclaredConvention(TypeCategory category) => Declared(FormatKind, DataTypeValue, category);
+
+    /// <inheritdoc cref="DeclaredConvention"/>
+    public static ConventionKind? Declared(ConventionKind? format, int? dataType, TypeCategory category)
+    {
+        if (format is not null)
+            return format;
+        var text = category == TypeCategory.String;
+        // The values of System.ComponentModel.DataAnnotations.DataType, which the source generator can't reference.
+        return dataType switch
+        {
+            5 when text => ConventionKind.Phone,
+            6 when ConventionRules.IsNumber(category) => ConventionKind.Price,
+            9 when text => ConventionKind.Paragraph,
+            10 when text => ConventionKind.Email,
+            11 when text => ConventionKind.Password,
+            12 when text || category == TypeCategory.Uri => ConventionKind.Url,
+            13 when text || category == TypeCategory.Uri => ConventionKind.ImageUrl,
+            14 when text => ConventionKind.CreditCardNumber,
+            15 when text => ConventionKind.ZipCode,
+            16 when text => ConventionKind.FileName,
+            _ => null,
+        };
+    }
 
     /// <summary>A maximum length; several maximums all apply, so the smallest wins, whatever order they come in.</summary>
     public void MaxLength(int value)
@@ -162,6 +203,33 @@ internal sealed class ConstraintState
         HasDeniedValues = true;
         Touch("DeniedValues");
     }
+
+    /// <summary><c>[Compare(otherMember)]</c>.</summary>
+    public void Compare(string otherMember)
+    {
+        CompareWith = otherMember;
+        Touch("Compare");
+    }
+
+    /// <summary><c>[EnumDataType]</c>.</summary>
+    public void EnumDataType()
+    {
+        HasEnumType = true;
+        Touch("EnumType");
+    }
+
+    /// <summary>
+    /// <c>[FileExtensions(Extensions = …)]</c>: the list is read as the validator reads it (spaces and dots dropped, lower case, <c>png,jpg,jpeg,gif</c> when empty).
+    /// </summary>
+    public void FileExtensions(string? extensions)
+    {
+        var list = string.IsNullOrWhiteSpace(extensions) ? "png,jpg,jpeg,gif" : extensions!;
+        Extensions = list.Replace(" ", "").Replace(".", "").ToLowerInvariant().Split([','], StringSplitOptions.RemoveEmptyEntries);
+        Touch("FileExtensions");
+    }
+
+    /// <summary><c>[DataType(dataType)]</c>: a hint, so it sets no constraint (see <see cref="DeclaredConvention"/>).</summary>
+    public void DataType(int dataType) => DataTypeValue = dataType;
 
     /// <summary>A bound or value as invariant text, so generated and reflected constraints read the same whatever the culture.</summary>
     public static string? Invariant(object? value) => value switch

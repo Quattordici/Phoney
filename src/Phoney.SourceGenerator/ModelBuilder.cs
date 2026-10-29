@@ -324,12 +324,10 @@ internal sealed class ModelBuilder
         var isConstructorParameter = (role & MemberRoles.ConstructorParameter) != 0;
         var isInitOnly = (role & MemberRoles.InitOnly) != 0;
         var inInitializer = (role & MemberRoles.InInitializer) != 0;
-        // Same rules as the reflection model: a format annotation overrides the name convention, [Required] is never null.
-        var constraints = ConstraintReader.Read(attributes);
-        var convention = constraints.Format is { } format
-            ? (ConventionKind)Enum.Parse(typeof(ConventionKind), format)
-            : ConventionRules.Match(name, ConventionCategory(type), owner.Name);
-        var constraintsField = constraints.Initializer is null ? null : "__c" + index;
+        // Same rules as the reflection model: a format annotation or a [DataType] overrides the name convention, [Required] is never null.
+        var constraints = ConstraintReader.Read(attributes, symbol => _compilation.IsSymbolAccessibleWithin(symbol, _compilation.Assembly));
+        var convention = constraints.Convention(name, ConventionCategory(type), owner.Name);
+        var constraintsField = constraints.Expression is null ? null : "__c" + index;
         return new MemberModel
         {
             Name = name,
@@ -341,7 +339,7 @@ internal sealed class ModelBuilder
             Value = Value(type, name, convention, nullableReference && !constraints.Required, 0, constraintsField, constraints.Required),
             DeclaringType = declaringType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             IsField = isField,
-            Constraints = constraints.Initializer,
+            Constraints = constraints.Expression,
             ConstraintsField = constraintsField,
             Settable = !isConstructorParameter,
             SetterInitOnly = isInitOnly,

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -9,38 +10,73 @@ namespace Phoney.SourceGenerator;
 
 /// <summary>
 /// Reads data annotations from symbols into a C# object initializer for <c>MemberConstraints</c>. It merges them with the same <c>ConstraintState</c> as
-/// <c>MemberConstraints.From</c> in the runtime, so generated and reflection models enforce the same rules.
+/// <c>MemberConstraints.Annotations</c> in the runtime, so generated and reflection models enforce the same rules.
 /// </summary>
 internal static class ConstraintReader
 {
     private const string Ns = "System.ComponentModel.DataAnnotations.";
 
     /// <summary>The result of reading a member's annotations.</summary>
-    /// <param name="Initializer">Object initializer body (<c>MaxLength = 10, Required = true</c>), or <see langword="null"/> when there are no supported annotations.</param>
-    /// <param name="Format">Convention kind name forced by a format annotation (<c>Email</c>…), if any.</param>
+    /// <param name="Expression">
+    /// The <c>MemberConstraints</c> expression: an object initializer (<c>new() { MaxLength = 10, Required = true }</c>), or, when an annotation derives from a supported one
+    /// and its values are only known once it is constructed, <c>MemberConstraints.Of(new SkuAttribute(), …)</c>; <see langword="null"/> when there are no supported annotations.
+    /// </param>
+    /// <param name="Format">Convention kind forced by a format annotation (<c>Email</c>…), if any.</param>
+    /// <param name="DataType">The <c>DataType</c> of a <c>[DataType]</c> annotation, as a number, if any.</param>
     /// <param name="Required">Whether the member is <c>[Required]</c>.</param>
-    /// <param name="DefinesValue">Whether the annotations alone define the value (format, pattern, range, allowed values or Base64), like <c>MemberConstraints.DefinesValue</c>.</param>
-    public readonly record struct Result(string? Initializer, string? Format, bool Required, bool DefinesValue);
-
-    public static Result Read(IEnumerable<AttributeData> attributes)
+    /// <param name="DefinesValue">Whether the annotations alone define the value, like <c>MemberConstraints.DefinesValue</c>.</param>
+    public readonly record struct Result(string? Expression, ConventionKind? Format, int? DataType, bool Required, bool DefinesValue)
     {
-        var builder = new Builder();
+        /// <summary>The convention of a member, like <c>MemberAnnotations.Convention</c>: the one the annotations declare, else the one the name gives.</summary>
+        public ConventionKind Convention(string name, TypeCategory category, string ownerName) =>
+            ConstraintState.Declared(Format, DataType, category) ?? ConventionRules.Match(name, category, ownerName);
+    }
+
+    /// <summary>The annotations the runtime reads, by full name (<c>[DataType]</c> is read separately, as a hint).</summary>
+    private static readonly HashSet<string> Supported = new(new[]
+    {
+        "StringLengthAttribute", "MaxLengthAttribute", "MinLengthAttribute", "LengthAttribute", "RangeAttribute", "RegularExpressionAttribute", "EmailAddressAttribute",
+        "PhoneAttribute", "UrlAttribute", "CreditCardAttribute", "Base64StringAttribute", "RequiredAttribute", "AllowedValuesAttribute", "DeniedValuesAttribute",
+        "CompareAttribute", "EnumDataTypeAttribute", "FileExtensionsAttribute",
+    }.Select(n => Ns + n));
+
+    /// <summary>Reads a member's annotations.</summary>
+    /// <param name="attributes">The member's attributes.</param>
+    /// <param name="accessible">Whether generated code can use a symbol (to construct an annotation that derives from a supported one).</param>
+    public static Result Read(IEnumerable<AttributeData> attributes, Func<ISymbol, bool> accessible)
+    {
+        var builder = new Builder(accessible);
         foreach (var attribute in attributes)
             builder.Add(attribute);
         return builder.Build();
     }
 
     /// <summary>Reads the annotations into a <see cref="ConstraintState"/> and writes what it holds as the parts of the initializer.</summary>
-    private sealed class Builder
+    private sealed class Builder(Func<ISymbol, bool> accessible)
     {
         private readonly ConstraintState _state = new();
+        private readonly List<AttributeData> _read = [];
+        private bool _derived;
         private string? _allowed;
         private string? _denied;
+        private string? _enumType;
 
         public void Add(AttributeData attribute)
         {
+            var name = attribute.AttributeClass?.ToDisplayString();
+            if (name is not null && Supported.Contains(name))
+                _read.Add(attribute);
+            else if (SupportedBase(attribute.AttributeClass) is { } supported && Constructible(attribute))
+            {
+                // Its values come from its constructor, so the generated model constructs it, as reflection does; what it is (a pattern, a format…) is known now.
+                _read.Add(attribute);
+                _derived = true;
+                Declare(supported);
+                return;
+            }
+
             var args = attribute.ConstructorArguments;
-            switch (attribute.AttributeClass?.ToDisplayString())
+            switch (name)
             {
                 case Ns + "StringLengthAttribute":
                     AddStringLength(attribute);
@@ -86,6 +122,19 @@ internal static class ConstraintReader
                     _state.DeniedValues();
                     _denied = Values(args);
                     break;
+                case Ns + "CompareAttribute" when args.Length == 1 && args[0].Value is string other:
+                    _state.Compare(other);
+                    break;
+                case Ns + "EnumDataTypeAttribute" when args.Length == 1 && args[0].Value is INamedTypeSymbol { TypeKind: TypeKind.Enum } enumType:
+                    _state.EnumDataType();
+                    _enumType = enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    break;
+                case Ns + "FileExtensionsAttribute":
+                    _state.FileExtensions(attribute.NamedArguments.Where(n => n.Key == "Extensions").Select(n => n.Value.Value as string).LastOrDefault());
+                    break;
+                case Ns + "DataTypeAttribute" when args.Length == 1 && args[0].Value is int dataType and not 0: // DataType.Custom names its type as text
+                    _state.DataType(dataType);
+                    break;
             }
         }
 
@@ -94,8 +143,109 @@ internal static class ConstraintReader
             var parts = _state.SetKeys.Select(Part).Where(p => p is not null).Select(p => p!).ToList();
             if (_state.FormatKind is { } format)
                 parts.Add("Format = global::Phoney.Generation.ConventionKind." + format);
-            return new Result(parts.Count == 0 ? null : string.Join(", ", parts), _state.FormatKind?.ToString(), _state.IsRequired, _state.DefinesValue);
+            var expression = _derived
+                ? "global::Phoney.Generation.MemberConstraints.Of(" + string.Join(", ", _read.Select(Construct)) + ")"
+                : parts.Count == 0 ? null : "new() { " + string.Join(", ", parts) + " }";
+            return new Result(expression, _state.FormatKind, _state.DataTypeValue, _state.IsRequired, _state.DefinesValue);
         }
+
+        /// <summary>The supported annotation <paramref name="type"/> derives from, or <see langword="null"/>.</summary>
+        private static string? SupportedBase(INamedTypeSymbol? type)
+        {
+            for (var t = type?.BaseType; t is not null; t = t.BaseType)
+            {
+                if (t.ToDisplayString() is var name && Supported.Contains(name))
+                    return name;
+            }
+
+            return null;
+        }
+
+        /// <summary>Whether generated code can construct the annotation as it is written.</summary>
+        private bool Constructible(AttributeData attribute) =>
+            attribute.AttributeClass is { } type && accessible(type) && attribute.AttributeConstructor is { } constructor && accessible(constructor)
+            && attribute.NamedArguments.All(n => Settable(type, n.Key) is { } member && accessible(member));
+
+        /// <summary>The setter or field a named argument sets, declared on the attribute or a base class.</summary>
+        private static ISymbol? Settable(INamedTypeSymbol type, string name)
+        {
+            for (var t = type; t is not null; t = t.BaseType)
+            {
+                switch (t.GetMembers(name).FirstOrDefault())
+                {
+                    case IPropertySymbol property:
+                        return property.SetMethod;
+                    case IFieldSymbol field:
+                        return field;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// What an annotation derived from <paramref name="supported"/> tells the generator before it is constructed: the format it forces, whether it is required and whether it
+        /// defines the value. The values themselves (the pattern, the limits…) are read when the generated model constructs it.
+        /// </summary>
+        private void Declare(string supported)
+        {
+            switch (supported.Substring(Ns.Length))
+            {
+                case "RegularExpressionAttribute":
+                    _state.RegularExpression("");
+                    break;
+                case "RangeAttribute":
+                    _state.Range("", "");
+                    break;
+                case "EmailAddressAttribute":
+                    _state.Format(ConventionKind.Email);
+                    break;
+                case "PhoneAttribute":
+                    _state.Format(ConventionKind.Phone);
+                    break;
+                case "UrlAttribute":
+                    _state.Format(ConventionKind.Url);
+                    break;
+                case "CreditCardAttribute":
+                    _state.Format(ConventionKind.CreditCardNumber);
+                    break;
+                case "Base64StringAttribute":
+                    _state.Base64();
+                    break;
+                case "RequiredAttribute":
+                    _state.Required();
+                    break;
+                case "AllowedValuesAttribute":
+                    _state.AllowedValues();
+                    break;
+                case "CompareAttribute":
+                    _state.Compare("");
+                    break;
+                case "EnumDataTypeAttribute":
+                    _state.EnumDataType();
+                    break;
+                case "FileExtensionsAttribute":
+                    _state.FileExtensions(null);
+                    break;
+            }
+        }
+
+        /// <summary>The attribute as a <c>new</c> expression with its arguments.</summary>
+        private static string Construct(AttributeData attribute)
+        {
+            var arguments = string.Join(", ", attribute.ConstructorArguments.Select(Expression));
+            var named = attribute.NamedArguments.Select(n => n.Key + " = " + Expression(n.Value)).ToList();
+            return $"new {attribute.AttributeClass!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}({arguments})" + (named.Count == 0 ? "" : " { " + string.Join(", ", named) + " }");
+        }
+
+        /// <summary>An attribute argument as C#: a constant, an enum value, <c>typeof</c> or an array.</summary>
+        private static string Expression(TypedConstant constant) => constant.Kind switch
+        {
+            _ when constant.IsNull => constant.Type is { } type ? $"({type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})null" : "null",
+            TypedConstantKind.Type => $"typeof({((ITypeSymbol)constant.Value!).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})",
+            TypedConstantKind.Array => $"new {((IArrayTypeSymbol)constant.Type!).ElementType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}[] {{ {string.Join(", ", constant.Values.Select(Expression))} }}",
+            _ => Constant(constant),
+        };
 
         /// <summary>The initializer part for a constraint that was set, or <see langword="null"/> for a flag that was set and then cleared.</summary>
         private string? Part(string key) => key switch
@@ -111,6 +261,9 @@ internal static class ConstraintReader
             "Required" => "Required = true",
             "AllowedValues" => $"AllowedValues = {_allowed}",
             "DeniedValues" => $"DeniedValues = {_denied}",
+            "Compare" => $"Compare = {Literal(_state.CompareWith)}",
+            "EnumType" => $"EnumType = typeof({_enumType})",
+            "FileExtensions" => $"FileExtensions = new string[] {{ {string.Join(", ", _state.Extensions!.Select(Literal))} }}",
             _ => null,
         };
 

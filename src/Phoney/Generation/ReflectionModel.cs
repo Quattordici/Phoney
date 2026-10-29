@@ -50,8 +50,13 @@ internal sealed class ReflectionModel<T> : FakeModel<T>
 /// </summary>
 [RequiresUnreferencedCode("Populates types with reflection.")]
 [RequiresDynamicCode("Populates types with reflection.")]
-internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
+internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>, IComparedMembers
 {
+    private Comparisons.Pair[]? _compared;
+
+    /// <inheritdoc />
+    public Comparisons.Pair[] Compared => _compared ??= Comparisons.PairsOf(Members);
+
     private static readonly ConcurrentDictionary<Type, ReflectionTypeModel> Cache = new();
 
     private readonly Func<object?[], object> _construct;
@@ -162,11 +167,11 @@ internal sealed class ReflectionTypeModel : IFakeModel, IPopulateTarget<object>
             Add(member.Name, memberType, nullable, MemberRole.Filled, member, MemberConstraints.Read(member));
         }
 
-        private void Add(string name, Type memberType, bool nullable, MemberRole role, MemberInfo? accessor, MemberConstraints? constraints, ParameterInfo? parameter = null)
+        private void Add(string name, Type memberType, bool nullable, MemberRole role, MemberInfo? accessor, MemberAnnotations annotations, ParameterInfo? parameter = null)
         {
-            // A format annotation ([EmailAddress]…) says more than the member name; [Required] members are never null.
-            var category = FakeMember.ConventionCategory(memberType);
-            var convention = constraints?.Format ?? ConventionRules.Match(name, category, type.Name);
+            // A format annotation ([EmailAddress]…) or a [DataType] says more than the member name; [Required] members are never null.
+            var constraints = annotations.Constraints;
+            var convention = annotations.Convention(name, memberType, type.Name);
             var fillsExisting = role == MemberRole.Filled;
             // Constructor parameters behind a settable property (a record's positional properties) can be set on an existing object too.
             Members.Add(new FakeMember(name, memberType, convention)

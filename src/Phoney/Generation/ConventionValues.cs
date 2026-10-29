@@ -40,6 +40,10 @@ public static class ConventionValues
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
                 return Text(scope.Faker.Random.Element(allowed));
+            if (constraints.EnumType is not null)
+                return OneOf(scope, constraints.EnumNames);
+            if (constraints.FileExtensions is { Length: > 0 } extensions)
+                return FileName(scope, constraints, extensions);
             if (constraints.Pattern is { } pattern)
                 return FromPattern(scope, pattern);
             if (constraints.Base64)
@@ -56,6 +60,33 @@ public static class ConventionValues
             var format = constraints.Format ?? Effective(scope, kind);
             return FitLength(scope, constraints, format, () => StringCore(scope, format));
         });
+    }
+
+    private static TItem OneOf<TItem>(FakeScope scope, TItem[] items) => items[scope.Faker.Random.Index(items.Length)];
+
+    /// <summary>
+    /// A file name with one of the <c>[FileExtensions]</c>, within the length limits: the name before the extension is shortened or lengthened, never the extension.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The maximum length leaves no room for a name before the extension.</exception>
+    private static string FileName(FakeScope scope, MemberConstraints c, string[] extensions)
+    {
+        var extension = OneOf(scope, extensions);
+        var name = scope.Faker.System.CommonFileName(extension);
+        var room = extension.Length + 1; // the dot and the extension
+        var stem = name[..^room];
+        var max = c.MaxLength ?? int.MaxValue;
+        if (max <= room)
+        {
+            throw new InvalidOperationException(
+                $"Phoney cannot generate a file name with the extension '.{extension}' of [FileExtensions] in at most {max} characters. Raise the maximum length, or add a rule with .With(...) for this member.");
+        }
+
+        if (stem.Length + room > max)
+            stem = stem[..(max - room)];
+        var min = Math.Max(c.MinLength ?? 0, c.Required ? 1 : 0);
+        if (stem.Length + room < min)
+            stem = stem.PadRight(min - room, 'x');
+        return stem + "." + extension;
     }
 
     /// <summary>A number inside a numeric <c>[Range]</c> on a string member, as invariant text: whole numbers when both limits are, else two decimals.</summary>
@@ -169,6 +200,8 @@ public static class ConventionValues
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
                 return T.CreateSaturating(Convert.ToDecimal(scope.Faker.Random.Element(allowed), CultureInfo.InvariantCulture));
+            if (constraints.EnumType is not null)
+                return T.CreateSaturating(OneOf(scope, constraints.EnumNumbers));
             if (TryRange(constraints, out var range))
                 return InRange<T>(scope, range);
             return NumberCore<T>(scope, kind);

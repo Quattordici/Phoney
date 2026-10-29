@@ -49,15 +49,48 @@ public sealed class MemberConstraints
     /// <summary>From <c>[DeniedValues]</c>: the value is never one of these.</summary>
     public object?[]? DeniedValues { get; init; }
 
-    /// <summary>Whether the annotations alone define the value (format, pattern, range or allowed values), which satisfies strict mode.</summary>
-    public bool DefinesValue => ConstraintState.Defines(Format is not null, Pattern is not null, RangeMin is not null, AllowedValues is not null, Base64);
+    /// <summary>From <c>[Compare]</c>: the member whose value this member repeats.</summary>
+    public string? Compare { get; init; }
 
-    /// <summary>Reads the supported data annotations; <see langword="null"/> when there are none.</summary>
+    /// <summary>From <c>[EnumDataType]</c>: the value is a name (for text) or a defined value (for numbers) of this enum.</summary>
+    public Type? EnumType { get; init; }
+
+    /// <summary>From <c>[FileExtensions]</c>: the value is a file name with one of these extensions (lower case, without the dot).</summary>
+    public string[]? FileExtensions { get; init; }
+
+    /// <summary>Whether the annotations alone define the value (format, pattern, range, allowed values, enum names, file extensions or a comparison), which satisfies strict mode.</summary>
+    public bool DefinesValue => ConstraintState.Defines(Format is not null, Pattern is not null, RangeMin is not null, AllowedValues is not null || EnumType is not null,
+        Base64 || FileExtensions is not null || Compare is not null);
+
+    private string[]? _enumNames;
+    private decimal[]? _enumNumbers;
+
+    /// <summary>The names of <see cref="EnumType"/>, read once.</summary>
+    internal string[] EnumNames => _enumNames ??= NonEmpty(Enum.GetNames(EnumType!));
+
+    /// <summary>The defined values of <see cref="EnumType"/> as numbers, read once.</summary>
+    internal decimal[] EnumNumbers => _enumNumbers ??=
+        NonEmpty([.. Enum.GetValuesAsUnderlyingType(EnumType!).Cast<object>().Select(v => Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture))]);
+
+    private TItem[] NonEmpty<TItem>(TItem[] items) => items.Length > 0
+        ? items
+        : throw new InvalidOperationException($"Phoney cannot generate a value for [EnumDataType(typeof({EnumType!.Name}))]: the enum has no values. Add values to it, or add a rule with .With(...) for this member.");
+
+    /// <summary>
+    /// The validation rules of annotations a generated model constructs: those that derive from a supported annotation (<c>class SkuAttribute() : RegularExpressionAttribute("…")</c>)
+    /// get their values from their constructor, so the source generator can't read them, and the member's other annotations are merged with them as reflection merges them.
+    /// </summary>
+    /// <param name="attributes">The member's supported annotations, in the order they are declared.</param>
+    /// <returns>The merged rules, or <see langword="null"/> when there are none.</returns>
+    public static MemberConstraints? Of(params Attribute[] attributes) => Annotations(attributes).Constraints;
+
+    /// <summary>Reads the supported data annotations: the validation rules and the <c>[DataType]</c> hint.</summary>
     /// <param name="attributes">Attributes of the member (and, for constructor parameters, of the matching property).</param>
-    internal static MemberConstraints? From(IEnumerable<Attribute> attributes)
+    internal static MemberAnnotations Annotations(IEnumerable<Attribute> attributes)
     {
         var state = new ConstraintState();
         object?[]? allowed = null, denied = null;
+        Type? enumType = null;
 
         foreach (var attribute in attributes)
         {
@@ -111,10 +144,23 @@ public sealed class MemberConstraints
                     state.DeniedValues();
                     denied = a.Values;
                     break;
+                case CompareAttribute a:
+                    state.Compare(a.OtherProperty);
+                    break;
+                case EnumDataTypeAttribute { EnumType.IsEnum: true } a:
+                    state.EnumDataType();
+                    enumType = a.EnumType;
+                    break;
+                case FileExtensionsAttribute a:
+                    state.FileExtensions(a.Extensions);
+                    break;
+                case DataTypeAttribute { DataType: not DataType.Custom } a when a.GetType() == typeof(DataTypeAttribute): // a hint the source generator reads too
+                    state.DataType((int)a.DataType);
+                    break;
             }
         }
 
-        return state.Any
+        var constraints = state.Any
             ? new MemberConstraints
             {
                 MinLength = state.MinLengthValue,
@@ -129,18 +175,22 @@ public sealed class MemberConstraints
                 Required = state.IsRequired,
                 AllowedValues = allowed,
                 DeniedValues = denied,
+                Compare = state.CompareWith,
+                EnumType = enumType,
+                FileExtensions = state.Extensions is { } extensions ? [.. extensions] : null,
             }
             : null;
+        return new MemberAnnotations(constraints, state.DataTypeValue);
     }
 
     /// <summary>Reads the annotations of a property or field, and for constructor parameters those of the matching property too.</summary>
     [RequiresUnreferencedCode("Reads attributes with reflection.")]
-    internal static MemberConstraints? Read(ICustomAttributeProvider member, ICustomAttributeProvider? matchingProperty = null)
+    internal static MemberAnnotations Read(ICustomAttributeProvider member, ICustomAttributeProvider? matchingProperty = null)
     {
         var attributes = AttributesOf(member);
         if (matchingProperty is not null)
             attributes = attributes.Concat(AttributesOf(matchingProperty));
-        return From(attributes);
+        return Annotations(attributes);
     }
 
     /// <summary>
@@ -154,4 +204,17 @@ public sealed class MemberConstraints
         ParameterInfo parameter => Attribute.GetCustomAttributes(parameter, inherit: true),
         _ => provider.GetCustomAttributes(inherit: true).OfType<Attribute>(),
     };
+}
+
+/// <summary>What a member's data annotations say: the validation rules, and the <c>[DataType]</c> hint that, like a format annotation, can pick the convention.</summary>
+/// <param name="Constraints">The validation rules, or <see langword="null"/>.</param>
+/// <param name="DataType">The <c>DataType</c> of a <c>[DataType]</c> annotation, as a number.</param>
+internal readonly record struct MemberAnnotations(MemberConstraints? Constraints, int? DataType)
+{
+    /// <summary>The convention of a member: the one its annotations declare, else the one its name gives.</summary>
+    public ConventionKind Convention(string name, Type type, string ownerName)
+    {
+        var category = FakeMember.ConventionCategory(type);
+        return ConstraintState.Declared(Constraints?.Format, DataType, category) ?? ConventionRules.Match(name, category, ownerName);
+    }
 }

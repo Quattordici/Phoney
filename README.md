@@ -593,6 +593,12 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 | `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | a value of that format, whatever the member is called, also with `WithNameConventions(false)` |
 | `[AllowedValues]`, `[DeniedValues]` | one of / none of the listed values (for enums also their names); when the denied values leave nothing to pick, generating throws |
 | `[Required]` | never `null` (even with `NullProbability`) and never empty |
+| `[Compare(nameof(Password))]` | the same value as the member it names, whichever of the two comes first, also in nested objects and constructor parameters. A rule for the member wins; a rule for the other member is repeated. `Populate` keeps a value you set on either side and copies it to the other |
+| `[EnumDataType(typeof(Plan))]` | a name of the enum for text (`"Pro"`), a defined value for numbers (`2`) |
+| `[FileExtensions(Extensions = "pdf,docx")]` | a file name with one of the extensions (`png,jpg,jpeg,gif` when none are listed), shortened or lengthened before the dot to fit the length limits |
+| `[DataType(DataType.EmailAddress)]` and the other kinds | picks the value like a member name would: `EmailAddress` is the person's email, `PhoneNumber`, `PostalCode`, `Url`, `ImageUrl`, `CreditCard`, `Password`, `MultilineText` (a paragraph), `Upload` (a file name) for text, `Currency` (a price) for numbers. It is a hint, not a rule, so a format annotation wins, `Invalid` doesn't break it, and it counts as a convention for `.Strict()` |
+
+Annotations of your own that derive from these work too, in both models: `class SkuAttribute() : RegularExpressionAttribute("^[A-Z]{3}-[0-9]{4}$")` gives SKUs wherever `[Sku]` is used. A source-generated model constructs such an annotation in its member table (the values only exist once its constructor has run), so it must be accessible from the class with `[FakeFor<T>]`; one that isn't is left out there.
 
 ### Invalid and boundary data
 
@@ -616,6 +622,8 @@ foreach (var c in Fake.For<Order>().Seed(1).BoundaryCases())                  //
 | `[Range]` on numbers and dates | one unit (a day for dates) below the minimum / above the maximum, or the limit itself when it is exclusive | the minimum / the maximum, or the nearest value inside an exclusive limit |
 | `[RegularExpression]`, `[EmailAddress]`, `[Phone]`, `[Url]`, `[CreditCard]`, `[Base64String]` | text the real validator rejects | none: they define a value, not an edge |
 | `[AllowedValues]`, `[DeniedValues]` | a value that is not allowed / a denied one | none |
+| `[EnumDataType]` | text that is no name of the enum, a number that is no value of it (for a flags enum, no combination of its flags) | none |
+| `[FileExtensions]` | a file name with another extension | none |
 
 - **One change per case**: a case is the object `Generate()` gives for the seed with only that member replaced. Every case can be a test case of its own, named after what it is, through your framework's data source (`MethodDataSource` in TUnit, `MemberData` in xUnit…).
 - `Invalid(member)` picks one violation per object, reproducibly, so `Generate(50)` covers them all. A member without annotations to break throws and lists the supported ones; limits beyond 100,000 are not built.
