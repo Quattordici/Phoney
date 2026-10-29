@@ -37,6 +37,13 @@ internal static class Comparisons
     {
         foreach (var (member, other) in pairs)
         {
+            if (scope.IsComparisonBroken(member))
+            {
+                if (other >= 0 && target.ValueAt(instance, member) is string own && Equals(own, target.ValueAt(instance, other)))
+                    instance = target.WithValueAt(instance, member, Different(own));
+                continue;
+            }
+
             if (scope.HasSource(member))
                 continue;
             if (other < 0)
@@ -51,6 +58,10 @@ internal static class Comparisons
 
         return instance;
     }
+
+    /// <summary>The text with its last character changed (the length stays, so the member's length limits still hold).</summary>
+    private static string Different(string text) =>
+        text.Length == 0 ? "x" : string.Concat(text.AsSpan(0, text.Length - 1), text[^1] == 'z' ? "a" : ((char)(text[^1] + 1)).ToString());
 
     private static InvalidOperationException Unpaired(FakeScope scope, FakeMember member) => new(
         $"{scope.TypeName}.{member.Name} has [Compare(\"{member.Constraints!.Compare}\")], but Phoney can't make the two equal: {member.Name} can't be set after the object is created, " +

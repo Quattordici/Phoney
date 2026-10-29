@@ -600,6 +600,8 @@ Generated objects satisfy their data annotations, so they pass `Validator.TryVal
 
 Annotations of your own that derive from these work too, in both models: `class SkuAttribute() : RegularExpressionAttribute("^[A-Z]{3}-[0-9]{4}$")` gives SKUs wherever `[Sku]` is used. A source-generated model constructs such an annotation in its member table (the values only exist once its constructor has run), so it must be accessible from the class with `[FakeFor<T>]`; one that isn't is left out there.
 
+Validation attributes that derive straight from `ValidationAttribute` work too: Phoney can't know what they accept, so it draws the member again until every one of them says yes (up to 101 times, then it throws and names the attribute, so you can add a `.With(...)` rule). The other annotations still shape the value, so `[Even, Range(1, 20)]` gives the even numbers from 2 to 20. A rule for the member wins, and an attribute that needs the whole object (`RequiresValidationContext`) is left out, because one member can't be checked on its own.
+
 ### Invalid and boundary data
 
 The annotations that make objects valid also tell Phoney how to break them, so you can test that validation rejects what it should and accepts what sits right on the edge:
@@ -624,6 +626,7 @@ foreach (var c in Fake.For<Order>().Seed(1).BoundaryCases())                  //
 | `[AllowedValues]`, `[DeniedValues]` | a value that is not allowed / a denied one | none |
 | `[EnumDataType]` | text that is no name of the enum, a number that is no value of it (for a flags enum, no combination of its flags) | none |
 | `[FileExtensions]` | a file name with another extension | none |
+| `[Compare]` on text | a value that differs from the member it names (its last character changed), the other member as in a valid object | none |
 
 - **One change per case**: a case is the object `Generate()` gives for the seed with only that member replaced. Every case can be a test case of its own, named after what it is, through your framework's data source (`MethodDataSource` in TUnit, `MemberData` in xUnit…).
 - `Invalid(member)` picks one violation per object, reproducibly, so `Generate(50)` covers them all. A member without annotations to break throws and lists the supported ones; limits beyond 100,000 are not built.

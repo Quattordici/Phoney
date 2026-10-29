@@ -413,6 +413,15 @@ public sealed class FakeScope
     /// <summary>Whether <c>Populate</c> kept the value of <paramref name="member"/>.</summary>
     internal bool IsKept(int member) => _kept?.Contains(member) == true;
 
+    // The members whose [Compare] an Invalid case breaks, by index (see BreakComparison).
+    private List<int>? _brokenComparisons;
+
+    /// <summary>Records that the member being produced must differ from the member its <c>[Compare]</c> names (an <c>Invalid</c> case).</summary>
+    internal void BreakComparison() => (_brokenComparisons ??= []).Add(_member);
+
+    /// <summary>Whether an <c>Invalid</c> case breaks the <c>[Compare]</c> of <paramref name="member"/>.</summary>
+    internal bool IsComparisonBroken(int member) => _brokenComparisons?.Contains(member) == true;
+
     /// <summary>Whether the model should set <paramref name="member"/> while creating the object.</summary>
     /// <remarks>False for ignored members and for members set afterwards by dependent rules.</remarks>
     public bool Include(int member) =>

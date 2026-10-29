@@ -336,7 +336,7 @@ internal sealed class ModelBuilder
             IsConstructorParameter = isConstructorParameter,
             IsInitOnly = isInitOnly,
             InInitializer = inInitializer,
-            Value = Value(type, name, convention, nullableReference && !constraints.Required, 0, constraintsField, constraints.Required),
+            Value = Validated(type, constraintsField, constraints.HasValidators, Value(type, name, convention, nullableReference && !constraints.Required, 0, constraintsField, constraints.Required)),
             DeclaringType = declaringType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             IsField = isField,
             Constraints = constraints.Expression,
@@ -350,6 +350,12 @@ internal sealed class ModelBuilder
             IsNested = IsNestable(type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType ? nullableType.TypeArguments[0] : type) || IsPolymorphic(type),
         };
     }
+
+    /// <summary>The member's value, drawn again while a validation attribute Phoney has no generator for rejects it; mirrors <c>ReflectionTypeModel.Producer</c>.</summary>
+    private static string Validated(ITypeSymbol type, string? constraints, bool hasValidators, string value) =>
+        hasValidators && constraints is not null
+            ? $"global::Phoney.Generation.ConventionValues.Validated<{type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}>(s0, {constraints}, static s0 => {value})"
+            : value;
 
     /// <summary>The value expression for a member of <paramref name="type"/>; mirrors <c>ReflectionTypeModel.Producer</c>.</summary>
     private string Value(ITypeSymbol type, string memberName, ConventionKind kind, bool nullableReference, int depth, string? constraints = null, bool required = false)
