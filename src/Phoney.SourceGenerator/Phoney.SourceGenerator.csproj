@@ -33,5 +33,7 @@
     <Compile Include="../Phoney/Generation/Shared/ConstraintState.cs" Link="Shared/ConstraintState.cs" />
     <!-- And how a value of a member type is made, so both models dispatch the same way (ValueShapes.Symbols.cs reads the facts from symbols). -->
     <Compile Include="../Phoney/Generation/Shared/ValueShapes.cs" Link="Shared/ValueShapes.cs" />
+    <!-- And which members a strict generator wants a source for, so the PHONEY004 warning names the members the exception would. -->
+    <Compile Include="../Phoney/Generation/Shared/StrictCoverage.cs" Link="Shared/StrictCoverage.cs" />
   </ItemGroup>
 </Project>

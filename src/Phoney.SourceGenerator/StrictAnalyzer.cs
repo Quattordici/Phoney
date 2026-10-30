@@ -81,32 +81,16 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static List<IInvocationOperation>? Chain(IInvocationOperation strict, INamedTypeSymbol generator, INamedTypeSymbol? fake, INamedTypeSymbol? fakeFor)
     {
-        // Later calls in the chain (outer invocations).
-        IOperation current = strict;
-        var later = new List<IInvocationOperation>();
-        while (current.Parent is IInvocationOperation outer && outer.Instance == current && IsGeneratorMethod(outer.TargetMethod, generator))
-        {
-            later.Add(outer);
-            current = outer;
-        }
-
+        var later = FluentChain.Later(strict, generator).ToList();
         if (later.Count == 0 || !AnalyzerSupport.Terminals.Contains(later[later.Count - 1].TargetMethod.Name) || later.Exists(i => i.TargetMethod.Name == "Strict"))
             return null;
-
-        // Earlier calls (receivers), down to where the generator was started.
-        var earlier = new List<IInvocationOperation>();
-        var receiver = strict.Instance;
-        while (receiver is IInvocationOperation inner && IsGeneratorMethod(inner.TargetMethod, generator))
-        {
-            earlier.Add(inner);
-            receiver = inner.Instance;
-        }
-
-        if (!AnalyzerSupport.IsStart(receiver, fake, fakeFor))
+        if (!AnalyzerSupport.IsStart(FluentChain.Start(strict, generator), fake, fakeFor))
             return null;
-        earlier.Reverse(); // collected from Strict outward; the calls run first to last
-        earlier.AddRange(later);
-        return earlier;
+
+        // The calls run first to last: the earlier ones (collected from Strict outward), then the later ones.
+        var calls = FluentChain.Earlier(strict, generator).Reverse().ToList();
+        calls.AddRange(later);
+        return calls;
     }
 
     /// <summary>What the calls of a chain give values to: members with rules, types with conventions, and whether name conventions apply.</summary>
@@ -141,9 +125,12 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
 
         /// <summary>Whether a member is a scalar that nothing gives a value to.</summary>
         public bool LeavesUncovered(MemberModel member) =>
-            member.IsScalar && !member.DefinesValue && !_covered.Contains(member.Name) && !(_useParameterDefaults && member is { IsConstructorParameter: true, DefaultValue: not null })
-            && (member.Convention == nameof(ConventionKind.None) || !_useConventions)
-            && !_conventionTypes.Exists(t => Matches(t, member.Type));
+            StrictCoverage.LeavesUncovered(member.IsScalar, member.DefinesValue, HasSource(member), _useConventions && member.Convention != nameof(ConventionKind.None));
+
+        /// <summary>Whether a rule, a declared default or a custom convention of the chain gives the member its value.</summary>
+        private bool HasSource(MemberModel member) =>
+            _covered.Contains(member.Name) || (_useParameterDefaults && member is { IsConstructorParameter: true, DefaultValue: not null })
+            || _conventionTypes.Exists(t => Matches(t, member.Type));
 
         private bool ReadMemberRule(IInvocationOperation call)
         {

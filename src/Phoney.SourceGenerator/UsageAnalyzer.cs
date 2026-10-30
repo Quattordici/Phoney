@@ -75,17 +75,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static void CheckSeedInLoop(OperationAnalysisContext context, IInvocationOperation terminal, Symbols symbols)
     {
         // The last Seed in the chain wins; a seed that isn't a constant may vary per iteration.
-        IInvocationOperation? seed = null;
-        var receiver = terminal.Instance;
-        while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, symbols.Generator))
+        var seed = FluentChain.Earlier(terminal, symbols.Generator).FirstOrDefault(earlier => earlier.TargetMethod.Name == "Seed");
+        if (seed is null || seed.Arguments.FirstOrDefault()?.Value.ConstantValue is not { HasValue: true }
+            || !AnalyzerSupport.IsStart(FluentChain.Start(terminal, symbols.Generator), symbols.Fake, symbols.FakeFor))
         {
-            if (seed is null && earlier.TargetMethod.Name == "Seed")
-                seed = earlier;
-            receiver = earlier.Instance;
-        }
-
-        if (seed is null || seed.Arguments.FirstOrDefault()?.Value.ConstantValue is not { HasValue: true } || !AnalyzerSupport.IsStart(receiver, symbols.Fake, symbols.FakeFor))
             return;
+        }
 
         IOperation child = terminal;
         for (var parent = terminal.Parent; parent is not null; child = parent, parent = parent.Parent)
@@ -326,7 +321,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
 
     /// <summary>The generated type of the rule's generator and its members as the model describes them, or <see langword="null"/> when they can't be known (a custom model).</summary>
     private static (INamedTypeSymbol Type, List<MemberModel> Members)? GeneratedMembers(IInvocationOperation call, Symbols symbols) =>
-        call.TargetMethod.ContainingType.TypeArguments.FirstOrDefault() is INamedTypeSymbol type && !StartsFromCustomModel(call, symbols) && symbols.Describe(type) is { } members
+        call.TargetMethod.ContainingType.TypeArguments.FirstOrDefault() is INamedTypeSymbol type && FluentChain.Start(call, symbols.Generator) is not IObjectCreationOperation && symbols.Describe(type) is { } members
             ? (type, members)
             : null;
 
@@ -344,7 +339,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     /// <summary>PHONEY008: an earlier call in the same chain set the same member, and this one replaces it.</summary>
     private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
     {
-        if (EarlierInChain(call, symbols, earlier =>
+        if (FluentChain.Earlier(call, symbols.Generator).FirstOrDefault(earlier =>
                 RuleCatalog.OccupiesSlot(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path) is { } replaced)
         {
             // The replaced call goes along so the code fix can remove it.
@@ -362,34 +357,11 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         if (call.TargetMethod.TypeArguments.FirstOrDefault() is not { } type)
             return;
         var method = call.TargetMethod.Name;
-        if (EarlierInChain(call, symbols, earlier =>
+        if (FluentChain.Earlier(call, symbols.Generator).FirstOrDefault(earlier =>
                 earlier.TargetMethod.Name == method && earlier.TargetMethod.TypeArguments.FirstOrDefault() is { } previous && SymbolEqualityComparer.Default.Equals(previous, type)) is { } replaced)
         {
             context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, AnalyzerSupport.NameLocation(call), additionalLocations: new[] { replaced.Syntax.GetLocation() }, type.Name));
         }
-    }
-
-    /// <summary>The nearest generator call earlier in the same fluent chain (not in a variable the chain started from) that satisfies <paramref name="matches"/>.</summary>
-    private static IInvocationOperation? EarlierInChain(IInvocationOperation call, Symbols symbols, Func<IInvocationOperation, bool> matches)
-    {
-        var receiver = call.Instance;
-        while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, symbols.Generator))
-        {
-            if (matches(earlier))
-                return earlier;
-            receiver = earlier.Instance;
-        }
-
-        return null;
-    }
-
-    /// <summary>Whether the chain starts with <c>new ObjectGenerator&lt;T&gt;(model)</c>, whose members are whatever the model says.</summary>
-    private static bool StartsFromCustomModel(IInvocationOperation call, Symbols symbols)
-    {
-        var receiver = call.Instance;
-        while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, symbols.Generator))
-            receiver = earlier.Instance;
-        return receiver is IObjectCreationOperation;
     }
 
     /// <summary>The symbols of one compilation, with the members of each generated type described once.</summary>
