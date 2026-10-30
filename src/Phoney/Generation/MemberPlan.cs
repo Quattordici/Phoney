@@ -185,14 +185,14 @@ internal sealed class MemberPlan
     private static void CheckStrict(IReadOnlyList<FakeMember> members, SlotDecision?[] decisions, Policy[] policies, MemberPlanInputs inputs)
     {
         var uncovered = members
-            .Where((m, i) => decisions[i] is null && !policies[i].Unique && m.IsScalar && m.Constraints?.DefinesValue != true
-                && (m.Convention == ConventionKind.None || !inputs.NameConventions))
+            .Where((m, i) => StrictCoverage.LeavesUncovered(
+                m.IsScalar, m.Constraints?.DefinesValue == true, decisions[i] is not null || policies[i].Unique, inputs.NameConventions && m.Convention != ConventionKind.None))
             .Select(m => m.Name)
             .ToList();
         if (uncovered.Count > 0)
         {
             throw new InvalidOperationException(
-                $"Strict generator for {inputs.TypeName}: no rule or convention for {string.Join(", ", uncovered)}. Add .With(...) or .Ignore(...) for them.");
+                $"Strict generator for {inputs.TypeName}: no rule or convention for {string.Join(", ", uncovered)}. {StrictCoverage.Advice}.");
         }
     }
 

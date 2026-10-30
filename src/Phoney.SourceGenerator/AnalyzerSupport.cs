@@ -179,3 +179,36 @@ internal static class AnalyzerSupport
             ? access.Name.GetLocation()
             : call.Syntax.GetLocation();
 }
+
+/// <summary>
+/// Walks the fluent chain a generator call is in (<c>Fake.For&lt;T&gt;().Seed(1).With(…).Generate(5)</c>): the generator calls before and after it, and what
+/// the chain was started from. Every analyzer that reads a chain walks it here, so they agree on where a chain begins and ends.
+/// </summary>
+internal static class FluentChain
+{
+    /// <summary>The generator calls earlier in the chain (the receivers of <paramref name="call"/>), nearest first.</summary>
+    public static IEnumerable<IInvocationOperation> Earlier(IInvocationOperation call, INamedTypeSymbol generator)
+    {
+        var receiver = call.Instance;
+        while (receiver is IInvocationOperation earlier && AnalyzerSupport.IsDefinition(earlier.TargetMethod.ContainingType, generator))
+        {
+            yield return earlier;
+            receiver = earlier.Instance;
+        }
+    }
+
+    /// <summary>The generator calls later in the chain (made on the result of <paramref name="call"/>), nearest first.</summary>
+    public static IEnumerable<IInvocationOperation> Later(IInvocationOperation call, INamedTypeSymbol generator)
+    {
+        IOperation current = call;
+        while (current.Parent is IInvocationOperation later && later.Instance == current && AnalyzerSupport.IsDefinition(later.TargetMethod.ContainingType, generator))
+        {
+            yield return later;
+            current = later;
+        }
+    }
+
+    /// <summary>What the chain was started from: the receiver of its first generator call (see <see cref="AnalyzerSupport.IsStart"/>), or <see langword="null"/> for a static call.</summary>
+    public static IOperation? Start(IInvocationOperation call, INamedTypeSymbol generator) =>
+        Earlier(call, generator).LastOrDefault() is { } first ? first.Instance : call.Instance;
+}

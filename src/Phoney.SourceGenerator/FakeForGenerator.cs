@@ -264,7 +264,7 @@ internal static class Diagnostics
 
     public static readonly DiagnosticDescriptor StrictUncovered = new(
         "PHONEY004", "Strict generator leaves members without a value",
-        "Strict generator for '{0}' has no rule, convention or annotation for: {1}. Add .With(...) or .Ignore(...) for them, or it throws when generating.",
+        "Strict generator for '{0}' has no rule, convention or annotation for: {1}. " + Phoney.Generation.StrictCoverage.Advice + ", or it throws when generating.",
         UsageCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor DiscardedResult = new(
