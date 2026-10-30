@@ -16,7 +16,6 @@ public sealed class FakeScope
     private int _member = -1;
     private readonly FakeScope? _parent;
     private readonly Type _type;
-    private Identity? _identity;
 
     internal FakeScope(Faker faker, GenerationSettings settings, RuleSlot?[]? slots, long index, Type type, FakeScope? parent = null, PathNode?[]? children = null)
     {
@@ -46,45 +45,13 @@ public sealed class FakeScope
     internal GenerationSettings Settings { get; }
 
     /// <summary>The person or place this object describes; shared by name, email, avatar, birthdate, age and address conventions.</summary>
-    internal Identity Identity
-    {
-        get
-        {
-            _identity ??= new Identity(Faker);
-            if (!_identity.IsSettled)
-                Settle(_identity);
-            return _identity;
-        }
-    }
-
-    /// <summary>The identity before its person is drawn: it collects what rules give and what populated objects keep.</summary>
-    private Identity Facts => _identity ??= new Identity(Faker);
-
-    /// <summary>
-    /// Settles the identity; an age, country or country code a constant rule gives is handed to it first, so the birthdate is drawn for that age and the
-    /// other country member matches even when it is declared first. A constant draws nothing, so taking it early moves no draws.
-    /// </summary>
-    private void Settle(Identity identity)
-    {
-        if (_slots is not null)
-        {
-            foreach (var slot in _slots)
-            {
-                if (slot is not { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode or GivenValue.BirthDate or GivenValue.Sex })
-                    continue;
-
-                identity.Give(slot.Gives, slot.Value);
-            }
-        }
-
-        identity.Settle();
-    }
+    internal Identity Identity => _facts.Identity(Faker, _slots);
 
     /// <summary>The object's creation time, drawn once (see <see cref="Timeline"/>); with causal timelines a nested object is created after its parent.</summary>
-    internal DateTimeOffset Created => _timeline.Created(Faker, Settings.CausalTimelines ? _parent : null, _slots);
+    internal DateTimeOffset Created => _facts.Created(Faker, Settings.CausalTimelines ? _parent : null, _slots);
 
     /// <summary>The creation time the object was given, or <see langword="null"/> when it is drawn.</summary>
-    internal DateTimeOffset? GivenCreated => _timeline.Given(_slots);
+    internal DateTimeOffset? GivenCreated => _facts.GivenCreated(_slots);
 
     /// <summary>The later of two moments.</summary>
     internal static DateTimeOffset Later(DateTimeOffset first, DateTimeOffset second) => first > second ? first : second;
@@ -92,12 +59,12 @@ public sealed class FakeScope
     /// <summary>Whether a "created"-style member already received <see cref="Created"/>.</summary>
     internal bool CreatedClaimed
     {
-        get => _timeline.Claimed;
-        set => _timeline.Claimed = value;
+        get => _facts.CreatedClaimed;
+        set => _facts.CreatedClaimed = value;
     }
 
-    // A scope is allocated for every object, so its state is kept compact: the timeline is a struct, -1 for "no forced count".
-    private Timeline _timeline;
+    // A scope is allocated for every object, so its state is kept compact: what it is told about itself is a struct, -1 for "no forced count".
+    private ObjectFacts _facts;
     private int _forcedCount = -1;
 
     /// <summary>
@@ -181,19 +148,10 @@ public sealed class FakeScope
     }
 
     /// <summary>
-    /// Tells the object's identity about a value that is kept as it is while populating (a set <c>FirstName</c>, birthdate or
-    /// sex/gender enum), so generated values that belong to the same person (email, username, age) agree with it.
-    /// Must be called before any value is generated.
+    /// Tells the object about a value that is kept as it is while populating (a set <c>FirstName</c>, birthdate, sex/gender enum or creation time), so generated
+    /// values that belong with it (email, username, age, later dates) agree (see <see cref="ObjectFacts.Adopt"/>). Must be called before any value is generated.
     /// </summary>
-    internal void Adopt(FakeMember member, object? value)
-    {
-        if (value is null)
-            return;
-        if (member.Convention == ConventionKind.PastDate)
-            _timeline.Give(value); // the object's own creation time: its updated and later dates are generated after it
-        else
-            Facts.Adopt(member, value);
-    }
+    internal void Adopt(FakeMember member, object? value) => _facts.Adopt(Faker, member, value);
 
     /// <summary>
     /// Populates an existing nested object through the model of its runtime type (so a <c>Circle</c> in an <c>IShape</c>
@@ -262,31 +220,10 @@ public sealed class FakeScope
             value = ProduceChecked(slot, fallback);
         if (slot.RecordsKeyPart)
             (_ledger ??= new()).RecordKeyPart(member, value);
-        if (slot.Gives == GivenValue.Created)
-            _timeline.Give(value);
-        else if (slot.Gives != GivenValue.None)
-        {
-            object? given = value; // boxed once for both
-            Facts.Give(slot.Gives, given);
-            DrawGiven(slot.Gives, given);
-        }
+        if (slot.Gives != GivenValue.None)
+            _facts.Give(Faker, _slots, slot.Gives, value);
 
         return value;
-    }
-
-    /// <summary>
-    /// Draws the sex or birthdate a rule just gave, where its member is, as the member's convention would have: the draw is part of the object's sequence either way,
-    /// and leaving it for whoever reads the person next would move everything generated in between. A value the identity can't use (a text for a sex) is not
-    /// taken in, so it doesn't draw either, and the object is as it was without the rule.
-    /// </summary>
-    private void DrawGiven(GivenValue given, object? value)
-    {
-        if (!Identity.CanGive(given, value))
-            return;
-        if (given == GivenValue.Sex)
-            _ = Identity;
-        else
-            _ = Identity.BirthDate;
     }
 
     /// <summary>Produces a value that has to be unique or satisfy a condition, drawing the member again until it does.</summary>
