@@ -22,8 +22,10 @@ internal struct ObjectFacts
             // even when it is declared first.
             foreach (var slot in slots ?? [])
             {
-                if (slot is { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode or GivenValue.BirthDate or GivenValue.Sex })
-                    identity.Give(slot.Gives, slot.Value);
+                if (slot is not { Kind: RuleKind.Constant, Gives: GivenValue.Age or GivenValue.Country or GivenValue.CountryCode or GivenValue.BirthDate or GivenValue.Sex })
+                    continue; // a loop, not Where: this runs for every object with an identity, so it allocates nothing
+
+                identity.Give(slot.Gives, slot.Value);
             }
 
             identity.Settle();
