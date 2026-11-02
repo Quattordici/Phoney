@@ -7,7 +7,7 @@ namespace Phoney.Tests;
 public sealed class RegistrationsTests
 {
     private static Registrations Empty() =>
-        new(ImmutableList<CustomConvention>.Empty, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty, ImmutableDictionary<Type, INestedGenerator>.Empty);
+        new(ImmutableList<CustomConvention>.Empty, ImmutableDictionary<Type, ImmutableArray<Type>>.Empty, ImmutableDictionary<Type, INestedGenerator>.Empty, GenerationDefaults.BuiltIn);
 
     [Test]
     public void A_snapshot_is_the_same_only_while_nothing_was_registered()
@@ -16,6 +16,7 @@ public sealed class RegistrationsTests
 
         snapshot.IsSameAs(snapshot with { }).ShouldBeTrue();
         snapshot.IsSameAs(snapshot with { Subtypes = snapshot.Subtypes.Add(typeof(IDisposable), [typeof(MemoryStream)]) }).ShouldBeFalse();
+        snapshot.IsSameAs(snapshot with { Defaults = snapshot.Defaults with { MaxDepth = 2 } }).ShouldBeFalse();
     }
 
     [Test]

@@ -39,6 +39,9 @@ A default chosen from a member's name or type (`Email`, `City`, `CreatedAt`, eve
 **Annotation**:
 A data annotation (`[Range]`, `[StringLength]`, …) on a member. It constrains whatever value was chosen and tells Phoney how to make that member invalid or hit its boundary.
 
+**Defaults**:
+App-wide values for generation settings (`Fake.Defaults`: null probability, collection size, depth, strict mode, back-references…). They fill only what no Generator, type-wide generator or option set.
+
 ### Reproducibility
 
 **Seed**:

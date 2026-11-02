@@ -48,7 +48,7 @@ public sealed class ArgumentGenerator
             null,
             null,
             default,
-            GenerationSettings.Default with
+            registrations.Defaults.ApplyTo(GenerationSettings.Default) with
             {
                 Subtypes = registrations.Subtypes,
                 Conventions = NestedConventions.For(registrations.Conventions),
