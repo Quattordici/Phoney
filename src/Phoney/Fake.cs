@@ -143,7 +143,37 @@ public static partial class Fake
     public static Faker Keyed(string key) => Faker.Keyed(key);
 
     /// <summary>
-    /// A <see cref="Seeded"/> or <see cref="Fork"/> scope: its faker is the facade's while it is the innermost open scope of the async flow. Disposing it goes back to the
+    /// Ties the facade of the current async flow to <paramref name="key"/> until the returned scope is disposed, like <see cref="Seeded"/> does to a seed:
+    /// <c>Fake.*</c> values come from <see cref="Keyed"/>'s faker for the key, and every type's objects are the key's own. <c>Fake.One&lt;Customer&gt;()</c>
+    /// is <c>Fake.For&lt;Customer&gt;().GenerateFor(key)</c>, the stand-in <see cref="ObjectGenerator{T}.Pseudonymize(T, Func{T, string})"/> gives, so it is the
+    /// same customer every time it is asked for, and <c>Fake.Many&lt;Order&gt;(3)</c> are the key's first three orders
+    /// (<see cref="ObjectGenerator{T}.Keyed"/>).
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// using (Fake.ForKey("customer:42"))
+    /// {
+    ///     var customer = Fake.One&lt;Customer&gt;();   // customer 42's stand-in, in every run, process and machine
+    ///     var orders = Fake.Many&lt;Order&gt;(3);       // and its orders
+    /// }
+    /// </code>
+    /// </example>
+    /// <remarks>
+    /// Scopes nest with <see cref="Seeded"/> and <see cref="Fork"/>, and the innermost one decides: a fork inside a keyed scope forks the keyed values, and
+    /// its objects follow the fork's seed. A generator's own <see cref="ObjectGenerator{T}.Seed"/> is mixed into the key, and a type with a
+    /// <see cref="ObjectGenerator{T}.Unique{TValue}"/> rule can't be generated in the scope. The mapping is reproducible, not secret, as for <see cref="Keyed"/>.
+    /// </remarks>
+    /// <param name="key">The key, e.g. <c>"customer:42"</c> or a keyed hash of a real value.</param>
+    /// <param name="locale">Locale for the scope; defaults to <see cref="Locale"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    public static IDisposable ForKey(string key, string? locale = null)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return Scope.Open(new Faker(locale ?? s_locale) { TimeProvider = TimeProvider }.Keyed(key), key);
+    }
+
+    /// <summary>
+    /// A <see cref="Seeded"/>, <see cref="Fork"/> or <see cref="ForKey"/> scope: its faker is the facade's while it is the innermost open scope of the async flow. Disposing it goes back to the
     /// nearest enclosing scope that is still open, so scopes disposed out of order never bring back one that has ended, and an outer scope disposed too early leaves
     /// the inner one in charge until that one ends too.
     /// </summary>
@@ -152,10 +182,13 @@ public static partial class Fake
         private readonly Scope? _outer;
         private volatile bool _disposed;
 
-        private Scope(Faker faker, Scope? outer) => (ScopedFaker, _outer) = (faker, outer);
+        private Scope(Faker faker, string? key, Scope? outer) => (ScopedFaker, Key, _outer) = (faker, key, outer);
 
         /// <summary>The scope's faker.</summary>
         public Faker ScopedFaker { get; }
+
+        /// <summary>The key of a <see cref="ForKey"/> scope, whose generators are keyed with it; <see langword="null"/> for the others.</summary>
+        public string? Key { get; }
 
         /// <summary>
         /// The innermost scope of this async flow that is still open. A task started inside a scope keeps a copy of it, so the copy can be one its creator has
@@ -164,9 +197,9 @@ public static partial class Fake
         public static Scope? Current => OpenFrom(s_scoped.Value);
 
         /// <summary>Makes <paramref name="faker"/> the facade's faker of this async flow until the returned scope is disposed.</summary>
-        public static Scope Open(Faker faker)
+        public static Scope Open(Faker faker, string? key = null)
         {
-            var scope = new Scope(faker, Current);
+            var scope = new Scope(faker, key, Current);
             s_scoped.Value = scope;
             return scope;
         }

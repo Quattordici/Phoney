@@ -48,7 +48,7 @@ App-wide values for generation settings (`Fake.Defaults`: null probability, coll
 The number that fixes the values and dates a Faker or Generator produces.
 
 **Key**:
-A string that stands for a seed, giving stable stand-ins for real data (`Keyed("customer:42")`). Reproducible, not secret: anyone who knows the key can compute its stand-in.
+A string that stands for a seed, giving stable stand-ins for real data (`Keyed("customer:42")`). Reproducible, not secret: anyone who knows the key can compute its stand-in. A key is a seed source like a seed or a Fork: `Fake.ForKey` opens a scope with it, in which each type's objects are the key's own (the first is the stand-in).
 
 **Pseudonymize**:
 Replace real data with stand-ins derived from a Key, so the same real value always becomes the same fake one, in every table. The stand-in is pseudonymous, not anonymous: anyone who knows the Key can recompute it.
