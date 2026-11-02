@@ -578,6 +578,14 @@ The same key gives the same values in every run, process and machine, whatever w
 string name = Fake.Keyed("customer:42").Person.FullName();     // always the same name for customer 42
 Faker faker = new Faker("sv").Keyed(user.Email);                // from any faker
 Customer c = Fake.For<Customer>().GenerateFor("customer:42");   // the whole object for a key
+List<Order> orders = Fake.For<Order>().Keyed("customer:42").Generate(3);   // the key's own sequence; the first is GenerateFor's
+
+using (Fake.ForKey("customer:42"))                               // a scope, like Fake.Seeded and Fake.Fork
+{
+    Customer same = Fake.One<Customer>();                        // the same stand-in as GenerateFor, however often you ask
+    List<Order> his = Fake.Many<Order>(3);                       // the same as Keyed("customer:42").Generate(3)
+    string name = Fake.Person.FullName();                        // the same as Fake.Keyed("customer:42").Person.FullName()
+}
 
 List<Customer> masked = Fake.For<Customer>()
     .Ignore(x => x.Id)                                           // keep what isn't personal
@@ -587,7 +595,8 @@ List<Customer> masked = Fake.For<Customer>()
 - `Pseudonymize` reads the key, then regenerates every member that isn't ignored, so the stand-in's names, email, address and birthdate agree.
 - The key becomes a seed with `SeededRandom.KeySeed` (FNV-1a and SplitMix64, never the per-process `string.GetHashCode`), mixed with the generator's `Seed` when there is one; keyed dates are relative to `DefaultSeededReferenceDate`.
 - **Reproducible, not secret**: anyone who knows a key can compute its stand-in. When it must not lead back, key on a keyed hash with a secret kept out of the data (`HMACSHA256.HashData(secret, …)`).
-- `Unique` can't be combined with keys (a key that comes again must give the same object), and a keyed object is position 0 for `Sequence` and `Cycle`.
+- `Unique` can't be combined with keys (a key that comes again must give the same object), and a keyed object is position 0 for `Sequence` and `Cycle` (the ones after it in `Keyed(key).Generate(n)` count on from there).
+- `Fake.ForKey(key, locale)` nests with `Fake.Seeded` and `Fake.Fork`, and the innermost scope decides: a fork inside a keyed scope forks the keyed values and gives its objects seeded draws. A generator's own `Seed` is mixed into the key, a locale, date or clock it has of its own (`Fake.Generators.Configure`) wins, and a keyed generator can't be a nested generator.
 
 ### Data from CSV and JSON
 

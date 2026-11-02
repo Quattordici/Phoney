@@ -142,10 +142,13 @@ public static partial class Fake
 
     /// <summary>
     /// Applies the facade's seed, locale, reference date and clock to a new generator; a locale, date or clock the generator has of its own (from
-    /// <see cref="FakeGenerators.Configure{T}"/>) wins, the seed always comes from the facade.
+    /// <see cref="FakeGenerators.Configure{T}"/>) wins, the seed always comes from the facade. In a <see cref="ForKey"/> scope the generator is keyed instead
+    /// (<see cref="ObjectGenerator{T}.Keyed"/>), without a draw, so its objects are the ones <c>For&lt;T&gt;().GenerateFor(key)</c> starts with.
     /// </summary>
     private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator) =>
-        Facade() switch
+        Scope.Current is { Key: { } key } keyed
+            ? generator.UnderKeyedFacade(key, keyed.ScopedFaker.Locale, TimeProvider)
+            : Facade() switch
         {
             { NewSeed: { } seed } facade => generator.UnderSeededFacade(seed, facade.Reference, facade.LocaleCode!),
             { Clock: { } clock } => generator.UnderFacadeClock(clock),

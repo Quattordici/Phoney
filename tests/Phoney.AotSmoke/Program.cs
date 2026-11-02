@@ -79,6 +79,14 @@ if (Fake.ForGenerated<Address>().Generate().City != "Bergen" || Fakes.Person.See
     throw new InvalidOperationException("the configured generator was not used");
 Fake.Generators.Clear();
 
+// A keyed scope keys the facade's generators: an object is the key's GenerateFor stand-in, no reflection.
+var standIn = Fake.ForGenerated<Address>().GenerateFor("customer:42");
+using (Fake.ForKey("customer:42"))
+{
+    if (Fake.ForGenerated<Address>().Generate() != standIn || Fake.ForGenerated<Address>().Generate() != standIn)
+        throw new InvalidOperationException("the keyed scope did not give the key's stand-in");
+}
+
 // A seeded test run, as the [FakeSeed] attributes open one, reports how to replay a failure.
 string? replay = null;
 using (var run = FakeSeed.Begin(11, "[FakeSeed({0})]"))

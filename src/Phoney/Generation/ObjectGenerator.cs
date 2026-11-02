@@ -83,6 +83,25 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// </summary>
     public ObjectGenerator<T> Seed(long seed) => DeriveRun(_config with { Seed = seed });
 
+    /// <summary>
+    /// Ties the objects to <paramref name="key"/>: the first one is <see cref="GenerateFor"/>'s object for the key, and the ones after it continue the key's
+    /// own sequence, so <c>Keyed("customer:42").Generate(3)</c> is the same three objects in every run, process and machine. A <see cref="Seed"/> is mixed in,
+    /// as for <see cref="GenerateFor"/>, and dates are relative to <see cref="Faker.DefaultSeededReferenceDate"/> unless a <see cref="ReferenceDate"/> or
+    /// <see cref="TimeProvider"/> is set. Inside <see cref="Fake.ForKey"/> the facade's generators are keyed this way.
+    /// </summary>
+    /// <example><code>List&lt;Order&gt; orders = Fake.For&lt;Order&gt;().Keyed("customer:42").Generate(3);   // customer 42's orders, always the same</code></example>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    /// <remarks>A keyed generator can't have <see cref="Unique{TValue}"/> rules (generating throws), and can't be a nested generator.</remarks>
+    public ObjectGenerator<T> Keyed(string key) =>
+        DeriveRun(_config with { Key = key ?? throw new ArgumentNullException(nameof(key), "The key of a keyed generator can't be null.") });
+
+    /// <summary>The facade's key for a keyed facade scope: its locale and clock unless the generator has its own, never a seed.</summary>
+    internal ObjectGenerator<T> UnderKeyedFacade(string key, string locale, TimeProvider? clock)
+    {
+        var keyed = DeriveRun(_config with { Key = key, Locale = _config.Locale ?? Locales.Get(locale).Code });
+        return clock is null ? keyed : keyed.UnderFacadeClock(clock);
+    }
+
     /// <summary>Sets the point in time relative dates are computed from (default: now, or a fixed date when seeded).</summary>
     public ObjectGenerator<T> ReferenceDate(DateTimeOffset referenceDate) => DeriveRun(_config with { Clock = _config.Clock with { Date = referenceDate } });
 
@@ -1146,7 +1165,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         if (!_config.Unique.IsEmpty || !_config.UniqueKeys.IsEmpty)
         {
             throw new InvalidOperationException(
-                $"Unique can't be combined with GenerateFor or Pseudonymize on {typeof(T).Name}: a key that comes again must give the same object, "
+                $"Unique can't be combined with GenerateFor, Keyed or Pseudonymize on {typeof(T).Name}: a key that comes again must give the same object, "
                 + "which Unique would reject as a duplicate and replace. Remove the Unique rule; different keys already give different objects almost always.");
         }
 
@@ -1164,6 +1183,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         get
         {
+            if (_config.Key is not null)
+                return "is Keyed, so every object it made would be the key's first one. Key the generator you call Generate on, or use GenerateFor where the object is needed.";
             if (_config.Verify)
                 return "verifies its rules (VerifyRules), but a nested generator is never checked: it has no Generate call of its own. Call VerifyRules(false) on it and verify the generator you call Generate on.";
             if (_config.Rules.Values.Any(r => r.Positional))
@@ -1179,7 +1200,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         Start(parent.Faker.Random.Long(), parent.Faker).Create(0, parent);
 
     /// <summary>The base seed: the configured one, or one random seed per generator instance.</summary>
-    private long BaseSeed => _config.Seed ?? _state.RandomSeed;
+    private long BaseSeed => _config.Key is { } key ? KeyedSeed(key) : _config.Seed ?? _state.RandomSeed;
 
     /// <summary>Throws when <see cref="VerifyRules"/> is on and a graph-dependent rule has not applied to anything generated so far.</summary>
     private void VerifyUsage()
@@ -1253,8 +1274,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // pooled faker would be reseeded under them by later runs, silently changing seeded data (a nested run also needs its own while the parent's
         // is in use). The facade's per-call cost is in compiling rules, which Fresh() shares; keep a generator to avoid the faker too.
         var faker = new Faker(data, new SeededRandom(0) { Tape = parentFaker?.Random.Tape }); // a nested object's draws belong to the checked object's tape
-        _config.Clock.Apply(faker, parentFaker, _config.Seed is not null || stableDates);
-        return new Run(this, compiled, faker, seed ?? BaseSeed);
+        var keyed = _config.Key is not null && parentFaker is null;
+        _config.Clock.Apply(faker, parentFaker, _config.Seed is not null || stableDates || keyed);
+        return new Run(this, compiled, faker, seed ?? BaseSeed, keyed);
     }
 
     /// <summary>Binds the rules (by member name) to the model's member indices and validates them.</summary>
@@ -1362,7 +1384,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     }
 
     /// <summary>One generation run: a faker reused for every item, reseeded per item for order-independent results.</summary>
-    private sealed class Run(ObjectGenerator<T> generator, Compiled compiled, Faker faker, long seed)
+    private sealed class Run(ObjectGenerator<T> generator, Compiled compiled, Faker faker, long seed, bool keyed = false)
     {
         /// <summary>Creates item <paramref name="index"/> with its draws recorded on, or replayed from, <paramref name="tape"/>.</summary>
         public T CreateOnTape(long index, ChoiceTape tape)
@@ -1379,7 +1401,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         }
 
         /// <summary>Creates item <paramref name="index"/>; its seed depends only on the base seed and the index (and the attempt, when a condition rejects an object).</summary>
-        public T Create(long index, FakeScope? parent = null) => CreateFrom(index, parent, SeededRandom.DeriveSeed(seed, index));
+        public T Create(long index, FakeScope? parent = null) => CreateFrom(index, parent, ItemSeed(index));
+
+        /// <summary>
+        /// The seed of item <paramref name="index"/>. A keyed run's base seed is the key's item seed, which <see cref="GenerateFor"/> uses as is, so item 0 is
+        /// that object and the items after it are derived from it like any sequence.
+        /// </summary>
+        private long ItemSeed(long index) => keyed && index == 0 ? seed : SeededRandom.DeriveSeed(seed, index);
 
         /// <summary>Creates an object from <paramref name="itemSeed"/> (and attempts derived from it), as item <paramref name="index"/>.</summary>
         public T CreateFrom(long index, FakeScope? parent, long itemSeed)
@@ -1455,7 +1483,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         }
 
         /// <summary>Populates <paramref name="instance"/> as item <paramref name="index"/> of the sequence.</summary>
-        public T Populate(T instance, long index, PopulateMode mode) => PopulateFrom(instance, index, mode, SeededRandom.DeriveSeed(seed, index));
+        public T Populate(T instance, long index, PopulateMode mode) => PopulateFrom(instance, index, mode, ItemSeed(index));
 
         /// <summary>Populates <paramref name="instance"/> from <paramref name="itemSeed"/> (and attempts derived from it), as item <paramref name="index"/>.</summary>
         public T PopulateFrom(T instance, long index, PopulateMode mode, long itemSeed)
@@ -1635,7 +1663,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         bool Verify,
         ImmutableList<ParentKey> ParentKeys,
         FeedSettings? Feed,
-        GenerationSettings Settings)
+        GenerationSettings Settings,
+        string? Key = null)
     {
 #pragma warning disable S2743 // one default configuration per T is intended
         public static readonly Config Default = new(

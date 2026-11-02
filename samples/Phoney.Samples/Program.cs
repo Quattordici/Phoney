@@ -141,6 +141,8 @@ using (Fake.Seeded(7))
 }
 
 Console.WriteLine($"customer:42 is always {Fake.Keyed("customer:42").Person.FullName()}");
+using (Fake.ForKey("customer:42"))                // a keyed scope: objects are the key's stand-ins
+    Console.WriteLine($"customer:42's email is always {Fake.One<Customer>().Email}");
 var real = new List<Customer> { new() { Id = 1, Email = "anna@example.com" }, new() { Id = 2, Email = "anna@example.com" } };
 foreach (var masked in Fake.For<Customer>().Seed(99).Ignore(c => c.Id).Pseudonymize(real, c => c.Email))
     Console.WriteLine($"  #{masked.Id}: {masked.FirstName} {masked.LastName} <{masked.Email}>");   // the same stand-in for the same person
