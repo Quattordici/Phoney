@@ -18,13 +18,14 @@ public sealed class PhoneyBuilder
 
     /// <summary>
     /// Registers a singleton <see cref="ObjectGenerator{T}"/> (generators are immutable and thread-safe) with the locale, seed
-    /// and clock of <see cref="PhoneyOptions"/>, then <paramref name="configure"/> applied:
+    /// and clock of <see cref="PhoneyOptions"/>, then the type-wide configuration of <c>Fake.Generators.Configure&lt;T&gt;</c> (whose locale and date win
+    /// over the options), then <paramref name="configure"/> applied:
     /// <c>.AddGenerator&lt;Customer&gt;(g =&gt; g.With(c =&gt; c.Country, "SE"))</c>.
     /// </summary>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
     public PhoneyBuilder AddGenerator<T>(Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure = null) =>
-        Register(() => new ObjectGenerator<T>(ModelRegistry.For<T>()), configure);
+        Register(() => new ObjectGenerator<T>(ModelRegistry.For<T>()), configure, typeWide: true);
 
     /// <summary>
     /// Registers a singleton generator built from <paramref name="generator"/>, typically a source-generated one
@@ -33,15 +34,17 @@ public sealed class PhoneyBuilder
     public PhoneyBuilder AddGenerator<T>(ObjectGenerator<T> generator, Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(generator);
-        return Register(() => generator, configure);
+        return Register(() => generator, configure, typeWide: false);
     }
 
-    private PhoneyBuilder Register<T>(Func<ObjectGenerator<T>> create, Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure)
+    private PhoneyBuilder Register<T>(Func<ObjectGenerator<T>> create, Func<ObjectGenerator<T>, ObjectGenerator<T>>? configure, bool typeWide)
     {
         Services.RemoveAll<ObjectGenerator<T>>();
         Services.AddSingleton(sp =>
         {
             var generator = ((FakerFactory)sp.GetRequiredService<IFakerFactory>()).Apply(create());
+            if (typeWide)
+                generator = Fake.Generators.Apply(generator); // Fake.Generators.Configure<T> comes after the options and before this registration's own configure
             return configure is null ? generator : configure(generator) ?? throw new InvalidOperationException($"The configure delegate for ObjectGenerator<{typeof(T).Name}> returned null; return the configured generator.");
         });
         return this;

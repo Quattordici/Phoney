@@ -18,7 +18,7 @@ _Avoid_: category, provider
 The static facade over a per-thread Faker. It is the entry point most users type, not a separate concept.
 
 **Generator**:
-Produces whole objects of one type (an `ObjectGenerator<T>`) and is immutable: every change returns a new Generator. Used inside another Generator it is either a **member generator** (given to one member) or a **type-wide generator** (given for every object of a type).
+Produces whole objects of one type (an `ObjectGenerator<T>`) and is immutable: every change returns a new Generator. Used inside another Generator it is either a **member generator** (given to one member) or a **type-wide generator** (given for every object of a type). `Fake.Generators.Configure<T>` makes one app-wide that also makes the type's own objects (`Fake.One`, `Fake.Many`, `Fake.Populate`), its test parameters and its DI generator.
 _Avoid_: builder, factory
 
 ### What decides a value

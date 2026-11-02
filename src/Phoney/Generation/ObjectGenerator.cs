@@ -53,6 +53,24 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>A copy with fresh per-instance state (positions, random base seed) that reuses the rules this generator already compiled.</summary>
     internal ObjectGenerator<T> Fresh() => new(_model, _config, new State(CompiledIsShareable ? _state : null));
 
+    /// <summary>The seed set with <see cref="Seed"/>, or <see langword="null"/>.</summary>
+    internal long? ConfiguredSeed => _config.Seed;
+
+    /// <summary>
+    /// The facade's settings for a seeded facade: its seed always, its locale and reference date only where the generator has none of its own (a type-wide
+    /// generator's <see cref="Locale"/> and <see cref="ReferenceDate"/> win, as they do for nested objects).
+    /// </summary>
+    internal ObjectGenerator<T> UnderSeededFacade(long seed, DateTimeOffset referenceDate, string locale) =>
+        DeriveRun(_config with
+        {
+            Seed = seed,
+            Locale = _config.Locale ?? Locales.Get(locale).Code,
+            Clock = _config.Clock.IsSet ? _config.Clock : _config.Clock with { Date = referenceDate },
+        });
+
+    /// <summary>The facade's clock for an unseeded facade, unless the generator has a date or clock of its own.</summary>
+    internal ObjectGenerator<T> UnderFacadeClock(TimeProvider clock) => _config.Clock.IsSet ? this : TimeProvider(clock);
+
     /// <summary>Like <see cref="Derive"/> for settings the compiled rules don't depend on (seed, locale, dates).</summary>
     private ObjectGenerator<T> DeriveRun(Config config) => new(_model, config, new State(CompiledIsShareable ? _state : null));
 

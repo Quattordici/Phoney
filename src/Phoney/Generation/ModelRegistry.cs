@@ -50,6 +50,27 @@ public static class ModelRegistry
     }
 
     /// <summary>
+    /// The typed model a type-wide generator configured with <see cref="FakeGenerators.Configure{T}"/> runs against when it creates nested objects:
+    /// the source-generated one when registered, else a reflection model where dynamic code is available, like <see cref="Get"/> for untyped nested objects.
+    /// </summary>
+    internal static FakeModel<T> Nested<T>()
+    {
+        if (Models.TryGetValue(typeof(T), out var model) && model is FakeModel<T> typed)
+            return typed;
+        if (!RuntimeFeature.IsDynamicCodeSupported)
+        {
+            throw new InvalidOperationException(
+                $"No source-generated model for '{typeof(T).FullName}'. In trimmed or Native AOT apps every generated type needs [FakeFor<{typeof(T).Name}>].");
+        }
+
+        return ReflectionFor<T>();
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Only reached when dynamic code is supported (checked by the caller); AOT apps use generated models.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Only reached when dynamic code is supported (checked by the caller); AOT apps use generated models.")]
+    private static FakeModel<T> ReflectionFor<T>() => For<T>();
+
+    /// <summary>
     /// Records the subtypes an interface or abstract class lists with <c>[JsonDerivedType]</c>, so they are its default
     /// subtypes without reflection (called by source-generated code).
     /// </summary>

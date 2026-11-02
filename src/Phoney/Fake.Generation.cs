@@ -114,7 +114,7 @@ public static partial class Fake
     /// var safe = Fake.ForGenerated&lt;Order&gt;().Populate(new Order { CustomerId = 42 }); // AOT safe</code></example>
     public static ObjectGenerator<T> ForGenerated<T>() => Configured(Plain<T>.Get(ModelRegistry.Generated<T>()));
 
-    /// <summary>A new unconfigured generator per call that reuses the rules compiled for the type while the model and the app-wide registrations stay the same.</summary>
+    /// <summary>A new generator per call, configured by <see cref="FakeGenerators.Configure{T}"/> when the type has a configuration, that reuses the rules compiled for the type while the model and the app-wide registrations stay the same.</summary>
     private static class Plain<T>
     {
         private sealed record Entry(FakeModel<T> Model, Registrations Registrations, ObjectGenerator<T> Prototype);
@@ -129,7 +129,7 @@ public static partial class Fake
             var entry = Volatile.Read(ref s_entry);
             if (entry is null || !ReferenceEquals(entry.Model, model) || !entry.Registrations.IsSameAs(registrations))
             {
-                entry = new Entry(model, registrations, new ObjectGenerator<T>(model));
+                entry = new Entry(model, registrations, TypeConfiguration<T>.Apply(registrations, new ObjectGenerator<T>(model)));
                 Volatile.Write(ref s_entry, entry);
             }
 
@@ -137,12 +137,15 @@ public static partial class Fake
         }
     }
 
-    /// <summary>Applies the facade's seed, locale, reference date and clock to a new generator.</summary>
+    /// <summary>
+    /// Applies the facade's seed, locale, reference date and clock to a new generator; a locale, date or clock the generator has of its own (from
+    /// <see cref="FakeGenerators.Configure{T}"/>) wins, the seed always comes from the facade.
+    /// </summary>
     private static ObjectGenerator<T> Configured<T>(ObjectGenerator<T> generator) =>
         Facade() switch
         {
-            { NewSeed: { } seed } facade => generator.Seed(seed).ReferenceDate(facade.Reference).Locale(facade.LocaleCode!),
-            { Clock: { } clock } => generator.TimeProvider(clock),
+            { NewSeed: { } seed } facade => generator.UnderSeededFacade(seed, facade.Reference, facade.LocaleCode!),
+            { Clock: { } clock } => generator.UnderFacadeClock(clock),
             _ => generator,
         };
 

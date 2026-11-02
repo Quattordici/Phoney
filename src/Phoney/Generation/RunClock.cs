@@ -8,6 +8,9 @@ namespace Phoney.Generation;
 /// <param name="Clock">The clock "now" is read from when there is no explicit date.</param>
 internal readonly record struct RunClock(DateTimeOffset? Date, TimeProvider? Clock)
 {
+    /// <summary>Whether the generator was given a date or a clock of its own, which then wins over the facade's.</summary>
+    public bool IsSet => Date is not null || Clock is not null;
+
     /// <summary>
     /// Sets <paramref name="faker"/> up: the explicit date; else the clock; else the date of <paramref name="parent"/> (a nested generator);
     /// else, when <paramref name="seeded"/>, <see cref="Faker.DefaultSeededReferenceDate"/> so relative dates don't drift with the clock; else nothing,
