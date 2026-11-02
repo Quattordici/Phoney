@@ -327,6 +327,15 @@ var customers = Fake.For<Customer>()
 - **Order**: constructor arguments, then members (base class first; fields, then properties, in declaration order; read-only collections last), then rules that depend on the object (in the order added), then `AfterCreate` actions. `CreateWith(f => new Customer(...))` replaces construction.
 - **Optional constructor parameters** (`int priority = 3`) get generated values like any member. `WithParameterDefaults()` gives them the default their type declares instead, in nested objects too; a rule, path rule, feed, `Unique` or `Where` on the member still decides it. A default draws nothing, so the members after it get other values than without the option.
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation, so new members can't silently get meaningless data. The analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`; it can't see app-wide `Fake.Conventions`.
+- **App-wide defaults**: set a generation setting once for every generator, `Fake.One`/`Many`, nested objects and `[FakeData]`/`[FakeCheck]` parameters:
+
+  ```csharp
+  Fake.Defaults.Strict = true;            // at startup: a module initializer, an assembly-level test hook
+  Fake.Defaults.CollectionSize = (0, 5);
+  Fake.Defaults.BackReferences = true;    // also NullProbability, MaxDepth, CausalTimelines, ParameterDefaults, NameConventions; Reset()
+  ```
+
+  Anything more specific wins: a setting on the generator (`.CollectionSize(2, 2)`, also inside `Fake.Generators.Configure<T>`), `PhoneyOptions` in DI, and an attribute option you set. Like conventions they are read when a generator is first used, and they are process-wide. With nothing set, generated data is the same as before. PHONEY004 doesn't see `Fake.Defaults.Strict`.
 
 ### Values that agree
 
@@ -818,7 +827,7 @@ public async Task Places_order(Customer customer, string email, [Range(1, 10)] i
 ```
 
 - Parameters are filled by name and type, objects and collections recursively, data annotations are honoured, and the parameters of one test case agree like the members of one object: `firstName`, `email`, `birthDate` and `age` describe one person, `street`, `city` and `zipCode` one address.
-- **Reproducible by default**: the seed is derived from the test's class, method and parameters, so every run and machine gets the same values and test names. Options: `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`.
+- **Reproducible by default**: the seed is derived from the test's class, method and parameters, so every run and machine gets the same values and test names. Options: `Count`, `Seed`, `Locale`, `NullProbability` and `ReferenceDate`; options you don't set come from `Fake.Defaults` and `Fake.Locale`.
 - **`PHONEY_SEED=123 dotnet test`** moves the seed of every `[FakeData]` test at once, to run the suite on other data; the same value replays it, and an explicit `Seed` stays as it is.
 - Interface and abstract parameters get a subtype from `Fake.Subtypes` or `[JsonDerivedType]`. Test data is created while the framework discovers tests, so register conventions and subtypes before that: in a module initializer, or in TUnit a `[Before(TestDiscovery)]` hook.
 - xUnit, NUnit and MSTest fill method parameters; TUnit also fills constructor parameters and `required` properties.

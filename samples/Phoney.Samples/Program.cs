@@ -80,6 +80,11 @@ Fake.Generators.Configure<Circle>(g => g.With(c => c.Radius, 5));
 Console.WriteLine($"{Fake.One<Circle>()}, {Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle>().Generate().Shape}");
 Fake.Generators.Remove<Circle>();
 
+// App-wide defaults: every generator from here on makes 2 elements per collection, unless it says otherwise.
+Fake.Defaults.CollectionSize = (2, 2);
+Console.WriteLine($"{Fake.One<List<int>>().Count} elements");
+Fake.Defaults.Reset();
+
 // 7b. Invalid and boundary data, from the data annotations ------------------------------------
 Console.WriteLine("\n== Invalid and boundary data");
 foreach (var c in Fake.For<Registration>().Seed(1).InvalidCases())

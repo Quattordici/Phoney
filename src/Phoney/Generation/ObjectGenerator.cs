@@ -532,10 +532,10 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// that define its value (<c>[EmailAddress]</c>, <c>[Range]</c>, <c>[RegularExpression]</c>, <c>[AllowedValues]</c>), so new
     /// members can't silently get meaningless data. Objects and collections are populated recursively and don't count.
     /// </summary>
-    public ObjectGenerator<T> Strict(bool strict = true) => Derive(_config with { Strict = strict });
+    public ObjectGenerator<T> Strict(bool strict = true) => Override(o => o with { Strict = strict });
 
     /// <summary>Turns name conventions off: members get values based on their type only.</summary>
-    public ObjectGenerator<T> WithNameConventions(bool useConventions = true) => Derive(_config with { Settings = _config.Settings with { WithNameConventions = useConventions } });
+    public ObjectGenerator<T> WithNameConventions(bool useConventions = true) => Override(o => o with { NameConventions = useConventions });
 
     /// <summary>
     /// Makes the dates of a graph tell one story: a nested object (an order of a customer, a line of an order) is created between the creation of the object
@@ -548,7 +548,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// convention sets it when that member is produced before the nested object. Objects of a nested generator (<c>WithGeneratorFor</c>, <c>With</c>) follow that generator's setting.
     /// </remarks>
     /// <param name="enabled"><see langword="false"/> turns it off again.</param>
-    public ObjectGenerator<T> WithCausalTimelines(bool enabled = true) => Derive(_config with { Settings = _config.Settings with { CausalTimelines = enabled } });
+    public ObjectGenerator<T> WithCausalTimelines(bool enabled = true) => Override(o => o with { CausalTimelines = enabled });
 
     /// <summary>
     /// Gives optional constructor parameters (<c>int priority = 3</c>) the default their type declares instead of a generated value, in this object and in
@@ -559,14 +559,14 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// Objects of a nested generator (<c>WithGeneratorFor</c>, <c>With</c>) follow that generator's setting.
     /// </remarks>
     /// <param name="enabled"><see langword="false"/> turns it off again.</param>
-    public ObjectGenerator<T> WithParameterDefaults(bool enabled = true) => Derive(_config with { Settings = _config.Settings with { ParameterDefaults = enabled } });
+    public ObjectGenerator<T> WithParameterDefaults(bool enabled = true) => Override(o => o with { ParameterDefaults = enabled });
 
     /// <summary>Probability (0–1) that nullable members (<c>int?</c>, <c>string?</c>…) are left <see langword="null"/>. Default 0.</summary>
     public ObjectGenerator<T> NullProbability(double probability)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(probability);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(probability, 1);
-        return Derive(_config with { Settings = _config.Settings with { NullProbability = probability } });
+        return Override(o => o with { NullProbability = probability });
     }
 
     /// <summary>Sets how many elements generated collections get. Default 1–3.</summary>
@@ -574,14 +574,14 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     {
         ArgumentOutOfRangeException.ThrowIfNegative(min);
         ArgumentOutOfRangeException.ThrowIfLessThan(max, min);
-        return Derive(_config with { Settings = _config.Settings with { MinCollectionSize = min, MaxCollectionSize = max } });
+        return Override(o => o with { MinCollectionSize = min, MaxCollectionSize = max });
     }
 
     /// <summary>Sets how deep nested objects are generated (default 4); deeper members stay <see langword="null"/>.</summary>
     public ObjectGenerator<T> MaxDepth(int depth)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(depth);
-        return Derive(_config with { Settings = _config.Settings with { MaxDepth = depth } });
+        return Override(o => o with { MaxDepth = depth });
     }
 
     /// <summary>
@@ -744,7 +744,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// </para>
     /// </remarks>
     /// <param name="enabled"><see langword="false"/> turns it off again.</param>
-    public ObjectGenerator<T> WithBackReferences(bool enabled = true) => Derive(_config with { BackReferences = enabled });
+    public ObjectGenerator<T> WithBackReferences(bool enabled = true) => Override(o => o with { BackReferences = enabled });
 
     /// <summary>
     /// Copies a key of the generated object to a foreign key in the objects below it, so a generated aggregate joins up:
@@ -1195,6 +1195,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             + "Remove the rule or change what is generated; VerifyRules(false) turns this check off.");
     }
 
+    /// <summary>A new generator with a setting of its own, which wins over <see cref="Fake.Defaults"/>.</summary>
+    private ObjectGenerator<T> Override(Func<SettingOverrides, SettingOverrides> change) => Derive(_config with { Overrides = change(_config.Overrides) });
+
     /// <summary>A new generator with <paramref name="config"/> and fresh state.</summary>
     private ObjectGenerator<T> Derive(Config config) => new(_model, config);
 
@@ -1269,31 +1272,32 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var unique = UniqueAttempts(known);
         var feed = _config.Feed is { } feedSettings ? FeedSource.Decisions(typeof(T).Name, feedSettings, BaseSeed, members, rules) : null;
         var conventions = registrations.ConventionsWith(_config.Conventions);
+        var resolved = registrations.Defaults.With(_config.Overrides);
         var plan = MemberPlan.Build(members, new MemberPlanInputs
         {
             Rules = rules,
             Feed = feed,
             Unique = unique,
-            ParameterDefaults = _config.Settings.ParameterDefaults,
+            ParameterDefaults = resolved.ParameterDefaults,
             Conventions = conventions,
             Usage = usage,
             Conditions = _config.MemberFilters,
             UniqueKeys = _config.UniqueKeys,
-            Strict = _config.Strict,
-            NameConventions = _config.Settings.WithNameConventions,
+            Strict = resolved.Strict,
+            NameConventions = resolved.NameConventions,
             CreatesWithFactory = _config.Factory is not null,
             TypeName = typeof(T).Name,
         });
 
         // Subtypes and custom conventions apply to the whole object graph, so they travel with the settings into nested scopes.
-        var settings = _config.Settings with
+        var settings = resolved.ApplyTo(_config.Settings) with
         {
             Subtypes = registrations.SubtypesWith(_config.Subtypes),
-            Conventions = NestedConventions.For(conventions, usage, _config.Settings.ParameterDefaults),
+            Conventions = NestedConventions.For(conventions, usage, resolved.ParameterDefaults),
             TypeGenerators = registrations.GeneratorsWith(_config.TypeGenerators),
             Usage = usage,
         };
-        return new Compiled(plan.Slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, plan.ObjectRetries, plan.Combinations, registrations);
+        return new Compiled(plan.Slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, plan.ObjectRetries, plan.Combinations, registrations, resolved.BackReferences);
     }
 
     /// <summary>The explicit rules by member index, in the order they were added; the rules that depend on the object are also collected in <paramref name="dependent"/>.</summary>
@@ -1522,7 +1526,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
             if (compare)
                 item = Comparisons.Apply(model, item, scope);
-            if (config.BackReferences && item is not null)
+            if (compiled.BackReferences && item is not null)
                 Phoney.Generation.BackReferences.Apply(item);
             if (!config.ParentKeys.IsEmpty && item is not null)
                 Phoney.Generation.ParentKeys.Apply(item, config.ParentKeys);
@@ -1563,7 +1567,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// Rules bound to member indices, plus rules that run after creation; <paramref name="ObjectRetries"/> is the attempt limit of unique identity members and
     /// <paramref name="Combinations"/> (0 when there are none).
     /// </summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations);
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations, bool BackReferences);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false);
@@ -1627,9 +1631,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         ImmutableList<Filter> Filters,
         ImmutableDictionary<string, MemberCondition> MemberFilters,
         Func<Faker, T>? Factory,
-        bool Strict,
+        SettingOverrides Overrides,
         bool Verify,
-        bool BackReferences,
         ImmutableList<ParentKey> ParentKeys,
         FeedSettings? Feed,
         GenerationSettings Settings)
@@ -1649,8 +1652,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             [],
             ImmutableDictionary.Create<string, MemberCondition>(StringComparer.Ordinal),
             null,
-            false,
-            false,
+            default,
             false,
             [],
             null,

@@ -9,7 +9,7 @@ namespace Phoney.Generation;
 /// </summary>
 public abstract class FakeArgumentOptions
 {
-    private double _nullProbability;
+    private double? _nullProbability;
     private string? _referenceDateText;
     private DateTimeOffset? _referenceDate;
 
@@ -20,11 +20,15 @@ public abstract class FakeArgumentOptions
     /// <summary>Locale of the data, e.g. <c>sv</c> or <c>de-AT</c>. Default: <see cref="Fake.Locale"/>.</summary>
     public string? Locale { get; set; }
 
-    /// <summary>Probability (0–1) that nullable parameters (<c>string?</c>, <c>int?</c>…) are <see langword="null"/>. Default 0.</summary>
+    /// <summary>Probability (0–1) that nullable parameters (<c>string?</c>, <c>int?</c>…) are <see langword="null"/>. Default: <see cref="FakeDefaults.NullProbability"/> (0).</summary>
     public double NullProbability
     {
-        get => _nullProbability;
-        set => _nullProbability = value is >= 0 and <= 1 ? value : throw new ArgumentOutOfRangeException(nameof(NullProbability), value, "Must be between 0 and 1.");
+        get => _nullProbability ?? FakeDefaults.Current.NullProbability;
+        set
+        {
+            GenerationDefaults.CheckNullProbability(value, nameof(NullProbability));
+            _nullProbability = value;
+        }
     }
 
     /// <summary>The point in time relative dates are computed from, in ISO 8601 (<c>2030-01-01</c>, UTC unless it has an offset). Default: <see cref="Faker.DefaultSeededReferenceDate"/>.</summary>
@@ -49,7 +53,8 @@ public abstract class FakeArgumentOptions
     [RequiresDynamicCode("Populates arguments with reflection.")]
     private protected ArgumentGenerator Configure(ArgumentGenerator generator)
     {
-        generator = generator.NullProbability(NullProbability);
+        if (_nullProbability is { } probability)
+            generator = generator.NullProbability(probability); // otherwise the generator has Fake.Defaults
         if (Locale is { } locale)
             generator = generator.Locale(locale);
         if (_referenceDate is { } date)
