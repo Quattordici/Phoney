@@ -14,6 +14,8 @@
   <ItemGroup>
     <PackageReference Include="Shouldly" />
     <PackageReference Include="TUnit" />
+    <!-- The README's TimeProvider example (tests/Phoney.Tests/Docs) uses FakeTimeProvider. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
 
   <ItemGroup>
