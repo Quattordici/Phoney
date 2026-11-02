@@ -62,7 +62,8 @@ public sealed class FakeDefaults
         get => Current.MaxDepth;
         set
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(value, nameof(MaxDepth));
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(nameof(MaxDepth), value, "Must not be negative.");
             Update(d => d with { MaxDepth = value });
         }
     }

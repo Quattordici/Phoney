@@ -52,8 +52,10 @@ internal sealed record GenerationDefaults(
     /// <summary>Validates a collection size like <c>CollectionSize(min, max)</c> does.</summary>
     public static void CheckCollectionSize(int min, int max, string minName, string maxName)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(min, minName);
-        ArgumentOutOfRangeException.ThrowIfLessThan(max, min, maxName);
+        if (min < 0)
+            throw new ArgumentOutOfRangeException(minName, min, "The minimum must not be negative.");
+        if (max < min)
+            throw new ArgumentOutOfRangeException(maxName, max, $"The maximum must be at least the minimum, {min}.");
     }
 }
 
