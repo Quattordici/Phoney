@@ -52,12 +52,18 @@ public sealed class FakeSeedRun : IDisposable
         if (pinHint is not null && !pinHint.Contains("{0}", StringComparison.Ordinal))
             throw new ArgumentException($"The pin hint says how to pin a seed and must hold {{0}} where the seed goes, like \"[FakeSeed({{0}})]\", but was \"{pinHint}\".", nameof(pinHint));
 
-        var (seed, origin) = pinned is { } value ? (value, Origin.Pinned)
-            : FakeSeed.FromEnvironment() is { } environment ? (environment, Origin.Environment)
-            : (FakeSeed.New(), Origin.Random);
+        var (seed, origin) = Choose(pinned);
         var run = new FakeSeedRun(seed, origin, pinHint, Current);
         s_current.Value = run;
         return run;
+    }
+
+    /// <summary>The pinned seed, else <c>PHONEY_SEED</c>, else a new random one, with where it came from.</summary>
+    private static (long Seed, Origin Origin) Choose(long? pinned)
+    {
+        if (pinned is { } value)
+            return (value, Origin.Pinned);
+        return FakeSeed.FromEnvironment() is { } environment ? (environment, Origin.Environment) : (FakeSeed.New(), Origin.Random);
     }
 
     /// <summary>
