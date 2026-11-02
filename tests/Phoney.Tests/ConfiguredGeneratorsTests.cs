@@ -51,7 +51,9 @@ public sealed class ConfiguredGeneratorsTests
     public static IEnumerable<Func<(string EntryPoint, Func<Part> Make)>> EntryPoints()
     {
         yield return () => ("Fake.One", Fake.One<Part>);
+#pragma warning disable CA2263 // the Type overload is the entry point under test
         yield return () => ("Fake.One(Type)", () => (Part)Fake.One(typeof(Part)));
+#pragma warning restore CA2263
         yield return () => ("Fake.Many", () => Fake.Many<Part>(3)[2]);
         yield return () => ("Fake.Many(min, max)", () => Fake.Many<Part>(2, 4)[1]);
         yield return () => ("Fake.For", () => Fake.For<Part>().Generate());
