@@ -5,8 +5,8 @@ namespace Phoney;
 /// <summary>
 /// Seeds for tests that run on random data but must be replayable: a failing test reports its seed, and the seed brings the
 /// same data back. <see cref="Run"/> and <see cref="RunAsync"/> do it for any test framework: they pick a seed with
-/// <see cref="Pick"/>, run the test in <see cref="Fake.Seeded"/> and report the seed when the test fails (<c>Phoney.TUnit</c>'s <c>[FakeSeed]</c>
-/// does the same as an attribute).
+/// <see cref="Pick"/>, run the test in <see cref="Fake.Seeded"/> and report the seed when the test fails. The <c>[FakeSeed]</c> attribute of each
+/// test-framework package does the same around a whole test, class or assembly, through <see cref="Begin"/>.
 /// </summary>
 /// <example>
 /// <code>
@@ -50,6 +50,23 @@ public static class FakeSeed
 #pragma warning restore RS0030
 
     /// <summary>
+    /// Opens a seeded test run in this async flow: the <see cref="Fake"/> facade is seeded with <paramref name="seed"/>, else <c>PHONEY_SEED</c>, else a
+    /// new random seed, until the run is disposed, and <see cref="FakeSeedRun.Failed"/> says how to replay the test. The <c>[FakeSeed]</c> attributes of
+    /// the test-framework packages are built on it; use it to give another framework the same.
+    /// </summary>
+    /// <param name="seed">Pins the seed to replay a failure; it wins over <c>PHONEY_SEED</c>.</param>
+    /// <param name="pinHint">
+    /// How a test pins a seed in your framework, with <c>{0}</c> where the seed goes (<c>"[FakeSeed({0})]"</c>); the report of a random seed offers it next to
+    /// <c>PHONEY_SEED</c>. Without it the report names only <c>PHONEY_SEED</c>.
+    /// </param>
+    /// <returns>The run; dispose it when the test ends.</returns>
+    /// <exception cref="ArgumentException"><paramref name="pinHint"/> has no <c>{0}</c>.</exception>
+    /// <exception cref="FormatException"><paramref name="seed"/> is not supplied and <c>PHONEY_SEED</c> is set but is not a whole number (no run is opened).</exception>
+    public static FakeSeedRun Begin(long? seed = null, string? pinHint = null) => FakeSeedRun.Begin(seed, pinHint);
+
+    private const string RunPin = "FakeSeed.Run(..., seed: {0})";
+
+    /// <summary>
     /// Runs <paramref name="body"/> on a seeded <see cref="Fake"/> facade and, when it throws, gives <paramref name="report"/> a line with the seed and how
     /// to replay it before the exception is rethrown unchanged. The seed is <paramref name="seed"/>, else <c>PHONEY_SEED</c>, else a new random one.
     /// </summary>
@@ -60,6 +77,7 @@ public static class FakeSeed
     /// Every exception is reported, so a test that is skipped by throwing (as some frameworks do) is reported too. Only the facade of the
     /// body's own flow is seeded: generators created earlier or with their own <c>.Seed(...)</c> keep theirs.
     /// The previous facade scope is restored when the call ends. If <paramref name="report"/> throws, its exception replaces the body's exception.
+    /// It is a <see cref="Begin"/> run, so inside a <c>[FakeSeed]</c> test only the innermost of the two reports a failure.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="report"/> is <see langword="null"/>.</exception>
     /// <exception cref="FormatException"><paramref name="seed"/> is not supplied and <c>PHONEY_SEED</c> is set but is not a valid <see cref="long"/> (the body does not run).</exception>
@@ -67,15 +85,14 @@ public static class FakeSeed
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(report);
-        var (value, origin) = Choose(seed);
-        using var scope = Fake.Seeded(value);
+        using var run = Begin(seed, RunPin);
         try
         {
             body();
         }
         catch
         {
-            report(Describe(value, origin));
+            run.Failed(report);
             throw;
         }
     }
@@ -90,35 +107,15 @@ public static class FakeSeed
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(report);
-        var (value, origin) = Choose(seed);
-        using var scope = Fake.Seeded(value);
+        using var run = Begin(seed, RunPin);
         try
         {
             await body().ConfigureAwait(false);
         }
         catch
         {
-            report(Describe(value, origin));
+            run.Failed(report);
             throw;
         }
     }
-
-    private enum Origin { Random, Environment, Pinned }
-
-    /// <summary>Chooses the pinned seed, then the environment seed, then a new random seed, and returns its origin for the failure report.</summary>
-    /// <exception cref="FormatException">No seed is pinned and the environment seed is invalid.</exception>
-    private static (long Seed, Origin Origin) Choose(long? pinned)
-    {
-        if (pinned is { } seed)
-            return (seed, Origin.Pinned);
-        return FromEnvironment() is { } fromEnvironment ? (fromEnvironment, Origin.Environment) : (New(), Origin.Random);
-    }
-
-    /// <summary>Returns a failure message identifying the seed's origin and how to replay an unpinned seed.</summary>
-    private static string Describe(long seed, Origin origin) => origin switch
-    {
-        Origin.Pinned => $"Phoney: the failing run used the pinned seed {seed}.",
-        Origin.Environment => $"Phoney: the failing run used seed {seed} from {EnvironmentVariable}. Replay it with {EnvironmentVariable}={seed}.",
-        _ => $"Phoney: the failing run used random seed {seed}. Replay it with {EnvironmentVariable}={seed} or FakeSeed.Run(..., seed: {seed}).",
-    };
 }

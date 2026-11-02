@@ -55,14 +55,14 @@ public sealed class SeededRunTests
 {
     private static readonly Regex SeedInMessage = new(@"seed (\d+)", RegexOptions.None, TimeSpan.FromSeconds(5));
 
-    private static async Task<(List<string> Output, Exception? Failure, string SeenName)> Run(long? pinned, long? environment, Func<Exception?> body)
+    private static async Task<(List<string> Output, Exception? Failure, string SeenName)> Run(long? pinned, Func<Exception?> body)
     {
         var output = new List<string>();
         var seen = "";
         Exception? failure = null;
         try
         {
-            await SeededRun.Execute(pinned, environment, output.Add, () =>
+            await SeededRun.Execute(pinned, output.Add, () =>
             {
                 seen = Fake.Person.FirstName();
                 if (body() is { } exception)
@@ -81,7 +81,7 @@ public sealed class SeededRunTests
     [Test]
     public async Task A_passing_test_reports_nothing()
     {
-        var (output, failure, seen) = await Run(null, null, () => null);
+        var (output, failure, seen) = await Run(null, () => null);
 
         output.ShouldBeEmpty();
         failure.ShouldBeNull();
@@ -93,7 +93,7 @@ public sealed class SeededRunTests
     {
         var problem = new InvalidOperationException("boom");
 
-        var (output, failure, seen) = await Run(null, null, () => problem);
+        var (output, failure, seen) = await Run(null, () => problem);
 
         failure.ShouldBeSameAs(problem); // rethrown as it was, stack trace and type intact
         var message = output.ShouldHaveSingleItem();
@@ -108,7 +108,7 @@ public sealed class SeededRunTests
     {
         var seeds = new List<string>();
         for (var i = 0; i < 10; i++)
-            seeds.Add((await Run(null, null, () => new InvalidOperationException())).Output.Single());
+            seeds.Add((await Run(null, () => new InvalidOperationException())).Output.Single());
 
         seeds.Distinct().Count().ShouldBeGreaterThan(5);
     }
@@ -116,7 +116,7 @@ public sealed class SeededRunTests
     [Test]
     public async Task A_pinned_seed_is_used_and_named_as_pinned()
     {
-        var (output, _, seen) = await Run(42, null, () => new InvalidOperationException());
+        var (output, _, seen) = await Run(42, () => new InvalidOperationException());
 
         seen.ShouldBe(Seeds.FirstNameFor(42));
         var message = output.ShouldHaveSingleItem();
@@ -125,30 +125,11 @@ public sealed class SeededRunTests
     }
 
     [Test]
-    public async Task The_environment_seed_replaces_a_random_one_and_says_so()
-    {
-        var (output, _, seen) = await Run(null, 99, () => new InvalidOperationException());
-
-        seen.ShouldBe(Seeds.FirstNameFor(99));
-        var message = output.ShouldHaveSingleItem();
-        message.ShouldContain("seed 99 from PHONEY_SEED");
-        message.ShouldContain("PHONEY_SEED=99");
-    }
-
-    [Test]
-    public async Task A_pinned_seed_wins_over_the_environment()
-    {
-        var (_, _, seen) = await Run(42, 99, () => null);
-
-        seen.ShouldBe(Seeds.FirstNameFor(42));
-    }
-
-    [Test]
     public async Task A_skipped_test_reports_nothing_and_still_skips()
     {
         var skip = new SkipTestException("not today");
 
-        var (output, failure, _) = await Run(null, null, () => skip);
+        var (output, failure, _) = await Run(null, () => skip);
 
         output.ShouldBeEmpty();
         failure.ShouldBeSameAs(skip);
@@ -159,7 +140,7 @@ public sealed class SeededRunTests
     {
         var seededInside = false;
 
-        await SeededRun.Execute(5, null, _ => { }, () =>
+        await SeededRun.Execute(5, _ => { }, () =>
         {
             seededInside = Fake.IsSeeded;
             return ValueTask.CompletedTask;

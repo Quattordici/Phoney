@@ -24,10 +24,10 @@
 | Package | What it adds | |
 |---|---|---|
 | `Phoney` | fakers, generators, the source generator and the analyzers | [![NuGet](https://img.shields.io/nuget/v/Phoney.svg?label=)](https://www.nuget.org/packages/Phoney) |
-| `Phoney.MSTest` | [`[FakeData]` and `[FakeCheck]` for MSTest](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.MSTest.svg?label=)](https://www.nuget.org/packages/Phoney.MSTest) |
-| `Phoney.NUnit` | [`[FakeData]` and `[FakeCheck]` for NUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NUnit.svg?label=)](https://www.nuget.org/packages/Phoney.NUnit) |
+| `Phoney.MSTest` | [`[FakeData]`, `[FakeSeed]` and `[FakeCheck]` for MSTest](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.MSTest.svg?label=)](https://www.nuget.org/packages/Phoney.MSTest) |
+| `Phoney.NUnit` | [`[FakeData]`, `[FakeSeed]` and `[FakeCheck]` for NUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NUnit.svg?label=)](https://www.nuget.org/packages/Phoney.NUnit) |
 | `Phoney.TUnit` | [`[FakeData]`, `[FakeSeed]` and `[FakeCheck]` for TUnit](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.TUnit.svg?label=)](https://www.nuget.org/packages/Phoney.TUnit) |
-| `Phoney.Xunit` | [`[FakeData]` and `[FakeCheck]` for xUnit.net v3](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.Xunit.svg?label=)](https://www.nuget.org/packages/Phoney.Xunit) |
+| `Phoney.Xunit` | [`[FakeData]`, `[FakeSeed]` and `[FakeCheck]` for xUnit.net v3](#test-data-in-xunit-nunit-mstest-and-tunit) | [![NuGet](https://img.shields.io/nuget/v/Phoney.Xunit.svg?label=)](https://www.nuget.org/packages/Phoney.Xunit) |
 | `Phoney.DependencyInjection` | [`services.AddPhoney()`, `IFaker`, injectable generators](#dependency-injection-and-aspnet-core) | [![NuGet](https://img.shields.io/nuget/v/Phoney.DependencyInjection.svg?label=)](https://www.nuget.org/packages/Phoney.DependencyInjection) |
 | `Phoney.EntityFrameworkCore` | [`HasFakeData` seed data](#ef-core-seeding) | [![NuGet](https://img.shields.io/nuget/v/Phoney.EntityFrameworkCore.svg?label=)](https://www.nuget.org/packages/Phoney.EntityFrameworkCore) |
 | `Phoney.NodaTime` | [NodaTime values and members](#nodatime) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NodaTime.svg?label=)](https://www.nuget.org/packages/Phoney.NodaTime) |
@@ -857,12 +857,12 @@ public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =
 - Parameters are filled like `[FakeData]` fills them, but the rows are **new on every run**, so the suite explores more data over time; `[FakeCheck(Seed = 812734)]` or `PHONEY_SEED` replays a failure and its shrinking exactly.
 - Options: `Count` (default 100), `MaxShrinks` (default 1000, 0 reports the original row), `Seed`, `Locale`, `NullProbability` and `ReferenceDate`.
 - The framework lists one test and reports one result; the failure message names the failing row. Every exception a row throws fails it, so use the framework's assertions as usual (in NUnit, `Assert.Pass()` passes a row).
-- **Around each row**: TUnit and xUnit.net run the rows on one instance of the test class (TUnit inside the executor the test already has, `[TestExecutor<T>]`, and inside `[FakeSeed]`); NUnit runs them between one `[SetUp]` and `[TearDown]`; MSTest invokes each row as a full test (a new instance, `[TestInitialize]` and `[TestCleanup]`).
+- **Around each row**: TUnit and xUnit.net run the rows on one instance of the test class (TUnit inside the executor the test already has, `[TestExecutor<T>]`); NUnit runs them between one `[SetUp]` and `[TearDown]`; MSTest invokes each row as a full test (a new instance, `[TestInitialize]` and `[TestCleanup]`). `[FakeSeed]` wraps the whole check in every framework (in MSTest through `[FakeSeedClass]`).
 - The options of the framework's own attribute apply to the whole check: `Skip`, `Timeout`, `DisplayName` and `Explicit` in xUnit.net, `DisplayName` in MSTest, NUnit attributes such as `[Timeout]` and `[Category]`.
 
 ### Replayable random data
 
-Run a test on random data and, **when it fails, get the seed that replays it**. TUnit has an attribute, `[FakeSeed]`; the other frameworks wrap the body in `FakeSeed.Run` (or `RunAsync`), which gives your sink a line with the seed before it rethrows:
+Run a test on random data and, **when it fails, get the seed that replays it**. Every test package has a `[FakeSeed]` attribute: it seeds the `Fake` facade around the test and prints the seed in the test output when the test fails.
 
 ```csharp
 // TUnit
@@ -873,23 +873,19 @@ public async Task Totals_add_up()
     await Assert.That(Totals.Of(orders)).IsEqualTo(orders.Sum(o => o.Total));
 }
 
-// xUnit.net v3
-[Fact]
-public void Totals_add_up() => FakeSeed.Run(() =>
-{
-    var orders = Fake.Many<Order>(100);
-    Totals.Of(orders).ShouldBe(orders.Sum(o => o.Total));
-}, TestContext.Current.SendDiagnosticMessage);
+// xUnit.net v3:  [Fact, FakeSeed]   (also on [Theory] and [FakeCheck])
+// NUnit:         [Test, FakeSeed]   (also on [TestCase] and [FakeCheck])
+// MSTest:        [FakeSeed] instead of [TestMethod], or [FakeSeedClass] instead of [TestClass]
 
-// NUnit:  FakeSeed.Run(() => { ... }, TestContext.Out.WriteLine);
-// MSTest: FakeSeed.Run(() => { ... }, TestContext.WriteLine);       // the TestContext property of the class
-// async:  await FakeSeed.RunAsync(async () => { ... }, sink);
 // Phoney: this test ran with random seed 481516234. Replay it with [FakeSeed(481516234)] or PHONEY_SEED=481516234.
 ```
 
-- **Replay** one test with `[FakeSeed(481516234)]` or `FakeSeed.Run(..., seed: 481516234)`, or a whole run with `PHONEY_SEED=481516234 dotnet test`. A pinned seed wins over `PHONEY_SEED`, and a `PHONEY_SEED` that isn't a whole number is reported.
-- Only the `Fake` facade of the test is seeded, not generators created earlier (a `static` field) or with their own `.Seed(...)`. Parallel tests don't affect each other.
-- `[FakeSeed]` on a method wins over the class, and on a class over the assembly (`[assembly: FakeSeed]`). It works with other test executors (`[TestExecutor<T>]`), and skipped tests print nothing. `FakeSeed.Run` reports every exception, so a test that skips by throwing is reported too.
+- **Replay** one test with `[FakeSeed(481516234)]`, or a whole run with `PHONEY_SEED=481516234 dotnet test`. A pinned seed wins over `PHONEY_SEED`, and a `PHONEY_SEED` that isn't a whole number is reported.
+- Only the `Fake` facade of the test is seeded, not generators created earlier (a `static` field) or with their own `.Seed(...)`. Parallel tests don't affect each other, and every row of a theory, test case or data row starts from the seed.
+- **Where it goes**: on a method, a class or the assembly (`[assembly: FakeSeed]`) in TUnit, xUnit.net and NUnit; the method wins over the class and the class over the assembly, and only the one that wins reports. MSTest has no hook next to `[TestMethod]`, so `[FakeSeed]` takes its place on a method, and `[FakeSeedClass]` takes the place of `[TestClass]` to seed every test of a class (`[DataRow]` and `[FakeCheck]` tests too; a method's own `[FakeSeed]` wins).
+- **Set-up code**: MSTest runs `[TestInitialize]` and `[TestCleanup]` inside the seed; NUnit does for `[FakeSeed]` on a class or the assembly; TUnit and xUnit.net seed the test body. TUnit's attribute also wraps the executor a test already has (`[TestExecutor<T>]`).
+- Only failures print: skipped, ignored and inconclusive tests don't.
+- **Without an attribute**, `FakeSeed.Run(() => { … }, sink)` (or `RunAsync`) does the same around a body and reports every exception to your sink (`FakeSeed.Run(..., seed: n)` replays it). For another test framework, open a run with `FakeSeed.Begin(seed, "[MySeed({0})]")` where the test starts and end it with `FakeSeedRun.Current?.End(failed, output.WriteLine)` where it ends; runs nest the same way.
 - Other frameworks can build on the same machinery with `Fake.Arguments(method)`, which returns rows of values for a parameter list.
 
 ## Dependency injection and ASP.NET Core

@@ -68,6 +68,10 @@ _Avoid_: deterministic
 **Replay**:
 Rerunning a failed test with the seed it reported (`PHONEY_SEED`), so random test data becomes the same data.
 
+**Seeded run**:
+One test running on a seeded facade, opened by `[FakeSeed]` (any test framework) or `FakeSeed.Run`: it picks the seed, and when the test fails it reports the seed and how to replay it. Runs nest (assembly, class, method); the innermost one seeds the facade and reports.
+_Avoid_: seeded test, seed scope (a `Fake.Seeded` scope reports nothing)
+
 **Reference date**:
 The "now" that relative dates (past, recent, birthdates, ages) are computed from. A seeded Faker or Generator has a fixed one, so its dates do not change from day to day.
 
