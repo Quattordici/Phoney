@@ -63,6 +63,17 @@ List<Customer> customers = Fake.Many<Customer>(1_000);
 List<Customer> someCustomers = Fake.Many<Customer>(3, 10);   // a count from 3 to 10, chosen from the seed
 ```
 
+### Where next
+
+| | |
+|---|---|
+| **[Choosing a seed](https://github.com/Quattordici/Phoney/blob/main/docs/seeds.md)** | fixed, replayable or keyed data, and which call gives which |
+| **[Cookbook](https://github.com/Quattordici/Phoney/blob/main/docs/cookbook.md)** | database-ready aggregates, validator tests, masked production data, fixture files |
+| **[Coming from Bogus](https://github.com/Quattordici/Phoney/blob/main/docs/coming-from-bogus.md)** | `RuleFor`, `RuleSet`, `UseSeed`… and their Phoney counterparts |
+| **[Questions and answers](https://github.com/Quattordici/Phoney/blob/main/docs/faq.md)** | a `null` member, a value that moved, an unexpected warning |
+
+Every example in the guides is a test that runs in CI. The rest of this page is the reference: [values](#values), [national ids](#national-and-tax-ids), [locales](#locales), [templates](#templates), [objects](#objects), [the source generator](#source-generator-and-native-aot), [property checks](#property-checks), [test frameworks](#test-data-in-xunit-nunit-mstest-and-tunit), [DI](#dependency-injection-and-aspnet-core), [EF Core](#ef-core-seeding), [NodaTime](#nodatime), [WireMock.Net](#wiremocknet-mocks) and [performance](#performance).
+
 ## Values
 
 A `Faker` groups values by topic:
