@@ -14,45 +14,31 @@ internal sealed class SeededTestExecutor(long? pinned, ITestExecutor? inner) : I
     public ValueTask ExecuteTest(TestContext context, Func<ValueTask> action)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return SeededRun.Execute(pinned, FakeSeed.FromEnvironment(), context.Output.WriteLine, inner is null ? action : () => inner.ExecuteTest(context, action));
+        return SeededRun.Execute(pinned, context.Output.WriteLine, inner is null ? action : () => inner.ExecuteTest(context, action));
     }
 }
 
 /// <summary>The seeding and reporting around a test body, apart from TUnit so it can be tested directly.</summary>
 internal static class SeededRun
 {
+    /// <summary>How a TUnit test pins a seed, offered by the report of a random seed.</summary>
+    public const string PinHint = "[FakeSeed({0})]";
+
     /// <summary>
-    /// Runs <paramref name="action"/> in <see cref="Fake.Seeded(long, string?)"/> with the pinned seed, else the one from the environment,
-    /// else a new random one. When the body throws (a skip excepted), <paramref name="report"/> gets a line that says how to replay it and
-    /// the exception is rethrown unchanged.
+    /// Runs <paramref name="action"/> in a <see cref="FakeSeed.Begin"/> run with the pinned seed, else <c>PHONEY_SEED</c>, else a new random one. When the
+    /// body throws (a skip excepted), <paramref name="report"/> gets a line that says how to replay it and the exception is rethrown unchanged.
     /// </summary>
-    public static async ValueTask Execute(long? pinned, long? environment, Action<string> report, Func<ValueTask> action)
+    public static async ValueTask Execute(long? pinned, Action<string> report, Func<ValueTask> action)
     {
-        var seed = pinned ?? environment ?? FakeSeed.New();
-        using var scope = Fake.Seeded(seed);
+        using var run = FakeSeed.Begin(pinned, PinHint);
         try
         {
             await action();
         }
         catch (Exception e) when (e is not SkipTestException)
         {
-            var origin = (pinned, environment) switch
-            {
-                (not null, _) => Origin.Pinned,
-                (_, not null) => Origin.Environment,
-                _ => Origin.Random,
-            };
-            report(Describe(seed, origin));
+            run.Failed(report);
             throw;
         }
     }
-
-    private enum Origin { Random, Environment, Pinned }
-
-    private static string Describe(long seed, Origin origin) => origin switch
-    {
-        Origin.Pinned => $"Phoney: this test ran with the pinned seed {seed}.",
-        Origin.Environment => $"Phoney: this test ran with seed {seed} from {FakeSeed.EnvironmentVariable}. Replay it with {FakeSeed.EnvironmentVariable}={seed}.",
-        _ => $"Phoney: this test ran with random seed {seed}. Replay it with [FakeSeed({seed})] or {FakeSeed.EnvironmentVariable}={seed}.",
-    };
 }

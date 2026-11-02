@@ -23,7 +23,7 @@ public class OrderTests
 - **Reproducible by default.** The seed is derived from the test's class, method and parameters, so every run and every machine gets the same values. Set `Seed = 42` for other values.
 - **Options:** `Count`, `Seed`, `Locale`, `NullProbability` (for nullable parameters) and `ReferenceDate` (ISO 8601). Several `[FakeData]` attributes add their cases.
 - **`PHONEY_SEED=123 dotnet test`** moves the seed of every `[FakeData]` test at once, to run the whole suite on other data; the same value replays it.
-- **Replayable random data**: `FakeSeed.Run(() => { … }, TestContext.Current.SendDiagnosticMessage)` (or `RunAsync`) runs a test body on a seeded `Fake` facade, new on every run, and reports the seed when it throws; `PHONEY_SEED=… dotnet test` or `FakeSeed.Run(…, seed: n)` replays it.
+- **Replayable random data**: `[Fact, FakeSeed]` (also with `[Theory]` and `[FakeCheck]`, on a class or `[assembly: FakeSeed]`) runs the test on a seeded `Fake` facade, new on every run, and prints the seed in the test output when it fails; `[FakeSeed(n)]` or `PHONEY_SEED=… dotnet test` replays it. The method wins over the class and the class over the assembly.
 - Custom conventions (`Fake.Conventions.Add(...)`), subtypes (`Fake.Subtypes.Add<IShape, Circle>()`, `[JsonDerivedType]`) and source-generated models (`[FakeFor<T>]`) apply. Test data is created while xUnit discovers tests, so register them before that, for example in a module initializer.
 - It fills method parameters. See the [main README](https://github.com/Quattordici/Phoney#test-data-in-xunit-nunit-mstest-and-tunit) for the full feature set.
 

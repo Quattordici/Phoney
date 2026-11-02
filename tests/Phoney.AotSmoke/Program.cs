@@ -79,6 +79,17 @@ if (Fake.ForGenerated<Address>().Generate().City != "Bergen" || Fakes.Person.See
     throw new InvalidOperationException("the configured generator was not used");
 Fake.Generators.Clear();
 
+// A seeded test run, as the [FakeSeed] attributes open one, reports how to replay a failure.
+string? replay = null;
+using (var run = FakeSeed.Begin(11, "[FakeSeed({0})]"))
+{
+    if (Fake.Person.FirstName() != new Faker(Fake.Locale, 11).Person.FirstName())
+        throw new InvalidOperationException("the seeded run did not seed the facade");
+    FakeSeedRun.Current?.End(failed: true, line => replay = line);
+}
+if (replay != "Phoney: this test ran with the pinned seed 11." || FakeSeedRun.Current is not null || Fake.IsSeeded)
+    throw new InvalidOperationException("the seeded run did not report or end: " + replay);
+
 // Invalid and boundary data from data annotations, through a generated model, no reflection.
 var invalid = Fakes.Ticket.Seed(6).InvalidCases();
 if (invalid.Count != 5 || !invalid.All(c => c.Member switch
