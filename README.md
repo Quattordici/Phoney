@@ -435,6 +435,24 @@ var orders = Fake.For<Order>()
 Fake.Generators.Add(Fake.For<Address>().Locale("sv"));   // app-wide, also for [FakeData] parameters (Remove<T>(), Clear())
 ```
 
+**Set a type up once** with `Fake.Generators.Configure`: the configuration is used for every object of the type, wherever it is made.
+
+```csharp
+// at startup: a module initializer, a test setup hook, Program.cs
+Fake.Generators.Configure<Customer>(g => g
+    .With(c => c.Age, f => f.Number.Int(18, 65))
+    .Unique(c => c.Email));
+
+var adult = Fake.One<Customer>();                       // Fake.One, Many, For, ForGenerated and Populate
+var order = Fake.One<Order>();                          // order.Customer, nested at any depth
+// test parameters ([FakeData] Customer customer) and AddGenerator<Customer>() in DI get it too
+var vip = Fake.For<Customer>().With(c => c.Tier, Tier.Gold).Generate(); // rules added here come after the configured ones
+```
+
+- The delegate always gets the type's plain generator (source-generated or reflection, whichever the caller uses), so configuring again replaces the configuration, and `Add` and `Configure` share one registration per type (the last wins). `Add` keeps meaning nested objects only.
+- A configured `Locale` or `ReferenceDate` wins over `Fake.Seeded`; the seed always comes from where the object is made, so a configuration can't set one. Each `Fake` call starts with fresh `Unique` values; nested objects share one generator.
+- Refused, with a message that says what to do: interfaces and abstract classes (configure a subtype), and `Seed`, `Sequence`, `Cycle`, `WithFeed` and `VerifyRules` in the delegate. PHONEY004 doesn't see app-wide configurations, so put `.Strict()` inside `Configure` rather than in a chain the configuration covers.
+
 - **Precedence**: a rule for the member wins over the type's generator, which wins over subtypes and the type's model. A generator's own `WithGeneratorFor` wins over `Fake.Generators`, and the innermost registration wins inside a nested generator's graph.
 - **Self-contained**: the generator brings its own rules, locale, conventions and `Unique` sets, and inherits the reference date. The root object always comes from the generator you call `Generate` on.
 - Only objects can be registered; scalars come from rules and conventions, so `WithGeneratorFor<string>` throws and points to `WithConvention`. `Fake.ForGenerated<Address>()` gives the AOT-safe generator to register.

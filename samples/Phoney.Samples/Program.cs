@@ -75,6 +75,11 @@ foreach (var drawing in Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle, Squa
 var big = Fake.For<Drawing>().Seed(1).WithGeneratorFor<IShape, Circle>(Fake.For<Circle>().With(c => c.Radius, 10)).Generate(2);
 Console.WriteLine(string.Join(", ", big.Select(d => d.Shape)));
 
+// Or set Circle up once for the whole app: Fake.One, Fake.Many, nested members and test parameters all use it.
+Fake.Generators.Configure<Circle>(g => g.With(c => c.Radius, 5));
+Console.WriteLine($"{Fake.One<Circle>()}, {Fake.For<Drawing>().Seed(1).Subtype<IShape, Circle>().Generate().Shape}");
+Fake.Generators.Remove<Circle>();
+
 // 7b. Invalid and boundary data, from the data annotations ------------------------------------
 Console.WriteLine("\n== Invalid and boundary data");
 foreach (var c in Fake.For<Registration>().Seed(1).InvalidCases())

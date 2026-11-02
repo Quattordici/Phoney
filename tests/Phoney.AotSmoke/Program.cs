@@ -73,6 +73,12 @@ var oslo = Fakes.Person.Seed(5)
 if (oslo.Any(p => p.Home.City != "Oslo") || oslo.Any(p => p.Contact is not Email { Address: "oslo@example.com" }))
     throw new InvalidOperationException("type generators were not used");
 
+// A type configured once app-wide reaches the facade and nested objects, no reflection.
+Fake.Generators.Configure<Address>(g => g.With(a => a.City, "Bergen"));
+if (Fake.ForGenerated<Address>().Generate().City != "Bergen" || Fakes.Person.Seed(5).Generate().Home.City != "Bergen")
+    throw new InvalidOperationException("the configured generator was not used");
+Fake.Generators.Clear();
+
 // Invalid and boundary data from data annotations, through a generated model, no reflection.
 var invalid = Fakes.Ticket.Seed(6).InvalidCases();
 if (invalid.Count != 5 || !invalid.All(c => c.Member switch

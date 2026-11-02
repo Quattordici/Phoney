@@ -49,6 +49,58 @@ public sealed class FakeGenerators
         ImmutableInterlocked.Update(ref s_all, all => all.SetItem(typeof(TBase), generator));
     }
 
+    /// <summary>
+    /// Configures every <typeparamref name="T"/>: the objects of <c>Fake.One</c>, <c>Fake.Many</c>, <c>Fake.For</c>, <c>Fake.ForGenerated</c> and
+    /// <c>Fake.Populate</c>, nested objects in every generator compiled afterwards, test parameters (<c>[FakeData]</c>, <c>[FakeCheck]</c>) and
+    /// <c>AddGenerator&lt;T&gt;()</c> in <c>Phoney.DependencyInjection</c>. Replaces an earlier registration for the type, <see cref="Add{TNested}"/> included.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <paramref name="configure"/> always receives the plain generator of the type (on the model the caller uses, source-generated or reflection), so
+    /// configuring twice replaces rather than stacks, and it may run again when registrations change: keep it free of side effects. Rules added where the
+    /// generator is used come after the configured ones. The configured <see cref="ObjectGenerator{T}.Locale"/> and <see cref="ObjectGenerator{T}.ReferenceDate"/>
+    /// win over the facade's; the seed always comes from where the object is made (<see cref="Fake.Seeded"/>, the generator it is nested in), so the
+    /// configuration may not set one. Each facade call starts with fresh <c>Unique</c> values; nested objects share one generator, like <see cref="Add{TNested}"/>.
+    /// </para>
+    /// <para>
+    /// Rules that count the objects a generator makes itself (<c>Sequence</c>, <c>Cycle</c>, <c>WithFeed</c>) and <c>VerifyRules</c> are refused when
+    /// the configuration is first applied, because nested objects are always number 0 and never verified. Register at startup, like the other registrations.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// Fake.Generators.Configure&lt;Customer&gt;(g =&gt; g.With(c =&gt; c.Age, f =&gt; f.Number.Int(18, 65)));
+    /// var adult = Fake.One&lt;Customer&gt;();            // also every nested Customer and every Customer test parameter
+    /// </code>
+    /// </example>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><typeparamref name="T"/> is a scalar, an array, an interface or an abstract class.</exception>
+    public void Configure<T>(Func<ObjectGenerator<T>, ObjectGenerator<T>> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        NestedGenerators.ValidateType(typeof(T), nameof(configure));
+        if (typeof(T).IsInterface || typeof(T).IsAbstract)
+        {
+            throw new ArgumentException(
+                $"{typeof(T).Name} has no objects of its own to configure. Configure a subtype and pick it with Fake.Subtypes, or register the generator of one with Fake.Generators.Add<{typeof(T).Name}, TSubtype>(…).",
+                nameof(configure));
+        }
+
+        ImmutableInterlocked.Update(ref s_all, all => all.SetItem(typeof(T), new TypeConfiguration<T>(configure)));
+    }
+
+    /// <summary>
+    /// <paramref name="generator"/> configured by <see cref="Configure{T}"/>'s registration for <typeparamref name="T"/>, or <paramref name="generator"/> itself when
+    /// there is none. For integrations that build generators themselves (<c>Phoney.DependencyInjection</c>); the facade applies it already.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="generator"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The configuration returned <see langword="null"/>, set a seed, or added rules a nested generator can't have.</exception>
+    public ObjectGenerator<T> Apply<T>(ObjectGenerator<T> generator)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        return TypeConfiguration<T>.Apply(Registrations.Current, generator);
+    }
+
     /// <summary>Removes the generator registered for <typeparamref name="TBase"/>.</summary>
     public void Remove<TBase>() => ImmutableInterlocked.Update(ref s_all, all => all.Remove(typeof(TBase)));
 
