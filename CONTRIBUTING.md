@@ -27,6 +27,16 @@ Locale data under `data/`, `src/Phoney/Resources` and `src/Phoney/Data/Generated
 pinned faker.js version by the tools in `tools/`. **Do not edit generated files by hand.** CI re-imports
 the data and fails if the committed output differs from a fresh import.
 
+## Documentation
+
+The [README](README.md) is the reference for every feature, and the guides in [`docs/`](docs/README.md) are organised by task. A code example in a guide, the README or a package README is a region of a test in `tests/<project>/Docs/*Examples.cs` (the core examples in `Phoney.Tests`, an add-on's in its own test project), between `// snippet: name` and `// end snippet`, and the guide shows it between `<!-- snippet: name -->` and `<!-- end snippet -->`. To add or change one, edit the test and write it into the guides with:
+
+```bash
+PHONEY_UPDATE_DOCS=1 dotnet test --project tests/Phoney.Tests -- --treenode-filter "/*/*/DocExampleTests/*"
+```
+
+`DocExampleTests` fails when a guide shows other code than its test runs, or when an example is in no guide.
+
 ## Pull request expectations
 
 - Keep pull requests focused; unrelated changes belong in separate PRs.

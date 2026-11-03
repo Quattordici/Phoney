@@ -41,9 +41,10 @@ dotnet add package Phoney
 
 ## Quick start
 
-```csharp
-using Phoney;
+Everything starts from the `Phoney` namespace (`using Phoney;`):
 
+<!-- snippet: readme-quick-start -->
+```csharp
 // Values
 Fake.Person.FullName();                         // "Madisen Collins"
 Fake.Internet.Email();                          // "Ryann_Beahan@yahoo.com"
@@ -62,6 +63,18 @@ Customer customer = Fake.One<Customer>();
 List<Customer> customers = Fake.Many<Customer>(1_000);
 List<Customer> someCustomers = Fake.Many<Customer>(3, 10);   // a count from 3 to 10, chosen from the seed
 ```
+<!-- end snippet -->
+
+### Where next
+
+| | |
+|---|---|
+| **[Choosing a seed](https://github.com/Quattordici/Phoney/blob/main/docs/seeds.md)** | fixed, replayable or keyed data, and which call gives which |
+| **[Cookbook](https://github.com/Quattordici/Phoney/blob/main/docs/cookbook.md)** | database-ready aggregates, validator tests, masked production data, fixture files |
+| **[Coming from Bogus](https://github.com/Quattordici/Phoney/blob/main/docs/coming-from-bogus.md)** | `RuleFor`, `RuleSet`, `UseSeed`… and their Phoney counterparts |
+| **[Questions and answers](https://github.com/Quattordici/Phoney/blob/main/docs/faq.md)** | a `null` member, a value that moved, an unexpected warning |
+
+Every example in the guides is a test that runs in CI. The rest of this page is the reference: [values](#values), [national ids](#national-and-tax-ids), [locales](#locales), [templates](#templates), [objects](#objects), [the source generator](#source-generator-and-native-aot), [property checks](#property-checks), [test frameworks](#test-data-in-xunit-nunit-mstest-and-tunit), [DI](#dependency-injection-and-aspnet-core), [EF Core](#ef-core-seeding), [NodaTime](#nodatime), [WireMock.Net](#wiremocknet-mocks) and [performance](#performance).
 
 ## Values
 
@@ -97,6 +110,7 @@ A `Faker` groups values by topic:
 
 A seed fixes values *and* dates: seeded fakers and generators compute relative dates (past, recent, birthdates, ages) from `Faker.DefaultSeededReferenceDate` (2025-01-01 UTC) unless you set `ReferenceDate`, so seeded output doesn't change from one day to the next.
 
+<!-- snippet: readme-reproducible -->
 ```csharp
 var faker = new Faker("de", seed: 2024);                         // same values and dates on every run
 var later = new Faker("de", seed: 2024) { ReferenceDate = DateTimeOffset.UtcNow }; // opt back into "now"
@@ -110,6 +124,7 @@ Parallel.For(0, 1_000, i =>
     Save(Fake.Person.FullName(), Fake.One<Order>());
 });
 ```
+<!-- end snippet -->
 
 `ObjectGenerator<T>.Seed(n)` does the same for a generator, and `GenerateParallel` forks for you. A `Fake.Seeded` scope flows into the tasks and workers started inside it, so they would share one faker without `Fake.Fork(i)` (or `faker.Fork(i)`). One exception: `Unique(...)` members combined with `GenerateParallel` depend on thread timing. Scopes nest; one disposed out of order never brings back a scope that has ended, and a task that outlives its scope goes back to the enclosing one. For tests that run on random data but can be replayed, see [`[FakeSeed]` and `FakeSeed.Run`](#replayable-random-data).
 
@@ -117,6 +132,7 @@ Parallel.For(0, 1_000, i =>
 
 Relative dates can follow a .NET `TimeProvider`, such as `FakeTimeProvider` from `Microsoft.Extensions.TimeProvider.Testing`, so they move with the clock your tests already control:
 
+<!-- snippet: readme-time-provider -->
 ```csharp
 var time = new FakeTimeProvider(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
@@ -126,6 +142,7 @@ var rows = Fake.Arguments(method).TimeProvider(time).Generate(5); // argument ro
 Fake.TimeProvider = time;                                         // the static facade, Fake.For/One/Many and Fake.Arguments
 time.Advance(TimeSpan.FromDays(30));                              // read on every use, so dates move along
 ```
+<!-- end snippet -->
 
 The reference date is, in order: an explicit `ReferenceDate`, the `TimeProvider`, `DefaultSeededReferenceDate` for seeded fakers and generators, and otherwise the system clock.
 
@@ -133,17 +150,19 @@ The reference date is, in order: an explicit `ReferenceDate`, the `TimeProvider`
 
 Personal identity numbers, company registration numbers and VAT numbers come with **valid check digits** and use the locale's country unless you pass one:
 
+<!-- snippet: readme-national-ids -->
 ```csharp
 var faker = new Faker("sv", seed: 1);
-faker.NationalId.Person();                                   // "19560703-6190" (personnummer)
+faker.NationalId.Person();                                   // "19761015-5736" (personnummer)
 faker.NationalId.Person("NO", birthDate: new DateOnly(1990, 5, 17), sex: Sex.Female, formatted: false);
-faker.NationalId.Company();                                  // "214200-3165" (organisationsnummer)
-faker.NationalId.Vat("GB");                                  // "GB 154 4706 67"
+faker.NationalId.Company();                                  // "538599-9650" (organisationsnummer)
+faker.NationalId.Vat("GB");                                  // "GB 904 0044 78"
 
-NationalIds.IsValid(NationalIdKind.Person, "SE", "19560703-6190");   // true: every scheme also validates
+NationalIds.IsValid(NationalIdKind.Person, "SE", "19761015-5736");   // true: every scheme also validates
 NationalIds.Supported(NationalIdKind.Vat);                           // ["DK", "FI", "FR", "GB", "NO", "PL", "SE"]
 NationalIds.Register(new MyEmployeeNumbers());                       // your own, derived from NationalIdScheme
 ```
+<!-- end snippet -->
 
 | | Person | Company | VAT |
 |---|---|---|---|
@@ -166,12 +185,14 @@ NationalIds.Register(new MyEmployeeNumbers());                       // your own
 
 ## Locales
 
+<!-- snippet: readme-locales -->
 ```csharp
-Locales.All;                      // 76 locales plus `base`, with code, title, endonym, script, fallback chain
-new Faker("de-AT");               // de_AT → de → en → base
-new Faker(CultureInfo.CurrentCulture); // "sv-SE" → sv, "sr-Latn-RS" → sr_RS_latin
-Fake.Locale = "fr";               // default for Fake.* and generators
+var all = Locales.All;                    // 76 locales plus `base`, with code, title, endonym, script, fallback chain
+var austrian = new Faker("de-AT");        // de_AT → de → en → base
+var current = new Faker(CultureInfo.CurrentCulture); // "sv-SE" → sv, "sr-Latn-RS" → sr_RS_latin
+Fake.Locale = "fr";                       // default for Fake.* and generators
 ```
+<!-- end snippet -->
 
 <details>
 <summary>Supported locales</summary>
@@ -265,6 +286,7 @@ Fallback works like faker.js: each data group (`person.first_name`, `location.ci
 
 ### Custom data
 
+<!-- snippet: readme-custom-data -->
 ```csharp
 // A new locale on top of an existing one
 Locales.Register("sv_dalarna", l => l
@@ -282,6 +304,7 @@ Locales.Extend("en", l => l
 
 Locales.Register("en_PIRATE", File.OpenRead("pirate.json"), "en");   // a faker.js locale file
 ```
+<!-- end snippet -->
 
 A built-in locale can't be registered again (that would drop its data for every locale that falls back to it), and a locale can't fall back to itself: both throw and say what to use instead.
 
@@ -291,11 +314,13 @@ Typed methods cover `FirstNames`, `LastNames`, `JobTitles`, `Cities`, `Streets`,
 
 Templates use the same names as the API:
 
+<!-- snippet: readme-templates -->
 ```csharp
 faker.Parse("{{Person.FirstName}} ordered {{Commerce.ProductName}} from {{Company.Name}}");
 faker.Parse("Ticket {{Helpers.FromRegExp([A-Z]{3}-[0-9]{4})}}, PIN {{String.Numeric(4)}}");
 TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-#####"));   // your own functions
 ```
+<!-- end snippet -->
 
 - **faker.js templates work unchanged**: names are case-insensitive (`{{person.firstName}}`), and locale data paths and record fields (`{{airline.airport.iataCode}}`) work too.
 - **Options** are an options object or the plain value: `{{number.int({"min":1,"max":9})}}`, `{{string.alpha({"length":8,"casing":"upper","exclude":["O","I"]})}}`, `{{person.firstName({"sex":"female"})}}`, `{{internet.mac("-")}}`. JavaScript literals, which need no escaping in a C# string, work as well: `{{number.int({min: 1, max: 9})}}`, `{{location.zipCode('#####')}}`. A wrong value (`"sex":"robot"`) throws a `FormatException` that says what is accepted, and so does a length above 100,000 characters, a count above its limit, an argument to a function that takes none (`{{airline.seat(5)}}`), an option the function doesn't use (faker.js' `multipleOf` on `{{number.float}}`, or a typo such as `maks`) and an option of the wrong type (`{memorable: 'yes'}`), so an option Phoney doesn't have is never silently ignored. Functions you register read their arguments as they like. Dates between two dates are `{{date.between({from: '2020-01-01', to: '2020-12-31'})}}`. Lengths and counts can be a range, as in faker.js: `{{lorem.words({min: 2, max: 5})}}`, `{{string.alpha({length: {min: 4, max: 8}})}}`, `{{word.noun({length: {min: 4, max: 6}})}}` (in code, `faker.Lorem.Words(2, 5)` and `faker.Lorem.Sentence(3, 6)`).
@@ -304,6 +329,7 @@ TemplateFunctions.Register("Shop.Sku", (f, _) => f.Random.ReplaceSymbols("SKU-##
 
 ## Objects
 
+<!-- snippet: readme-objects -->
 ```csharp
 var customers = Fake.For<Customer>()
     .Locale("sv")
@@ -316,6 +342,7 @@ var customers = Fake.For<Customer>()
     .Ignore(x => x.InternalNotes)
     .Generate(100);                                                // also: Generate(), Stream(), GenerateParallel(n)
 ```
+<!-- end snippet -->
 
 - **Supported shapes**: classes, records and structs (the constructor with most parameters is used), `init` and `required` members, public fields, nested objects (closed generic classes such as `Paged<Order>` too), interfaces and abstract classes (through [subtypes](#interfaces-and-subtypes)), arrays, lists, sets, dictionaries and [more collection types](#collection-types), enums, nullable types, `byte[]`, `Memory<byte>`, `T[,]`, tuples, `KeyValuePair<K,V>`, and `Guid`, the date and time types, `Uri`, `IPAddress`, `Version`, `Rune` and every numeric type (`Half`, `Int128`, `BigInteger` and `nint` included).
 - **Asked for directly**, a value type, a collection or an interface gets a value too: `Fake.One<Guid>()`, `Fake.Many<int>(10)`, `Fake.One<List<Customer>>()` (1–3 customers), `Fake.For<IShape>().Subtype<IShape, Circle, Square>().Generate()`. `Fake.One(type)` and `Fake.Many(type, count)` take a `Type` known only at runtime.
@@ -329,11 +356,13 @@ var customers = Fake.For<Customer>()
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation, so new members can't silently get meaningless data. The analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`; it can't see app-wide `Fake.Conventions`.
 - **App-wide defaults**: set a generation setting once for every generator, `Fake.One`/`Many`, nested objects and `[FakeData]`/`[FakeCheck]` parameters:
 
+  <!-- snippet: readme-defaults -->
   ```csharp
   Fake.Defaults.Strict = true;            // at startup: a module initializer, an assembly-level test hook
   Fake.Defaults.CollectionSize = (0, 5);
   Fake.Defaults.BackReferences = true;    // also NullProbability, MaxDepth, CausalTimelines, ParameterDefaults, NameConventions; Reset()
   ```
+  <!-- end snippet -->
 
   Anything more specific wins: a setting on the generator (`.CollectionSize(2, 2)`, also inside `Fake.Generators.Configure<T>`), `PhoneyOptions` in DI, and an attribute option you set. Like conventions they are read when a generator is first used, and they are process-wide. With nothing set, generated data is the same as before. PHONEY004 doesn't see `Fake.Defaults.Strict`.
 
@@ -348,6 +377,7 @@ Within one object, related members describe the same thing:
 
 Across objects, `WithOneOf` links to data you generated already, optionally with weights, and `WithSubsetOf` gives a collection member its own random subset of values:
 
+<!-- snippet: readme-one-of -->
 ```csharp
 var orders = Fake.For<Order>()
     .WithOneOf(o => o.CustomerId, customers, c => c.Id)                                                        // an existing customer's id
@@ -362,6 +392,7 @@ var users = Fake.For<User>().Seed(1)
     .WithSubsetOf(u => u.Badges, badges, new[] { 80.0, 15, 4, 1 }, 2)   // heavier values are more likely to be in it
     .Generate(100);
 ```
+<!-- end snippet -->
 
 - **Weights** are relative (70/25/5 is 14/5/1) and a weight of zero is never picked; a negative, non-finite or missing weight throws when the rule is added. A pick is one random number and a binary search.
 - **A subset** is made of distinct positions of the list, in list order, with every value equally likely (Floyd's algorithm). With weights, values are taken one at a time by weight among those left, so a subset of one is a plain weighted pick; this costs one pass over the list per value, unnoticeable up to a few thousand values.
@@ -396,6 +427,7 @@ Each is built exactly like its `List<T>`, `HashSet<T>` or `Dictionary<K,V>` coun
 
 A rule can name a member of a nested object with a path, so you don't need a generator for the whole object just to change one value:
 
+<!-- snippet: readme-path-rules -->
 ```csharp
 var invoices = Fake.For<Invoice>()
     .With(i => i.Billing.City, "Oslo")                          // this address only: Shipping is another position
@@ -406,6 +438,7 @@ var invoices = Fake.For<Invoice>()
     .Invalid(i => i.Lines.Each().Quantity)                      // see "Invalid and boundary data"
     .Generate(10);
 ```
+<!-- end snippet -->
 
 - **Which rules**: `With`, `WithOneOf`, `WithSubsetOf`, `WithNormalDistribution`, `Ignore`, `Invalid` and `Boundary`. `Unique` and rules that depend on the object belong to the generated object, so a path throws an `ArgumentException` (and the analyzer reports **PHONEY007**).
 - **A position, not a type**: `Billing.City` and `Shipping.City` are both addresses, and only the first is changed. For every object of a type, use [`WithGeneratorFor`](#type-wide-generators). `Each()` is only a marker for "every element" and can't be called; `x.Lines[0]` is rejected.
@@ -416,6 +449,7 @@ var invoices = Fake.For<Invoice>()
 
 Members declared as an interface, an abstract class or a base class are generated as one of their subtypes:
 
+<!-- snippet: readme-subtypes -->
 ```csharp
 var drawings = Fake.For<Drawing>()
     .Subtype<IShape, Circle>()               // every IShape in the object graph is a Circle
@@ -425,6 +459,7 @@ var drawings = Fake.For<Drawing>()
 
 Fake.Subtypes.Add<IShape, Circle, Square>(); // app-wide, for generators created afterwards (also Remove<IShape>() and Clear())
 ```
+<!-- end snippet -->
 
 - **`[JsonDerivedType]` works out of the box**: the derived types listed for System.Text.Json are the default subtypes.
 - **Precedence**: the generator's `Subtype`, then `Fake.Subtypes`, then `[JsonDerivedType]`. Without any, an interface or abstract member stays `null` (and is left out of collections), and `Fake.One<IShape>()` throws with how to register one. A concrete base class is generated as itself unless you map it (`.Subtype<Vehicle, Truck>()`).
@@ -435,6 +470,7 @@ Fake.Subtypes.Add<IShape, Circle, Square>(); // app-wide, for generators created
 
 `WithGeneratorFor` configures a **type**: every nested object of that type in the graph, in a member, a collection or a dictionary, at any depth, comes from the generator you give it:
 
+<!-- snippet: readme-type-generators -->
 ```csharp
 var orders = Fake.For<Order>()
     .WithGeneratorFor(Fake.For<Address>().Locale("de").With(a => a.Country, "Germany"))   // Order.Billing, Order.Shipping, Customer.Home…
@@ -443,9 +479,11 @@ var orders = Fake.For<Order>()
 
 Fake.Generators.Add(Fake.For<Address>().Locale("sv"));   // app-wide, also for [FakeData] parameters (Remove<T>(), Clear())
 ```
+<!-- end snippet -->
 
 **Set a type up once** with `Fake.Generators.Configure`: the configuration is used for every object of the type, wherever it is made.
 
+<!-- snippet: readme-configure -->
 ```csharp
 // at startup: a module initializer, a test setup hook, Program.cs
 Fake.Generators.Configure<Customer>(g => g
@@ -457,6 +495,7 @@ var order = Fake.One<Order>();                          // order.Customer, neste
 // test parameters ([FakeData] Customer customer) and AddGenerator<Customer>() in DI get it too
 var vip = Fake.For<Customer>().With(c => c.Tier, Tier.Gold).Generate(); // rules added here come after the configured ones
 ```
+<!-- end snippet -->
 
 - The delegate always gets the type's plain generator (source-generated or reflection, whichever the caller uses), so configuring again replaces the configuration, and `Add` and `Configure` share one registration per type (the last wins). `Add` keeps meaning nested objects only.
 - A configured `Locale` or `ReferenceDate` wins over `Fake.Seeded`; the seed always comes from where the object is made, so a configuration can't set one. Each `Fake` call starts with fresh `Unique` values; nested objects share one generator.
@@ -470,10 +509,12 @@ var vip = Fake.For<Customer>().With(c => c.Tier, Tier.Gold).Generate(); // rules
 
 With navigation properties in both directions (`Order.Lines`, `OrderLine.Order`) a cycle stops with `null` by default. `WithBackReferences()` closes it, like an ORM would:
 
+<!-- snippet: readme-back-references -->
 ```csharp
 var orders = Fake.For<Order>().WithBackReferences().Generate(10);
-orders[0].Lines[0].Order;   // the very same order (ReferenceEquals), not null
+var parent = orders[0].Lines[0].Order;   // the very same order (ReferenceEquals), not null
 ```
+<!-- end snippet -->
 
 - Every member still `null` after creation, whose type an object above it satisfies, gets the **nearest** such object, through settable members, collections and dictionary values. Members that have a value are kept, and constructor-only members are left alone.
 - Nothing is drawn, so **the rest of the data is exactly that of the same seed without it**. `Where` and `AfterCreate` see the finished graph, and `Populate` fills the missing references of an existing graph.
@@ -483,12 +524,14 @@ orders[0].Lines[0].Order;   // the very same order (ReferenceEquals), not null
 
 Foreign keys in nested objects are random by default, so `order.CustomerId` doesn't match `customer.Id`. `WithParentKey` copies the key down, so a generated aggregate joins up, ready for a database, `DataExport` or an API mock:
 
+<!-- snippet: readme-parent-keys -->
 ```csharp
 var customers = Fake.For<Customer>()
     .WithParentKey(c => c.Orders.Each().CustomerId, c => c.Id)
     .WithParentKey(c => c.Orders.Each().Lines.Each().OrderId, (Order o) => o.Id)   // the nearest Order above each line
     .Generate(100);
 ```
+<!-- end snippet -->
 
 - The parent is the generated object, or with a typed parameter (`(Order o) => …`) the **nearest** object of that type above the foreign key. Paths go through nested objects, collections and dictionary values; objects on the path must be classes.
 - The keys are set on the finished object, after rules that depend on it and `WithBackReferences`, before `Where`, `Unique` and `AfterCreate` see it, so a key that a rule (`Sequence(c => c.Id, …)`) gives the parent is the one copied.
@@ -498,6 +541,7 @@ var customers = Fake.For<Customer>()
 
 `Where` keeps only the objects that satisfy a condition, and `Where(x => x.Member, condition)` draws just that member again, which is cheaper:
 
+<!-- snippet: readme-where -->
 ```csharp
 var bigOrders = Fake.For<Order>().Seed(1)
     .Where(o => o.Total > 100)                                   // the whole object is generated again until it holds
@@ -505,6 +549,7 @@ var bigOrders = Fake.For<Order>().Seed(1)
     .Where(o => o.Reference, r => !r.StartsWith("TEST"))         // only Reference is drawn again
     .Generate(50);
 ```
+<!-- end snippet -->
 
 - **Same seed, same data**: an object that already satisfies the condition is the one you get without it, and retries draw from a seed derived from the seed, the position and the attempt, so item *n* stays the same however you generate.
 - **The object condition sees the finished object** (dependent rules and `AfterCreate` have run). It is meant for conditions most objects meet: after `maxAttempts` (default 1000) it throws and suggests setting the members with `With(...)`. Rejected objects have used up their `Unique` values.
@@ -515,14 +560,16 @@ var bigOrders = Fake.For<Order>().Seed(1)
 
 A rule that names a position in the graph can silently do nothing: `.With(x => x.Lines.Each().Sku, "A")` when the lists are empty, a path below a member that another rule replaced, or a `Subtype` for an interface nothing uses. `VerifyRules()` turns that into a failure:
 
+<!-- snippet: readme-verify-rules -->
 ```csharp
 var invoices = Fake.For<Invoice>().Seed(1)
     .With(i => i.Billing.City, "Oslo")
     .Subtype<IPayment, Card>()
     .WithConvention<string>(n => n.EndsWith("Code"), f => f.Random.ReplaceSymbols("??-###"))
     .VerifyRules()
-    .Generate(20);      // InvalidOperationException listing every rule that applied to none of the 20 invoices
+    .Generate(20);      // a rule that applied to none of the 20 invoices throws an InvalidOperationException naming it
 ```
+<!-- end snippet -->
 
 - **Checked**: path rules, `Subtype`, `WithGeneratorFor` and `WithConvention`, the rules whose reach depends on the graph. A rule counts once it applied to any object of this generator instance, over all its calls.
 - **When generation ends**: after `Generate`, `GenerateParallel` and `Populate` (not for zero objects). `Stream()` never ends, so it throws `NotSupportedException`, and a verifying generator can't be nested (call `VerifyRules(false)` on it).
@@ -531,15 +578,17 @@ var invoices = Fake.For<Invoice>().Seed(1)
 
 Measurements, scores, ages and durations cluster around an average. `WithNormalDistribution` gives a number member that shape:
 
+<!-- snippet: readme-normal -->
 ```csharp
 var people = Fake.For<Person>().Seed(1)
-    .WithNormalDistribution(p => p.Height, mean: 175, standardDeviation: 8)             // 175.34, 168.9, 181.72…
+    .WithNormalDistribution(p => p.Height, mean: 175, standardDeviation: 8)             // 184.81, 171.03, 184.82…
     .WithNormalDistribution(p => p.Iq, 100, 15)                                         // whole numbers for int members
     .WithNormalDistribution(p => p.Lines.Each().Pulse, 70, 8, min: 40, max: 120)        // a value outside the limits is drawn again
     .Generate(1000);
 
 var iq = faker.Number.Normal<int>(100, 15);          // also Normal(), faker.Random.Normal() and {{number.normal(50, 5)}}
 ```
+<!-- end snippet -->
 
 - **Any numeric type** and its nullable form. Whole-number types are rounded, others get two decimals (`decimals: 0` to 15), and a value the type can't hold saturates, so give limits for `byte` near 255.
 - **Limits cut the bell off, they don't flatten it**: values outside are drawn again, and after 100 misses the nearest limit is returned. `[Range]` is not read, because rules win over annotations.
@@ -547,12 +596,14 @@ var iq = faker.Number.Normal<int>(100, 15);          // also Normal(), faker.Ran
 
 ### Numbering and cycling
 
+<!-- snippet: readme-sequence -->
 ```csharp
 var tickets = Fake.For<Ticket>().Seed(1)
     .Sequence(t => t.Code, i => $"T{i + 1:D4}")                       // T0001, T0002, T0003…
     .Cycle(t => t.Queue, ["north", "south", "east"])                  // north, south, east, north…
     .Generate(100);
 ```
+<!-- end snippet -->
 
 The value depends on the object's position: the first object is 0 and the numbers continue over calls, whatever the seed, the batch size, `GenerateParallel` or `Stream()`, and a `Where` retry keeps its position. Only members of the generated object take these rules, and a generator with them can't be nested (every nested object would be 0). The object's own `Id` already counts 1, 2, 3… by [convention](#conventions).
 
@@ -560,11 +611,13 @@ The value depends on the object's position: the first object is 0 and the number
 
 `Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:
 
+<!-- snippet: readme-populate -->
 ```csharp
 var order = Fake.Populate(new Order { CustomerId = 42 });         // CustomerId stays 42, everything else is filled
 generator.Populate(existing, PopulateMode.All);                   // regenerate every member that isn't ignored
 List<Customer> filled = generator.Populate(customers);            // many at once, each from its own place in the seeded sequence
 ```
+<!-- end snippet -->
 
 - **`MissingOnly`** (the default) fills members that hold their default (`null`, `0`, `false`, `Guid.Empty`, an empty string or collection), keeps the others and populates set nested objects member by member. A deliberate `false` or `0` counts as unset: protect it with `.Ignore(...)`.
 - Kept values shape the generated ones: with a set `FirstName`, `BirthDate` or `Age`, the email, username, age and birthdate match them.
@@ -574,6 +627,7 @@ List<Customer> filled = generator.Populate(customers);            // many at onc
 
 The same key gives the same values in every run, process and machine, whatever was generated before and whether or not anything is seeded. That makes stable stand-ins for real data, for example to copy production data to a test system without the personal details while joins still work:
 
+<!-- snippet: readme-keyed -->
 ```csharp
 string name = Fake.Keyed("customer:42").Person.FullName();     // always the same name for customer 42
 Faker faker = new Faker("sv").Keyed(user.Email);                // from any faker
@@ -584,13 +638,14 @@ using (Fake.ForKey("customer:42"))                               // a scope, lik
 {
     Customer same = Fake.One<Customer>();                        // the same stand-in as GenerateFor, however often you ask
     List<Order> his = Fake.Many<Order>(3);                       // the same as Keyed("customer:42").Generate(3)
-    string name = Fake.Person.FullName();                        // the same as Fake.Keyed("customer:42").Person.FullName()
+    string sameName = Fake.Person.FullName();                    // the same as Fake.Keyed("customer:42").Person.FullName()
 }
 
 List<Customer> masked = Fake.For<Customer>()
     .Ignore(x => x.Id)                                           // keep what isn't personal
     .Pseudonymize(customers, x => x.Email);                      // the same real email gets the same fake person in every table
 ```
+<!-- end snippet -->
 
 - `Pseudonymize` reads the key, then regenerates every member that isn't ignored, so the stand-in's names, email, address and birthdate agree.
 - The key becomes a seed with `SeededRandom.KeySeed` (FNV-1a and SplitMix64, never the per-process `string.GetHashCode`), mixed with the generator's `Seed` when there is one; keyed dates are relative to `DefaultSeededReferenceDate`.
@@ -602,6 +657,7 @@ List<Customer> masked = Fake.For<Customer>()
 
 `WithFeed` fills members from the rows of a CSV or JSON file, for data you want to control (a product catalogue, real-looking test accounts) while the rest is generated. The generator can also write what it generates:
 
+<!-- snippet: readme-feeds -->
 ```csharp
 var feed = DataFeed.FromCsvFile("customers.csv");        // also FromCsv(text), FromJson(text), FromJsonFile(path)
 var customers = Fake.For<Customer>().WithFeed(feed).Generate(100);                         // rows 1, 2, 3… and round again
@@ -611,6 +667,7 @@ Fake.For<Customer>().Seed(1).WriteCsvFile("customers.csv", 500);
 string json = Fake.For<Customer>().ToJson(10);                   // also WriteJsonFile(path, n), WriteJson(stream, n)
 string csv = Fake.For<Customer>().ToCsv(100, delimiter: ';', columns: ["Id", "Email", "Country"]);
 ```
+<!-- end snippet -->
 
 - **One row per object**, picked by position (or by seed and position), so item *n* is the same however you generate. **Columns fill members by name**, ignoring case, spaces and underscores (`first_name` fills `FirstName`), constructor parameters included, converted with the invariant culture. A `DateTimeOffset` without an offset is UTC and a `DateTime` with one becomes UTC, so a feed reads the same on every machine; an enum takes a name or the number of a defined value.
 - **Strict about mistakes**: an unmatched column (unless `ignoreUnknownColumns: true`), a value that doesn't fit (the message names the row, column, value and type), ragged rows, duplicate columns and unterminated quotes throw when the feed is read or first used, not mid-run.
@@ -642,6 +699,7 @@ Validation attributes that derive straight from `ValidationAttribute` work too: 
 
 The annotations that make objects valid also tell Phoney how to break them, so you can test that validation rejects what it should and accepts what sits right on the edge:
 
+<!-- snippet: readme-invalid -->
 ```csharp
 var order = Fake.For<Order>().Invalid(o => o.Quantity).Generate();            // 0 or 11 for [Range(1, 10)], everything else valid
 var edge = Fake.For<Order>().Boundary(o => o.Quantity).Generate();            // 1 or 10
@@ -652,6 +710,7 @@ foreach (var c in Fake.For<Order>().Seed(1).InvalidCases())                   //
 foreach (var c in Fake.For<Order>().Seed(1).BoundaryCases())                  // every value exactly on a limit, all valid
     validator.Validate(c.Value).IsValid.ShouldBeTrue(c.ToString());           // "Name: the maximum length (50)"
 ```
+<!-- end snippet -->
 
 | Annotation | `Invalid` gives | `Boundary` gives |
 |---|---|---|
@@ -685,11 +744,13 @@ Member names (case and `_` ignored, trailing words matched, so `BillingCity` is 
 
 `Name` and `Title` look at the declaring type (`Company.Name` is a company name, `Book.Title` a title). Anything else gets a value based on its type. Add your own:
 
+<!-- snippet: readme-conventions -->
 ```csharp
 Fake.Conventions.Add<string>(name => name.EndsWith("Sku"), f => f.Random.ReplaceSymbols("SKU-#####")); // app-wide
-Fake.For<Order>().WithConvention<decimal>(n => n == "Vat", f => 0.25m);                          // one generator
-Fake.For<Order>().WithEveryMemberOfType<DateOnly>(f => f.Date.Past().Date);                     // every DateOnly member, whatever its name
+var withVat = Fake.For<Order>().WithConvention<decimal>(n => n == "Vat", f => 0.25m);           // one generator
+var dated = Fake.For<Order>().WithEveryMemberOfType<DateOnly>(f => DateOnly.FromDateTime(f.Date.Past().UtcDateTime)); // every DateOnly member, whatever its name
 ```
+<!-- end snippet -->
 
 Conventions apply to every object in the graph, so `Order.Lines[0].Sku` is covered as well as `Order.Sku`. Explicit rules come first, then the generator's conventions, then the app-wide ones. `WithEveryMemberOfType` matches the nullable form too, doesn't apply annotations, and counts as coverage for `.Strict()`.
 
@@ -697,19 +758,28 @@ Conventions apply to every object in the graph, so `Order.Lines[0].Sku` is cover
 
 `Fake.For<T>()` uses reflection (with compiled delegates) unless a generated model exists. Declare the types you generate on a partial class:
 
+<!-- snippet: readme-fake-for -->
 ```csharp
 [FakeFor<Customer>, FakeFor<Order>]
 internal static partial class TestData;
+```
+<!-- end snippet -->
 
+and use them:
+
+<!-- snippet: readme-fake-for-use -->
+```csharp
 var customers = TestData.Customer.Seed(1).Generate(100);                         // an ObjectGenerator<Customer>, no reflection
 var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 }); // the Fake facade, trim and AOT safe
 ```
+<!-- end snippet -->
 
 - The generator writes a model for each listed type and every type it contains and registers them at startup, so `Fake.For<Customer>()` uses them too. **Generated and reflection models produce identical data for the same seed.**
 - `Fake.For`, `One`, `Many` and `Populate` fall back to reflection and are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`), so the compiler flags them in trimmed and AOT apps. **`Fake.ForGenerated<T>()`** is the same facade without reflection, and throws with the fix when the type has no model.
 - Subtypes need models too: `[JsonDerivedType]` types get them automatically, and `[FakeSubtype<IShape, Circle>]` generates one and registers the subtype. NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
 - Generic helpers (test-data builders, factories in a shared package) can mark their type parameter with **`[FakeForTypeArgument]`**: every project that passes a concrete type for it, in a base class or an explicit generic call, gets a generated, registered model for that type without listing it in `[FakeFor]`. Type arguments inferred from method arguments are not seen.
 
+  <!-- snippet: readme-type-argument -->
   ```csharp
   public abstract class TestDataBuilder<[FakeForTypeArgument] T> where T : class
   {
@@ -718,6 +788,7 @@ var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 });
 
   internal sealed class CustomerBuilder : TestDataBuilder<Customer>; // Customer gets a model
   ```
+  <!-- end snippet -->
 
 <details>
 <summary>Diagnostics</summary>
@@ -762,6 +833,7 @@ dotnet_analyzer_diagnostic.category-Phoney.Usage.severity = suggestion
 
 `Check` turns a generator into a property-based test: it generates objects, runs a property on each and, when one fails, **shrinks** it to the simplest object that still fails. Unlike classic property-based testing tools, the candidates are made by your generator, so the counterexample is realistic data that obeys your rules, annotations and conventions, with names, email and dates that still agree:
 
+<!-- snippet: readme-check -->
 ```csharp
 Fake.For<Customer>().CollectionSize(0, 6)
     .Check(c => c.Orders.Sum(o => o.Quantity * o.Price) < 5_000);          // returns false: fails
@@ -769,6 +841,7 @@ Fake.For<Customer>().CollectionSize(0, 6)
 Fake.For<Order>().Check(o => Pricing.Total(o).ShouldBeGreaterThanOrEqualTo(0));   // any assertion library
 await Fake.For<Order>().CheckAsync(async o => await Assert.That(await api.Quote(o)).IsPositive());
 ```
+<!-- end snippet -->
 
 ```text
 FakeCheckException<Customer>: The property failed for Customer number 1 of 100 (seed 286532772, shrunk in 63 steps).
@@ -789,11 +862,13 @@ Replay: PHONEY_SEED=286532772 dotnet test, or Seed(286532772) on the generator.
 
 `Fake.Check` checks a lambda of up to four parameters. They are filled like `[FakeData]` fills test parameters (by name, type and data annotations, and the values of one row agree), and a failing row is shrunk the same way:
 
+<!-- snippet: readme-check-parameters -->
 ```csharp
 Fake.Check((OrderLine line, [Range(0, 1000)] int discount) => Pricing.Total(line, discount) >= 0);
 Fake.Check((string email, [Range(18, 99)] int age) => Signup.Validate(email, age).ShouldBeEmpty());
 await Fake.CheckAsync(async (Customer customer) => await api.Register(customer));
 ```
+<!-- end snippet -->
 
 ```text
 FakeCheckException<Object[]>: The property failed for row number 1 of 100 (seed 355719690, shrunk in 25 steps).
@@ -846,21 +921,24 @@ public async Task Places_order(Customer customer, string email, [Range(1, 10)] i
 
 `[FakeCheck]` (in all four packages) runs a test once for each of 100 generated rows of its parameters and, when it fails for one, shrinks the row and fails with the simplest one:
 
+In TUnit:
+
+<!-- snippet: tunit-fake-check -->
 ```csharp
-// TUnit
 [Test, FakeCheck]
 public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
     Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
+```
+<!-- end snippet -->
 
-// xUnit.net v3, NUnit and MSTest: [FakeCheck] replaces [Fact], [Test] or [TestMethod]
-[FakeCheck]
-public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
-    Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
-// FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
-// Counterexample:
-//   order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }] }, discount = 2
-// …
-// Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
+In xUnit.net v3, NUnit and MSTest, `[FakeCheck]` replaces `[Fact]`, `[Test]` or `[TestMethod]`. When the property fails for a row:
+
+```text
+FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
+Counterexample:
+  order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }], … }, discount = 2
+…
+Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
 ```
 
 - Parameters are filled like `[FakeData]` fills them, but the rows are **new on every run**, so the suite explores more data over time; `[FakeCheck(Seed = 812734)]` or `PHONEY_SEED` replays a failure and its shrinking exactly.
@@ -873,20 +951,24 @@ public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =
 
 Run a test on random data and, **when it fails, get the seed that replays it**. Every test package has a `[FakeSeed]` attribute: it seeds the `Fake` facade around the test and prints the seed in the test output when the test fails.
 
+In TUnit:
+
+<!-- snippet: tunit-fake-seed -->
 ```csharp
-// TUnit
 [Test, FakeSeed]
-public async Task Totals_add_up()
+public void Totals_add_up()
 {
-    var orders = Fake.Many<Order>(100);                       // different on every run
-    await Assert.That(Totals.Of(orders)).IsEqualTo(orders.Sum(o => o.Total));
+    var orders = Fake.Many<Order>(100);   // new orders on every run, the same ones when replayed
+
+    orders.Sum(o => o.Total).ShouldBe(orders.SelectMany(o => o.Lines).Sum(l => l.Quantity * l.Price));
 }
+```
+<!-- end snippet -->
 
-// xUnit.net v3:  [Fact, FakeSeed]   (also on [Theory] and [FakeCheck])
-// NUnit:         [Test, FakeSeed]   (also on [TestCase] and [FakeCheck])
-// MSTest:        [FakeSeed] instead of [TestMethod], or [FakeSeedClass] instead of [TestClass]
+In xUnit.net v3 it is `[Fact, FakeSeed]` (also on `[Theory]` and `[FakeCheck]`), in NUnit `[Test, FakeSeed]` (also on `[TestCase]` and `[FakeCheck]`), and in MSTest `[FakeSeed]` instead of `[TestMethod]` or `[FakeSeedClass]` instead of `[TestClass]`. When the test fails, its output says:
 
-// Phoney: this test ran with random seed 481516234. Replay it with [FakeSeed(481516234)] or PHONEY_SEED=481516234.
+```text
+Phoney: this test ran with random seed 481516234. Replay it with [FakeSeed(481516234)] or PHONEY_SEED=481516234.
 ```
 
 - **Replay** one test with `[FakeSeed(481516234)]`, or a whole run with `PHONEY_SEED=481516234 dotnet test`. A pinned seed wins over `PHONEY_SEED`, and a `PHONEY_SEED` that isn't a whole number is reported.
@@ -901,14 +983,26 @@ public async Task Totals_add_up()
 
 The `Phoney.DependencyInjection` package registers fakers and generators in `IServiceCollection`:
 
+<!-- snippet: di-add-phoney -->
 ```csharp
-builder.Services.AddPhoney(o => { o.Locale = "sv"; o.Seed = 42; })
-    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // singleton ObjectGenerator<Customer>
-    .AddGenerator(TestData.Order);                              // source-generated: no reflection, AOT safe
+builder.Services.AddPhoney(o =>
+    {
+        o.Locale = "sv";
+        o.Seed = 42;                                            // every scope starts at the same seed
+    })
+    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // a singleton ObjectGenerator<Customer>
+    .AddGenerator(TestData.Order);                              // a [FakeFor<Order>] generator: no reflection, AOT safe
+```
+<!-- end snippet -->
 
+and use them in endpoints, controllers or services:
+
+<!-- snippet: di-minimal-api -->
+```csharp
 app.MapGet("/demo/customers", (ObjectGenerator<Customer> customers) => customers.Generate(10));
 app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 ```
+<!-- end snippet -->
 
 - `IFaker`/`Faker` are scoped, `IFakerFactory` creates fakers for other locales and seeds, and generators are singletons. `IFaker` itself is in the core package, for your own abstractions and test doubles.
 - `PhoneyOptions`: `Locale`, `Seed` (every scope starts at the seed, so each request or test scope is reproducible), `ReferenceDate` and `TimeProvider` (also taken from the container, such as a `FakeTimeProvider`).
@@ -918,13 +1012,18 @@ app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 
 The `Phoney.EntityFrameworkCore` package turns generated data into `HasData` seed data:
 
+<!-- snippet: ef-has-fake-data -->
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    modelBuilder.Entity<Customer>().HasFakeData(50);
+    modelBuilder.Entity<Customer>().Property(c => c.Email).HasMaxLength(100);
+
+    var customers = modelBuilder.Entity<Customer>().HasFakeData(50);
     modelBuilder.Entity<Order>().HasFakeData(200, g => g.With(o => o.Status, OrderStatus.Paid));
+    modelBuilder.Entity<Review>().HasFakeData(20, g => g.WithOneOf(r => r.CustomerId, customers, c => c.Id));
 }
 ```
+<!-- end snippet -->
 
 - The data is the same on every model build (the seed is derived from the entity name), so migrations stay stable.
 - Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys point at seeded principals (seed principals first, or link with `WithOneOf`; a key to the same table points at an earlier row).
@@ -934,12 +1033,14 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 
 The `Phoney.NodaTime` package adds NodaTime values and members:
 
+<!-- snippet: readme-noda -->
 ```csharp
 Instant created = faker.Noda().Instant.Past();
 LocalDate birthday = faker.Noda().LocalDate.Birthdate();
-Interval stay = faker.Noda().Interval();       // also DateInterval, YearMonth, AnnualDate, Offset
+Interval stay = faker.Noda().Interval();         // also DateInterval, YearMonth, AnnualDate, Offset
 var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate BirthDate… follow the conventions
 ```
+<!-- end snippet -->
 
 `Instant`, `OffsetDateTime`, `ZonedDateTime`, `LocalDateTime`, `LocalDate`, `LocalTime` and `Duration` members are generated like their built-in counterparts, so `CreatedAt`, `ExpiresAt`, `BirthDate` and `Age` agree, with reflection and with source-generated models. See the [package README](src/Phoney.NodaTime/README.md).
 
@@ -947,12 +1048,17 @@ var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate
 
 The `Phoney.WireMock` package answers WireMock.Net requests with fake JSON that belongs to the URL:
 
+<!-- snippet: wiremock-customers -->
 ```csharp
+var server = WireMockServer.Start();
+
 server.Given(Request.Create().WithPath("/customers/*").UsingGet())
-      .RespondWith(Response.Create().WithFakeJson(Fake.For<Customer>()));       // /customers/42 is always the same customer
+      .RespondWith(Response.Create().WithFakeJson(Fake.For<Customer>()));            // /customers/42 is always the same customer
+
 server.Given(Request.Create().WithPath("/customers").UsingGet())
       .RespondWith(Response.Create().WithFakeJsonList(Fake.For<Customer>(), 5, 20)); // a stable 5 to 20 per URL
 ```
+<!-- end snippet -->
 
 Nothing is stored: each body is `GenerateFor` of the request's key (the path and query by default, or your own, such as the id), so your assertions can compute the expected object. Rules and seeds apply, and a `JsonTypeInfo<T>` overload keeps it reflection free. See the [package README](src/Phoney.WireMock/README.md).
 

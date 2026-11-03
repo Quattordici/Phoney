@@ -1,22 +1,31 @@
 # Phoney.NUnit
 
-[Phoney](https://github.com/Quattordici/Phoney) fake data for [NUnit](https://nunit.org) tests. `[FakeData]` fills test parameters with realistic values, chosen by name and type like the members of a Phoney-generated object:
+[Phoney](https://github.com/Quattordici/Phoney) fake data for [NUnit](https://nunit.org) tests. `[FakeData]` fills test parameters with realistic values, chosen by name and type like the members of a Phoney-generated object.
 
+With `using Phoney.NUnit;` (and, because NUnit has a `[Range]` of its own, `using Range = System.ComponentModel.DataAnnotations.RangeAttribute;`):
+
+<!-- snippet: nunit-fake-data -->
 ```csharp
-using Phoney.NUnit;
-
-public class OrderTests
+public sealed class OrderTests
 {
     [FakeData]   // instead of [Test], like [TestCase]
     public void Places_order(Customer customer, string email, [Range(1, 10)] int quantity)
     {
-        // customer is fully populated, email is an email address, quantity is between 1 and 10
+        customer.Email.ShouldNotBeEmpty();     // customer is fully populated
+        email.ShouldContain('@');              // email is an email address
+        quantity.ShouldBeInRange(1, 10);
     }
 
     [FakeData(Count = 5, Locale = "sv")] // five test cases with Swedish data
-    public void Formats_address(string street, string city, string zipCode) { }
+    public void Formats_address(string street, string city, string zipCode)
+    {
+        street.ShouldNotBeEmpty();             // street, city and zipCode come from one address
+        city.ShouldNotBeEmpty();
+        zipCode.ShouldMatch("^[0-9]{5}$");     // Swedish postcodes have five digits
+    }
 }
 ```
+<!-- end snippet -->
 
 - **Values agree.** All parameters of a test case describe the same person, place and timeline: `firstName`, `email`, `birthDate` and `age` match, `street`, `city` and `zipCode` come from one address, and `createdAt` comes before `updatedAt`.
 - **Data annotations are honoured** on parameters: `[Range]`, `[StringLength]`, `[EmailAddress]`, `[RegularExpression]`, `[AllowedValues]` and more.
@@ -31,15 +40,22 @@ public class OrderTests
 
 `[FakeCheck]` (instead of `[Test]`) runs a test once for each of 100 generated rows of its parameters. When the test fails for a row, the row is **shrunk** to the simplest one that still fails (fewer collection elements, lower numbers, the first list values), and the test fails with it:
 
+<!-- snippet: nunit-fake-check -->
 ```csharp
 [FakeCheck]
 public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
     Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
-// The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
-// Counterexample:
-//   order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }] }, discount = 2
-// …
-// Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
+```
+<!-- end snippet -->
+
+When it fails for a row, the test fails with the shrunk row and how to replay it:
+
+```text
+The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
+Counterexample:
+  order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }], … }, discount = 2
+…
+Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
 ```
 
 - Parameters are filled like `[FakeData]` fills them (names, types, annotations; the values of a row agree), and shrinking only makes rows Phoney could have generated, so a counterexample is still realistic data.

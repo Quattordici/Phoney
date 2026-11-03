@@ -75,17 +75,7 @@ public sealed class FakeDataTests
     }
 
     [Test, FakeData]
-    public void Custom_conventions_apply(string sku) => sku.ShouldStartWith("SKU-");
-}
-
-/// <summary>
-/// Test data is generated while tests are discovered, so conventions are registered in a hook that runs before
-/// discovery; later hooks (such as <c>[Before(Assembly)]</c>) would be too late.
-/// </summary>
-public static class TestSetup
-{
-    [Before(TestDiscovery)]
-    public static void RegisterConventions() => Fake.Conventions.Add("Sku", f => f.Random.ReplaceSymbols("SKU-####"));
+    public void Custom_conventions_apply(string sku) => sku.ShouldStartWith("SKU-"); // registered by Docs.TestSetup, the README's hook
 }
 
 /// <summary>Seeds, independent of a running test.</summary>

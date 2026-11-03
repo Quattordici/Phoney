@@ -20,4 +20,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Phoney.TUnit/Phoney.TUnit.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The shop model the docs' examples (Docs/*Examples.cs, checked by DocExampleTests) are written against. -->
+    <Compile Include="../Shared/DocShop.cs" Link="Docs/DocShop.cs" />
+  </ItemGroup>
 </Project>
