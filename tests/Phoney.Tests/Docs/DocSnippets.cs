@@ -65,8 +65,13 @@ internal static class DocSnippets
             {
                 var name = DocName(trimmed);
                 if (!snippets.TryGetValue(name, out var code))
-                    throw new InvalidOperationException($"{fileName} shows snippet '{name}', which no test defines. Add a '{CodeStart} {name}' region to a test in tests/Phoney.Tests/Docs/*Examples.cs.");
-                result.Append(line).Append('\n').Append("```csharp\n").Append(code).Append("\n```\n");
+                    throw new InvalidOperationException($"{fileName} shows snippet '{name}', which no test defines. Add a '{CodeStart} {name}' region to a test in tests/<project>/Docs/*Examples.cs.");
+                // A snippet inside a list item is indented like its markers, so it stays part of the item.
+                var indent = line[..(line.Length - line.TrimStart().Length)];
+                result.Append(line).Append('\n').Append(indent).Append("```csharp\n");
+                foreach (var codeLine in Lines(code))
+                    result.Append(codeLine.Length == 0 ? "" : indent).Append(codeLine).Append('\n');
+                result.Append(indent).Append("```\n");
                 inside = true;
             }
             else if (trimmed == DocEnd)

@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Phoney.Tests.Docs;
 
 // Inside the namespace, so the guides' model wins over the test models of Phoney.Tests.
-using Phoney.Tests.Docs.Shop;
+using Phoney.Docs.Shop;
 
 /// <summary>The recipes of docs/cookbook.md, run as tests.</summary>
 public sealed class CookbookExamples

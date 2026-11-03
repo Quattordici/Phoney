@@ -1,7 +1,7 @@
 namespace Phoney.Tests.Docs;
 
 // Inside the namespace, so the guides' model wins over the test models of Phoney.Tests.
-using Phoney.Tests.Docs.Shop;
+using Phoney.Docs.Shop;
 
 /// <summary>The Phoney side of docs/coming-from-bogus.md, run as tests.</summary>
 public sealed class MigrationExamples

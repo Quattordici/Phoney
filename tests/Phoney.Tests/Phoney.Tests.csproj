@@ -30,4 +30,8 @@
     <!-- One table of member types for both models: this project reads them through its own model, the other one through the other. -->
     <Compile Include="../Shared/ValueShapeCases.cs" Link="Shared/ValueShapeCases.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The shop model the docs' examples (Docs/*Examples.cs, checked by DocExampleTests) are written against. -->
+    <Compile Include="../Shared/DocShop.cs" Link="Docs/DocShop.cs" />
+  </ItemGroup>
 </Project>

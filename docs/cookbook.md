@@ -1,6 +1,6 @@
 # Cookbook
 
-Short answers to concrete jobs. Every recipe uses the same small shop model (`Customer`, `Order`, `OrderLine`, `Product`, `Signup`; see [`Shop.cs`](../tests/Phoney.Tests/Docs/Shop.cs)) and runs as a test, so you can paste it and change the names.
+Short answers to concrete jobs. Every recipe uses the same small shop model (`Customer`, `Order`, `OrderLine`, `Product`, `Signup`; see [`DocShop.cs`](../tests/Shared/DocShop.cs)) and runs as a test, so you can paste it and change the names.
 
 - [A database-ready aggregate](#a-database-ready-aggregate)
 - [Data that refers to other data](#data-that-refers-to-other-data)

@@ -1,7 +1,7 @@
 namespace Phoney.Tests.Docs;
 
 /// <summary>
-/// The guides show the code their tests run. To change an example, change the test under tests/Phoney.Tests/Docs (the *Examples.cs files) and run
+/// The guides show the code their tests run. To change an example, change the test in tests/<project>/Docs/*Examples.cs and run
 /// <c>PHONEY_UPDATE_DOCS=1 dotnet test --project tests/Phoney.Tests -- --treenode-filter "/*/*/DocExampleTests/*"</c>, which writes it into the guides.
 /// </summary>
 public sealed class DocExampleTests
@@ -11,7 +11,13 @@ public sealed class DocExampleTests
     private static readonly Lazy<Dictionary<string, string>> Snippets = new(() =>
     {
         var all = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var file in Directory.EnumerateFiles(Path.Combine(Root, "tests", "Phoney.Tests", "Docs"), "*Examples.cs").Order(StringComparer.Ordinal))
+        // Every test project can hold examples: an add-on's examples compile and run where its package is referenced.
+        var files = Directory.EnumerateDirectories(Path.Combine(Root, "tests"))
+            .Select(project => Path.Combine(project, "Docs"))
+            .Where(Directory.Exists)
+            .SelectMany(docs => Directory.EnumerateFiles(docs, "*Examples.cs"))
+            .Order(StringComparer.Ordinal);
+        foreach (var file in files)
         {
             foreach (var (name, code) in DocSnippets.Extract(File.ReadAllText(file), Path.GetFileName(file)))
             {
@@ -25,6 +31,7 @@ public sealed class DocExampleTests
     public static IEnumerable<string> Guides() =>
         [.. Directory.EnumerateFiles(Path.Combine(Root, "docs"), "*.md", SearchOption.AllDirectories)
             .Append(Path.Combine(Root, "README.md"))
+            .Concat(Directory.EnumerateDirectories(Path.Combine(Root, "src")).Select(package => Path.Combine(package, "README.md")).Where(File.Exists))
             .Select(p => Path.GetRelativePath(Root, p).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)];
 

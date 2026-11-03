@@ -84,4 +84,13 @@ public sealed class DocSnippetsTests
 
         DocSnippets.NamesIn(markdown).ShouldBe(["a", "b"]);
     }
+
+    [Test]
+    public void Indents_the_code_like_its_markers_inside_a_list()
+    {
+        const string markdown = "- item:\n\n  <!-- snippet: hello -->\n  <!-- end snippet -->\n";
+
+        DocSnippets.Render(markdown, new Dictionary<string, string> { ["hello"] = "a();\n\nb();" }, "guide.md")
+            .ShouldBe("- item:\n\n  <!-- snippet: hello -->\n  ```csharp\n  a();\n\n  b();\n  ```\n  <!-- end snippet -->\n");
+    }
 }

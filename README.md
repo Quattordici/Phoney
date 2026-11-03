@@ -356,11 +356,13 @@ var customers = Fake.For<Customer>()
 - **Strict mode**: `.Strict()` throws when a scalar member has neither a rule, a convention nor a data annotation, so new members can't silently get meaningless data. The analyzer reports the same at compile time (**PHONEY004**) for chains like `Fake.For<T>().Strict()…Generate()`; it can't see app-wide `Fake.Conventions`.
 - **App-wide defaults**: set a generation setting once for every generator, `Fake.One`/`Many`, nested objects and `[FakeData]`/`[FakeCheck]` parameters:
 
+  <!-- snippet: readme-defaults -->
   ```csharp
   Fake.Defaults.Strict = true;            // at startup: a module initializer, an assembly-level test hook
   Fake.Defaults.CollectionSize = (0, 5);
   Fake.Defaults.BackReferences = true;    // also NullProbability, MaxDepth, CausalTimelines, ParameterDefaults, NameConventions; Reset()
   ```
+  <!-- end snippet -->
 
   Anything more specific wins: a setting on the generator (`.CollectionSize(2, 2)`, also inside `Fake.Generators.Configure<T>`), `PhoneyOptions` in DI, and an attribute option you set. Like conventions they are read when a generator is first used, and they are process-wide. With nothing set, generated data is the same as before. PHONEY004 doesn't see `Fake.Defaults.Strict`.
 
@@ -756,19 +758,28 @@ Conventions apply to every object in the graph, so `Order.Lines[0].Sku` is cover
 
 `Fake.For<T>()` uses reflection (with compiled delegates) unless a generated model exists. Declare the types you generate on a partial class:
 
+<!-- snippet: readme-fake-for -->
 ```csharp
 [FakeFor<Customer>, FakeFor<Order>]
 internal static partial class TestData;
+```
+<!-- end snippet -->
 
+and use them:
+
+<!-- snippet: readme-fake-for-use -->
+```csharp
 var customers = TestData.Customer.Seed(1).Generate(100);                         // an ObjectGenerator<Customer>, no reflection
 var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 }); // the Fake facade, trim and AOT safe
 ```
+<!-- end snippet -->
 
 - The generator writes a model for each listed type and every type it contains and registers them at startup, so `Fake.For<Customer>()` uses them too. **Generated and reflection models produce identical data for the same seed.**
 - `Fake.For`, `One`, `Many` and `Populate` fall back to reflection and are annotated (`RequiresUnreferencedCode`/`RequiresDynamicCode`), so the compiler flags them in trimmed and AOT apps. **`Fake.ForGenerated<T>()`** is the same facade without reflection, and throws with the fix when the type has no model.
 - Subtypes need models too: `[JsonDerivedType]` types get them automatically, and `[FakeSubtype<IShape, Circle>]` generates one and registers the subtype. NodaTime members are generated without reflection when `Phoney.NodaTime` is referenced.
 - Generic helpers (test-data builders, factories in a shared package) can mark their type parameter with **`[FakeForTypeArgument]`**: every project that passes a concrete type for it, in a base class or an explicit generic call, gets a generated, registered model for that type without listing it in `[FakeFor]`. Type arguments inferred from method arguments are not seen.
 
+  <!-- snippet: readme-type-argument -->
   ```csharp
   public abstract class TestDataBuilder<[FakeForTypeArgument] T> where T : class
   {
@@ -777,6 +788,7 @@ var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 });
 
   internal sealed class CustomerBuilder : TestDataBuilder<Customer>; // Customer gets a model
   ```
+  <!-- end snippet -->
 
 <details>
 <summary>Diagnostics</summary>

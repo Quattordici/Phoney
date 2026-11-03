@@ -25,7 +25,7 @@ var orderFaker = new Faker<Order>()
 var some = orderFaker.Generate(10);
 ```
 
-In Phoney, with `[RegularExpression]` and `[Range]` on `OrderLine` (annotations your API validates anyway; see [`Shop.cs`](../tests/Phoney.Tests/Docs/Shop.cs)):
+In Phoney, with `[RegularExpression]` and `[Range]` on `OrderLine` (annotations your API validates anyway; see [`DocShop.cs`](../tests/Shared/DocShop.cs)):
 
 <!-- snippet: bogus-translated -->
 ```csharp

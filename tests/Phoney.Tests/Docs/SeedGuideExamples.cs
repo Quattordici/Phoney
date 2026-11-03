@@ -1,7 +1,7 @@
 namespace Phoney.Tests.Docs;
 
 // Inside the namespace, so the guides' model wins over the test models of Phoney.Tests.
-using Phoney.Tests.Docs.Shop;
+using Phoney.Docs.Shop;
 
 /// <summary>The examples of docs/seeds.md, run as tests: each one also checks the promise its paragraph makes.</summary>
 public sealed class SeedGuideExamples

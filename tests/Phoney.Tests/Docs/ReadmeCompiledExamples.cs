@@ -198,4 +198,13 @@ internal static class ReadmeCompiledExamples
         await Fake.CheckAsync(async (Customer customer) => await api.Register(customer));
         // end snippet
     }
+
+    internal static void AppWideDefaults()
+    {
+        // snippet: readme-defaults
+        Fake.Defaults.Strict = true;            // at startup: a module initializer, an assembly-level test hook
+        Fake.Defaults.CollectionSize = (0, 5);
+        Fake.Defaults.BackReferences = true;    // also NullProbability, MaxDepth, CausalTimelines, ParameterDefaults, NameConventions; Reset()
+        // end snippet
+    }
 }

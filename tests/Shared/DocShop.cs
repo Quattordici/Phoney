@@ -1,7 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 
-// The model the guides under docs/ are written against. Its own namespace keeps it apart from the test models.
-namespace Phoney.Tests.Docs.Shop;
+// The model the guides under docs/ and the package READMEs are written against, linked into every test project that runs
+// their examples. Its own namespace keeps it apart from the test models.
+namespace Phoney.Docs.Shop;
 
 public sealed class Customer
 {
@@ -70,4 +71,11 @@ public sealed class Employee
     public string FirstName { get; set; } = "";
     public string Email { get; set; } = "";
     public string Department { get; set; } = "";
+}
+
+/// <summary>The application code the examples test.</summary>
+public static class Pricing
+{
+    /// <summary>The order's total after a discount in percent.</summary>
+    public static decimal Total(Order order, int discount) => order.Total * (100 - discount) / 100;
 }
