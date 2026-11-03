@@ -2,6 +2,7 @@
 
 Seed [EF Core](https://learn.microsoft.com/ef/core/) models with [Phoney](https://github.com/Quattordici/Phoney) fake data:
 
+<!-- snippet: ef-has-fake-data -->
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
@@ -12,6 +13,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
     modelBuilder.Entity<Review>().HasFakeData(20, g => g.WithOneOf(r => r.CustomerId, customers, c => c.Id));
 }
 ```
+<!-- end snippet -->
 
 - **Stable migrations**: the data is the same every time the model is built. The seed defaults to one derived from the entity's type name; pass `seed:` for other data.
 - **Valid for `HasData`**: navigations, owned and nested objects are left empty, strings are cut to their configured maximum length, and a single integer primary key is numbered 1…n when generated values clash. Other keys must come out unique, or you get an exception that says how to fix it.

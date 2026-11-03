@@ -2,17 +2,19 @@
 
 [Phoney](https://github.com/Quattordici/Phoney) fake data for [WireMock.Net](https://github.com/wiremock/WireMock.Net) mocks: realistic JSON bodies that belong to their URL, without writing or storing a single fixture.
 
-```csharp
-using Phoney.WireMock;
+With `using Phoney.WireMock;`:
 
+<!-- snippet: wiremock-customers -->
+```csharp
 var server = WireMockServer.Start();
 
 server.Given(Request.Create().WithPath("/customers/*").UsingGet())
-      .RespondWith(Response.Create().WithFakeJson(Fake.For<Customer>()));
+      .RespondWith(Response.Create().WithFakeJson(Fake.For<Customer>()));            // /customers/42 is always the same customer
 
 server.Given(Request.Create().WithPath("/customers").UsingGet())
-      .RespondWith(Response.Create().WithFakeJsonList(Fake.For<Customer>(), 5, 20));
+      .RespondWith(Response.Create().WithFakeJsonList(Fake.For<Customer>(), 5, 20)); // a stable 5 to 20 per URL
 ```
+<!-- end snippet -->
 
 `GET /customers/42` is the same customer in every request, test run and machine, `/customers/43` is another one, and `/customers?page=2` always has the same 5 to 20 customers. The bodies are computed from the URL each time (`ObjectGenerator<T>.GenerateFor`), so nothing is kept in memory and parallel requests agree.
 

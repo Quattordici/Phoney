@@ -2,6 +2,7 @@
 
 [Phoney](https://github.com/Quattordici/Phoney) fake data in `Microsoft.Extensions.DependencyInjection` and ASP.NET Core.
 
+<!-- snippet: di-add-phoney -->
 ```csharp
 builder.Services.AddPhoney(o =>
     {
@@ -10,13 +11,20 @@ builder.Services.AddPhoney(o =>
     })
     .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // a singleton ObjectGenerator<Customer>
     .AddGenerator(TestData.Order);                              // a [FakeFor<Order>] generator: no reflection, AOT safe
+```
+<!-- end snippet -->
 
+Then take a faker or a generator wherever the container creates objects:
+
+<!-- snippet: di-controller -->
+```csharp
 public class DemoController(IFaker faker, ObjectGenerator<Customer> customers)
 {
     public Customer Get() => customers.Generate();
     public string Name() => faker.Person.FullName();
 }
 ```
+<!-- end snippet -->
 
 - **`IFaker` / `Faker`** are scoped (a faker is not thread-safe); **`IFakerFactory`** creates fakers for other locales or seeds; generators are singletons (they are immutable and thread-safe).
 - **Seeded**: with `Seed`, each scope's faker starts at the seed, so every request or test scope gets the same values.

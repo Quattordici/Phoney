@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using RangeAttribute = System.ComponentModel.DataAnnotations.RangeAttribute; // NUnit, which some projects linking this file use, has one too
 
 // The model the guides under docs/ and the package READMEs are written against, linked into every test project that runs
 // their examples. Its own namespace keeps it apart from the test models.
@@ -10,6 +11,7 @@ public sealed class Customer
     public string FirstName { get; set; } = "";
     public string LastName { get; set; } = "";
     public string Email { get; set; } = "";
+    public string Country { get; set; } = "";
     public DateOnly BirthDate { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public List<Order> Orders { get; set; } = [];

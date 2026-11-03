@@ -29,7 +29,7 @@ the data and fails if the committed output differs from a fresh import.
 
 ## Documentation
 
-The [README](README.md) is the reference for every feature, and the guides in [`docs/`](docs/README.md) are organised by task. A code example in a guide or in the README's core sections is a region of a test in `tests/Phoney.Tests/Docs/*Examples.cs`, between `// snippet: name` and `// end snippet`, and the guide shows it between `<!-- snippet: name -->` and `<!-- end snippet -->`. To add or change one, edit the test and write it into the guides with:
+The [README](README.md) is the reference for every feature, and the guides in [`docs/`](docs/README.md) are organised by task. A code example in a guide, the README or a package README is a region of a test in `tests/<project>/Docs/*Examples.cs` (the core examples in `Phoney.Tests`, an add-on's in its own test project), between `// snippet: name` and `// end snippet`, and the guide shows it between `<!-- snippet: name -->` and `<!-- end snippet -->`. To add or change one, edit the test and write it into the guides with:
 
 ```bash
 PHONEY_UPDATE_DOCS=1 dotnet test --project tests/Phoney.Tests -- --treenode-filter "/*/*/DocExampleTests/*"

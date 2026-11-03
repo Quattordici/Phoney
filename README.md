@@ -921,21 +921,24 @@ public async Task Places_order(Customer customer, string email, [Range(1, 10)] i
 
 `[FakeCheck]` (in all four packages) runs a test once for each of 100 generated rows of its parameters and, when it fails for one, shrinks the row and fails with the simplest one:
 
+In TUnit:
+
+<!-- snippet: tunit-fake-check -->
 ```csharp
-// TUnit
 [Test, FakeCheck]
 public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
     Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
+```
+<!-- end snippet -->
 
-// xUnit.net v3, NUnit and MSTest: [FakeCheck] replaces [Fact], [Test] or [TestMethod]
-[FakeCheck]
-public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =>
-    Pricing.Total(order, discount).ShouldBeGreaterThanOrEqualTo(0);
-// FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
-// Counterexample:
-//   order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }] }, discount = 2
-// …
-// Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
+In xUnit.net v3, NUnit and MSTest, `[FakeCheck]` replaces `[Fact]`, `[Test]` or `[TestMethod]`. When the property fails for a row:
+
+```text
+FakeCheckException<Object[]>: The property failed for row number 12 of 100 (seed 812734, shrunk in 31 steps).
+Counterexample:
+  order = Order { Lines = [OrderLine { Sku = "AAA-00000", Quantity = 1, Price = 0.01 }], … }, discount = 2
+…
+Replay: PHONEY_SEED=812734 dotnet test, or [FakeCheck(Seed = 812734)].
 ```
 
 - Parameters are filled like `[FakeData]` fills them, but the rows are **new on every run**, so the suite explores more data over time; `[FakeCheck(Seed = 812734)]` or `PHONEY_SEED` replays a failure and its shrinking exactly.
@@ -948,20 +951,24 @@ public void Total_is_never_negative(Order order, [Range(0, 100)] int discount) =
 
 Run a test on random data and, **when it fails, get the seed that replays it**. Every test package has a `[FakeSeed]` attribute: it seeds the `Fake` facade around the test and prints the seed in the test output when the test fails.
 
+In TUnit:
+
+<!-- snippet: tunit-fake-seed -->
 ```csharp
-// TUnit
 [Test, FakeSeed]
-public async Task Totals_add_up()
+public void Totals_add_up()
 {
-    var orders = Fake.Many<Order>(100);                       // different on every run
-    await Assert.That(Totals.Of(orders)).IsEqualTo(orders.Sum(o => o.Total));
+    var orders = Fake.Many<Order>(100);   // new orders on every run, the same ones when replayed
+
+    orders.Sum(o => o.Total).ShouldBe(orders.SelectMany(o => o.Lines).Sum(l => l.Quantity * l.Price));
 }
+```
+<!-- end snippet -->
 
-// xUnit.net v3:  [Fact, FakeSeed]   (also on [Theory] and [FakeCheck])
-// NUnit:         [Test, FakeSeed]   (also on [TestCase] and [FakeCheck])
-// MSTest:        [FakeSeed] instead of [TestMethod], or [FakeSeedClass] instead of [TestClass]
+In xUnit.net v3 it is `[Fact, FakeSeed]` (also on `[Theory]` and `[FakeCheck]`), in NUnit `[Test, FakeSeed]` (also on `[TestCase]` and `[FakeCheck]`), and in MSTest `[FakeSeed]` instead of `[TestMethod]` or `[FakeSeedClass]` instead of `[TestClass]`. When the test fails, its output says:
 
-// Phoney: this test ran with random seed 481516234. Replay it with [FakeSeed(481516234)] or PHONEY_SEED=481516234.
+```text
+Phoney: this test ran with random seed 481516234. Replay it with [FakeSeed(481516234)] or PHONEY_SEED=481516234.
 ```
 
 - **Replay** one test with `[FakeSeed(481516234)]`, or a whole run with `PHONEY_SEED=481516234 dotnet test`. A pinned seed wins over `PHONEY_SEED`, and a `PHONEY_SEED` that isn't a whole number is reported.
@@ -976,14 +983,26 @@ public async Task Totals_add_up()
 
 The `Phoney.DependencyInjection` package registers fakers and generators in `IServiceCollection`:
 
+<!-- snippet: di-add-phoney -->
 ```csharp
-builder.Services.AddPhoney(o => { o.Locale = "sv"; o.Seed = 42; })
-    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // singleton ObjectGenerator<Customer>
-    .AddGenerator(TestData.Order);                              // source-generated: no reflection, AOT safe
+builder.Services.AddPhoney(o =>
+    {
+        o.Locale = "sv";
+        o.Seed = 42;                                            // every scope starts at the same seed
+    })
+    .AddGenerator<Customer>(g => g.With(c => c.Country, "SE"))  // a singleton ObjectGenerator<Customer>
+    .AddGenerator(TestData.Order);                              // a [FakeFor<Order>] generator: no reflection, AOT safe
+```
+<!-- end snippet -->
 
+and use them in endpoints, controllers or services:
+
+<!-- snippet: di-minimal-api -->
+```csharp
 app.MapGet("/demo/customers", (ObjectGenerator<Customer> customers) => customers.Generate(10));
 app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 ```
+<!-- end snippet -->
 
 - `IFaker`/`Faker` are scoped, `IFakerFactory` creates fakers for other locales and seeds, and generators are singletons. `IFaker` itself is in the core package, for your own abstractions and test doubles.
 - `PhoneyOptions`: `Locale`, `Seed` (every scope starts at the seed, so each request or test scope is reproducible), `ReferenceDate` and `TimeProvider` (also taken from the container, such as a `FakeTimeProvider`).
@@ -993,13 +1012,18 @@ app.MapGet("/demo/name", (IFaker faker) => faker.Person.FullName());
 
 The `Phoney.EntityFrameworkCore` package turns generated data into `HasData` seed data:
 
+<!-- snippet: ef-has-fake-data -->
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    modelBuilder.Entity<Customer>().HasFakeData(50);
+    modelBuilder.Entity<Customer>().Property(c => c.Email).HasMaxLength(100);
+
+    var customers = modelBuilder.Entity<Customer>().HasFakeData(50);
     modelBuilder.Entity<Order>().HasFakeData(200, g => g.With(o => o.Status, OrderStatus.Paid));
+    modelBuilder.Entity<Review>().HasFakeData(20, g => g.WithOneOf(r => r.CustomerId, customers, c => c.Id));
 }
 ```
+<!-- end snippet -->
 
 - The data is the same on every model build (the seed is derived from the entity name), so migrations stay stable.
 - Navigations and owned objects are left empty, strings respect `HasMaxLength`, a single integer key is numbered 1…n when values clash, and foreign keys point at seeded principals (seed principals first, or link with `WithOneOf`; a key to the same table points at an earlier row).
@@ -1009,12 +1033,14 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 
 The `Phoney.NodaTime` package adds NodaTime values and members:
 
+<!-- snippet: readme-noda -->
 ```csharp
 Instant created = faker.Noda().Instant.Past();
 LocalDate birthday = faker.Noda().LocalDate.Birthdate();
-Interval stay = faker.Noda().Interval();       // also DateInterval, YearMonth, AnnualDate, Offset
+Interval stay = faker.Noda().Interval();         // also DateInterval, YearMonth, AnnualDate, Offset
 var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate BirthDate… follow the conventions
 ```
+<!-- end snippet -->
 
 `Instant`, `OffsetDateTime`, `ZonedDateTime`, `LocalDateTime`, `LocalDate`, `LocalTime` and `Duration` members are generated like their built-in counterparts, so `CreatedAt`, `ExpiresAt`, `BirthDate` and `Age` agree, with reflection and with source-generated models. See the [package README](src/Phoney.NodaTime/README.md).
 
@@ -1022,12 +1048,17 @@ var subscriptions = Fake.Many<Subscription>(10); // Instant CreatedAt, LocalDate
 
 The `Phoney.WireMock` package answers WireMock.Net requests with fake JSON that belongs to the URL:
 
+<!-- snippet: wiremock-customers -->
 ```csharp
+var server = WireMockServer.Start();
+
 server.Given(Request.Create().WithPath("/customers/*").UsingGet())
-      .RespondWith(Response.Create().WithFakeJson(Fake.For<Customer>()));       // /customers/42 is always the same customer
+      .RespondWith(Response.Create().WithFakeJson(Fake.For<Customer>()));            // /customers/42 is always the same customer
+
 server.Given(Request.Create().WithPath("/customers").UsingGet())
       .RespondWith(Response.Create().WithFakeJsonList(Fake.For<Customer>(), 5, 20)); // a stable 5 to 20 per URL
 ```
+<!-- end snippet -->
 
 Nothing is stored: each body is `GenerateFor` of the request's key (the path and query by default, or your own, such as the id), so your assertions can compute the expected object. Rules and seeds apply, and a `JsonTypeInfo<T>` overload keeps it reflection free. See the [package README](src/Phoney.WireMock/README.md).
 
