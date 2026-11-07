@@ -105,8 +105,8 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         public bool Read(IInvocationOperation call)
         {
             var name = call.TargetMethod.Name;
-            if (RuleCatalog.IsMemberRule(name))
-                return ReadMemberRule(call);
+            if (RuleGroup.Of(call) is { } group)
+                return ReadMemberRules(group);
             switch (name)
             {
                 case "WithFeed":
@@ -132,14 +132,18 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
             _covered.Contains(member.Name) || (_useParameterDefaults && member is { IsConstructorParameter: true, DefaultValue: not null })
             || _conventionTypes.Exists(t => Matches(t, member.Type));
 
-        private bool ReadMemberRule(IInvocationOperation call)
+        /// <summary>
+        /// A member rule gives the member a value, like <c>MemberPlan</c> counts it: a condition (<c>Where</c>) alone does not, and a view whose rules can't be
+        /// read from the source (<c>m =&gt; Helper(m)</c>) counts as giving one, so nothing is reported that may be covered.
+        /// </summary>
+        private bool ReadMemberRules(RuleGroup group)
         {
-            var selector = RuleSelector.Read(call);
+            var selector = group.Selector;
             if (selector.Kind == SelectorKind.Combination)
                 return true; // a unique combination checks members, it doesn't give them values
             if (selector.Kind != SelectorKind.Member)
                 return false; // the member can't be read from the source, so don't guess
-            if (!selector.IsNested)
+            if (!selector.IsNested && (group.Rules is null || group.Rules.Any(r => RuleCatalog.IsMemberRule(r.Name))))
                 _covered.Add(selector.Name!); // a rule for Billing.City is not a rule for Billing
             return true;
         }

@@ -45,6 +45,8 @@ var orders = Fake.For<Order>().Seed(3)
 
 `o.Lines.Each().Sku` is a path rule: it reaches into every line of every order without a generator for `OrderLine`. Weights are relative, a weight of zero is never picked, and `WithSubsetOf` does the same for collections (two of these roles, never the same one twice).
 
+When a member takes more than one rule, select it once with `Member`: `.Member(o => o.Status, m => m.OneOf((OrderStatus.Paid, 70), (OrderStatus.Shipped, 30)).Where(s => s != OrderStatus.Shipped || allowShipped))` gives the same orders as `WithOneOf` followed by `Where`, and the lambda only offers the rules the member's type can take ([One member, several rules](../README.md#one-member-several-rules)).
+
 ## Testing a validator against every edge
 
 The data annotations that make generated objects valid also tell Phoney how to break them. One loop tests every way to break every annotated member, and another every value that sits exactly on a limit:

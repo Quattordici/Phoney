@@ -212,3 +212,76 @@ internal static class FluentChain
     public static IOperation? Start(IInvocationOperation call, INamedTypeSymbol generator) =>
         Earlier(call, generator).LastOrDefault() is { } first ? first.Instance : call.Instance;
 }
+
+/// <summary>
+/// One member rule as the analyzers read it: a flat call (<c>.WithOneOf(x =&gt; x.Email, emails)</c>) or one call of a member view
+/// (<c>.Member(x =&gt; x.Email, m =&gt; m.OneOf(emails))</c>), named after the generator method it stands for.
+/// </summary>
+/// <param name="Name">The generator method the rule is (<c>WithOneOf</c> for <c>m.OneOf</c>).</param>
+/// <param name="Call">The call with the rule's own arguments: the flat call, or the view call inside the lambda.</param>
+/// <param name="InView">Whether the rule is written in a member view.</param>
+internal readonly record struct RuleCall(string Name, IInvocationOperation Call, bool InView)
+{
+    /// <summary>The method name as written (<c>OneOf</c> in a view), for messages.</summary>
+    public string Written => Call.TargetMethod.Name;
+
+    /// <summary>Whether the rule reads the object after it is created: <c>With(member, (faker, obj) =&gt; …)</c> or <c>m.From((faker, obj) =&gt; …)</c>.</summary>
+    public bool IsDependent =>
+        Name == "With" && Call.TargetMethod.Parameters.Length == (InView ? 1 : 2)
+        && Call.TargetMethod.Parameters[InView ? 0 : 1].Type is INamedTypeSymbol { Name: "Func", TypeArguments.Length: 3 };
+}
+
+/// <summary>
+/// The member rules of one generator call: the call itself for a flat rule, the calls in the lambda for <c>Member(selector, m =&gt; …)</c>.
+/// </summary>
+/// <param name="Selector">The member the rules are for, read from the generator call.</param>
+/// <param name="Rules">The rules in the order they apply, or <see langword="null"/> when a view's lambda is not a plain chain (<c>m =&gt; Helper(m)</c>), so its rules can't be known.</param>
+internal sealed record RuleGroup(RuleSelector Selector, IReadOnlyList<RuleCall>? Rules)
+{
+    /// <summary>
+    /// The rules of <paramref name="call"/>, or <see langword="null"/> when it adds no member rules: a member rule of <see cref="RuleCatalog.MemberRules"/>,
+    /// the member <c>Where(x =&gt; x.Member, condition)</c>, or a <c>Member</c> view.
+    /// </summary>
+    public static RuleGroup? Of(IInvocationOperation call)
+    {
+        var method = call.TargetMethod;
+        if (method.Name == RuleCatalog.Member && method.Parameters.Length == 2)
+            return new RuleGroup(RuleSelector.Read(call), ViewRules(call));
+        return RuleCatalog.IsMemberRule(method.Name) || IsMemberCondition(method)
+            ? new RuleGroup(RuleSelector.Read(call), [new RuleCall(method.Name, call, InView: false)])
+            : null;
+    }
+
+    /// <summary>Whether <paramref name="method"/> belongs to the member view (<c>MemberRules&lt;T, TValue&gt;</c> or its extension class).</summary>
+    public static bool IsView(IMethodSymbol method) =>
+        method.ContainingType is { Name: "MemberRules", ContainingNamespace: { Name: "Phoney", ContainingNamespace.IsGlobalNamespace: true } };
+
+    /// <summary><c>Where(x =&gt; x.Member, condition)</c>: a condition on one member, unlike <c>Where(x =&gt; …)</c> on the whole object.</summary>
+    private static bool IsMemberCondition(IMethodSymbol method) =>
+        method.Name == "Where" && method.Parameters.Length >= 2 && method.Parameters[0].Type is INamedTypeSymbol { Name: "Expression" };
+
+    /// <summary>The calls of <c>m =&gt; m.A().B()</c> first to last, or <see langword="null"/> when the lambda is anything else.</summary>
+    private static IReadOnlyList<RuleCall>? ViewRules(IInvocationOperation member)
+    {
+        var argument = member.Arguments.FirstOrDefault(a => a.Parameter?.Ordinal == 1)?.Value;
+        while (argument is IConversionOperation or IDelegateCreationOperation)
+            argument = argument is IConversionOperation conversion ? conversion.Operand : ((IDelegateCreationOperation)argument).Target;
+        if (argument is not IAnonymousFunctionOperation lambda
+            || lambda.Body.Operations.Length != 1 || lambda.Body.Operations[0] is not IReturnOperation { ReturnedValue: { } current })
+        {
+            return null;
+        }
+
+        var rules = new List<RuleCall>();
+        while (current is IInvocationOperation call && IsView(call.TargetMethod) && RuleCatalog.ViewRules.TryGetValue(call.TargetMethod.Name, out var name))
+        {
+            rules.Add(new RuleCall(name, call, InView: true));
+            current = call.TargetMethod.IsExtensionMethod ? call.Arguments[0].Value : call.Instance;
+        }
+
+        if (!(current is IParameterReferenceOperation reference && SymbolEqualityComparer.Default.Equals(reference.Parameter, lambda.Symbol.Parameters.FirstOrDefault())))
+            return null;
+        rules.Reverse();
+        return rules;
+    }
+}

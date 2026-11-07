@@ -160,6 +160,15 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Product>().WithNormalDistribution(x => x.Price, 0, 1, null, null, 16)),
             R(() => Fake.For<Product>().WithNormalDistribution(x => x.Price, 0, 1, null, null, 15)),
             R(() => Fake.For<Product>().WithNormalDistribution(x => x.Price, 0, 1, null, null, -1)),
+            R(() => Fake.For<Product>().Member(x => x.Id, m => m.Unique(0))),
+            R(() => Fake.For<Product>().Member(x => x.Id, m => m.Unique(1))),
+            R(() => Fake.For<Product>().Member(x => x.Id, m => m.Where(v => v > 0, 0))),
+            R(() => Fake.For<Product>().Member(x => x.Id, m => m.OneOf(Numbers).Where(v => v > 0, 3))),
+            R(() => Fake.For<Product>().Member(x => x.Price, m => m.Normal(0, -1))),
+            R(() => Fake.For<Product>().Member(x => x.Price, m => m.Normal(0, 1))),
+            R(() => Fake.For<Product>().Member(x => x.Price, m => m.Normal(0, 1, 5, 1))),
+            R(() => Fake.For<Product>().Member(x => x.Price, m => m.Normal(0, 1, decimals: 16))),
+            R(() => Fake.For<Product>().Member(x => x.Shelf, m => m.Normal(0, 1, min: 0).Unique(2))),
         ];
 
         (await Disagreements(rows, new UsageAnalyzer(), "PHONEY011", BadArgument, cancellationToken)).ShouldBeEmpty();
@@ -196,6 +205,19 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Product>().Where(p => p.Address!.Street, s => true).Generate()),
             R(() => Fake.For<Product>().Sequence(p => p.Code, i => "x").Generate()),
             R(() => Fake.For<Product>().Cycle(p => p.Address!.Street, Letters).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Code, m => m.Is("x")).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Name.Length, m => m.Is(3)).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Address!.Street, m => m.Unique()).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Address!.Street, m => m.From((f, p) => p.Name)).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Address!.Street, m => m.OneOf(Letters).Cycle(Letters)).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Addresses.Each().Street, m => m.OneOf(Letters)).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Address!.Street, m => m.Is("x").Ignore()).Generate()),
+            R(() => Fake.For<Product>().Member(p => new { p.Name, p.Id }, m => m.Unique()).Generate()),
+            R(() => Fake.For<Product>().Member(p => new { p.Name, p.Id }, m => m.Ignore()).Generate()),
+            R(() => Fake.For<Product>().Member(p => new { p.Code, p.Id }, m => m.Unique()).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Name, m => m.Where(n => n != null).Sequence(i => "n" + i).Unique()).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Name, m => m.From((f, p) => p.Flavor)).Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Name, m => m).Generate()),
         ];
 
         (await Disagreements(rows, new UsageAnalyzer(), "PHONEY007", CannotBeApplied, cancellationToken)).ShouldBeEmpty();
@@ -221,6 +243,12 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Shipment>().WithParameterDefaults().Strict().Generate()),
             R(() => Fake.For<Shipment>().WithParameterDefaults().With(s => s.Carrier, "UPS").Strict().Generate()),
             R(() => Fake.For<Shipment>().With(s => s.Carrier, "UPS").Strict().Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Flavor, m => m.Is("a")).Member(p => p.Shelf, m => m.Normal(5, 1)).Strict().Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Flavor, m => m.Where(f => true)).Member(p => p.Shelf, m => m.Normal(5, 1)).Strict().Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Flavor, m => m.Unique()).Member(p => p.Shelf, m => m.Cycle(Numbers)).Strict().Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Flavor, m => m).Ignore(p => p.Shelf).Strict().Generate()),
+            R(() => Fake.For<Product>().Member(p => p.Address!.Street, m => m.Is("a")).Ignore(p => p.Shelf).Ignore(p => p.Flavor).Strict().Generate()),
+            R(() => Fake.For<Shipment>().Member(s => s.Carrier, m => m.OneOf(Letters)).Strict().Generate()),
         ];
 
         (await Disagreements(rows, new StrictAnalyzer(), "PHONEY004", StrictViolation, cancellationToken)).ShouldBeEmpty();

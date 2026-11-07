@@ -26,6 +26,10 @@ _Avoid_: builder, factory
 **Rule**:
 An explicit instruction for a member (`With`, `WithOneOf`, `Ignore`, `Unique`, `Where`, `Sequence`, …). A Rule wins over everything below it; a Rule for a member also wins over a type-wide generator.
 
+**Member view**:
+The rules of one member written together, `Member(x => x.Email, m => m.OneOf(emails).Unique())`: every view method adds the Rule of the generator method it stands for, and only the Rules the member's type can take are offered (`Normal` for numbers, `SubsetOf` for collections). It is a way to write Rules, not a source of its own.
+_Avoid_: member builder, member config
+
 **Path**:
 A dotted member selector such as `Billing.City` or `Lines.Each().Sku` that points a Rule at a member of a nested object. A Path rule applies to that spot only, not to every object of that type.
 _Avoid_: position

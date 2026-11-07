@@ -53,6 +53,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     {
         var call = (IInvocationOperation)context.Operation;
         var method = call.TargetMethod;
+        if (RuleGroup.IsView(method))
+        {
+            CheckViewCall(context, call);
+            return;
+        }
+
         var onFake = AnalyzerSupport.IsDefinition(method.ContainingType, symbols.Fake);
         var onGenerator = !onFake && AnalyzerSupport.IsDefinition(method.ContainingType, symbols.Generator);
         if (!onFake && !onGenerator)
@@ -65,7 +71,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         else if (onGenerator)
             CheckGenerator(context, call, symbols);
 
-        CheckArguments(context, call);
+        CheckArguments(context, call, method.Name);
         // A keyed call gives every key its own object, so a constant seed in a loop is the point there (it keeps the mapping stable).
         if (onGenerator && AnalyzerSupport.Terminals.Contains(method.Name) && method.Name is not ("GenerateFor" or "Pseudonymize"))
             CheckSeedInLoop(context, call, symbols);
@@ -102,9 +108,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     };
 
     /// <summary>PHONEY011: constant arguments the runtime rejects (<c>NullProbability(1.5)</c>, <c>Generate(-1)</c>…).</summary>
-    private static void CheckArguments(OperationAnalysisContext context, IInvocationOperation call)
+    /// <param name="context">The analysis context.</param>
+    /// <param name="call">The call whose arguments are checked.</param>
+    /// <param name="name">The generator method the call is or stands for (<c>WithNormalDistribution</c> for <c>m.Normal</c> in a member view).</param>
+    private static void CheckArguments(OperationAnalysisContext context, IInvocationOperation call, string name)
     {
-        switch (call.TargetMethod.Name)
+        switch (name)
         {
             case "NullProbability":
                 Check(context, call, "probability", v => v is >= 0 and <= 1, "between 0 and 1");
@@ -230,94 +239,114 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     private static void CheckGenerator(OperationAnalysisContext context, IInvocationOperation call, Symbols symbols)
     {
         CheckDiscarded(context, call, symbols);
-        var name = call.TargetMethod.Name;
-        if (RuleCatalog.IsTypeRule(name))
+        if (RuleCatalog.IsTypeRule(call.TargetMethod.Name))
         {
             CheckTypeRuleReplaced(context, call, symbols);
             return;
         }
 
-        if (!RuleCatalog.IsMemberRule(name) && !IsMemberCondition(call.TargetMethod))
+        if (RuleGroup.Of(call) is not { Selector.Kind: not SelectorKind.Unknown } group || !CheckSelector(context, call, group, symbols))
             return;
-
-        var selector = RuleSelector.Read(call);
-        if (selector.Kind == SelectorKind.Unknown)
-            return;
-        CheckRule(context, call, selector, symbols);
-        if (selector.Kind == SelectorKind.Member && RuleCatalog.OccupiesSlot(name))
-            CheckReplaced(context, call, selector, symbols);
+        var rules = group.Rules ?? [];
+        for (var i = 0; i < rules.Count; i++)
+        {
+            CheckRule(context, call, group.Selector, rules[i], symbols);
+            if (group.Selector.Kind == SelectorKind.Member && RuleCatalog.OccupiesSlot(rules[i].Name))
+                CheckReplaced(context, call, group.Selector, rules, i, symbols);
+        }
     }
 
-    /// <summary>PHONEY007: what <c>ObjectGenerator&lt;T&gt;.Compile</c> and <c>MemberName</c> reject at runtime.</summary>
-    private static void CheckRule(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
+    /// <summary>A call inside a member view (<c>m =&gt; m.OneOf(…).Unique(0)</c>): a dropped result (PHONEY005) and constant arguments its generator method rejects (PHONEY011).</summary>
+    private static void CheckViewCall(OperationAnalysisContext context, IInvocationOperation call)
     {
-        if (selector.Kind == SelectorKind.Combination)
-        {
-            CheckCombination(context, call, selector, symbols);
+        if (!RuleCatalog.ViewRules.TryGetValue(call.TargetMethod.Name, out var name))
             return;
+        if (call.Parent is IExpressionStatementOperation)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Diagnostics.DiscardedResult,
+                AnalyzerSupport.NameLocation(call),
+                $"The result of '{call.TargetMethod.Name}' is discarded. Member rules are immutable: every rule returns new rules, so this call has no effect. Return the result from the lambda: m => m.{call.TargetMethod.Name}(…)."));
         }
 
+        CheckArguments(context, call, name);
+    }
+
+    /// <summary>
+    /// PHONEY007 for what is wrong with the selected member whatever the rule: not a member path, or not a member that is generated. <see langword="false"/> when
+    /// there is such a problem (reported once, also for a view with several rules), so the rules aren't checked against it.
+    /// </summary>
+    private static bool CheckSelector(OperationAnalysisContext context, IInvocationOperation call, RuleGroup group, Symbols symbols)
+    {
+        var selector = group.Selector;
         if (selector.Kind == SelectorKind.NotDirect)
         {
-            Report(context, selector, "The rule must select a member of the generated type (x => x.Name), of a nested object (x => x.Address.City) or of each element of a collection (x => x.Lines.Each().Sku). A member of a string, number or date has no members to give a rule to.");
-            return;
+            Report(context, selector.Location, "The rule must select a member of the generated type (x => x.Name), of a nested object (x => x.Address.City) or of each element of a collection (x => x.Lines.Each().Sku). A member of a string, number or date has no members to give a rule to.");
+            return false;
         }
 
-        if ((selector.IsNested ? NestedRuleProblem(call.TargetMethod, selector) : null) is { } problem)
+        if (selector.Kind == SelectorKind.Combination)
         {
-            Report(context, selector, problem);
-            return;
+            if (group.Rules is { } rules && rules.All(r => r.Name == RuleCatalog.Unique))
+                CheckCombinationParts(context, call, selector, symbols);
+            return true;
         }
 
-        if (GeneratedMembers(call, symbols) is var (type, members))
-            CheckMember(context, call.TargetMethod, selector, type, members);
+        if (selector.IsNested || GeneratedMembers(call, symbols) is not var (type, members) || members.Exists(m => m.Name == selector.Name))
+            return true;
+        Report(context, selector.Location, $"'{type.Name}.{selector.Name}' is not a public settable member or constructor parameter, so it can't be generated and the generator throws when it is first used.");
+        return false;
     }
 
-    /// <summary>PHONEY007 for <c>Unique(x =&gt; new { … })</c>: only Unique takes a combination, and every part must be a member that is generated.</summary>
-    private static void CheckCombination(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
+    /// <summary>PHONEY007: what <c>ObjectGenerator&lt;T&gt;.Compile</c> and <c>MemberName</c> reject for this rule on the selected member.</summary>
+    private static void CheckRule(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, RuleCall rule, Symbols symbols)
     {
-        var method = call.TargetMethod;
-        if (method.Name != RuleCatalog.Unique)
+        var location = Where(selector, rule);
+        if (selector.Kind == SelectorKind.Combination)
         {
-            Report(context, selector, $"{method.Name} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
+            if (rule.Name != RuleCatalog.Unique)
+                Report(context, location, $"{rule.Written} must select one member (x => x.Name); only Unique accepts several members as an anonymous type (x => new {{ x.UserId, x.RoleId }}).");
             return;
         }
 
+        if (selector.IsNested)
+        {
+            if (NestedRuleProblem(rule, selector) is { } problem)
+                Report(context, location, problem);
+            return;
+        }
+
+        if (!rule.IsDependent || GeneratedMembers(call, symbols) is not var (type, members) || members.Find(m => m.Name == selector.Name) is not { } member)
+            return;
+        if (member.IsConstructorParameter)
+            Report(context, location, $"'{type.Name}.{selector.Name}' is a constructor parameter, so it can't depend on the object. Use a rule without the object parameter.");
+        else if (member.FillsExisting)
+            Report(context, location, $"'{type.Name}.{selector.Name}' is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
+    }
+
+    /// <summary>Where a rule's diagnostic goes: the selector of a flat rule, the method name of a rule in a view (the selector is shared by all of them).</summary>
+    private static Location Where(RuleSelector selector, RuleCall rule) => rule.InView ? AnalyzerSupport.NameLocation(rule.Call) : selector.Location;
+
+    /// <summary>PHONEY007 for <c>Unique(x =&gt; new { … })</c>: every part must be a member that is generated.</summary>
+    private static void CheckCombinationParts(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
+    {
         if (GeneratedMembers(call, symbols) is not var (owner, described))
             return;
         foreach (var part in selector.Path!.Split(',').Where(p => !described.Exists(m => m.Name == p)))
         {
-            Report(context, selector, $"'{owner.Name}.{part}' is not a public settable member or constructor parameter, so it can't be part of a unique combination and the generator throws when it is first used.");
+            Report(context, selector.Location, $"'{owner.Name}.{part}' is not a public settable member or constructor parameter, so it can't be part of a unique combination and the generator throws when it is first used.");
         }
     }
 
     /// <summary>Why a rule can't be given to a member of a nested object, or <see langword="null"/> when it can.</summary>
-    private static string? NestedRuleProblem(IMethodSymbol method, RuleSelector selector) => method.Name switch
+    private static string? NestedRuleProblem(RuleCall rule, RuleSelector selector) => rule.Name switch
     {
         RuleCatalog.Unique => $"Unique must select a member of the generated type directly, like x => x.Name: uniqueness is per member of the generated type, not for '{selector.Path}' in a nested object.",
-        "Sequence" or "Cycle" => $"{method.Name} must select a member of the generated type directly, like x => x.Name: it numbers the generated objects, so it can't give a value to '{selector.Path}' in a nested object.",
+        "Sequence" or "Cycle" => $"{rule.Name} must select a member of the generated type directly, like x => x.Name: it numbers the generated objects, so it can't give a value to '{selector.Path}' in a nested object.",
         "Where" => $"Where must select a member of the generated type directly, like x => x.Name: a condition on a member applies to the generated object's own members, not to '{selector.Path}' in a nested object.",
-        _ when IsDependentRule(method) => $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.",
+        _ when rule.IsDependent => $"'{selector.Path}' is a member of a nested object, so its rule can't depend on the object. Use a rule without the object parameter.",
         _ => null,
     };
-
-    /// <summary>PHONEY007 for a rule on a member of the generated type: the member must exist, and a rule that reads the object can't be given to what is set before it exists.</summary>
-    private static void CheckMember(OperationAnalysisContext context, IMethodSymbol method, RuleSelector selector, INamedTypeSymbol type, List<MemberModel> members)
-    {
-        var member = members.Find(m => m.Name == selector.Name);
-        if (member is null)
-        {
-            Report(context, selector, $"'{type.Name}.{selector.Name}' is not a public settable member or constructor parameter, so it can't be generated and the generator throws when it is first used.");
-        }
-        else if (member.IsConstructorParameter && IsDependentRule(method))
-        {
-            Report(context, selector, $"'{type.Name}.{selector.Name}' is a constructor parameter, so it can't depend on the object. Use a rule without the object parameter.");
-        }
-        else if (member.FillsExisting && IsDependentRule(method))
-        {
-            Report(context, selector, $"'{type.Name}.{selector.Name}' is a read-only collection that is filled in place, so it can't be set from the object. Use a rule without the object parameter.");
-        }
-    }
 
     /// <summary>The generated type of the rule's generator and its members as the model describes them, or <see langword="null"/> when they can't be known (a custom model).</summary>
     private static (INamedTypeSymbol Type, List<MemberModel> Members)? GeneratedMembers(IInvocationOperation call, Symbols symbols) =>
@@ -325,26 +354,21 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             ? (type, members)
             : null;
 
-    /// <summary><c>Where(x =&gt; x.Member, condition)</c>: a condition on one member, unlike <c>Where(x =&gt; …)</c> on the whole object.</summary>
-    private static bool IsMemberCondition(IMethodSymbol method) =>
-        method.Name == "Where" && method.Parameters.Length >= 2 && method.Parameters[0].Type is INamedTypeSymbol { Name: "Expression" };
+    private static void Report(OperationAnalysisContext context, Location location, string message) =>
+        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleNotGenerated, location, message));
 
-    private static void Report(OperationAnalysisContext context, RuleSelector selector, string message) =>
-        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleNotGenerated, selector.Location, message));
-
-    /// <summary><c>With(member, (faker, obj) =&gt; …)</c>: the rule reads the object after it is created.</summary>
-    private static bool IsDependentRule(IMethodSymbol method) =>
-        method.Name == "With" && method.Parameters.Length == 2 && method.Parameters[1].Type is INamedTypeSymbol { Name: "Func", TypeArguments.Length: 3 };
-
-    /// <summary>PHONEY008: an earlier call in the same chain set the same member, and this one replaces it.</summary>
-    private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, Symbols symbols)
+    /// <summary>PHONEY008: an earlier rule in the same chain (or the same view) set the same member, and this one replaces it.</summary>
+    private static void CheckReplaced(OperationAnalysisContext context, IInvocationOperation call, RuleSelector selector, IReadOnlyList<RuleCall> rules, int index, Symbols symbols)
     {
-        if (FluentChain.Earlier(call, symbols.Generator).FirstOrDefault(earlier =>
-                RuleCatalog.OccupiesSlot(earlier.TargetMethod.Name) && RuleSelector.Read(earlier) is { Kind: SelectorKind.Member } previous && previous.Path == selector.Path) is { } replaced)
-        {
-            // The replaced call goes along so the code fix can remove it.
-            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, selector.Location, additionalLocations: new[] { replaced.Syntax.GetLocation() }, selector.Path));
-        }
+        // Nearest first: the rules before it in its own view, then those of the earlier calls of the chain for the same member.
+        var replaced = Enumerable.Range(0, index).Reverse().Select(i => rules[i])
+            .Concat(FluentChain.Earlier(call, symbols.Generator).SelectMany(earlier =>
+                RuleGroup.Of(earlier) is { Selector: { Kind: SelectorKind.Member } previous, Rules: { } before } && previous.Path == selector.Path ? before.Reverse() : []))
+            .FirstOrDefault(r => RuleCatalog.OccupiesSlot(r.Name));
+        if (replaced.Call is null)
+            return;
+        // The replaced call goes along so the code fix can remove it.
+        context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, Where(selector, rules[index]), additionalLocations: new[] { replaced.Call.Syntax.GetLocation() }, selector.Path));
     }
 
     /// <summary>

@@ -112,6 +112,28 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     public ObjectGenerator<T> TimeProvider(TimeProvider timeProvider) =>
         DeriveRun(_config with { Clock = _config.Clock with { Clock = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider)) } });
 
+    /// <summary>
+    /// Gives one member several rules, selecting it once: <c>.Member(c =&gt; c.Email, m =&gt; m.OneOf(emails).Unique().Where(e =&gt; e.EndsWith(".se")))</c>.
+    /// The lambda gets the member's <see cref="MemberRules{T, TValue}"/>, which offers the rules its type can take (<c>Normal</c> only for numbers, <c>SubsetOf</c> only for collections).
+    /// </summary>
+    /// <remarks>
+    /// Every rule of the view is the generator method it is named after with this member (<c>m.Is(v)</c> is <c>With(member, v)</c>, <c>m.OneOf(…)</c> is <c>WithOneOf</c>,
+    /// <c>m.Normal(…)</c> is <c>WithNormalDistribution</c>…), so the objects are the same as with those calls, in the same order, for every seed and in both models.
+    /// The member can be a path like for the flat rules (<c>x =&gt; x.Billing.City</c>, <c>x =&gt; x.Lines.Each().Sku</c>).
+    /// </remarks>
+    /// <param name="member">The member: <c>x =&gt; x.Email</c>.</param>
+    /// <param name="rules">Adds the rules to the view it is given and returns the result: <c>m =&gt; m.OneOf(emails).Unique()</c>.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="rules"/> returned other rules than those it was given.</exception>
+    public ObjectGenerator<T> Member<TValue>(Expression<Func<T, TValue>> member, Func<MemberRules<T, TValue>, MemberRules<T, TValue>> rules)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        ArgumentNullException.ThrowIfNull(rules);
+        var result = rules(new MemberRules<T, TValue>(this, member));
+        if (!ReferenceEquals(result.Selector, member))
+            throw new InvalidOperationException($"Member({member}, m => …) must return the rules the lambda was given, with its rules added: m => m.OneOf(values).Unique().");
+        return result.Generator;
+    }
+
     /// <summary>Sets a member to a fixed value.</summary>
     public ObjectGenerator<T> With<TValue>(Expression<Func<T, TValue>> member, TValue value) =>
         AddRule(member, new Rule(RuleKind.Constant, value));

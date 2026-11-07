@@ -76,6 +76,30 @@ public sealed class ReadmeExamples
     }
 
     [Test]
+    public void One_member_several_rules()
+    {
+        string[] roles = ["admin", "editor", "viewer"];
+
+        // snippet: readme-member-view
+        var customers = Fake.For<Customer>().Seed(7)
+            .Member(c => c.Tier, m => m.OneOf((Tier.Standard, 80), (Tier.Silver, 15), (Tier.Gold, 5)).Where(t => t != Tier.Gold, 50))
+            .Member(c => c.LoyaltyPoints, m => m.Normal(2_000, 600, min: 0).Unique())   // Normal: only on number members
+            .Member(c => c.Id, m => m.Sequence(i => (int)i + 1))
+            .Member(c => c.InternalNotes, m => m.Ignore())
+            .Generate(50);
+
+        var users = Fake.For<User>()
+            .Member(u => u.Roles, m => m.SubsetOf(roles, (1, 2)))                       // SubsetOf: only on collection members
+            .Generate(10);
+        // end snippet
+
+        customers.ShouldAllBe(c => c.Tier != Tier.Gold && c.LoyaltyPoints >= 0 && c.InternalNotes == null);
+        customers.Select(c => c.LoyaltyPoints).ShouldBeUnique();
+        customers.Select(c => c.Id).ShouldBe(Enumerable.Range(1, 50));
+        users.ShouldAllBe(u => u.Roles.Count >= 1 && u.Roles.Count <= 2);
+    }
+
+    [Test]
     public void One_of_and_subsets()
     {
         var customers = Fake.For<Customer>().Seed(1).Generate(10);
