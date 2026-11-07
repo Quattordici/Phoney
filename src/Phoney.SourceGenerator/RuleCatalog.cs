@@ -23,6 +23,29 @@ internal static class RuleCatalog
     /// <summary>The calls that register something for a type (<c>TypeArguments[0]</c>): a later one for the same type replaces an earlier one of the same kind.</summary>
     public static IReadOnlyList<string> TypeRules { get; } = ["WithGeneratorFor", "Subtype"];
 
+    /// <summary><c>Member(x =&gt; x.Name, m =&gt; …)</c>, which gives one member the rules of the view it passes to its lambda.</summary>
+    public const string Member = "Member";
+
+    /// <summary>
+    /// The methods of the member view (<c>MemberRules&lt;T, TValue&gt;</c> and its extensions) by the generator method each one calls: <c>m.OneOf(…)</c> is
+    /// <c>WithOneOf(member, …)</c>. <c>RuleCatalogTests</c> pins that every member rule (and the member <c>Where</c>) has one and that the view has no others.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ViewRules { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["Is"] = "With",
+        ["From"] = "With",
+        ["OneOf"] = "WithOneOf",
+        ["SubsetOf"] = "WithSubsetOf",
+        ["Normal"] = "WithNormalDistribution",
+        ["Ignore"] = "Ignore",
+        [Unique] = Unique,
+        ["Invalid"] = "Invalid",
+        ["Boundary"] = "Boundary",
+        ["Sequence"] = "Sequence",
+        ["Cycle"] = "Cycle",
+        ["Where"] = "Where",
+    };
+
     private static readonly HashSet<string> MemberRuleSet = new(MemberRules, StringComparer.Ordinal);
     private static readonly HashSet<string> SlotRuleSet = new(SlotRules, StringComparer.Ordinal);
     private static readonly HashSet<string> TypeRuleSet = new(TypeRules, StringComparer.Ordinal);

@@ -151,4 +151,18 @@ public sealed class StrictAnalyzerTests
 
         diagnostics.ShouldBeEmpty();
     }
+
+    [Test]
+    public async Task A_member_view_covers_its_member_unless_it_only_filters_it(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("""
+            private static MemberRules<Product, string> Helper(MemberRules<Product, string> m) => m.Is("a");
+            public static object A() => Fake.For<Product>().Member(p => p.Flavor, m => m.OneOf(new[] { "a" })).Member(p => p.Shelf, m => m.Normal(5, 1)).Strict().Generate();
+            public static object B() => Fake.For<Product>().Member(p => p.Flavor, m => m.Where(f => f != "")).Ignore(p => p.Shelf).Strict().Generate();
+            public static object C() => Fake.For<Product>().Member(p => p.Flavor, Helper).Ignore(p => p.Shelf).Strict().Generate();
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(1); // B: a condition alone gives Flavor no value; C's helper can't be read, so it counts as covered
+        diagnostics[0].GetMessage().ShouldContain("Flavor");
+    }
 }

@@ -366,6 +366,31 @@ var customers = Fake.For<Customer>()
 
   Anything more specific wins: a setting on the generator (`.CollectionSize(2, 2)`, also inside `Fake.Generators.Configure<T>`), `PhoneyOptions` in DI, and an attribute option you set. Like conventions they are read when a generator is first used, and they are process-wide. With nothing set, generated data is the same as before. PHONEY004 doesn't see `Fake.Defaults.Strict`.
 
+### One member, several rules
+
+`Member` selects a member once and gives it its rules in a lambda. The lambda only offers what the member's type can take, so the editor's completion list is short, and the compiler tells you which rules fit:
+
+<!-- snippet: readme-member-view -->
+```csharp
+var customers = Fake.For<Customer>().Seed(7)
+    .Member(c => c.Tier, m => m.OneOf((Tier.Standard, 80), (Tier.Silver, 15), (Tier.Gold, 5)).Where(t => t != Tier.Gold, 50))
+    .Member(c => c.LoyaltyPoints, m => m.Normal(2_000, 600, min: 0).Unique())   // Normal: only on number members
+    .Member(c => c.Id, m => m.Sequence(i => (int)i + 1))
+    .Member(c => c.InternalNotes, m => m.Ignore())
+    .Generate(50);
+
+var users = Fake.For<User>()
+    .Member(u => u.Roles, m => m.SubsetOf(roles, (1, 2)))                       // SubsetOf: only on collection members
+    .Generate(10);
+```
+<!-- end snippet -->
+
+- **The same rules**: `m.Is(v)` is `With(member, v)`, `m.From(…)` the factory `With`s (also `(f, x) => …` and a nested generator), `m.OneOf`, `m.SubsetOf` and `m.Normal` are `WithOneOf`, `WithSubsetOf` and `WithNormalDistribution`, and `Unique`, `Where`, `Sequence`, `Cycle`, `Invalid`, `Boundary` and `Ignore` keep their names. The objects are the ones the flat calls give, seed for seed, in both models.
+- **By type**: `Normal` is offered for number members (also nullable ones) and `SubsetOf` for arrays, lists, sets and the list interfaces. The other rules fit every member.
+- **Order and precedence** work as in the flat chain: a later rule that gives the member its value replaces an earlier one (`m.OneOf(a).Is(b)` keeps `Is(b)`), and `Unique` and `Where` combine with it. Paths work too: `.Member(i => i.Lines.Each().Sku, m => m.From(f => f.Commerce.Ean13()))`.
+- **Analyzers** read through the lambda: strict mode (PHONEY004), rules the runtime rejects (PHONEY007), replaced rules (PHONEY008), constant arguments (PHONEY011) and dropped results in a block lambda (PHONEY005).
+- The flat methods stay. They are the shortest way to give a member one rule; `Member` pays off from the second rule on.
+
 ### Values that agree
 
 Within one object, related members describe the same thing:

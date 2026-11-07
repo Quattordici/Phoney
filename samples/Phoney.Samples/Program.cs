@@ -49,6 +49,10 @@ foreach (var c in swedes.Generate(3))
 var vip = swedes.With(x => x.LoyaltyPoints, 10_000);
 Console.WriteLine($"VIP: {vip.Generate().LoyaltyPoints} points");
 
+// Several rules for one member: select it once; the lambda offers what its type can take (Normal for numbers).
+var regulars = swedes.Member(x => x.LoyaltyPoints, m => m.Normal(2_500, 800, min: 0).Where(p => p != 0).Unique());
+Console.WriteLine($"Regulars: {string.Join(", ", regulars.Generate(3).Select(c => c.LoyaltyPoints))} points");
+
 // 5. Source-generated (reflection-free, Native AOT safe) ------------------------------------------
 Console.WriteLine("\n== Source generated");
 foreach (var c in SampleData.Customer.Seed(1).Generate(2))

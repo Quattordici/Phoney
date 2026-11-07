@@ -219,6 +219,12 @@ var weightedCrew = ShipmentFakes.Shipment.Seed(13).WithSubsetOf(s => s.Crew, rar
 if (weightedCrew.Any(s => s.Crew.Count != 2 || s.Crew.Distinct().Count() != 2) || weightedCrew.Count(s => s.Crew.Contains("common")) < 190)
     throw new InvalidOperationException("weighted subset off");
 
+// A member view: the list subset goes through a Convert node to the IEnumerable<T> overload, and Normal through generic math, without reflection.
+var viewed = ShipmentFakes.Shipment.Seed(12).Member(s => s.Crew, m => m.SubsetOf(roles, (2, 3))).Generate(100);
+var viewedWeights = ShipmentFakes.Shipment.Seed(9).Member(s => s.Weight, m => m.Normal(1000, 50).Where(w => w > 0)).Generate(50);
+if (!viewed.Select(s => string.Join(",", s.Crew)).SequenceEqual(crew.Select(s => string.Join(",", s.Crew))) || viewedWeights.Any(s => s.Weight <= 0))
+    throw new InvalidOperationException("member view off");
+
 // Weighted choices: the running totals are made once and a pick allocates nothing.
 var picked = ShipmentFakes.Shipment.Seed(11).WithOneOf(s => s.Weight, (new System.Numerics.BigInteger(5), 9), (new System.Numerics.BigInteger(7), 1)).Generate(400);
 if (picked.Any(s => s.Weight != 5 && s.Weight != 7) || picked.Count(s => s.Weight == 5) < 320)

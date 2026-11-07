@@ -643,4 +643,69 @@ public sealed class UsageAnalyzerTests
         diagnostics.Select(TextOf).ShouldBe(["-1", "double.NaN", "double.PositiveInfinity", "max: 1", "decimals: 16", "min: double.NaN"], ignoreOrder: true);
         diagnostics.Single(d => TextOf(d) == "max: 1").GetMessage().ShouldContain("at least 5");
     }
+
+    // Member views: Member(x => x.Name, m => …) is read as the flat rules it stands for
+
+    [Test]
+    public async Task A_rule_replaced_in_a_view_or_by_a_view_is_reported_at_the_rule(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Member(p => p.Name, m => m.OneOf(new[] { "a" }).Is("b"));
+            public static object B() => Fake.For<Product>().With(p => p.Name, "a").Member(p => p.Name, m => m.Unique().From(f => "b"));
+            public static object C() => Fake.For<Product>().Member(p => p.Name, m => m.Is("a")).WithOneOf(p => p.Name, new[] { "b" });
+            public static object D() => Fake.For<Product>().Member(p => p.Name, m => m.Is("a").Unique().Where(n => n != "")).Member(p => p.Id, m => m.Is(1));
+            """, cancellationToken);
+
+        diagnostics.Select(TextOf).ShouldBe(["Is", "From", "p => p.Name"]);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("replaces"));
+    }
+
+    [Test]
+    public async Task Rule_problems_in_a_view_are_reported_at_the_rule_and_member_problems_once_at_the_member(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY007", """
+            public static object A() => Fake.For<Product>().Member(p => p.Code, m => m.Is("a").Unique());
+            public static object B() => Fake.For<Product>().Member(p => p.Address!.Street, m => m.OneOf(new[] { "a" }).Unique());
+            public static object C() => Fake.For<Person>().Member(p => p.FirstName, m => m.From((f, p) => p.LastName));
+            public static object D() => Fake.For<Product>().Member(p => new { p.Name, p.Id }, m => m.Unique().Ignore());
+            """, cancellationToken);
+
+        diagnostics.Select(TextOf).ShouldBe(["p => p.Code", "Unique", "From", "Ignore"]);
+    }
+
+    [Test]
+    public async Task A_rule_dropped_inside_a_view_is_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY005", """
+            public static object A() => Fake.For<Product>().Member(p => p.Name, m => { m.Unique(); return m; });
+            public static object B() => Fake.For<Product>().Member(p => p.Name, m => m.Unique());
+            """, cancellationToken);
+
+        diagnostics.Select(TextOf).ShouldBe(["Unique"]);
+        diagnostics[0].GetMessage().ShouldContain("Return the result from the lambda");
+    }
+
+    [Test]
+    public async Task Constant_arguments_of_view_rules_are_checked_like_their_generator_methods(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY011", """
+            public static object A() => Fake.For<Product>().Member(p => p.Price, m => m.Normal(10, -1).Unique(0));
+            public static object B() => Fake.For<Product>().Member(p => p.Price, m => m.Normal(10, 1, min: 5, max: 6).Where(v => v > 0, maxAttempts: 3));
+            """, cancellationToken);
+
+        diagnostics.Select(TextOf).ShouldBe(["-1", "0"], ignoreOrder: true);
+    }
+
+    [Test]
+    public async Task A_view_whose_rules_are_not_a_plain_chain_is_left_alone(CancellationToken cancellationToken)
+    {
+        var diagnostics = await GeneratorHarness.Analyze(Types + """
+            private static MemberRules<Product, string> Helper(MemberRules<Product, string> m) => m.Is("a");
+            public static object A() => Fake.For<Product>().Member(p => p.Name, Helper).With(p => p.Name, "b");
+            public static object B() => Fake.For<Product>().Member(p => p.Name, m => Helper(m).Is("c"));
+            }
+            """, new UsageAnalyzer(), cancellationToken);
+
+        diagnostics.Where(d => d.Id is "PHONEY007" or "PHONEY008").ShouldBeEmpty();
+    }
 }
