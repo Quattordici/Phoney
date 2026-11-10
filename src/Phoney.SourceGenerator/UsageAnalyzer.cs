@@ -44,7 +44,7 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             if (generator is null || fake is null)
                 return;
             var fakeFor = start.Compilation.GetTypeByMetadataName("Phoney.Generation.FakeForAttribute`1");
-            var symbols = new Symbols(start.Compilation, generator, fake, fakeFor);
+            var symbols = new Symbols(start.Compilation, generator, fake, fakeFor, start.Compilation.GetTypeByMetadataName("Phoney.StepCheck`1"));
             start.RegisterOperationAction(c => Analyze(c, symbols), OperationKind.Invocation);
         });
     }
@@ -56,6 +56,13 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
         if (RuleGroup.IsView(method))
         {
             CheckViewCall(context, call);
+            return;
+        }
+
+        if (symbols.Steps is not null && AnalyzerSupport.IsDefinition(method.ContainingType, symbols.Steps))
+        {
+            CheckDiscardedSteps(context, call, symbols.Steps);
+            CheckArguments(context, call, method.Name);
             return;
         }
 
@@ -134,6 +141,8 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 break;
             case "Check" or "CheckAsync":
                 Check(context, call, "count", v => v >= 0, AtLeastZero);
+                Check(context, call, "runs", v => v >= 0, AtLeastZero);
+                Check(context, call, "maxSteps", v => v >= 1, "at least 1");
                 Check(context, call, "maxShrinks", v => v >= 0, AtLeastZero);
                 break;
             case RuleCatalog.Unique or "Where":
@@ -189,6 +198,18 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 Diagnostics.DiscardedResult,
                 AnalyzerSupport.NameLocation(call),
                 $"The result of '{call.TargetMethod.Name}' is discarded. Generators are immutable: every configuration method returns a new generator, so this call has no effect. Use the returned generator."));
+        }
+    }
+
+    /// <summary>PHONEY005: a step check's new check is dropped (<c>steps.Step(…);</c>), so the step or invariant is never run.</summary>
+    private static void CheckDiscardedSteps(OperationAnalysisContext context, IInvocationOperation call, INamedTypeSymbol steps)
+    {
+        if (call.Parent is IExpressionStatementOperation && AnalyzerSupport.IsDefinition(call.TargetMethod.ReturnType as INamedTypeSymbol, steps))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Diagnostics.DiscardedResult,
+                AnalyzerSupport.NameLocation(call),
+                $"The result of '{call.TargetMethod.Name}' is discarded. Step checks are immutable: every method returns a new check, so this call has no effect. Use the returned check."));
         }
     }
 
@@ -389,8 +410,11 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>The symbols of one compilation, with the members of each generated type described once.</summary>
-    private sealed class Symbols(Compilation compilation, INamedTypeSymbol generator, INamedTypeSymbol fake, INamedTypeSymbol? fakeFor)
+    private sealed class Symbols(Compilation compilation, INamedTypeSymbol generator, INamedTypeSymbol fake, INamedTypeSymbol? fakeFor, INamedTypeSymbol? steps)
     {
+        /// <summary><c>StepCheck&lt;TState&gt;</c>, or <see langword="null"/> before Phoney had it.</summary>
+        public INamedTypeSymbol? Steps { get; } = steps;
+
         private readonly ConcurrentDictionary<INamedTypeSymbol, List<MemberModel>?> _members = new(SymbolEqualityComparer.Default);
 
         public INamedTypeSymbol Generator { get; } = generator;

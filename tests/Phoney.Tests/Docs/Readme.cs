@@ -196,3 +196,27 @@ public sealed class MyEmployeeNumbers() : NationalIdScheme("ZZ", NationalIdKind.
 
     public override bool IsValid(string value) => value.Length == 7 && value.StartsWith("E-", StringComparison.Ordinal);
 }
+
+/// <summary>The README's stateful check finds its bug: it lets you withdraw more than the balance.</summary>
+public sealed class BankAccount
+{
+    public decimal Balance { get; private set; }
+
+    public void Deposit(decimal amount) => Balance += amount;
+
+    public void Withdraw(decimal amount) => Balance -= amount;
+}
+
+/// <summary>The README's model-based check compares it with a list; it forgets that a line can be added twice.</summary>
+public sealed class Basket
+{
+    private readonly Dictionary<string, BasketLine> _lines = [];
+
+    public decimal Total => _lines.Values.Sum(l => l.Quantity * l.Price);
+
+    public void Add(BasketLine line) => _lines[line.Sku] = line;
+
+    public void Remove(BasketLine line) => _lines.Remove(line.Sku);
+}
+
+public sealed record BasketLine(string Sku, [property: Range(1, 10)] int Quantity, decimal Price);

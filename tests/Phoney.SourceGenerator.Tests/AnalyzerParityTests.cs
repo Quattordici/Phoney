@@ -35,6 +35,8 @@ public sealed class AnalyzerParityTests
 
     private static readonly int[] Numbers = [1, 2];
 
+    private static int Zero() => 0;
+
     /// <summary>The same types, written out for the analyzer's compilation.</summary>
     private const string Types = """
         using System;
@@ -62,6 +64,7 @@ public sealed class AnalyzerParityTests
         {
             private static readonly string[] Letters = ["a"];
             private static readonly int[] Numbers = [1, 2];
+            private static int Zero() => 0;
 
             public static void All()
             {
@@ -148,6 +151,11 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Product>().Check(x => x.Id > 0, 1)),
             R(() => Fake.For<Product>().Check(x => x.Id > 0, 1, -4)),
             R(() => Fake.For<Product>().Check(x => x.Id > 0, 1, 0)),
+            R(() => Fake.Steps(Zero).Step("noop", _ => { }).Check(-1)),
+            R(() => Fake.Steps(Zero).Step("noop", _ => { }).Check(1, 0)),
+            R(() => Fake.Steps(Zero).Step("noop", _ => { }).Check(1, 1, -1)),
+            R(() => Fake.Steps(Zero).Step("noop", _ => { }).Check(1, 1, 0)),
+            R(() => Fake.Steps(Zero).Step("noop", _ => { }).Check(runs: 0, maxSteps: 3)),
             R(() => Fake.For<Product>().WithNormalDistribution(x => x.Price, 0, -1)),
             R(() => Fake.For<Product>().WithNormalDistribution(x => x.Price, 0, 1)),
             R(() => Fake.For<Product>().WithNormalDistribution(x => x.Price, double.NaN, 1)),

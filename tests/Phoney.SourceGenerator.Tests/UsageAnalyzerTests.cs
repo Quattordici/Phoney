@@ -72,6 +72,24 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task Discarded_step_checks_are_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY005", """
+            public static void A()
+            {
+                var steps = Fake.Steps(() => new System.Collections.Generic.List<int>());
+                steps.Step("add", l => l.Add(1));
+                steps.Invariant(l => l.Count >= 0);
+                steps.Seed(1).Step("add", l => l.Add(1)).Check();
+                var kept = steps.Step("add", l => l.Add(1));
+            }
+            """, cancellationToken);
+
+        diagnostics.Select(TextOf).ShouldBe(["Step", "Invariant"], ignoreOrder: true);
+        diagnostics[0].GetMessage().ShouldContain("Step checks are immutable");
+    }
+
+    [Test]
     public async Task Discarded_Populate_of_a_struct_is_reported(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY005", """

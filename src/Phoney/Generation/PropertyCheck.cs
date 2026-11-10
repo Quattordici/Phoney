@@ -5,7 +5,7 @@ namespace Phoney.Generation;
 /// <summary>
 /// One run of a property check (<c>ObjectGenerator&lt;T&gt;.Check</c>, <c>ArgumentGenerator.Check</c>), apart from what is generated and how the property
 /// is called: <see cref="Objects"/> yields the objects to test, each result is reported with <see cref="Report"/>, and when one fails the run shrinks it
-/// by replaying simpler draws (<see cref="TapeShrinker"/>) and ends with <see cref="Failure"/>. <see cref="Run"/> and <see cref="RunAsync"/> are that
+/// by replaying simpler draws (<see cref="TapeShrinker"/>) and ends with <see cref="Failure"/>. <see cref="Run"/> and <see cref="RunAsync(Func{T, Task}, CancellationToken)"/> are that
 /// loop for synchronous and asynchronous properties.
 /// </summary>
 /// <param name="record">Creates object <c>index</c> of the run while the tape records its draws.</param>
@@ -15,7 +15,22 @@ namespace Phoney.Generation;
 /// <param name="seed">The seed of the run, for the report.</param>
 /// <param name="subject">What an object is called in the report (<c>Cart</c>, <c>row</c>).</param>
 /// <param name="describe">Describes an object on one line for the report.</param>
-internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<long, ChoiceTape, T> replay, int count, int maxShrinks, CheckSeed seed, string subject, Func<T, string> describe)
+/// <param name="because">Why an object failed, for the report; <see langword="null"/> for the exception or "the property returned false".</param>
+/// <param name="spans">How an object's draws group (start and length), which shrinking deletes whole; <see langword="null"/> for no groups.</param>
+/// <remarks>
+/// The draws of an object are those its tape holds once its outcome is reported, not once it is made: a stateful check (<see cref="StepCheck{TState}"/>)
+/// keeps drawing while the property runs. Other checks detach the tape when the object is made, so for them the two are the same.
+/// </remarks>
+internal sealed class PropertyCheck<T>(
+    Func<long, ChoiceTape, T> record,
+    Func<long, ChoiceTape, T> replay,
+    int count,
+    int maxShrinks,
+    CheckSeed seed,
+    string subject,
+    Func<T, string> describe,
+    Func<T, PropertyCheck<T>.Outcome, string>? because = null,
+    Func<T, IReadOnlyList<(int Start, int Length)>>? spans = null)
 {
     /// <summary>A check of generated objects, reported by their type's name and described member by member.</summary>
     public PropertyCheck(Func<long, ChoiceTape, T> record, Func<long, ChoiceTape, T> replay, int count, int maxShrinks, CheckSeed seed)
@@ -43,15 +58,18 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
     }
 
     /// <summary>Runs the check with an asynchronous property, which fails when its task faults; throws <see cref="Failure"/> when it failed.</summary>
-    public async Task RunAsync(Func<T, Task> property, CancellationToken cancellationToken)
+    public Task RunAsync(Func<T, Task> property, CancellationToken cancellationToken) =>
+        RunAsync(item => Passes(property(item)), cancellationToken);
+
+    /// <summary>Runs the check with an asynchronous evaluation of each object; throws <see cref="Failure"/> when it failed.</summary>
+    public async Task RunAsync(Func<T, ValueTask<Outcome>> evaluate, CancellationToken cancellationToken)
     {
         foreach (var item in Objects())
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await property(item).ConfigureAwait(false);
-                Report(Outcome.Passed);
+                Report(await evaluate(item).ConfigureAwait(false));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -66,6 +84,12 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
         }
 
         ThrowIfFailed();
+    }
+
+    private static async ValueTask<Outcome> Passes(Task property)
+    {
+        await property.ConfigureAwait(false);
+        return Outcome.Passed;
     }
 
     private void ThrowIfFailed()
@@ -104,7 +128,7 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
             if (_last.SameFailureAs(original.Outcome))
             {
                 _best = (again, _last);
-                var shrinker = new TapeShrinker(draws, maxShrinks);
+                var shrinker = new TapeShrinker(draws, maxShrinks, spans is null ? null : () => spans(_best.Item));
                 foreach (var simpler in Candidates(index, shrinker, original.Outcome))
                     yield return simpler;
                 steps = shrinker.Steps;
@@ -119,22 +143,25 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
     {
         foreach (var candidate in shrinker.Candidates())
         {
-            if (!TryReplay(index, candidate, out var simpler, out var used))
+            if (!TryReplay(index, candidate, out var simpler, out var tape))
             {
                 shrinker.Report(null);
                 continue;
             }
 
             yield return simpler;
-            if (shrinker.Report(_last.SameFailureAs(failure) ? used : null))
+            if (shrinker.Report(_last.SameFailureAs(failure) ? tape.Draws() : null))
                 _best = (simpler, _last);
         }
     }
 
-    /// <summary>Makes the object of a candidate tape; a candidate the generator can't make (its draws run out, a condition is never met) is no counterexample.</summary>
-    private bool TryReplay(long index, ulong[] draws, out T item, out ulong[] used)
+    /// <summary>
+    /// Makes the object of a candidate tape; a candidate the generator can't make (its draws run out, a condition is never met) is no counterexample.
+    /// The tape's draws are read after the object's outcome is reported (<see cref="PropertyCheck{T}"/>).
+    /// </summary>
+    private bool TryReplay(long index, ulong[] draws, out T item, out ChoiceTape tape)
     {
-        var tape = ChoiceTape.Replay(draws);
+        tape = ChoiceTape.Replay(draws);
         try
         {
 #pragma warning disable CA1031 // any failure to make the candidate only means it is not a counterexample
@@ -143,25 +170,24 @@ internal sealed class PropertyCheck<T>(Func<long, ChoiceTape, T> record, Func<lo
         catch (Exception)
         {
             item = default!;
-            used = [];
             return false;
         }
 #pragma warning restore CA1031
 
-        used = tape.Draws();
         return true;
     }
 
     private string Message(int index, T original, T counterexample, Outcome outcome, int steps)
     {
-        var because = outcome.Exception is { } exception ? $"{exception.GetType().Name}: {exception.Message}" : "the property returned false";
+        var reason = because?.Invoke(counterexample, outcome)
+            ?? (outcome.Exception is { } exception ? $"{exception.GetType().Name}: {exception.Message}" : "the property returned false");
         var stepWord = steps == 1 ? "step" : "steps";
         var shrunk = steps == 0 ? "could not be simplified" : $"shrunk in {steps} {stepWord}";
         var text = new System.Text.StringBuilder()
             .Append(CultureInfo.InvariantCulture, $"The property failed for {subject} number {index + 1} of {count} (seed {seed.Value}, {shrunk}).").AppendLine()
             .AppendLine("Counterexample:")
             .Append("  ").AppendLine(describe(counterexample))
-            .Append("Because: ").AppendLine(because);
+            .Append("Because: ").AppendLine(reason);
         if (steps > 0)
             text.AppendLine("Original:").Append("  ").AppendLine(describe(original));
         return text.Append(seed.Replay).ToString();

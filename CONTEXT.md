@@ -143,6 +143,10 @@ The concrete type chosen for a member declared as an interface, abstract class o
 **Property check**:
 A test that generates objects, runs a property on each and reports a failing one (`Check`).
 
+**Stateful check**:
+A Property check of a sequence of steps against a state (`Fake.Steps`): random runs of steps, invariants checked after every step, and a failing run shrunk to the shortest that still fails. Each step taken is recorded with its argument in the **run** (`StepRun`).
+_Avoid_: state machine test, model test
+
 **Shrink**:
 Reduce a failing object to the simplest one that still fails, by regenerating it from simpler draws so it stays realistic and obeys the Generator's Rules.
 

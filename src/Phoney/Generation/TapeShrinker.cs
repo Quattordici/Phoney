@@ -8,9 +8,13 @@ namespace Phoney.Generation;
 /// <remarks>
 /// Because the objects are made again by the generator, a simpler tape is always an object the generator can make: rules, annotations and the
 /// agreement of names, emails and dates hold for every candidate. Deleting draws removes collection elements and characters; lowering a draw lowers the
-/// number, length or index it becomes.
+/// number, length or index it becomes. A caller that knows how the draws group (the steps of a stateful run) passes <c>spans</c>, and each pass first
+/// tries deleting those whole: a group of three draws is not a run any fixed block size lines up with.
 /// </remarks>
-internal sealed class TapeShrinker(ulong[] tape, int maxAttempts)
+/// <param name="tape">The draws of the failing object.</param>
+/// <param name="maxAttempts">How many candidates may be tried.</param>
+/// <param name="spans">The groups of draws of the best tape so far, as start and length, or <see langword="null"/> for none.</param>
+internal sealed class TapeShrinker(ulong[] tape, int maxAttempts, Func<IReadOnlyList<(int Start, int Length)>>? spans = null)
 {
     private static readonly int[] BlockSizes = [8, 4, 2, 1];
 
@@ -51,6 +55,8 @@ internal sealed class TapeShrinker(ulong[] tape, int maxAttempts)
         while (improved && !Exhausted)
         {
             var steps = Steps;
+            foreach (var candidate in DeleteSpans())
+                yield return candidate;
             foreach (var candidate in DeleteBlocks())
                 yield return candidate;
             foreach (var candidate in SimplifyBlocks())
@@ -58,6 +64,26 @@ internal sealed class TapeShrinker(ulong[] tape, int maxAttempts)
             foreach (var candidate in LowerDraws())
                 yield return candidate;
             improved = Steps > steps;
+        }
+    }
+
+    /// <summary>Removes the caller's groups of draws whole, the last one first, reading them again after each deletion.</summary>
+    private IEnumerable<ulong[]> DeleteSpans()
+    {
+        if (spans is null)
+            yield break;
+        var groups = spans();
+        for (var i = groups.Count - 1; i >= 0 && !Exhausted; i--)
+        {
+            var (start, length) = groups[i];
+            if (length == 0 || start + length > Best.Length)
+                continue;
+            yield return [.. Best.AsSpan(0, start), .. Best.AsSpan(start + length)];
+            if (_accepted)
+            {
+                groups = spans();
+                i = Math.Min(i, groups.Count);
+            }
         }
     }
 

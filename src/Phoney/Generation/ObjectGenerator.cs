@@ -1217,6 +1217,16 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         }
     }
 
+    /// <summary>
+    /// Makes the arguments of a step of a <see cref="StepCheck{TState}"/> run: one object per call from the step faker's draws (so they are on the run's tape),
+    /// as a nested generator would. A generator with unique values gets a fresh copy per run, so values taken by earlier runs or shrink candidates don't count.
+    /// </summary>
+    internal Func<Faker, T> StepArguments()
+    {
+        var generator = _config.Unique.IsEmpty && _config.UniqueKeys.IsEmpty ? this : Derive(_config);
+        return faker => generator.Start(faker.Random.Long(), faker).Create(0);
+    }
+
     /// <inheritdoc />
     object? INestedGenerator.CreateNested(FakeScope parent) =>
         Start(parent.Faker.Random.Long(), parent.Faker).Create(0, parent);
