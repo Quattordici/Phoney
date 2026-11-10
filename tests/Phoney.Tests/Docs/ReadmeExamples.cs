@@ -286,4 +286,51 @@ public sealed class ReadmeExamples
         }
         masked[1].Email.ShouldBe(masked[0].Email);
     }
+
+    [Test]
+    public void Stateful_checks()
+    {
+        var failure = Should.Throw<FakeCheckException<StepRun<BankAccount>>>(() =>
+        {
+            // snippet: readme-steps
+            Fake.Steps(() => new BankAccount())
+                .Step("deposit", f => f.Finance.Amount(1, 100), (a, amount) => a.Deposit(amount))
+                .Step("withdraw", f => f.Finance.Amount(1, 100), (a, amount) => a.Withdraw(amount), when: a => a.Balance > 0)
+                .Invariant(a => a.Balance >= 0)
+                .Check();                                                   // fails: Withdraw allows an overdraft
+            // end snippet
+        });
+
+        // The seed is new every time; whatever it is, the shortest failure is one deposit and a larger withdrawal.
+        failure.Counterexample.Steps.Select(s => s.Name).ShouldBe(["deposit", "withdraw"]);
+        failure.Counterexample.State.Balance.ShouldBeLessThan(0);
+    }
+
+    [Test]
+    public void Model_based_checks()
+    {
+        var failure = Should.Throw<FakeCheckException<StepRun<(Basket Basket, List<BasketLine> Model)>>>(() =>
+        {
+            // snippet: readme-steps-model
+            var lines = Fake.For<BasketLine>().WithOneOf(l => l.Sku, ["A-1", "B-2", "C-3"]);
+            Fake.Steps(() => (Basket: new Basket(), Model: new List<BasketLine>()))
+                .Step("add", lines, (s, line) =>
+                {
+                    s.Basket.Add(line);
+                    s.Model.Add(line);
+                })
+                .Step("remove", (f, s) => f.Random.Element(s.Model), (s, line) =>
+                {
+                    s.Basket.Remove(line);
+                    s.Model.Remove(line);
+                }, when: s => s.Model.Count > 0)
+                .Invariant(s => s.Basket.Total == s.Model.Sum(l => l.Quantity * l.Price))
+                .Check();
+            // end snippet
+        });
+
+        // The basket keeps one line per SKU, so adding the same SKU twice is the shortest failure.
+        failure.Counterexample.Steps.Select(s => s.Name).ShouldBe(["add", "add"]);
+        failure.Counterexample.Steps.Select(s => ((BasketLine)s.Argument!).Sku).Distinct().Count().ShouldBe(1);
+    }
 }

@@ -15,7 +15,7 @@
 - **76 locales** imported from faker.js (`@faker-js/faker` 10.6.0), kept up to date by an automated sync pipeline.
 - **One line to a value or a fully populated object**: `Fake.Person.FullName()`, `Fake.Many<Customer>(100)`. Name conventions fill `FirstName`, `Email`, `BillingCity`, `Price`, `CreatedAt`… and the names, email and avatar of one object belong to the same person.
 - **Flexible**: fluent, immutable generators, rules that depend on other members or reach into nested ones (`.With(x => x.Lines.Each().Sku, …)`), uniqueness, conditions, numbering, weighted choices, subtypes and `[JsonDerivedType]`, strict mode checked at compile time, custom conventions and locales, faker.js-style templates.
-- **Property checks that shrink**: `Fake.For<Order>().Check(o => Pricing.Total(o) >= 0)` tests a property on a hundred realistic orders and, when one fails, shrinks it to the simplest order your own rules can make that still fails, with the seed to replay it. `Fake.Check((Order o, int discount) => …)` and `[FakeCheck]` (xUnit, NUnit, MSTest and TUnit) do the same for parameters.
+- **Property checks that shrink**: `Fake.For<Order>().Check(o => Pricing.Total(o) >= 0)` tests a property on a hundred realistic orders and, when one fails, shrinks it to the simplest order your own rules can make that still fails, with the seed to replay it. `Fake.Check((Order o, int discount) => …)` and `[FakeCheck]` (xUnit, NUnit, MSTest and TUnit) do the same for parameters. `Fake.Steps(() => new Account())` runs random sequences of steps against a state and shrinks a failing sequence to the shortest one that still breaks an invariant.
 - **Test-focused**: invalid and boundary data from your data annotations, `[FakeData]` for xUnit, NUnit, MSTest and TUnit, replayable random tests (`PHONEY_SEED=… dotnet test`), a `TimeProvider` for "now", and stable stand-ins for real data (`Fake.Keyed("customer:42")`, `Pseudonymize`).
 - **Data from files and to files**: fill members from the rows of a CSV or JSON file, or write generated objects as CSV or JSON.
 - **Fast**: array-indexed, allocation-free lookups, templates parsed once, and a **source generator** that makes generation reflection free, trim and Native AOT safe ([benchmarks](#performance)).
@@ -908,6 +908,69 @@ Replay: PHONEY_SEED=355719690 dotnet test.
 - The seed is the facade's when it is seeded (`Fake.Seeded`, `[FakeSeed]`), else `PHONEY_SEED`, else a new random one. `Counterexample` and `Original` are the rows (`object?[]`), in parameter order.
 - For more parameters, or to pin the seed in code, use the generator underneath: `Fake.Arguments(method).Seed(42).Check(row => …)` (also `Check(Action<object?[]>)` and `CheckAsync`).
 - In a test framework, `[FakeCheck]` turns a test method into such a check: the test runs once per row and fails with the shrunk row. See [`[FakeCheck]`](#property-checks-in-test-methods).
+
+### Stateful checks
+
+Some bugs only show up after a particular sequence of calls. `Fake.Steps` runs random sequences of steps against a fresh state, checks the invariants after every step and, when one breaks, **shrinks the sequence** to the shortest one that still breaks it, with the simplest arguments:
+
+<!-- snippet: readme-steps -->
+```csharp
+Fake.Steps(() => new BankAccount())
+    .Step("deposit", f => f.Finance.Amount(1, 100), (a, amount) => a.Deposit(amount))
+    .Step("withdraw", f => f.Finance.Amount(1, 100), (a, amount) => a.Withdraw(amount), when: a => a.Balance > 0)
+    .Invariant(a => a.Balance >= 0)
+    .Check();                                                   // fails: Withdraw allows an overdraft
+```
+<!-- end snippet -->
+
+```text
+FakeCheckException<StepRun<BankAccount>>: The property failed for run number 3 of 100 (seed 742876089, shrunk in 81 steps).
+Counterexample:
+  1. deposit 1
+  2. withdraw 1.01
+Because: the invariant a => a.Balance >= 0 failed after step 2
+Original:
+  1. deposit 67.64
+  2. deposit 92.22
+  3. withdraw 2.16
+  …
+  7. withdraw 91.2
+Replay: PHONEY_SEED=742876089 dotnet test, or Seed(742876089) on the steps.
+```
+
+Model-based testing needs nothing extra: make the state a pair of the system and a simple model of it, and let the invariant compare the two. An argument can be an object of a generator, and it can be picked from the state:
+
+<!-- snippet: readme-steps-model -->
+```csharp
+var lines = Fake.For<BasketLine>().WithOneOf(l => l.Sku, ["A-1", "B-2", "C-3"]);
+Fake.Steps(() => (Basket: new Basket(), Model: new List<BasketLine>()))
+    .Step("add", lines, (s, line) =>
+    {
+        s.Basket.Add(line);
+        s.Model.Add(line);
+    })
+    .Step("remove", (f, s) => f.Random.Element(s.Model), (s, line) =>
+    {
+        s.Basket.Remove(line);
+        s.Model.Remove(line);
+    }, when: s => s.Model.Count > 0)
+    .Invariant(s => s.Basket.Total == s.Model.Sum(l => l.Quantity * l.Price))
+    .Check();
+```
+<!-- end snippet -->
+
+```text
+Counterexample:
+  1. add BasketLine { Sku = "B-2", Quantity = 1, Price = 1.09 }
+  2. add BasketLine { Sku = "B-2", Quantity = 1, Price = 1.09 }
+Because: the invariant s => s.Basket.Total == s.Model.Sum(l => l.Quantity * l.Price) failed after step 2
+```
+
+- **Steps** take no argument, an argument from the faker (`f => …`), one from the faker and the state (`(f, s) => …`), or an object of an `ObjectGenerator<T>` with all its rules. The report shows each argument after the step's name. `when:` is a precondition: a step runs only while it holds, and a run ends when no step may run. An exception from a step fails the run, so assertions inside a step are postconditions.
+- **Invariants** are a `bool` predicate or an assertion of any test framework (`Invariant(a => a.Balance.ShouldBeGreaterThanOrEqualTo(0))`). They are checked after the state is created and after every step, and the report names them as you wrote them.
+- **Shrinking** works on the draws, as for `Check`: every step's draws lie together, so whole steps are deleted, and arguments become smaller, made by the same rules. Shrinking keeps to the kind of failure it found (an invariant that is false, or the same exception type).
+- **Seeds**: `Seed(…)` (or the facade's, inside `Fake.Seeded` and `[FakeSeed]`), else `PHONEY_SEED`, else a new one. Run *n* depends only on the seed and *n*. `Locale(…)` and `ReferenceDate(…)` set up the faker, and dates are relative to `Faker.DefaultSeededReferenceDate`.
+- `Check(runs: 100, maxSteps: 50, maxShrinks: 1000)` are the defaults. `CheckAsync` also runs `async` steps and invariants, one at a time, and `Check` refuses them. A state that is `IDisposable` or `IAsyncDisposable` is disposed after every run. `FakeCheckException<StepRun<TState>>` has the runs as `Original` and `Counterexample`, each with its `Steps`, final `State` and `FailedAt`. The check is immutable like a generator, so a dropped `Step(…)` is **PHONEY005**, and constant bad counts are **PHONEY011**.
 
 ## Test data in xUnit, NUnit, MSTest and TUnit
 

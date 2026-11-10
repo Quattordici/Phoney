@@ -175,6 +175,21 @@ catch (FakeCheckException<object?[]> e)
     Console.WriteLine($"Fake.Check failed for row {e.Index + 1}; simplest failing discount: {e.Counterexample[1]}");
 }
 
+try
+{
+    // Random sequences of steps against a fresh state; a sequence that breaks the invariant is shrunk to the shortest one that still breaks it.
+    Fake.Steps(() => new List<decimal>())
+        .Seed(5)
+        .Step("deposit", f => f.Finance.Amount(1, 100), (ledger, amount) => ledger.Add(amount))
+        .Step("withdraw", f => f.Finance.Amount(1, 100), (ledger, amount) => ledger.Add(-amount), when: ledger => ledger.Sum() > 0)  // no overdraft check
+        .Invariant(ledger => ledger.Sum() >= 0)
+        .Check();
+}
+catch (FakeCheckException<StepRun<List<decimal>>> e)
+{
+    Console.WriteLine($"Steps failed after {e.Counterexample.Steps.Count} steps: {string.Join(", ", e.Counterexample.Steps)}");
+}
+
 // 8. Time from a TimeProvider -----------------------------------------------------------------
 Console.WriteLine("\n== TimeProvider");
 var clock = new FixedClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));

@@ -248,6 +248,21 @@ catch (FakeCheckException<Person> failure) when (failure.Counterexample.Pets.Cou
     Check(failure.Counterexample.Email, "shrunk counterexample");
 }
 
+// A stateful check makes step arguments through the generated model and shrinks the sequence of steps.
+try
+{
+    Fake.Steps(() => new List<Person>())
+        .Seed(15)
+        .Step("add", Fakes.Person, (list, person) => list.Add(person))
+        .Invariant(list => list.Count < 3)
+        .Check();
+    throw new InvalidOperationException("the stateful check passed");
+}
+catch (FakeCheckException<StepRun<List<Person>>> failure) when (failure.Counterexample.Steps.Count == 3 && failure.Message.Contains("3. add Person {", StringComparison.Ordinal))
+{
+    Check(failure.Counterexample.State[0].Email, "shrunk steps");
+}
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 
