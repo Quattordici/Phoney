@@ -16,6 +16,7 @@ namespace Phoney.Generation;
 /// <param name="subject">What an object is called in the report (<c>Cart</c>, <c>row</c>).</param>
 /// <param name="describe">Describes an object on one line for the report.</param>
 /// <param name="because">Why an object failed, for the report; <see langword="null"/> for the exception or "the property returned false".</param>
+/// <param name="spans">How an object's draws group (start and length), which shrinking deletes whole; <see langword="null"/> for no groups.</param>
 /// <remarks>
 /// The draws of an object are those its tape holds once its outcome is reported, not once it is made: a stateful check (<see cref="StepCheck{TState}"/>)
 /// keeps drawing while the property runs. Other checks detach the tape when the object is made, so for them the two are the same.
@@ -28,7 +29,8 @@ internal sealed class PropertyCheck<T>(
     CheckSeed seed,
     string subject,
     Func<T, string> describe,
-    Func<T, PropertyCheck<T>.Outcome, string>? because = null)
+    Func<T, PropertyCheck<T>.Outcome, string>? because = null,
+    Func<T, IReadOnlyList<(int Start, int Length)>>? spans = null)
 {
     /// <summary>A check of generated objects, reported by their type's name and described member by member.</summary>
     public PropertyCheck(Func<long, ChoiceTape, T> record, Func<long, ChoiceTape, T> replay, int count, int maxShrinks, CheckSeed seed)
@@ -126,7 +128,7 @@ internal sealed class PropertyCheck<T>(
             if (_last.SameFailureAs(original.Outcome))
             {
                 _best = (again, _last);
-                var shrinker = new TapeShrinker(draws, maxShrinks);
+                var shrinker = new TapeShrinker(draws, maxShrinks, spans is null ? null : () => spans(_best.Item));
                 foreach (var simpler in Candidates(index, shrinker, original.Outcome))
                     yield return simpler;
                 steps = shrinker.Steps;

@@ -12,6 +12,7 @@ namespace Phoney;
 public sealed class StepRun<TState>
 {
     private readonly List<TakenStep> _steps = [];
+    private readonly List<(int Start, int Length)> _spans = [];
 
     internal StepRun(Faker faker) => Faker = faker;
 
@@ -33,7 +34,13 @@ public sealed class StepRun<TState>
     /// <summary>The faker the run draws from, while it runs.</summary>
     internal Faker Faker { get; }
 
+    /// <summary>Where each step's draws lie on the run's tape (start and length), so shrinking can delete a step whole.</summary>
+    internal IReadOnlyList<(int Start, int Length)> Spans => _spans;
+
     internal void Add(TakenStep step) => _steps.Add(step);
+
+    /// <summary>Records that the draws from <paramref name="start"/> to <paramref name="end"/> belong to the step just added.</summary>
+    internal void Drew(int start, int end) => _spans.Add((start, end - start));
 
     internal void Fail(string reason)
     {

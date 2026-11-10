@@ -64,6 +64,23 @@ public sealed class StepCheckTests
     }
 
     [Test]
+    [Arguments(25)]
+    [Arguments(28)]
+    [Arguments(91)]
+    public void Shrinking_deletes_a_whole_step_whose_draws_no_fixed_block_size_covers(long seed)
+    {
+        // A step here takes three draws ("go on?", the step, the amount), so only deleting the step itself removes the second deposit of
+        // "deposit 1, deposit 1, withdraw 2.01"; these seeds ended there before steps were deleted as a whole.
+        var failure = Falsify(Fake.Steps(() => new CheckedAccount())
+            .Seed(seed)
+            .Step("deposit", f => f.Finance.Amount(1, 100), (a, amount) => a.Deposit((int)(amount * 100)))
+            .Step("withdraw", f => f.Finance.Amount(1, 100), (a, amount) => a.Withdraw((int)(amount * 100)), when: a => a.Balance > 0)
+            .Invariant(a => a.Balance >= 0));
+
+        failure.Counterexample.Steps.Select(s => s.ToString()).ShouldBe(["deposit 1", "withdraw 1.01"]);
+    }
+
+    [Test]
     public void The_report_lists_the_steps_and_names_the_invariant()
     {
         var failure = Falsify(Account().Invariant(a => a.Balance >= 0));

@@ -228,7 +228,8 @@ public sealed class StepCheck<TState>
             seed,
             "run",
             run => run.Describe(Environment.NewLine + "  "),
-            (run, _) => run.Reason ?? "the run failed");
+            (run, _) => run.Reason ?? "the run failed",
+            run => run.Spans);
         return (check, new StepExecution<TState>(_create, _steps, _invariants, maxSteps));
     }
 

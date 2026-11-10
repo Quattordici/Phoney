@@ -60,12 +60,14 @@ internal sealed class StepExecution<TState>(Func<TState> create, ImmutableArray<
             try
             {
                 Enabled(run.State, enabled);
+                var start = faker.Random.Tape?.Position ?? 0;
                 if (enabled.Count == 0 || faker.Random.Int(0, _odds) == 0)
                     break;
                 var index = enabled[faker.Random.Index(enabled.Count)];
                 step = steps[index];
                 argument = arguments[index]?.Invoke(faker, run.State);
                 run.Add(new TakenStep(step.Name, step.Arguments is not null, argument));
+                run.Drew(start, faker.Random.Tape?.Position ?? 0);
             }
             catch (Exception e)
             {
