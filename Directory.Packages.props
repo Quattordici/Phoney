@@ -77,6 +77,9 @@
     <PackageVersion Include="NodaTime" Version="$(NodaTimeFloor)" />
     <!-- Phoney.WireMock depends on the builder interfaces only; the tests run the server of the same release. -->
     <PackageVersion Include="WireMock.Net.Shared" Version="$(WireMockFloor)" />
+    <!-- WireMock.Net.Shared before 2.31.0 brings Microsoft.AspNetCore.WebUtilities 2.3.0-2.3.13 (GHSA-6527-9fp8-r4x6, NuGet audit fails the build). Phoney.WireMock references the
+         first patched version directly, so the WireMock.Net floor stays where it is and every app that installs the add-on gets the fix. -->
+    <PackageVersion Include="Microsoft.AspNetCore.WebUtilities" Version="2.3.14" />
     <PackageVersion Include="WireMock.Net.Minimal" Version="$(WireMockTestVersion)" />
   </ItemGroup>
 

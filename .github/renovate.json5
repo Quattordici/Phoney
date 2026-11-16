@@ -64,6 +64,8 @@
         'Microsoft.EntityFrameworkCore.Sqlite',
         'WireMock.Net.Shared',
         'WireMock.Net.Minimal',
+        // A dependency of Phoney.WireMock, at the first version without a known vulnerability (the next major is ASP.NET Core 8).
+        'Microsoft.AspNetCore.WebUtilities',
         'Microsoft.CodeAnalysis.CSharp',
         'Microsoft.CodeAnalysis.CSharp.Workspaces',
       ],
