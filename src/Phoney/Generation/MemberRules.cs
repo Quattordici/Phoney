@@ -79,6 +79,9 @@ public readonly struct MemberRules<T, TValue>
     /// <summary>Gives the member the <paramref name="values"/> in turn, by the object's position; <see cref="ObjectGenerator{T}.Cycle{TValue}"/>.</summary>
     public MemberRules<T, TValue> Cycle(IReadOnlyList<TValue> values) => Then((g, m) => g.Cycle(m, values));
 
+    /// <summary>Gives the member a lifecycle, so its value is a state objects can really reach; <see cref="ObjectGenerator{T}.Lifecycle{TState}"/>.</summary>
+    public MemberRules<T, TValue> Lifecycle(Func<LifecycleBuilder<TValue>, LifecycleBuilder<TValue>> lifecycle) => Then((g, m) => g.Lifecycle(m, lifecycle));
+
     /// <summary>Sets the member to a value that breaks one of its data annotations; <see cref="ObjectGenerator{T}.Invalid{TValue}"/>.</summary>
     public MemberRules<T, TValue> Invalid() => Then((g, m) => g.Invalid(m));
 

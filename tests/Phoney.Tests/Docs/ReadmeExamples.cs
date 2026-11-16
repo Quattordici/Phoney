@@ -236,6 +236,29 @@ public sealed class ReadmeExamples
     }
 
     [Test]
+    public void Lifecycles()
+    {
+        // snippet: readme-lifecycle
+        var orders = Fake.For<Order>().Seed(1)
+            .Lifecycle(o => o.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid, 4).To(OrderStatus.Cancelled, 1)   // staying pending weighs 1
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped))                                   // a cancelled order stays cancelled
+            .Generate(1000);                                    // about 1/6 pending, 1/6 cancelled, 1/3 paid, 1/3 shipped
+
+        var mix = Fake.For<Order>().Seed(1)
+            .Lifecycle(o => o.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped)
+                .EndsIn(OrderStatus.Shipped, 80).EndsIn(OrderStatus.Cancelled, 20))                // exactly this mix
+            .Generate(1000);
+        // end snippet
+
+        orders.Select(o => o.Status).Distinct().Count().ShouldBe(4);
+        mix.Count(o => o.Status == OrderStatus.Shipped).ShouldBeInRange(740, 860);
+        mix.ShouldAllBe(o => o.Status == OrderStatus.Shipped || o.Status == OrderStatus.Cancelled);
+    }
+
+    [Test]
     public void Populating_existing_objects()
     {
         var generator = Fake.For<Customer>().Seed(1);

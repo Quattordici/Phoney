@@ -11,7 +11,8 @@ internal sealed class ObjectLedger
     private List<int>? _brokenComparisons;
     private Dictionary<int, object?>? _keyParts;
     private List<(RuleSlot Slot, object? Value)>? _pendingClaims;
-    private bool _hasDuplicate;
+    private List<(LifecycleDefinition Lifecycle, int[] Path)>? _paths;
+    private bool _rejected;
 
     /// <summary>Records that <c>Populate</c> keeps the value <paramref name="member"/> already has.</summary>
     public void Keep(int member) => (_kept ??= []).Add(member);
@@ -35,6 +36,24 @@ internal sealed class ObjectLedger
         return _keyParts is not null && _keyParts.TryGetValue(member, out value);
     }
 
+    /// <summary>Records that a value drawn once per object was rejected by its member's condition, so the object is generated again.</summary>
+    public void Reject() => _rejected = true;
+
+    /// <summary>The path the object walks through <paramref name="lifecycle"/>: drawn from <paramref name="random"/> the first time it is asked for, then the same.</summary>
+    public int[] Path(LifecycleDefinition lifecycle, SeededRandom random)
+    {
+        _paths ??= [];
+        foreach (var (known, path) in _paths)
+        {
+            if (ReferenceEquals(known, lifecycle))
+                return path;
+        }
+
+        var walked = lifecycle.Walk(random);
+        _paths.Add((lifecycle, walked));
+        return walked;
+    }
+
     /// <summary>
     /// Records a unique identity value the object produced (see <see cref="RuleSlot.RetriesObject"/>): one produced before rejects the object, a new one is
     /// claimed only when the object is accepted.
@@ -42,7 +61,7 @@ internal sealed class ObjectLedger
     public void Produced(RuleSlot slot, object? value)
     {
         if (slot.IsClaimed(value))
-            _hasDuplicate = true;
+            _rejected = true;
         else
             (_pendingClaims ??= []).Add((slot, value));
     }
@@ -56,7 +75,7 @@ internal sealed class ObjectLedger
     /// <param name="combinations">The unique combinations with the object's values, or <see langword="null"/>.</param>
     public static bool TryClaim(ObjectLedger? ledger, object gate, IReadOnlyList<(UniqueCombination Combination, object?[] Values)>? combinations)
     {
-        if (ledger is { _hasDuplicate: true })
+        if (ledger is { _rejected: true })
             return false;
         var pending = ledger?._pendingClaims;
         if (pending is null && combinations is null)

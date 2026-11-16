@@ -645,6 +645,35 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     }
 
     /// <summary>
+    /// Gives a member a lifecycle: every object walks from the start state through the transitions, by weight, so its status is one it can really be in, e.g.
+    /// <c>.Lifecycle(o =&gt; o.Status, l =&gt; l.From(Placed).To(Paid, 4).To(Cancelled, 1).From(Paid).To(Shipped))</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// At each state an object stays (weight 1, see <see cref="LifecycleBuilder{TState}.Stays"/>) or takes one of the state's transitions, until it stays, reaches a
+    /// state with no way out or has taken <see cref="LifecycleBuilder{TState}.MaxTransitions"/> transitions; with <see cref="LifecycleBuilder{TState}.EndsIn"/> the end
+    /// state is drawn first and the object walks there. The lifecycle is checked when the rule is added.
+    /// </para>
+    /// <para>
+    /// Works for members of nested objects and collection elements too (<c>o =&gt; o.Lines.Each().Status</c>). Like <c>With</c> it takes the member's rule slot, so a
+    /// later rule for the member replaces it. The path is drawn once per object, so <see cref="Where{TValue}(Expression{Func{T, TValue}}, Func{TValue, bool}, int)"/> and
+    /// <see cref="Unique{TValue}"/> on the member generate the whole object again. Generators reflected and generated give the same objects for a seed.
+    /// </para>
+    /// </remarks>
+    /// <param name="member">The status member: <c>o =&gt; o.Status</c>.</param>
+    /// <param name="lifecycle">The states and transitions: <c>l =&gt; l.From(Placed).To(Paid)</c>.</param>
+    /// <exception cref="ArgumentException">The lifecycle has no transitions, a state the start can't reach, a value its enum doesn't define, or an end state it can't reach in time.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A weight is not positive and finite (a stay weight may be zero).</exception>
+    /// <exception cref="InvalidOperationException">A transition comes before any <c>From</c>, or the lambda returned <see langword="null"/>.</exception>
+    public ObjectGenerator<T> Lifecycle<TState>(Expression<Func<T, TState>> member, Func<LifecycleBuilder<TState>, LifecycleBuilder<TState>> lifecycle)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        ArgumentNullException.ThrowIfNull(lifecycle);
+        LifecycleDefinition definition = LifecycleDefinition<TState>.Of(lifecycle, $"{typeof(T).Name}.{string.Join('.', MemberPath(member))}");
+        return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)(scope => definition.StateAt(scope.LifecyclePath(definition)[^1])), ObjectBound: true));
+    }
+
+    /// <summary>
     /// Gives a number member values from a normal (Gaussian) distribution, e.g. <c>.WithNormalDistribution(x =&gt; x.Height, 175, 8)</c>: most heights are near 175, about two thirds within 8 of it.
     /// Realistic measurements, ages, scores and durations look like this, where a plain range gives every value the same chance.
     /// </summary>
@@ -1368,7 +1397,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 dependent.Add((index, DependentRule(members[index], rule)));
 
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(typeof(T).Name, members[index], (ConstraintRequest)rule.Value!) : rule.Value;
-            rules[index] = new SlotDecision(rule.Kind, value, rule.Boxed);
+            rules[index] = new SlotDecision(rule.Kind, value, rule.Boxed, rule.ObjectBound);
         }
 
         return rules;
@@ -1493,6 +1522,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         {
             if (!filters.IsEmpty && (compiled.ObjectRetries == 0 || attempts < compiled.ObjectRetries))
                 return Filter.Exhausted(typeof(T), filters, attempts);
+            if (Array.Find(compiled.Slots, s => s is { RetriesObject: true, Filter: not null }) is { } conditioned)
+            {
+                return new InvalidOperationException(
+                    $"Could not generate a {typeof(T).Name} whose {conditioned.MemberName} satisfies its Where condition after {attempts} attempts: almost every object is rejected. "
+                    + "Loosen the condition, make the values it accepts more likely, or raise maxAttempts.");
+            }
+
             return new InvalidOperationException(
                 $"Could not generate a {typeof(T).Name} with a unique {UniqueNames()} after {attempts} attempts: almost every value was produced before. "
                 + "Give the member a source with more distinct values with .With(…), generate fewer objects, or raise maxAttempts.");
@@ -1630,7 +1666,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations, bool BackReferences);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
-    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false);
+    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false, bool ObjectBound = false);
 
     /// <summary>Mutable per-instance state; derived generators start fresh.</summary>
     private sealed class State(State? shared)

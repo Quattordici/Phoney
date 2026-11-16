@@ -263,6 +263,13 @@ catch (FakeCheckException<StepRun<List<Person>>> failure) when (failure.Countere
     Check(failure.Counterexample.State[0].Email, "shrunk steps");
 }
 
+// A lifecycle walks the generated model's status member.
+var suspended = Fakes.Person.Seed(16)
+    .Lifecycle(p => p.Status, l => l.From(Status.Active).To(Status.Suspended).EndsIn(Status.Suspended, 1))
+    .Generate(5);
+if (suspended.Any(p => p.Status != Status.Suspended))
+    throw new InvalidOperationException("the lifecycle did not end in its end state");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 
