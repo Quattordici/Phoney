@@ -101,7 +101,11 @@ The states a member can be in and the transitions between them, declared on a Ge
 _Avoid_: state machine, workflow
 
 **Transition**:
-One allowed move of a Lifecycle from a state to another, with a weight.
+One allowed move of a Lifecycle from a state to another, with a weight and the time it takes.
+
+**Stamp**:
+A date member that holds the time an object entered a state of its Lifecycle (`PaidAt`), or the time of its last transition (`UpdatedAt`).
+_Avoid_: timestamp, audit field
 
 **History**:
 The transitions one object (and the objects inside it) went through, with their times.

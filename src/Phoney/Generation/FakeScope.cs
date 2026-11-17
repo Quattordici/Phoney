@@ -263,7 +263,13 @@ public sealed class FakeScope
     }
 
     /// <summary>The path this object walks through <paramref name="lifecycle"/>, drawn on first use and the same for every member that reads it.</summary>
-    internal int[] LifecyclePath(LifecycleDefinition lifecycle) => (_ledger ??= new()).Path(lifecycle, Faker.Random);
+    internal LifecycleWalk LifecyclePath(LifecycleDefinition lifecycle) => (_ledger ??= new()).Path(lifecycle, Faker.Random);
+
+    /// <summary>When this object last entered <paramref name="state"/> of <paramref name="lifecycle"/>, or <see langword="null"/> when it never did.</summary>
+    internal DateTimeOffset? Entered(LifecycleDefinition lifecycle, int state) => LifecyclePath(lifecycle).Entered(state, Created, Faker.ReferenceDate);
+
+    /// <summary>When this object took the last transition of <paramref name="lifecycle"/>, or its creation time when it took none.</summary>
+    internal DateTimeOffset LastTransition(LifecycleDefinition lifecycle) => LifecyclePath(lifecycle).LastTransition(Created, Faker.ReferenceDate);
 
     /// <summary>
     /// Claims the unique identity values and <paramref name="combinations"/> of an accepted object; false when one was produced before or another thread

@@ -650,8 +650,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// </summary>
     /// <remarks>
     /// <para>
-    /// At each state an object stays (weight 1, see <see cref="LifecycleBuilder{TState}.Stays"/>) or takes one of the state's transitions, until it stays, reaches a
-    /// state with no way out or has taken <see cref="LifecycleBuilder{TState}.MaxTransitions"/> transitions; with <see cref="LifecycleBuilder{TState}.EndsIn"/> the end
+    /// At each state an object stays (weight 1, see <see cref="LifecycleBuilder{T, TState}.Stays"/>) or takes one of the state's transitions, until it stays, reaches a
+    /// state with no way out or has taken <see cref="LifecycleBuilder{T, TState}.MaxTransitions"/> transitions; with <see cref="LifecycleBuilder{T, TState}.EndsIn"/> the end
     /// state is drawn first and the object walks there. The lifecycle is checked when the rule is added.
     /// </para>
     /// <para>
@@ -665,12 +665,34 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <exception cref="ArgumentException">The lifecycle has no transitions, a state the start can't reach, a value its enum doesn't define, or an end state it can't reach in time.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A weight is not positive and finite (a stay weight may be zero).</exception>
     /// <exception cref="InvalidOperationException">A transition comes before any <c>From</c>, or the lambda returned <see langword="null"/>.</exception>
-    public ObjectGenerator<T> Lifecycle<TState>(Expression<Func<T, TState>> member, Func<LifecycleBuilder<TState>, LifecycleBuilder<TState>> lifecycle)
+    public ObjectGenerator<T> Lifecycle<TState>(Expression<Func<T, TState>> member, Func<LifecycleBuilder<T, TState>, LifecycleBuilder<T, TState>> lifecycle)
     {
         ArgumentNullException.ThrowIfNull(member);
         ArgumentNullException.ThrowIfNull(lifecycle);
-        LifecycleDefinition definition = LifecycleDefinition<TState>.Of(lifecycle, $"{typeof(T).Name}.{string.Join('.', MemberPath(member))}");
-        return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)(scope => definition.StateAt(scope.LifecyclePath(definition)[^1])), ObjectBound: true));
+        var path = MemberPath(member);
+        var name = $"{typeof(T).Name}.{string.Join('.', path)}";
+        LifecycleDefinition definition = LifecycleDefinition<TState>.Of(lifecycle, name, stamp => StampMember(name, path, stamp));
+        return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)(scope => definition.StateAt(scope.LifecyclePath(definition).Status)), ObjectBound: true, Lifecycle: definition));
+    }
+
+    /// <summary>The name of the member a lifecycle's <c>Stamp</c> selects, which must be a date member of the object that holds the status at <paramref name="status"/>.</summary>
+    private static string StampMember(string lifecycle, string[] status, LambdaExpression stamp)
+    {
+        var steps = PathSteps(stamp);
+        var names = steps.Select(step => step.Member.Name).ToArray();
+        if (names.Length != status.Length || !names.AsSpan(0, names.Length - 1).SequenceEqual(status.AsSpan(0, status.Length - 1)))
+        {
+            var owner = status.Length == 1 ? typeof(T).Name : string.Join('.', status[..^1]);
+            throw new ArgumentException(
+                $"The lifecycle of {lifecycle} stamps '{stamp}', which is not a member of the object that holds the status ({owner}). Select a member next to it, like {string.Join('.', [.. status[..^1], "PaidAt"])}.",
+                nameof(lifecycle));
+        }
+
+        var member = steps[^1].Member;
+        var type = member is PropertyInfo property ? property.PropertyType : ((FieldInfo)member).FieldType;
+        if (!LifecycleStamps.CanHold(type))
+            throw new ArgumentException($"The lifecycle of {lifecycle} stamps {member.Name}, a {type.Name}: a stamp is a DateTimeOffset, DateTime or DateOnly (nullable unless every object reaches the state).", nameof(lifecycle));
+        return member.Name;
     }
 
     /// <summary>
@@ -1322,7 +1344,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 nameof(member));
         }
 
-        var spec = new PathSpec(path, new PathRule(rule.Kind, rule.Value, rule.Boxed));
+        var spec = new PathSpec(path, new PathRule(rule.Kind, rule.Value, rule.Boxed, rule.Lifecycle));
         return Derive(_config with { PathRules = _config.PathRules.SetItem(string.Join('.', path), spec), RuleCount = _config.RuleCount + 1 });
     }
 
@@ -1397,7 +1419,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 dependent.Add((index, DependentRule(members[index], rule)));
 
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(typeof(T).Name, members[index], (ConstraintRequest)rule.Value!) : rule.Value;
-            rules[index] = new SlotDecision(rule.Kind, value, rule.Boxed, rule.ObjectBound);
+            rules[index] = new SlotDecision(rule.Kind, value, rule.Boxed, rule.ObjectBound, rule.Lifecycle);
         }
 
         return rules;
@@ -1666,7 +1688,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations, bool BackReferences);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
-    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false, bool ObjectBound = false);
+    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false, bool ObjectBound = false, LifecycleDefinition? Lifecycle = null);
 
     /// <summary>Mutable per-instance state; derived generators start fresh.</summary>
     private sealed class State(State? shared)
@@ -1798,7 +1820,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     private static string[] MemberPath<TValue>(Expression<Func<T, TValue>> expression) => [.. PathSteps(expression).Select(step => step.Member.Name)];
 
     /// <summary>The members a path selects, from the root on, each with the type of the object it is read from (the element type after <c>Each()</c>).</summary>
-    private static List<(MemberInfo Member, Type Owner)> PathSteps<TValue>(Expression<Func<T, TValue>> expression)
+    private static List<(MemberInfo Member, Type Owner)> PathSteps(LambdaExpression expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
         var steps = new List<(MemberInfo, Type)>();

@@ -2,9 +2,10 @@ namespace Phoney.Generation;
 
 /// <summary>
 /// What produces a member's value, before it is bound to the member as a <see cref="RuleSlot"/>; <paramref name="ObjectBound"/> when the value is drawn once per
-/// object (a lifecycle's path), so a check on it makes the whole object again.
+/// object (a lifecycle's path), so a check on it makes the whole object again, and <paramref name="Lifecycle"/> when it is a lifecycle's status, whose stamps the
+/// plan then gives the object's date members.
 /// </summary>
-internal readonly record struct SlotDecision(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, bool ObjectBound = false);
+internal readonly record struct SlotDecision(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, bool ObjectBound = false, LifecycleDefinition? Lifecycle = null);
 
 /// <summary>
 /// How a member's produced values are checked, besides who produces them: uniqueness (attempts per value, 0 for none), a <c>Where</c> condition, whether a duplicate
@@ -60,8 +61,9 @@ internal sealed class MemberPlanInputs
 
 /// <summary>
 /// Decides, for every member of an object, which source gives it its value and how it is checked, and binds both to a finished <see cref="RuleSlot"/> in one pass.
-/// One order for the root object, nested objects and path positions alike, the first source that has a say wins: a rule, then the feed, then the default the member
-/// declares, then a custom convention. A member that is <c>Unique</c> or has a <c>Where</c> condition is decided by that and gets no declared default (its value is drawn,
+/// One order for the root object, nested objects and path positions alike, the first source that has a say wins: a rule (a lifecycle's status among them), then a
+/// member a lifecycle stamps with <c>Stamp</c>, then the feed, then a date member named after a lifecycle's state (or its "updated" member), then the default the
+/// member declares, then a custom convention. A member that is <c>Unique</c> or has a <c>Where</c> condition is decided by that and gets no declared default (its value is drawn,
 /// then checked), but still takes a convention. A member that nothing decides gets no slot, unless a policy needs one (uniqueness, a condition, a key part).
 /// </summary>
 /// <remarks>
@@ -95,9 +97,10 @@ internal sealed class MemberPlan
         var known = conditions is null && keys is null ? null : IndexByName(members);
 
         var policies = Policies(members.Count, inputs, known, conditions);
+        var stamps = LifecycleStamps.Of(members, inputs.Rules, inputs.TypeName);
         var decisions = new SlotDecision?[members.Count];
         for (var i = 0; i < decisions.Length; i++)
-            decisions[i] = Decide(members[i], i, policies[i], inputs);
+            decisions[i] = Decide(members[i], i, policies[i], inputs, stamps);
 
         if (inputs.Strict)
             CheckStrict(members, decisions, policies, inputs);
@@ -185,12 +188,16 @@ internal sealed class MemberPlan
         return known;
     }
 
-    private static SlotDecision? Decide(FakeMember member, int index, Policy policy, MemberPlanInputs inputs)
+    private static SlotDecision? Decide(FakeMember member, int index, Policy policy, MemberPlanInputs inputs, LifecycleStamps? stamps)
     {
         if (inputs.Rules is not null && inputs.Rules.TryGetValue(index, out var rule))
             return rule;
+        if (stamps?.Explicit(index) is { } stamped)
+            return stamped;
         if (inputs.Feed is not null && inputs.Feed.TryGetValue(index, out var fed))
             return fed;
+        if (inputs.NameConventions && stamps?.Named(index) is { } named)
+            return named;
         if (inputs.ParameterDefaults && !policy.Unique && !policy.Conditioned && ParameterDefaults.Decision(member) is { } declared)
             return declared;
 

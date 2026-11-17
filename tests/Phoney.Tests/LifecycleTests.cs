@@ -46,7 +46,7 @@ public sealed class LifecycleTests
     private static ObjectGenerator<Freight> Model(bool generated) => generated ? Generated() : Reflected();
 
     /// <summary>Placed → Paid (4) or Cancelled (1); Paid → Shipped; Shipped → Delivered. Staying weighs 1 everywhere.</summary>
-    private static LifecycleBuilder<ParcelState> Shop(LifecycleBuilder<ParcelState> l) => l
+    private static LifecycleBuilder<T, ParcelState> Shop<T>(LifecycleBuilder<T, ParcelState> l) => l
         .From(ParcelState.Placed).To(ParcelState.Paid, 4).To(ParcelState.Cancelled, 1)
         .From(ParcelState.Paid).To(ParcelState.Shipped)
         .From(ParcelState.Shipped).To(ParcelState.Delivered);

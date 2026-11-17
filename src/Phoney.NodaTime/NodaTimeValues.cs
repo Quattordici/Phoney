@@ -27,6 +27,13 @@ public static class NodaTimeValues
         ScalarAdapters.Register(LocalDate);
         ScalarAdapters.Register(LocalTime);
         ScalarAdapters.Register(Duration);
+
+        // A lifecycle's stamps (PaidAt gets the time the object entered Paid): the moment as the member's type, in UTC like every generated date.
+        ScalarAdapters.RegisterMoment(NodaInstant.FromDateTimeOffset);
+        ScalarAdapters.RegisterMoment(NodaOffsetDateTime.FromDateTimeOffset);
+        ScalarAdapters.RegisterMoment(NodaZonedDateTime.FromDateTimeOffset);
+        ScalarAdapters.RegisterMoment(moment => NodaLocalDateTime.FromDateTime(moment.UtcDateTime));
+        ScalarAdapters.RegisterMoment(moment => NodaLocalDate.FromDateTime(moment.UtcDateTime));
     }
 
     /// <summary>An <c>Instant</c>, generated like a <see cref="DateTimeOffset"/> member.</summary>

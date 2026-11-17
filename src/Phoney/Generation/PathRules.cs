@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 namespace Phoney.Generation;
 
 /// <summary>A rule given to a member of a nested object, e.g. <c>x =&gt; x.Billing.City</c>; <paramref name="Value"/> is what the rule kind needs.</summary>
-internal sealed record PathRule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed);
+internal sealed record PathRule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed, LifecycleDefinition? Lifecycle = null);
 
 /// <summary>A configured path rule: its member names from the root, and the rule.</summary>
 internal sealed record PathSpec(string[] Segments, PathRule Rule);
@@ -71,11 +71,11 @@ internal sealed class PathNode
             var (rule, usage) = found;
             usage?.MarkUsed(); // the model gets or skips every member of an object created here, so binding is applying
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(type.Name, members[i], (ConstraintRequest)rule.Value!) : rule.Value;
-            rules[i] = new SlotDecision(rule.Kind, value, rule.Boxed);
+            rules[i] = new SlotDecision(rule.Kind, value, rule.Boxed, rule.Lifecycle is not null, rule.Lifecycle);
         }
 
         // Path rules come first, then what a nested object of this type gets anyway (declared defaults, conventions).
-        var slots = MemberPlan.Build(members, conventions?.Sources(rules) ?? new MemberPlanInputs { Rules = rules }).Slots;
+        var slots = MemberPlan.Build(members, conventions?.Sources(rules, type.Name) ?? new MemberPlanInputs { Rules = rules, TypeName = type.Name }).Slots;
         return new PathBinding(slots, ChildrenFor(members));
     }
 }
