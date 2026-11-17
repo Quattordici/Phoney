@@ -1,7 +1,9 @@
 namespace Phoney.Generation;
 
-/// <summary>What produces a member's value, before it is bound to the member as a <see cref="RuleSlot"/>.</summary>
-/// <summary>Who gives a member its value; <paramref name="ObjectBound"/> when the value is drawn once per object (a lifecycle's path), so a check on it makes the whole object again.</summary>
+/// <summary>
+/// What produces a member's value, before it is bound to the member as a <see cref="RuleSlot"/>; <paramref name="ObjectBound"/> when the value is drawn once per
+/// object (a lifecycle's path), so a check on it makes the whole object again.
+/// </summary>
 internal readonly record struct SlotDecision(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, bool ObjectBound = false);
 
 /// <summary>
@@ -143,26 +145,34 @@ internal sealed class MemberPlan
                 decision = new SlotDecision(RuleKind.Default, null);
             }
 
-            // A unique member read from the object's identity can't be drawn again on its own (the identity is cached, and name, email and address must agree),
-            // so a duplicate generates the whole object again.
-            var retriesObject = decision.Kind == RuleKind.Default && policy.Unique && inputs.NameConventions && ConventionValues.IsIdentityBound(members[i].Convention);
-            if (retriesObject)
-                objectRetries = Smallest(objectRetries, policy.UniqueAttempts);
-
-            // A value drawn once per object (a lifecycle's path) is the same however often the member is produced, so a duplicate or a rejected value makes the whole object again.
-            if (decision.ObjectBound && (policy.Unique || policy.Filter is not null))
-            {
-                retriesObject = true;
-                if (policy.Unique)
-                    objectRetries = Smallest(objectRetries, policy.UniqueAttempts);
-                if (policy.Filter is { } filter)
-                    objectRetries = Smallest(objectRetries, filter.MaxAttempts);
-            }
-
+            var retriesObject = RetriesObject(members[i], decision, policy, inputs, ref objectRetries);
             slots[i] = new RuleSlot(members[i], decision, new SlotChecks(policy.UniqueAttempts, policy.Filter?.Accepts, policy.Filter?.MaxAttempts ?? 0, retriesObject, policy.RecordsKeyPart));
         }
 
         return slots;
+    }
+
+    /// <summary>
+    /// Whether a duplicate or rejected value of the member makes the whole object again, because producing the member again would give the same value; folds the
+    /// member's limit into <paramref name="objectRetries"/>.
+    /// </summary>
+    private static bool RetriesObject(FakeMember member, SlotDecision decision, Policy policy, MemberPlanInputs inputs, ref int objectRetries)
+    {
+        // A unique member read from the object's identity can't be drawn again on its own (the identity is cached, and name, email and address must agree).
+        if (decision.Kind == RuleKind.Default && policy.Unique && inputs.NameConventions && ConventionValues.IsIdentityBound(member.Convention))
+        {
+            objectRetries = Smallest(objectRetries, policy.UniqueAttempts);
+            return true;
+        }
+
+        // A value drawn once per object (a lifecycle's path) is the same however often the member is produced.
+        if (!decision.ObjectBound || (!policy.Unique && policy.Filter is null))
+            return false;
+        if (policy.Unique)
+            objectRetries = Smallest(objectRetries, policy.UniqueAttempts);
+        if (policy.Filter is { } filter)
+            objectRetries = Smallest(objectRetries, filter.MaxAttempts);
+        return true;
     }
 
     private static int Smallest(int limit, int attempts) => limit == 0 ? attempts : Math.Min(limit, attempts);

@@ -43,14 +43,16 @@ internal abstract class LifecycleDefinition
             var total = 0.0;
             if (moves.Length > 0 && stays[s] > 0)
             {
+                total += stays[s];
                 targets.Add(Stay);
-                totals.Add(total += stays[s]);
+                totals.Add(total);
             }
 
             foreach (var move in moves)
             {
+                total += move.Weight;
                 targets.Add(move.To);
-                totals.Add(total += move.Weight);
+                totals.Add(total);
             }
 
             _targets[s] = [.. targets];
@@ -85,7 +87,8 @@ internal abstract class LifecycleDefinition
             var next = targets[random.WeightedIndex(_totals[current])];
             if (next == Stay)
                 break;
-            path.Add(current = next);
+            current = next;
+            path.Add(current);
         }
 
         return [.. path];
@@ -100,7 +103,8 @@ internal abstract class LifecycleDefinition
         Span<double> totals = widest <= 32 ? stackalloc double[widest] : new double[widest];
         Span<int> candidates = widest <= 32 ? stackalloc int[widest] : new int[widest];
         var current = _start;
-        for (var left = _max; current != end; left--)
+        var left = _max;
+        while (current != end)
         {
             var moves = _moves[current];
             var weights = _moveWeights[current];
@@ -114,7 +118,9 @@ internal abstract class LifecycleDefinition
                 totals[count++] = total += weights[i];
             }
 
-            path.Add(current = candidates[random.WeightedIndex(totals[..count])]);
+            current = candidates[random.WeightedIndex(totals[..count])];
+            path.Add(current);
+            left--;
         }
     }
 
@@ -158,19 +164,20 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
 
     public override object? StateAt(int state) => _states[state];
 
-    /// <summary>Checks the lifecycle <paramref name="build"/> writes; <paramref name="member"/> names it in messages.</summary>
-    /// <exception cref="InvalidOperationException"><paramref name="build"/> returned <see langword="null"/>.</exception>
+    /// <summary>Checks the lifecycle <paramref name="lifecycle"/> writes; <paramref name="member"/> names it in messages.</summary>
+    /// <exception cref="InvalidOperationException"><paramref name="lifecycle"/> returned <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">No transitions, a state the start can't reach, an undefined enum value, or an end state the walk can't reach in time.</exception>
-    public static LifecycleDefinition<TState> Of(Func<LifecycleBuilder<TState>, LifecycleBuilder<TState>> build, string member)
+    public static LifecycleDefinition<TState> Of(Func<LifecycleBuilder<TState>, LifecycleBuilder<TState>> lifecycle, string member)
     {
-        var spec = (build(new LifecycleBuilder<TState>()) ?? throw new InvalidOperationException(
+        var spec = (lifecycle(new LifecycleBuilder<TState>()) ?? throw new InvalidOperationException(
             $"The lifecycle of {member} returned null. Return the builder the lambda was given, with the transitions added: l => l.From(a).To(b).")).Current;
         if (spec.Transitions.IsEmpty)
-            throw new ArgumentException($"The lifecycle of {member} has no transitions. Add them with .From(state).To(next), e.g. l => l.From(Placed).To(Paid).", "lifecycle");
+            throw new ArgumentException($"The lifecycle of {member} has no transitions. Add them with .From(state).To(next), e.g. l => l.From(Placed).To(Paid).", nameof(lifecycle));
 
         var states = spec.States.ToArray();
         int Index(TState state) => Array.FindIndex(states, s => LifecycleBuilder<TState>.Same(s, state));
-        CheckDefined(states, member);
+        if (Undefined(states) is { } undefined)
+            throw new ArgumentException($"The lifecycle of {member} uses {undefined}, which is not a value of {EnumType!.Name}. Use one of its defined values.", nameof(lifecycle));
 
         var start = Index(spec.HasStart ? spec.Start : spec.Transitions[0].From);
         var transitions = spec.Transitions.Select(t => (Index(t.From), Index(t.To), t.Weight)).ToList();
@@ -186,7 +193,7 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
             if (definition.Distance(start, s) == int.MaxValue)
             {
                 throw new ArgumentException(
-                    $"The lifecycle of {member} can't reach {LifecycleBuilder<TState>.Text(states[s])} from its start state {startText}. Add a transition into it, or remove it.", "lifecycle");
+                    $"The lifecycle of {member} can't reach {LifecycleBuilder<TState>.Text(states[s])} from its start state {startText}. Add a transition into it, or remove it.", nameof(lifecycle));
             }
         }
 
@@ -197,22 +204,22 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
                 throw new ArgumentException(
                     string.Create(CultureInfo.InvariantCulture, $"The lifecycle of {member} can't end in {LifecycleBuilder<TState>.Text(states[end])}: it takes {definition.Distance(start, end)} transitions from {startText}, ")
                     + string.Create(CultureInfo.InvariantCulture, $"and MaxTransitions is {spec.Max}. Raise MaxTransitions, or remove the EndsIn."),
-                    "lifecycle");
+                    nameof(lifecycle));
             }
         }
 
         return definition;
     }
 
-    private static void CheckDefined(TState[] states, string member)
+    /// <summary>The enum type of the states (their underlying type when nullable), or <see langword="null"/> when they aren't enum values.</summary>
+    private static Type? EnumType { get; } = (Nullable.GetUnderlyingType(typeof(TState)) ?? typeof(TState)) is { IsEnum: true } type ? type : null;
+
+    /// <summary>The first state that is not a defined value of its enum, or <see langword="null"/> when there is none (or the states aren't enum values).</summary>
+    private static object? Undefined(TState[] states)
     {
-        var type = Nullable.GetUnderlyingType(typeof(TState)) ?? typeof(TState);
-        if (!type.IsEnum)
-            return;
-        foreach (var state in states)
-        {
-            if (state is not null && !Enum.IsDefined(type, state))
-                throw new ArgumentException($"The lifecycle of {member} uses {state}, which is not a value of {type.Name}. Use one of its defined values.", "lifecycle");
-        }
+        if (EnumType is not { } type)
+            return null;
+        var index = Array.FindIndex(states, state => state is not null && !Enum.IsDefined(type, state));
+        return index < 0 ? null : states[index];
     }
 }
