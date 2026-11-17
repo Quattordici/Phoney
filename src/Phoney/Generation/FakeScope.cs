@@ -190,8 +190,18 @@ public sealed class FakeScope
     /// <summary>What this object recorded about its members, or <see langword="null"/> when it recorded nothing.</summary>
     internal ObjectLedger? Ledger => _ledger;
 
-    /// <summary>Records that <c>Populate</c> keeps the value <paramref name="member"/> already has.</summary>
-    internal void Keep(int member) => (_ledger ??= new()).Keep(member);
+    /// <summary>
+    /// Records that <c>Populate</c> keeps <paramref name="value"/>, the value <paramref name="member"/> already has; a lifecycle's status then is where the
+    /// object's walk ends, so its stamps agree with it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The member is a lifecycle's status, and its lifecycle can't get into <paramref name="value"/>.</exception>
+    internal void Keep(int member, object? value)
+    {
+        var ledger = _ledger ??= new();
+        ledger.Keep(member);
+        if (_slots?[member] is { Lifecycle: { } lifecycle } slot)
+            ledger.KeepState(lifecycle, lifecycle.Kept(value, $"{_type.Name}.{slot.MemberName}"));
+    }
 
     /// <summary>Records that the member being produced must differ from the member its <c>[Compare]</c> names (an <c>Invalid</c> case).</summary>
     internal void BreakComparison() => (_ledger ??= new()).BreakComparison(_member);

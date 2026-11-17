@@ -279,6 +279,13 @@ var histories = Fakes.Person.Seed(16)
 if (histories.Any(h => h.Of(p => p.Status) is not [{ To: Status.Suspended } t] || global::NodaTime.Instant.FromDateTimeOffset(t.At) != h.Object.SuspendedAt))
     throw new InvalidOperationException("the history does not end in the end state at the time of its stamp");
 
+// Populate walks a kept status into place, and the invalid cases break its stamp, through the generated model.
+var lifecycle = Fakes.Person.Seed(16).Lifecycle(p => p.Status, l => l.From(Status.Active).To(Status.Suspended));
+if (lifecycle.Populate(new Person { Status = Status.Suspended }) is not { SuspendedAt: { } kept } populated || kept <= populated.CreatedAt)
+    throw new InvalidOperationException("Populate did not walk the kept status into place");
+if (lifecycle.InvalidCases().Count(c => c.Member == "Status") != 3)
+    throw new InvalidOperationException("the lifecycle does not have its three invalid cases");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 

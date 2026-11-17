@@ -130,6 +130,14 @@ var history = Fake.For<Purchase>().Seed(4)
 foreach (var t in history.Transitions)
     Console.WriteLine($"  {t.Path}: {t.From} -> {t.To} at {t.At:u}");
 
+// A purchase you already have keeps its status and is walked into it; invalid cases break one stamp each.
+var shop = Fake.For<Purchase>().Seed(4)
+    .Lifecycle(p => p.Status, l => l.From(OrderStatus.Pending).To(OrderStatus.Paid).From(OrderStatus.Paid).To(OrderStatus.Shipped));
+var kept = shop.Populate(new Purchase { Status = OrderStatus.Shipped });
+Console.WriteLine($"kept {kept.Status}: paid {kept.PaidAt:u}, shipped {kept.ShippedAt:u}");
+foreach (var invalid in shop.InvalidCases().Where(c => c.Member == "Status"))
+    Console.WriteLine($"  invalid {invalid}");
+
 // 7c2. Conditions and checked rules -------------------------------------------------------------
 Console.WriteLine("\n== Conditions and checked rules");
 foreach (var order in Fake.For<Order>().Seed(3).Where(o => o.Total > 100).Where(o => o.Status != OrderStatus.Pending).Generate(3))

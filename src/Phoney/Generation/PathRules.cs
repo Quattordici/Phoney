@@ -70,6 +70,12 @@ internal sealed class PathNode
                 continue;
             var (rule, usage) = found;
             usage?.MarkUsed(); // the model gets or skips every member of an object created here, so binding is applying
+            if (rule is { Kind: RuleKind.Constraint, Lifecycle: { } lifecycle })
+            {
+                rules[i] = LifecycleCases.Resolve(type.Name, members, i, lifecycle, (ConstraintRequest)rule.Value!, m => _rules.ContainsKey(members[m].Name));
+                continue;
+            }
+
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(type.Name, members[i], (ConstraintRequest)rule.Value!) : rule.Value;
             rules[i] = new SlotDecision(rule.Kind, value, rule.Boxed, rule.Lifecycle is not null, rule.Lifecycle);
         }
@@ -100,6 +106,17 @@ internal static class PathRules
         return root.ChildrenFor(rootMembers);
     }
 
+    private static int IndexOf(IReadOnlyList<FakeMember> members, FakeMember member)
+    {
+        for (var i = 0; i < members.Count; i++)
+        {
+            if (ReferenceEquals(members[i], member))
+                return i;
+        }
+
+        return -1;
+    }
+
     private static void Insert(PathNode root, Type rootType, IReadOnlyList<FakeMember> rootMembers, PathSpec spec, RuleUsage.Entry? usage)
     {
         var node = root;
@@ -114,8 +131,11 @@ internal static class PathRules
 
             if (i == spec.Segments.Length - 1)
             {
-                if (member is not null && spec.Rule.Kind == RuleKind.Constraint)
-                    ConstraintCases.Resolve(owner.Name, member, (ConstraintRequest)spec.Rule.Value!); // fail now, not when the first nested object is created
+                // Fail now, not when the first nested object is created.
+                if (member is not null && spec.Rule is { Kind: RuleKind.Constraint, Lifecycle: { } lifecycle })
+                    LifecycleCases.Resolve(owner.Name, members!, IndexOf(members!, member), lifecycle, (ConstraintRequest)spec.Rule.Value!, _ => false);
+                else if (member is not null && spec.Rule.Kind == RuleKind.Constraint)
+                    ConstraintCases.Resolve(owner.Name, member, (ConstraintRequest)spec.Rule.Value!);
                 node.Set(name, spec.Rule, usage);
                 return;
             }

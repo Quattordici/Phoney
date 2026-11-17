@@ -250,10 +250,20 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <see cref="Generate()"/> would give, with only this member replaced.
     /// </para>
     /// <para>Use <see cref="InvalidCases"/> to get every violation of every member at once.</para>
+    /// <para>
+    /// On a member with a <see cref="Lifecycle{TState}"/> it keeps the lifecycle and breaks one of its stamps instead: a stamp earlier than the object's creation,
+    /// a state the object entered without its stamp (nullable stamps only), or a stamp of a state it never entered. The object walks into the state the case needs.
+    /// </para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">At <c>Generate</c>: the member has no data annotations that can be broken.</exception>
+    /// <exception cref="InvalidOperationException">At <c>Generate</c>: the member has no data annotations that can be broken (or, with a lifecycle, no stamps).</exception>
     public ObjectGenerator<T> Invalid<TValue>(Expression<Func<T, TValue>> member) =>
-        AddRule(member, new Rule(RuleKind.Constraint, new ConstraintRequest(Boundary: false, null)));
+        AddRule(member, new Rule(RuleKind.Constraint, new ConstraintRequest(Boundary: false, null), Lifecycle: LifecycleOf(MemberPath(member))));
+
+    /// <summary>The lifecycle the member at <paramref name="path"/> has so far, which an <c>Invalid</c> rule on it keeps and breaks the stamps of.</summary>
+    private LifecycleDefinition? LifecycleOf(string[] path) =>
+        path.Length == 1
+            ? _config.Rules.GetValueOrDefault(path[0])?.Lifecycle
+            : _config.PathRules.GetValueOrDefault(string.Join('.', path))?.Rule.Lifecycle;
 
     /// <summary>
     /// Sets a member exactly on a limit of its data annotations, e.g. <c>.Boundary(x =&gt; x.Quantity)</c> gives the smallest or the
@@ -672,7 +682,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var path = MemberPath(member);
         var name = $"{typeof(T).Name}.{string.Join('.', path)}";
         LifecycleDefinition definition = LifecycleDefinition<TState>.Of(lifecycle, name, stamp => StampMember(name, path, stamp));
-        return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)(scope => definition.StateAt(scope.LifecyclePath(definition).Status)), ObjectBound: true, Lifecycle: definition));
+        return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)definition.Status, ObjectBound: true, Lifecycle: definition));
     }
 
     /// <summary>The name of the member a lifecycle's <c>Stamp</c> selects, which must be a date member of the object that holds the status at <paramref name="status"/>.</summary>
@@ -1361,15 +1371,24 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var cases = new List<ConstraintCase<T>>();
         foreach (var member in _model.Members)
         {
-            if (_config.Rules.TryGetValue(member.Name, out var existing) && existing.Kind == RuleKind.Ignore)
+            var existing = _config.Rules.GetValueOrDefault(member.Name);
+            if (existing?.Kind == RuleKind.Ignore)
                 continue;
 
-            var descriptions = boundary ? ConstraintCases.Boundary(member) : ConstraintCases.Invalid(member);
+            // A lifecycle's status breaks its stamps instead of its annotations, and has no limits to sit on.
+            var lifecycle = existing?.Lifecycle;
+            IReadOnlyList<string> descriptions = (lifecycle, boundary) switch
+            {
+                (null, true) => [.. ConstraintCases.Boundary(member).Select(c => c.Description)],
+                (null, false) => [.. ConstraintCases.Invalid(member).Select(c => c.Description)],
+                (_, true) => [],
+                _ => [.. LifecycleCases.Invalid(_model.Members, lifecycle, HasOwnRule(_model.Members)).Select(c => c.Description)],
+            };
             for (var i = 0; i < descriptions.Count; i++)
             {
-                var rule = new Rule(RuleKind.Constraint, new ConstraintRequest(boundary, i), Added: _config.RuleCount);
+                var rule = new Rule(RuleKind.Constraint, new ConstraintRequest(boundary, i), Added: _config.RuleCount, Lifecycle: lifecycle);
                 var generator = Derive(_config with { Seed = seed, Rules = _config.Rules.SetItem(member.Name, rule), RuleCount = _config.RuleCount + 1, Filters = [], MemberFilters = _config.MemberFilters.Clear(), Verify = false });
-                cases.Add(new ConstraintCase<T>(member.Name, descriptions[i].Description, generator.Generate()));
+                cases.Add(new ConstraintCase<T>(member.Name, descriptions[i], generator.Generate()));
             }
         }
 
@@ -1467,12 +1486,21 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             if (rule.Kind == RuleKind.Dependent)
                 dependent.Add((index, DependentRule(members[index], rule)));
 
+            if (rule is { Kind: RuleKind.Constraint, Lifecycle: { } lifecycle })
+            {
+                rules[index] = LifecycleCases.Resolve(typeof(T).Name, members, index, lifecycle, (ConstraintRequest)rule.Value!, HasOwnRule(members));
+                continue;
+            }
+
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(typeof(T).Name, members[index], (ConstraintRequest)rule.Value!) : rule.Value;
             rules[index] = new SlotDecision(rule.Kind, value, rule.Boxed, rule.ObjectBound, rule.Lifecycle);
         }
 
         return rules;
     }
+
+    /// <summary>Whether a member of the generated type has an explicit rule, which an <c>Invalid</c> case of a lifecycle leaves alone.</summary>
+    private Func<int, bool> HasOwnRule(IReadOnlyList<FakeMember> members) => i => _config.Rules.ContainsKey(members[i].Name);
 
     /// <summary>The attempts allowed per value for each <c>Unique</c> member, by member index.</summary>
     private Dictionary<int, int> UniqueAttempts(Dictionary<string, int> known)
