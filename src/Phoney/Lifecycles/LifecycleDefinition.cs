@@ -19,6 +19,12 @@ internal readonly record struct LifecycleMove(int From, int To, double Weight, l
 /// </remarks>
 internal abstract class LifecycleDefinition
 {
+    /// <summary>The shortest time a transition takes when <c>after:</c> isn't given.</summary>
+    internal static readonly TimeSpan DefaultMinGap = TimeSpan.FromHours(1);
+
+    /// <summary>The longest time a transition takes when <c>after:</c> isn't given.</summary>
+    internal static readonly TimeSpan DefaultMaxGap = TimeSpan.FromDays(7);
+
     private const int Stay = -1;
 
     private readonly int _start;
@@ -126,13 +132,7 @@ internal abstract class LifecycleDefinition
             return false;
         if (_ends is null)
             return CanStopAvoiding(state);
-        foreach (var end in _ends)
-        {
-            if (end != state && CanArriveAvoiding(state, end))
-                return true;
-        }
-
-        return false;
+        return _ends.Any(end => end != state && CanArriveAvoiding(state, end));
     }
 
     /// <summary>The state a date member is named after (<c>PaidAt</c>, <c>PaidOn</c>, <c>PaidDate</c>, any case), or -1.</summary>
@@ -204,10 +204,10 @@ internal abstract class LifecycleDefinition
             var targets = _targets[at.State];
             if (at.Taken == _max || targets.Length == 0 || targets[0] == Stay)
                 return true;
-            foreach (var move in _moves[at.State])
+            foreach (var to in _moves[at.State].Select(move => move.To))
             {
-                if (move.To != avoided && seen.Add((move.To, at.Taken + 1)))
-                    queue.Enqueue((move.To, at.Taken + 1));
+                if (to != avoided && seen.Add((to, at.Taken + 1)))
+                    queue.Enqueue((to, at.Taken + 1));
             }
         }
 
@@ -224,10 +224,10 @@ internal abstract class LifecycleDefinition
         {
             if (at.State == end)
                 return true;
-            foreach (var move in _moves[at.State])
+            foreach (var to in _moves[at.State].Select(move => move.To))
             {
-                if (move.To != avoided && _distance[move.To][end] <= at.Left - 1 && seen.Add((move.To, at.Left - 1)))
-                    queue.Enqueue((move.To, at.Left - 1));
+                if (to != avoided && _distance[to][end] <= at.Left - 1 && seen.Add((to, at.Left - 1)))
+                    queue.Enqueue((to, at.Left - 1));
             }
         }
 

@@ -27,12 +27,6 @@ public sealed class LifecycleBuilder<T, TState>
     /// <summary>The default for <see cref="MaxTransitions"/>.</summary>
     public const int DefaultMaxTransitions = 16;
 
-    /// <summary>The shortest time a transition takes when <c>after:</c> isn't given.</summary>
-    public static readonly TimeSpan DefaultMinGap = TimeSpan.FromHours(1);
-
-    /// <summary>The longest time a transition takes when <c>after:</c> isn't given.</summary>
-    public static readonly TimeSpan DefaultMaxGap = TimeSpan.FromDays(7);
-
     internal LifecycleBuilder()
         : this(new Spec([], [], [], [], [], default!, false, default!, false, DefaultMaxTransitions))
     {
@@ -66,7 +60,7 @@ public sealed class LifecycleBuilder<T, TState>
     {
         var from = RequireFrom(nameof(To));
         Positive(weight, nameof(weight));
-        var (min, max) = after ?? (DefaultMinGap, DefaultMaxGap);
+        var (min, max) = after ?? (Generation.LifecycleDefinition.DefaultMinGap, Generation.LifecycleDefinition.DefaultMaxGap);
         if (min < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(after), min, "A transition can't happen before the state it leaves was entered: give after a minimum of zero or more.");
         if (max < min)
