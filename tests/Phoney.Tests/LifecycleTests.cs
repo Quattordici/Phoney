@@ -1,5 +1,8 @@
 using Phoney.Generation;
 
+// These tests pin what the runtime throws for lifecycles written wrong, which LifecycleAnalyzer also reports at compile time.
+#pragma warning disable PHONEY013, PHONEY014
+
 namespace Phoney.Tests;
 
 public enum ParcelState

@@ -175,6 +175,7 @@ internal static class Decomposition
     public static string WithTable(string text)
     {
         var sb = new StringBuilder(text.Length + 8);
+        Span<char> units = stackalloc char[2]; // a rune is at most two UTF-16 code units; appended without a string per rune
         foreach (var rune in text.EnumerateRunes())
         {
             var value = rune.Value;
@@ -193,7 +194,7 @@ internal static class Decomposition
             }
             else
             {
-                sb.Append(rune.ToString());
+                sb.Append(units[..rune.EncodeToUtf16(units)]);
             }
         }
 

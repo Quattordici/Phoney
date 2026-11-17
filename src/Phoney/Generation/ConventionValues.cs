@@ -220,7 +220,7 @@ public static class ConventionValues
         return Avoiding(constraints, () =>
         {
             if (constraints.AllowedValues is { Length: > 0 } allowed)
-                return T.CreateSaturating(Convert.ToDecimal(scope.Faker.Random.Element(allowed), CultureInfo.InvariantCulture));
+                return T.CreateSaturating(PortableDecimal.FromNumber(scope.Faker.Random.Element(allowed)));
             if (constraints.EnumType is not null)
                 return T.CreateSaturating(OneOf(scope, constraints.EnumNumbers));
             if (TryRange(constraints, out var range))
@@ -242,14 +242,14 @@ public static class ConventionValues
             ConventionKind.Age => T.CreateSaturating(scope.Identity.Age), // matches a BirthDate member
             ConventionKind.Price => T.CreateSaturating(f.Commerce.Price()),
             ConventionKind.Quantity => T.CreateSaturating(f.Random.Int(1, 100)),
-            ConventionKind.Rating => fractional ? T.CreateSaturating(f.Number.Double(1, 5, 1)) : T.CreateSaturating(f.Random.Int(1, 5)),
+            ConventionKind.Rating => fractional ? PortableDecimal.Create<T>(f.Number.Double(1, 5, 1)) : T.CreateSaturating(f.Random.Int(1, 5)),
             ConventionKind.Year => T.CreateSaturating(f.Random.Int(1950, f.ReferenceDate.Year)),
-            ConventionKind.Percentage => fractional ? T.CreateSaturating(f.Number.Double(0, 100, 2)) : T.CreateSaturating(f.Random.Int(0, 100)),
+            ConventionKind.Percentage => fractional ? PortableDecimal.Create<T>(f.Number.Double(0, 100, 2)) : T.CreateSaturating(f.Random.Int(0, 100)),
             ConventionKind.Port => T.CreateSaturating(f.Internet.Port()),
-            ConventionKind.Latitude => T.CreateSaturating(f.Location.Latitude()),
-            ConventionKind.Longitude => T.CreateSaturating(f.Location.Longitude()),
+            ConventionKind.Latitude => PortableDecimal.Create<T>(f.Location.Latitude()),
+            ConventionKind.Longitude => PortableDecimal.Create<T>(f.Location.Longitude()),
             _ when typeof(T) == typeof(decimal) => T.CreateSaturating(f.Number.Decimal(1, 1000, 2)),
-            _ when fractional => T.CreateSaturating(f.Number.Double(1, 1000, 2)),
+            _ when fractional => PortableDecimal.Create<T>(f.Number.Double(1, 1000, 2)),
             _ => T.CreateSaturating(f.Random.Int(1, int.CreateSaturating(T.CreateSaturating(1000)))), // 1 to 255 for a byte, not mostly 255
         };
     }
@@ -532,7 +532,7 @@ public static class ConventionValues
         static object? Normalize(object? v) => v switch
         {
             global::System.Enum or sbyte or byte or short or ushort or int or uint or long or ulong or decimal => Convert.ToDecimal(v, CultureInfo.InvariantCulture),
-            float or double when Convert.ToDouble(v, CultureInfo.InvariantCulture) is var d && double.IsFinite(d) && Math.Abs(d) < 7.9e28 => (decimal)d,
+            float or double when Convert.ToDouble(v, CultureInfo.InvariantCulture) is var d && double.IsFinite(d) && Math.Abs(d) < 7.9e28 => PortableDecimal.FromDouble(d),
             _ => v,
         };
     }
@@ -667,7 +667,7 @@ public static class ConventionValues
         public (decimal Low, decimal High) Decimals() => (Exact(Source.RangeMin, Min), Exact(Source.RangeMax, Max));
 
         private static decimal Exact(string? text, double parsed) =>
-            decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) ? exact : (decimal)Math.Clamp(parsed, -7.9e28, 7.9e28);
+            decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) ? exact : PortableDecimal.FromDouble(Math.Clamp(parsed, -7.9e28, 7.9e28));
 
         /// <summary>The error for a range in which <paramref name="type"/> has no value.</summary>
         public InvalidOperationException Empty(Type type) => NoValueInRange(Source, type);
@@ -719,12 +719,14 @@ public static class ConventionValues
         if (typeof(T) == typeof(decimal))
             return T.CreateSaturating(DecimalInRange(scope, range));
 
+#pragma warning disable PHONEYDEV002 // T is the floating-point type itself here, never decimal
         if (typeof(T) == typeof(float))
             return T.CreateSaturating(Narrow<float>(FractionalInRange(scope, range), range));
         if (typeof(T) == typeof(Half))
             return T.CreateSaturating(Narrow<Half>(FractionalInRange(scope, range), range));
         if (typeof(T) == typeof(double))
             return T.CreateSaturating(FractionalInRange(scope, range));
+#pragma warning restore PHONEYDEV002
 
         // Integers: whole numbers inside the range and inside the type, from the limits as written (a double can't tell long.MinValue from the next one).
         var (low, high) = range.Decimals();

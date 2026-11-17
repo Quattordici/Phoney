@@ -281,7 +281,7 @@ internal static class Populator
             {
                 current[i] = target.ValueAt(instance, i);
                 scope.Adopt(members[i], current[i]);
-                scope.Keep(i);
+                scope.Keep(i, current[i]);
             }
         }
 

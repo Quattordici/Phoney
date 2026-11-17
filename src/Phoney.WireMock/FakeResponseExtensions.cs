@@ -169,7 +169,11 @@ public static class FakeResponseExtensions
     {
         options ??= WebOptions;
         options.MakeReadOnly(populateMissingResolver: true);
-        return (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+#if NET11_0_OR_GREATER
+        return options.GetTypeInfo<T>();
+#else
+        return (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)); // GetTypeInfo<T>() is new in .NET 11
+#endif
     }
 
     private static IResponseBuilder Json(IResponseBuilder response, Func<IRequestMessage, string> body)

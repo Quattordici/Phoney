@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- CI installs the .NET 8 runtime and tests both targets; locally only the SDK's runtime is required. -->
-    <TargetFrameworks>net10.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(GITHUB_ACTIONS)' == 'true'">net10.0;net8.0</TargetFrameworks>
+    <!-- Every supported target in CI, the newest locally (Directory.Build.props). -->
+    <TargetFrameworks>$(PhoneyTestTargetFrameworks)</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <!-- Test classes and methods are documented by their names. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
@@ -29,6 +28,10 @@
   <ItemGroup>
     <!-- One table of member types for both models: this project reads them through its own model, the other one through the other. -->
     <Compile Include="../Shared/ValueShapeCases.cs" Link="Shared/ValueShapeCases.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The support rule of the scheduled .NET support check, tested here against fixtures of Microsoft's release index. -->
+    <Compile Include="../../tools/Phoney.DotNetSupport/SupportedReleases.cs" Link="Repository/SupportedReleases.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- The shop model the docs' examples (Docs/*Examples.cs, checked by DocExampleTests) are written against. -->

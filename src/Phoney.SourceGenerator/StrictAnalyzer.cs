@@ -98,6 +98,7 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
     {
         private readonly HashSet<string> _covered = new(StringComparer.Ordinal);
         private readonly List<ITypeSymbol> _conventionTypes = [];
+        private readonly List<LifecycleSketch> _lifecycles = [];
         private bool _useConventions = true;
         private bool _useParameterDefaults;
 
@@ -130,7 +131,11 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
         /// <summary>Whether a rule, a declared default or a custom convention of the chain gives the member its value.</summary>
         private bool HasSource(MemberModel member) =>
             _covered.Contains(member.Name) || (_useParameterDefaults && member is { IsConstructorParameter: true, DefaultValue: not null })
-            || _conventionTypes.Exists(t => Matches(t, member.Type));
+            || _conventionTypes.Exists(t => Matches(t, member.Type)) || IsNamedStamp(member);
+
+        /// <summary>A date member named after a state of a lifecycle on the generated type (<c>PaidAt</c>), which the lifecycle stamps while names give values.</summary>
+        private bool IsNamedStamp(MemberModel member) =>
+            _useConventions && member.Type is { } type && LifecycleSketch.CanHold(type) && _lifecycles.Exists(l => l.StateNamed(member.Name) >= 0);
 
         /// <summary>
         /// A member rule gives the member a value, like <c>MemberPlan</c> counts it: a condition (<c>Where</c>) alone does not, and a view whose rules can't be
@@ -145,6 +150,25 @@ public sealed class StrictAnalyzer : DiagnosticAnalyzer
                 return false; // the member can't be read from the source, so don't guess
             if (!selector.IsNested && (group.Rules is null || group.Rules.Any(r => RuleCatalog.IsMemberRule(r.Name))))
                 _covered.Add(selector.Name!); // a rule for Billing.City is not a rule for Billing
+            return selector.IsNested || group.Rules is null || group.Rules.Where(r => r.Name == "Lifecycle").All(r => ReadStamps(r.Call));
+        }
+
+        /// <summary>
+        /// The stamps of a lifecycle on a member of the generated type give their members values: those written with <c>Stamp</c>, and those named after a
+        /// state. <see langword="false"/> when the states can't be read from the source, so which members are named after one can't be known.
+        /// </summary>
+        private bool ReadStamps(IInvocationOperation lifecycle)
+        {
+            if (LifecycleSketch.Read(lifecycle) is not { StatesKnown: true } sketch)
+                return false;
+            foreach (var stamp in sketch.Stamps)
+            {
+                if (!stamp.IsRoot)
+                    return false; // refused when the rule is added, or a member that can't be read
+                _covered.Add(stamp.MemberName!);
+            }
+
+            _lifecycles.Add(sketch);
             return true;
         }
 

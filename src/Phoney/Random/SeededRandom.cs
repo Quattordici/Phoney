@@ -174,7 +174,7 @@ public sealed class SeededRandom
     {
         if (max < min)
             throw new ArgumentException($"Max {max} must be greater than or equal to min {min}.", nameof(max));
-        var fraction = (decimal)Double();
+        var fraction = PortableDecimal.FromDouble(Double()); // not a cast: .NET 11 converts differently
         return min >= 0 || max <= decimal.MaxValue + min
             ? min + (fraction * (max - min))
             : min + (fraction * max) - (fraction * min); // the width overflows a decimal; the parts don't

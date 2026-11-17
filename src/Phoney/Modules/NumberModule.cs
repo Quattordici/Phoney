@@ -81,7 +81,7 @@ public sealed class NumberModule : FakerModule
             value = Math.Ceiling(low * factor) / factor;
         if (max is { } high && value > high)
             value = Math.Floor(high * factor) / factor;
-        return TNumber.CreateSaturating(Math.Clamp(value, FiniteLimit<TNumber>(negative: true), FiniteLimit<TNumber>(negative: false)));
+        return PortableDecimal.Create<TNumber>(Math.Clamp(value, FiniteLimit<TNumber>(negative: true), FiniteLimit<TNumber>(negative: false)));
     }
 
     /// <summary>
@@ -256,7 +256,7 @@ public sealed class NumberModule : FakerModule
         if (low < 0 && high > decimal.MaxValue + low)
         {
             // The width doesn't fit in a decimal (e.g. MinValue to MaxValue): interpolate between the ends instead.
-            var share = (decimal)Random.Double();
+            var share = PortableDecimal.FromDouble(Random.Double());
             var value = decimal.Floor((low * (1 - share)) + (high * share));
             return decimal.Round(Math.Clamp(value, low, high) / factor, places);
         }
@@ -266,7 +266,7 @@ public sealed class NumberModule : FakerModule
         var span = range < decimal.MaxValue ? range + 1 : range;
         var offset = range <= long.MaxValue
             ? Random.Long(0, (long)range)
-            : decimal.Floor((decimal)Random.Double() * span);
+            : decimal.Floor(PortableDecimal.FromDouble(Random.Double()) * span);
         return decimal.Round((low + offset) / factor, places);
     }
 

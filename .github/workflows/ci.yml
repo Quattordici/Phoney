@@ -26,9 +26,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is Apple Silicon and ubuntu-24.04-arm is Linux on arm64: seeded data must be bit-identical off x64 too, on both of the
-        # arm64 runtimes the package ships ReadyToRun code for.
-        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm]
+        # macos-latest is Apple Silicon, so seeded data is checked to be bit-identical off x64 too. One arm64 runner is enough: the tests run the
+        # project's IL under the same arm64 JIT on Linux and macOS (not the packed ReadyToRun copies), and generated values never call the
+        # platform's libm (PureMath), so a separate Linux arm64 run repeated macOS's coverage.
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -36,10 +37,10 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: |
-            8.0.x
             10.0.x
+            11.0.x
       - run: dotnet build -c Release
-      # Tests run on net8.0 and net10.0 in CI (see tests/Phoney.Tests/Phoney.Tests.csproj).
+      # Tests run on every supported target in CI (PhoneyTestTargetFrameworks in Directory.Build.props).
       - run: dotnet test -c Release --no-build
       # Containers and AOT apps often run without ICU (InvariantGlobalization): seeded data must be the same there (see Modules/Decomposition.cs).
       - name: Test with invariant globalization
@@ -60,8 +61,8 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: |
-            8.0.x
             10.0.x
+            11.0.x
       # The packages are built against the lowest versions of xUnit.net, NUnit, MSTest, TUnit, NodaTime, Microsoft.Extensions.DependencyInjection, EF Core and WireMock.Net they declare (Directory.Packages.props); every other job tests with
       # the newest. Here the test projects run on those lowest versions too, so a newer API creeping in fails this job instead of the users on older versions.
       - name: Build and test the integration packages on their dependency floors
@@ -89,7 +90,6 @@ jobs:
           check NodaTime NodaTime NodaTimeFloor
           check DependencyInjection Microsoft.Extensions.DependencyInjection DependencyInjectionFloor
           check DependencyInjection Microsoft.Extensions.DependencyInjection.Abstractions DependencyInjectionFloor
-          check EntityFrameworkCore Microsoft.EntityFrameworkCore EfCore8Floor
           check EntityFrameworkCore Microsoft.EntityFrameworkCore EfCore10Floor
           check WireMock WireMock.Net.Shared WireMockFloor
           check WireMock WireMock.Net.Minimal WireMockFloor
@@ -155,8 +155,8 @@ jobs:
         if: steps.token.outputs.present == 'true'
         with:
           dotnet-version: |
-            8.0.x
             10.0.x
+            11.0.x
       # The release binary, checked against its published SHA-256, instead of npx, which would run the npm package's install scripts.
       - uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04 # v1.0.0
         if: steps.token.outputs.present == 'true'
@@ -202,8 +202,8 @@ jobs:
         if: steps.token.outputs.present == 'true'
         with:
           dotnet-version: |
-            8.0.x
             10.0.x
+            11.0.x
       - name: Install the scanner
         if: steps.token.outputs.present == 'true'
         run: |
@@ -260,7 +260,8 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF#refs/tags/v}"; else VERSION="0.1.0-ci.${GITHUB_RUN_NUMBER}"; fi
           # Phoney also carries a ReadyToRun copy per common runtime (Phoney.csproj, PackReadyToRun), so the first call of a process skips most JIT work.
           dotnet pack src/Phoney -c Release -o artifacts/packages -p:Version="$VERSION" -p:PackReadyToRun=true
-          for rid in win-x64 linux-x64 linux-arm64 osx-arm64; do for tfm in net8.0 net10.0; do
+          targets=$(dotnet msbuild src/Phoney -getProperty:TargetFrameworks | tr ';' ' ')
+          for rid in win-x64 linux-x64 linux-arm64 osx-arm64; do for tfm in $targets; do
             unzip -l "artifacts/packages/Phoney.$VERSION.nupkg" | grep -q "runtimes/$rid/lib/$tfm/Phoney.dll" \
               || { echo "::error::The Phoney package has no ReadyToRun assembly for $rid/$tfm."; exit 1; }
           done; done

@@ -1,0 +1,35 @@
+name: .NET support
+
+# Phoney supports every .NET LTS release Microsoft still supports plus every stable release after it. Renovate keeps versions current but
+# can't add or drop a target framework, so this compares PhoneyTargetFrameworks (Directory.Build.props) with Microsoft's release index every
+# week and fails, saying what to add or drop, when a release ships or reaches its end of support.
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Monday morning, with Renovate's schedule
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Directory.Build.props
+      - tools/Phoney.DotNetSupport/**
+      - .github/workflows/dotnet-support.yml
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  check:
+    name: Targets follow the support rule
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
+        with:
+          dotnet-version: 11.0.x
+      - run: dotnet run --project tools/Phoney.DotNetSupport -c Release

@@ -302,6 +302,16 @@ internal static class Diagnostics
         "'{0}' is generated with reflection. Add [FakeFor<{0}>] to a partial class for a source-generated model that is also trim and Native AOT safe.",
         UsageCategory, DiagnosticSeverity.Info, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor LifecycleRefused = new(
+        "PHONEY013", "Lifecycle can't work as written",
+        "{0}",
+        UsageCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor StampRefused = new(
+        "PHONEY014", "Stamp can't be filled",
+        "{0}",
+        UsageCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
     public static readonly DiagnosticDescriptor SubtypeNotRegistrable = new(
         "PHONEY009", "Subtype cannot be registered",
         "[FakeSubtype<{0}, {1}>] can't register '{1}': {2}. Use a concrete class or struct; the registration is left out.",

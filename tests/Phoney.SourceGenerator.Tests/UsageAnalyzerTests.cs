@@ -408,6 +408,32 @@ public sealed class UsageAnalyzerTests
     }
 
     [Test]
+    public async Task Invalid_on_a_lifecycle_breaks_its_stamps_and_replaces_nothing(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Lifecycle(p => p.Name, l => l.From("a").To("b")).Invalid(p => p.Name);
+            public static object B() => Fake.For<Product>().Lifecycle(p => p.Name, l => l.From("a").To("b")).Boundary(p => p.Name);
+            public static object C() => Fake.For<Product>().Invalid(p => p.Name).Lifecycle(p => p.Name, l => l.From("a").To("b"));
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2); // Boundary replaces the lifecycle, and a lifecycle replaces an Invalid before it
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Name'"));
+    }
+
+    [Test]
+    public async Task A_later_rule_on_the_status_replaces_its_lifecycle(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("PHONEY008", """
+            public static object A() => Fake.For<Product>().Lifecycle(p => p.Name, l => l.From("a").To("b")).With(p => p.Name, "c");
+            public static object B() => Fake.For<Product>().Member(p => p.Name, m => m.Lifecycle(l => l.From("a").To("b"))).WithOneOf(p => p.Name, new[] { "c" });
+            public static object C() => Fake.For<Product>().Lifecycle(p => p.Name, l => l.From("a").To("b")).Unique(p => p.Name).Where(p => p.Name, n => n != "b");
+            """, cancellationToken);
+
+        diagnostics.Count.ShouldBe(2);
+        diagnostics.ShouldAllBe(d => d.GetMessage().Contains("'Name'"));
+    }
+
+    [Test]
     public async Task Invalid_and_Boundary_replace_other_rules_of_the_member(CancellationToken cancellationToken)
     {
         var diagnostics = await Diagnose("PHONEY008", """

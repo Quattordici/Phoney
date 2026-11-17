@@ -35,5 +35,6 @@
   <Folder Name="/tools/">
     <Project Path="tools/Phoney.DevAnalyzers/Phoney.DevAnalyzers.csproj" />
     <Project Path="tools/Phoney.DataCompiler/Phoney.DataCompiler.csproj" />
+    <Project Path="tools/Phoney.DotNetSupport/Phoney.DotNetSupport.csproj" />
   </Folder>
 </Solution>

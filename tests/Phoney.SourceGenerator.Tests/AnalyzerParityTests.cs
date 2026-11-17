@@ -30,6 +30,26 @@ public sealed class AnalyzerParityTests
 
     public record Shipment(string Carrier, int Boxes = 1, double Weight = 2.5);
 
+    public enum Phase { Draft, Sent, Paid, Void }
+
+    public class Invoice
+    {
+        public Phase Status { get; set; }
+        public DateTimeOffset? SentAt { get; set; }
+        public DateTimeOffset? Settled { get; set; }
+        public DateTime Closed { get; set; }
+        public string Note { get; set; } = "";
+        public Address? Address { get; set; }
+    }
+
+    public class Receipt
+    {
+        public Phase Status { get; set; }
+        public DateTime PaidAt { get; set; }
+    }
+
+    private static Phase Later() => Phase.Sent;
+
     /// <summary>Arguments the rows pass by name, so the methods they call get a static array; the analyzer's compilation defines the same fields.</summary>
     private static readonly string[] Letters = ["a"];
 
@@ -60,8 +80,27 @@ public sealed class AnalyzerParityTests
 
         public record Shipment(string Carrier, int Boxes = 1, double Weight = 2.5);
 
+        public enum Phase { Draft, Sent, Paid, Void }
+
+        public class Invoice
+        {
+            public Phase Status { get; set; }
+            public DateTimeOffset? SentAt { get; set; }
+            public DateTimeOffset? Settled { get; set; }
+            public DateTime Closed { get; set; }
+            public string Note { get; set; } = "";
+            public Address? Address { get; set; }
+        }
+
+        public class Receipt
+        {
+            public Phase Status { get; set; }
+            public DateTime PaidAt { get; set; }
+        }
+
         public static class Calls
         {
+            private static Phase Later() => Phase.Sent;
             private static readonly string[] Letters = ["a"];
             private static readonly int[] Numbers = [1, 2];
             private static int Zero() => 0;
@@ -232,6 +271,78 @@ public sealed class AnalyzerParityTests
     }
 
     [Test]
+    public async Task Lifecycles_are_reported_exactly_when_the_runtime_rejects_them(CancellationToken cancellationToken)
+    {
+        Row[] rows =
+        [
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).To(Phase.Void, 0.5).From(Phase.Sent).To(Phase.Paid))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.Stays(2).From(Phase.Draft).To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent, 0))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent, double.NaN))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).From(Phase.Draft).To(Phase.Void))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(-1).To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(1).Stays(2).To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l)),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To((Phase)7))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).From(Phase.Paid).To(Phase.Void))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.Start(Phase.Sent).From(Phase.Draft).To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.Start(Phase.Draft).From(Phase.Sent).To(Phase.Paid).From(Phase.Draft).To(Phase.Sent))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).From(Phase.Sent).To(Phase.Paid).EndsIn(Phase.Paid, 1).MaxTransitions(1))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).From(Phase.Sent).To(Phase.Paid).EndsIn(Phase.Paid, 1).MaxTransitions(2))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).MaxTransitions(0))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).EndsIn(Phase.Sent, 1).EndsIn(Phase.Sent, 2))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).EndsIn(Phase.Sent, 0))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).EndsIn(Phase.Draft, 1).EndsIn(Phase.Sent, 3))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent, after: (TimeSpan.FromHours(2), TimeSpan.FromHours(1))))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent, after: (TimeSpan.FromMinutes(-1), TimeSpan.FromDays(1))))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent, after: (TimeSpan.Zero, TimeSpan.FromSeconds(30))))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Later()).From(Phase.Sent).To(Phase.Paid))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Note, l => l.From("new").To("old"))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Note, l => l.From("new"))),
+            R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Lifecycle(l => l.From(Phase.Draft).To(Phase.Sent)))),
+            R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Lifecycle(l => l.From(Phase.Draft)))),
+            R(() => Fake.For<Invoice>().GenerateHistory()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent)).GenerateHistory()),
+            R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Lifecycle(l => l.From(Phase.Draft).To(Phase.Sent))).GenerateHistory()),
+            R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Is(Phase.Paid)).Seed(1).GenerateHistory(2)),
+        ];
+
+        (await Disagreements(rows, new LifecycleAnalyzer(), "PHONEY013", CannotBeApplied, cancellationToken)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public async Task Stamps_are_reported_exactly_when_the_runtime_rejects_them(CancellationToken cancellationToken)
+    {
+        Row[] rows =
+        [
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Note)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Void, i => i.Settled)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled).Stamp(Phase.Draft, i => i.Settled)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Address!.Street)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Closed)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Draft, i => i.Closed)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Sent).Stamp(Phase.Sent, i => i.Closed)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).To(Phase.Void).Stays(0).Stamp(Phase.Sent, i => i.Closed)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).To(Phase.Void).EndsIn(Phase.Sent, 1).Stamp(Phase.Sent, i => i.Closed)).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Closed)).Ignore(i => i.Closed).Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Closed))),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).To(Phase.Paid)).Generate()),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Paid)).Generate()),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).To(Phase.Paid)).WithNameConventions(false).Generate()),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).To(Phase.Paid)).With(r => r.PaidAt, DateTime.UnixEpoch).Generate()),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).To(Phase.Sent)).Generate()),
+            R(() => Fake.For<Receipt>().Member(r => r.Status, m => m.Lifecycle(l => l.From(Phase.Draft).To(Phase.Paid))).Generate()),
+        ];
+
+        (await Disagreements(rows, new LifecycleAnalyzer(), "PHONEY014", CannotBeApplied, cancellationToken)).ShouldBeEmpty();
+    }
+
+    [Test]
     public async Task Members_are_reported_as_uncovered_exactly_when_strict_mode_would_throw(CancellationToken cancellationToken)
     {
         Row[] rows =
@@ -257,6 +368,13 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Product>().Member(p => p.Flavor, m => m).Ignore(p => p.Shelf).Strict().Generate()),
             R(() => Fake.For<Product>().Member(p => p.Address!.Street, m => m.Is("a")).Ignore(p => p.Shelf).Ignore(p => p.Flavor).Strict().Generate()),
             R(() => Fake.For<Shipment>().Member(s => s.Carrier, m => m.OneOf(Letters)).Strict().Generate()),
+            R(() => Fake.For<Invoice>().Ignore(i => i.Note).Ignore(i => i.Address).Strict().Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Sent).Stamp(Phase.Sent, i => i.Closed).Stamp(Phase.Sent, i => i.Settled)).Ignore(i => i.Note).Ignore(i => i.Address).Strict().Generate()),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Sent).Stamp(Phase.Sent, i => i.Closed)).Ignore(i => i.Note).Ignore(i => i.Address).Strict().Generate()),
+            R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Lifecycle(l => l.From(Phase.Draft).Stays(0).To(Phase.Sent).Stamp(Phase.Sent, i => i.Closed).Stamp(Phase.Sent, i => i.Settled))).Ignore(i => i.Note).Ignore(i => i.Address).Strict().Generate()),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Paid)).Strict().Generate()),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Paid)).WithNameConventions(false).Strict().Generate()),
+            R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).Stays(0).To(Later())).Ignore(r => r.PaidAt).Strict().Generate()),
         ];
 
         (await Disagreements(rows, new StrictAnalyzer(), "PHONEY004", StrictViolation, cancellationToken)).ShouldBeEmpty();
