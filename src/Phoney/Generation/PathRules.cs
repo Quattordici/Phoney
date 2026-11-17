@@ -106,6 +106,15 @@ internal static class PathRules
         return root.ChildrenFor(rootMembers);
     }
 
+    /// <summary>Resolves an <c>Invalid</c> or <c>Boundary</c> rule once, so a member with nothing to break throws when the generator is compiled.</summary>
+    private static void CheckConstraint(Type owner, IReadOnlyList<FakeMember> members, FakeMember member, PathRule rule)
+    {
+        if (rule.Lifecycle is { } lifecycle)
+            LifecycleCases.Resolve(owner.Name, members, IndexOf(members, member), lifecycle, (ConstraintRequest)rule.Value!, _ => false);
+        else
+            ConstraintCases.Resolve(owner.Name, member, (ConstraintRequest)rule.Value!);
+    }
+
     private static int IndexOf(IReadOnlyList<FakeMember> members, FakeMember member)
     {
         for (var i = 0; i < members.Count; i++)
@@ -131,11 +140,8 @@ internal static class PathRules
 
             if (i == spec.Segments.Length - 1)
             {
-                // Fail now, not when the first nested object is created.
-                if (member is not null && spec.Rule is { Kind: RuleKind.Constraint, Lifecycle: { } lifecycle })
-                    LifecycleCases.Resolve(owner.Name, members!, IndexOf(members!, member), lifecycle, (ConstraintRequest)spec.Rule.Value!, _ => false);
-                else if (member is not null && spec.Rule.Kind == RuleKind.Constraint)
-                    ConstraintCases.Resolve(owner.Name, member, (ConstraintRequest)spec.Rule.Value!);
+                if (member is not null && spec.Rule.Kind == RuleKind.Constraint)
+                    CheckConstraint(owner, members!, member, spec.Rule); // fail now, not when the first nested object is created
                 node.Set(name, spec.Rule, usage);
                 return;
             }
