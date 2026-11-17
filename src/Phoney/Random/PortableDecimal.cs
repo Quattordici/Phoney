@@ -45,49 +45,14 @@ internal static class PortableDecimal
             throw new OverflowException("Value was either too large or too small for a Decimal.");
 
         var negative = value < 0;
-        var scaled = Math.Abs(value);
-        var limit = DoublePowers10[digits];
+        var (scaled, power) = ScaleToDigits(Math.Abs(value), exponent, digits);
 
-        // Scale to an integer of the digits: log10(2) * 2^16 = 19728.3 estimates the power of ten.
-        var power = digits - 1 - ((exponent * 19728) >> 16);
-        if (power >= 0)
-        {
-            power = Math.Min(power, MaxScale);
-            scaled *= DoublePowers10[power];
-        }
-        else if (power != -1 || scaled >= limit)
-        {
-            scaled /= DoublePowers10[-power];
-        }
-        else
-        {
-            power = 0;
-        }
-
-        if (scaled < limit / 10 && power < MaxScale)
-        {
-            scaled *= 10;
-            power++;
-        }
-
-        // Round half to even to an integer.
-        var mantissa = (ulong)(long)scaled;
-        var rest = scaled - (long)mantissa;
-        if (rest > 0.5 || (rest == 0.5 && (mantissa & 1) != 0))
-            mantissa++;
+        // Round half to even to an integer (exact in IEEE arithmetic, as the runtime's ROUNDSD path does).
+        var mantissa = (ulong)Math.Round(scaled, MidpointRounding.ToEven);
         if (mantissa == 0)
             return 0m;
-
         if (power < 0)
-        {
-            // A whole number: the digits times a power of ten.
-            var whole = (UInt128)mantissa;
-            for (var i = power; i < 0; i++)
-                whole *= 10;
-            if (whole >> 96 != 0)
-                throw new OverflowException("Value was either too large or too small for a Decimal.");
-            return new decimal((int)(uint)whole, (int)(uint)(whole >> 32), (int)(uint)(whole >> 64), negative, 0);
-        }
+            return Whole(mantissa, -power, negative);
 
         // Remove trailing zeros the way the runtime does (it tests the low bits first, so some zeros stay).
         var removable = Math.Min(power, digits - 1);
@@ -96,6 +61,42 @@ internal static class PortableDecimal
         RemoveZeros(ref mantissa, ref power, ref removable, (mantissa & 3) == 0, 2);
         RemoveZeros(ref mantissa, ref power, ref removable, (mantissa & 1) == 0, 1);
         return new decimal((int)(uint)mantissa, (int)(uint)(mantissa >> 32), 0, negative, (byte)power);
+    }
+
+    /// <summary>
+    /// <paramref name="magnitude"/> times a power of ten (the power returned, at most the decimal scale) so that it has <paramref name="digits"/> digits
+    /// before the point; log10(2) * 2^16 = 19728.3 estimates the power from the binary <paramref name="exponent"/>.
+    /// </summary>
+    private static (double Scaled, int Power) ScaleToDigits(double magnitude, int exponent, int digits)
+    {
+        var limit = DoublePowers10[digits];
+        var power = digits - 1 - ((exponent * 19728) >> 16);
+        if (power >= 0)
+        {
+            power = Math.Min(power, MaxScale);
+            magnitude *= DoublePowers10[power];
+        }
+        else if (power != -1 || magnitude >= limit)
+        {
+            magnitude /= DoublePowers10[-power];
+        }
+        else
+        {
+            power = 0;
+        }
+
+        return magnitude < limit / 10 && power < MaxScale ? (magnitude * 10, power + 1) : (magnitude, power);
+    }
+
+    /// <summary>The whole number <paramref name="mantissa"/> × 10^<paramref name="zeros"/>, which must fit in 96 bits.</summary>
+    private static decimal Whole(ulong mantissa, int zeros, bool negative)
+    {
+        var whole = (UInt128)mantissa;
+        for (var i = 0; i < zeros; i++)
+            whole *= 10;
+        if (whole >> 96 != 0)
+            throw new OverflowException("Value was either too large or too small for a Decimal.");
+        return new decimal((int)(uint)whole, (int)(uint)(whole >> 32), (int)(uint)(whole >> 64), negative, 0);
     }
 
     /// <summary>
@@ -108,8 +109,11 @@ internal static class PortableDecimal
 #pragma warning disable PHONEYDEV002 // every type but decimal, which is handled below
             return TNumber.CreateSaturating(value);
 #pragma warning restore PHONEYDEV002
-        var converted = value >= DecimalLimit ? decimal.MaxValue : value <= -DecimalLimit ? decimal.MinValue : FromDouble(value);
-        return TNumber.CreateSaturating(converted);
+        if (value >= DecimalLimit)
+            return TNumber.CreateSaturating(decimal.MaxValue);
+        if (value <= -DecimalLimit)
+            return TNumber.CreateSaturating(decimal.MinValue);
+        return TNumber.CreateSaturating(FromDouble(value));
     }
 
     /// <summary>A number of any type as a decimal: a double or float as <see cref="FromDouble"/>/<see cref="FromSingle"/>, the rest as <see cref="Convert.ToDecimal(object, IFormatProvider)"/>.</summary>

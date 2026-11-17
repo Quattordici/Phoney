@@ -11,6 +11,8 @@ public sealed partial class TargetFrameworkTests
 {
     private static readonly string[] Targets = SupportedTargets();
 
+    private static readonly string[] ProjectFolders = ["src", "tests", "tools", "benchmarks", "samples"];
+
     private static IEnumerable<int> Majors => Targets.Select(t => int.Parse(t["net".Length..t.IndexOf('.', StringComparison.Ordinal)], System.Globalization.CultureInfo.InvariantCulture));
 
     [Test]
@@ -23,7 +25,7 @@ public sealed partial class TargetFrameworkTests
     [Test]
     public void No_project_names_a_dotnet_version_of_its_own()
     {
-        var projects = new[] { "src", "tests", "tools", "benchmarks", "samples" }
+        var projects = ProjectFolders
             .SelectMany(dir => Directory.EnumerateFiles(Path.Combine(RepositoryFiles.Root, dir), "*.csproj", SearchOption.AllDirectories));
 
         var offenders = projects
