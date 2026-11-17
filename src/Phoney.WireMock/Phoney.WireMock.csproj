@@ -15,8 +15,6 @@
 
   <ItemGroup>
     <PackageReference Include="WireMock.Net.Shared" />
-    <!-- Not used directly: lifts the version WireMock.Net brings past an advisory (see Directory.Packages.props). -->
-    <PackageReference Include="Microsoft.AspNetCore.WebUtilities" />
   </ItemGroup>
 
   <ItemGroup>

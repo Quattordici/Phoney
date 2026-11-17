@@ -78,8 +78,6 @@
     <!-- Phoney.WireMock depends on the builder interfaces only; the tests run the server of the same release. -->
     <PackageVersion Include="WireMock.Net.Shared" Version="$(WireMockFloor)" />
     <PackageVersion Include="WireMock.Net.Minimal" Version="$(WireMockTestVersion)" />
-    <!-- Every WireMock.Net release brings Microsoft.AspNetCore.WebUtilities 2.3.0, which has a moderate severity advisory (GHSA-6527-9fp8-r4x6, fixed in 2.3.14); Phoney.WireMock references the fixed one. -->
-    <PackageVersion Include="Microsoft.AspNetCore.WebUtilities" Version="2.3.14" />
   </ItemGroup>
 
   <!-- EF Core: each target framework uses the EF Core release built for it. The add-on depends on the floor, the tests run on Microsoft.EntityFrameworkCore.Sqlite. -->
