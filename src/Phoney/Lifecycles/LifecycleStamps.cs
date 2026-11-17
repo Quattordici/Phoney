@@ -105,7 +105,37 @@ internal sealed class LifecycleStamps
                 + $"Make it nullable ({target.Type.Name}?), or leave it out with .Ignore(x => x.{target.Name}).");
         }
 
-        return Stamp(scope => scope.Entered(lifecycle, state) is { } entered ? convert(entered) : null);
+        return Stamp(scope =>
+        {
+            var entered = scope.Entered(lifecycle, state); // the valid value first, so an Invalid case draws what a valid object draws
+            if (scope.LifecyclePath(lifecycle).Break is { } broken && broken.Member == member)
+                entered = broken.Moment(scope.Created);
+            return entered is { } moment ? convert(moment) : null;
+        });
+    }
+
+    /// <summary>
+    /// The members of an object that <paramref name="lifecycle"/> stamps, by member index and state: those tied with <c>Stamp</c>, then the date members named
+    /// after a state, in member order; members <paramref name="hasRule"/> gives a rule of their own are left out.
+    /// </summary>
+    public static List<(int Member, int State)> StampsOf(IReadOnlyList<FakeMember> members, LifecycleDefinition lifecycle, Func<int, bool> hasRule)
+    {
+        var stamps = new List<(int Member, int State)>();
+        foreach (var (state, name) in lifecycle.Stamps)
+        {
+            var index = IndexOf(members, name);
+            if (index >= 0 && !hasRule(index))
+                stamps.Add((index, state));
+        }
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            var at = i;
+            if (!hasRule(i) && Converter(members[i].Type) is not null && lifecycle.StateNamed(members[i].Name) is var state and >= 0 && !stamps.Exists(s => s.Member == at))
+                stamps.Add((i, state));
+        }
+
+        return stamps;
     }
 
     // Drawn once per object with the lifecycle's path, so a Where or Unique on a stamp makes the whole object again.

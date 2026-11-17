@@ -12,10 +12,14 @@ internal sealed class ObjectLedger
     private Dictionary<int, object?>? _keyParts;
     private List<(RuleSlot Slot, object? Value)>? _pendingClaims;
     private List<(LifecycleDefinition Lifecycle, LifecycleWalk Walk)>? _paths;
+    private List<(LifecycleDefinition Lifecycle, int State)>? _keptStates;
     private bool _rejected;
 
     /// <summary>Records that <c>Populate</c> keeps the value <paramref name="member"/> already has.</summary>
     public void Keep(int member) => (_kept ??= []).Add(member);
+
+    /// <summary>Records that <c>Populate</c> keeps a status of <paramref name="lifecycle"/>, so the object's walk ends in <paramref name="state"/>.</summary>
+    public void KeepState(LifecycleDefinition lifecycle, int state) => (_keptStates ??= []).Add((lifecycle, state));
 
     /// <summary>Whether <c>Populate</c> kept the value of <paramref name="member"/>.</summary>
     public bool IsKept(int member) => _kept?.Contains(member) == true;
@@ -50,10 +54,17 @@ internal sealed class ObjectLedger
                 return path;
         }
 
-        var walked = lifecycle.Walk(random);
+        var walked = lifecycle.Walk(random, KeptState(lifecycle));
         _paths.Add((lifecycle, walked));
         drawn = true;
         return walked;
+    }
+
+    /// <summary>The state <c>Populate</c> keeps for <paramref name="lifecycle"/>, or <see langword="null"/> when it keeps none.</summary>
+    private int? KeptState(LifecycleDefinition lifecycle)
+    {
+        var kept = _keptStates?.FindIndex(k => ReferenceEquals(k.Lifecycle, lifecycle)) ?? -1;
+        return kept < 0 ? null : _keptStates![kept].State;
     }
 
     /// <summary>

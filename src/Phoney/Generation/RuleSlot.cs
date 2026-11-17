@@ -94,7 +94,11 @@ internal sealed class RuleSlot
         FilterAttempts = checks.FilterAttempts;
         RetriesObject = checks.RetriesObject;
         RecordsKeyPart = checks.RecordsKeyPart;
+        Lifecycle = decision.Lifecycle;
     }
+
+    /// <summary>The lifecycle whose status the slot produces, or <see langword="null"/>.</summary>
+    public LifecycleDefinition? Lifecycle { get; }
 
     /// <summary>How the rule produces values.</summary>
     public RuleKind Kind { get; }

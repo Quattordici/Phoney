@@ -305,6 +305,31 @@ public sealed class ReadmeExamples
     }
 
     [Test]
+    public void Lifecycle_populate_and_invalid_cases()
+    {
+        // A purchase is paid exactly when its status says so, and never before it was created.
+        static bool IsValid(Purchase p) =>
+            (p.PaidAt is null) == (p.Status is OrderStatus.Pending or OrderStatus.Cancelled) && (p.PaidAt is not { } paid || paid >= p.CreatedAt);
+
+        // snippet: readme-lifecycle-populate
+        var shop = Fake.For<Purchase>().Seed(1)
+            .Lifecycle(p => p.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped));
+
+        var shipped = shop.Populate(new Purchase { Status = OrderStatus.Shipped });  // walked into Shipped: PaidAt and ShippedAt are set
+
+        foreach (var invalid in shop.InvalidCases().Where(c => c.Member == "Status"))
+            IsValid(invalid.Value).ShouldBeFalse(invalid.ToString());               // "Status: PaidAt is earlier than the object's creation", …
+        // end snippet
+
+        shipped.Status.ShouldBe(OrderStatus.Shipped);
+        shipped.ShippedAt.ShouldNotBeNull();
+        IsValid(shipped).ShouldBeTrue();
+        shop.InvalidCases().Count(c => c.Member == "Status").ShouldBe(3);
+    }
+
+    [Test]
     public void Populating_existing_objects()
     {
         var generator = Fake.For<Customer>().Seed(1);
