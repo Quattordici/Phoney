@@ -14,6 +14,9 @@ internal sealed class LifecycleWalk(int[] states, long[] gaps)
     /// <summary>The state the object is in.</summary>
     public int Status => States[^1];
 
+    /// <summary>The stamp this walk breaks for an <c>Invalid</c> case, or <see langword="null"/>.</summary>
+    public LifecycleBreak? Break { get; init; }
+
     /// <summary>
     /// When the object entered each of <see cref="States"/>: the start at <paramref name="created"/>, each later state its gap after the one before. Gaps that would
     /// end past <paramref name="reference"/> are scaled by one factor so the last transition lands on it at the latest, and an object created at or after it moves

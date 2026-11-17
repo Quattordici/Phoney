@@ -97,14 +97,74 @@ internal abstract class LifecycleDefinition
     /// <summary>The members tied to a state with <c>Stamp</c>, by member name, on the object that holds the lifecycle's member.</summary>
     public IReadOnlyList<(int State, string Member)> Stamps { get; protected init; } = [];
 
-    /// <summary>The walk of one object: the states it goes through, the start first and its status last, and the gap before each transition.</summary>
-    public LifecycleWalk Walk(SeededRandom random)
+    /// <summary>The state objects start in.</summary>
+    public int Start => _start;
+
+    /// <summary>
+    /// The ways an <c>Invalid</c> rule on the status breaks a stamp, one of which each walk takes (see <see cref="LifecycleCases"/>), or <see langword="null"/> for a
+    /// valid lifecycle.
+    /// </summary>
+    public LifecycleBreak[]? Breaks { get; private set; }
+
+    /// <summary>The status of the object <paramref name="scope"/> makes: the last state of its walk, the producer of the status member.</summary>
+    public object? Status(FakeScope scope) => StateAt(scope.LifecyclePath(this).Status);
+
+    /// <summary>
+    /// A copy of this lifecycle whose walks each break a stamp in one of the <paramref name="breaks"/> ways (picked per object with one draw when there are
+    /// several), walking into the state the break needs. A copy, so its objects keep walks of their own.
+    /// </summary>
+    public LifecycleDefinition WithBreaks(LifecycleBreak[] breaks)
+    {
+        var copy = (LifecycleDefinition)MemberwiseClone();
+        copy.Breaks = breaks;
+        return copy;
+    }
+
+    /// <summary>Whether a walk can get from the start into <paramref name="state"/> within the transitions it may take.</summary>
+    public bool Reaches(int state) => _distance[_start][state] <= _max;
+
+    /// <summary>
+    /// The state of a status <c>Populate</c> keeps, which the walk then ends in; <paramref name="member"/> names the status in messages.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"><paramref name="value"/> is not one of the states, or the walk can't get there within <c>MaxTransitions</c>.</exception>
+    public int Kept(object? value, string member)
+    {
+        var state = StateOf(value);
+        if (state < 0)
+        {
+            var states = string.Join(", ", Enumerable.Range(0, StateCount).Select(StateText));
+            throw new InvalidOperationException(
+                $"Populate keeps {member} = {value ?? "null"}, which is not one of its states in the lifecycle ({states}). Set one of them, or populate with PopulateMode.All to draw a new status.");
+        }
+
+        if (!Reaches(state))
+        {
+            throw new InvalidOperationException(
+                string.Create(CultureInfo.InvariantCulture, $"Populate keeps {member} = {StateText(state)}, but its lifecycle can't get there: it takes {_distance[_start][state]} transitions from {StateText(_start)}, ")
+                + string.Create(CultureInfo.InvariantCulture, $"and MaxTransitions is {_max}. Raise MaxTransitions, keep a nearer state, or populate with PopulateMode.All to draw a new status."));
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// The walk of one object: the states it goes through, the start first and its status last, and the gap before each transition. With <paramref name="end"/>
+    /// (a status <c>Populate</c> keeps) it walks into that state as towards an end state, without drawing one.
+    /// </summary>
+    public LifecycleWalk Walk(SeededRandom random, int? end = null)
     {
         var path = new List<int>(4) { _start };
         var gaps = new List<long>(4);
-        if (_ends is not null)
+        if (Breaks is { } breaks)
         {
-            WalkInto(random, path, gaps, _ends[random.WeightedIndex(_endTotals!)]);
+            var broken = breaks[breaks.Length == 1 ? 0 : random.Index(breaks.Length)];
+            WalkInto(random, path, gaps, broken.End);
+            return new LifecycleWalk([.. path], [.. gaps]) { Break = broken };
+        }
+
+        if (end is not null || _ends is not null)
+        {
+            WalkInto(random, path, gaps, end ?? _ends![random.WeightedIndex(_endTotals!)]);
             return new LifecycleWalk([.. path], [.. gaps]);
         }
 
@@ -158,6 +218,9 @@ internal abstract class LifecycleDefinition
 
     /// <summary>The state with number <paramref name="state"/>, boxed.</summary>
     public abstract object? StateAt(int state);
+
+    /// <summary>The number of the state <paramref name="value"/> is, or -1 when it is none of them.</summary>
+    public abstract int StateOf(object? value);
 
     /// <summary>The state with number <paramref name="state"/> as text, for messages and stamp names.</summary>
     public abstract string StateText(int state);
@@ -275,6 +338,9 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
     public override object? StateAt(int state) => _states[state];
 
     public override string StateText(int state) => Text(_states[state]);
+
+    public override int StateOf(object? value) =>
+        value is TState state ? Array.FindIndex(_states, s => EqualityComparer<TState>.Default.Equals(s, state)) : Array.FindIndex(_states, s => s is null && value is null);
 
     /// <summary>
     /// Checks the lifecycle <paramref name="lifecycle"/> writes; <paramref name="member"/> names it in messages, and <paramref name="stampMember"/> checks a
