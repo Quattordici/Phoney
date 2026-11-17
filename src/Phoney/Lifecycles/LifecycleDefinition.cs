@@ -204,9 +204,9 @@ internal abstract class LifecycleDefinition
             var targets = _targets[at.State];
             if (at.Taken == _max || targets.Length == 0 || targets[0] == Stay)
                 return true;
-            foreach (var to in _moves[at.State].Select(move => move.To))
+            foreach (var to in _moves[at.State].Select(move => move.To).Where(to => to != avoided))
             {
-                if (to != avoided && seen.Add((to, at.Taken + 1)))
+                if (seen.Add((to, at.Taken + 1)))
                     queue.Enqueue((to, at.Taken + 1));
             }
         }
@@ -224,9 +224,9 @@ internal abstract class LifecycleDefinition
         {
             if (at.State == end)
                 return true;
-            foreach (var to in _moves[at.State].Select(move => move.To))
+            foreach (var to in _moves[at.State].Select(move => move.To).Where(to => to != avoided && _distance[to][end] <= at.Left - 1))
             {
-                if (to != avoided && _distance[to][end] <= at.Left - 1 && seen.Add((to, at.Left - 1)))
+                if (seen.Add((to, at.Left - 1)))
                     queue.Enqueue((to, at.Left - 1));
             }
         }
