@@ -156,32 +156,16 @@ public sealed class LifecycleAnalyzer : DiagnosticAnalyzer
         {
             var rules = new Rules();
             var later = FluentChain.Later(holder, chain.Generator).ToList();
-            foreach (var call in FluentChain.Earlier(holder, chain.Generator).Concat(later))
-            {
-                if (!rules.Read(call, status, replacesLifecycle: later.Contains(call)))
-                    return null;
-            }
-
-            return rules;
+            var known = FluentChain.Earlier(holder, chain.Generator).All(call => rules.Read(call, status, replacesLifecycle: false))
+                && later.TrueForAll(call => rules.Read(call, status, replacesLifecycle: true));
+            return known ? rules : null;
         }
 
         /// <summary>Records what <paramref name="call"/> does to the members; <see langword="false"/> when that can't be known, or when it replaces the lifecycle of <paramref name="status"/>.</summary>
         private bool Read(IInvocationOperation call, string status, bool replacesLifecycle)
         {
             if (RuleGroup.Of(call) is { } group)
-            {
-                if (group.Selector.Kind == SelectorKind.Combination)
-                    return true;
-                if (group.Selector is not { Kind: SelectorKind.Member, Name: { } name })
-                    return false;
-                if (group.Selector.IsNested)
-                    return true;
-                if (replacesLifecycle && name == status && (group.Rules is null || group.Rules.Any(r => r.Name is not ("Invalid" or "Where" or RuleCatalog.Unique))))
-                    return false; // the lifecycle is replaced, so its stamps don't apply
-                Ruled.Add(name);
-                return true;
-            }
-
+                return ReadGroup(group, status, replacesLifecycle);
             switch (call.TargetMethod.Name)
             {
                 case "WithFeed":
@@ -198,6 +182,23 @@ public sealed class LifecycleAnalyzer : DiagnosticAnalyzer
                     return true;
                 default:
                     return true;
+            }
+        }
+
+        /// <summary>Records the member a rule is for; <see langword="false"/> when it can't be read, or when a later rule replaces the lifecycle of <paramref name="status"/>.</summary>
+        private bool ReadGroup(RuleGroup group, string status, bool replacesLifecycle)
+        {
+            switch (group.Selector)
+            {
+                case { Kind: SelectorKind.Combination } or { IsNested: true }:
+                    return true;
+                case { Kind: SelectorKind.Member, Name: { } name }:
+                    if (replacesLifecycle && name == status && (group.Rules is null || group.Rules.Any(r => r.Name is not ("Invalid" or "Where" or RuleCatalog.Unique))))
+                        return false; // the lifecycle is replaced, so its stamps don't apply
+                    Ruled.Add(name);
+                    return true;
+                default:
+                    return false;
             }
         }
     }

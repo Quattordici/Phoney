@@ -83,9 +83,8 @@ internal sealed class LifecycleGraph
     {
         if (_ends is null)
             return -1;
-        foreach (var end in _ends.Where(end => !Reaches(end)))
-            return end;
-        return -1;
+        var index = System.Array.FindIndex(_ends, end => !Reaches(end));
+        return index < 0 ? -1 : _ends[index];
     }
 
     /// <summary>
