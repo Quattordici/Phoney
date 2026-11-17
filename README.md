@@ -33,7 +33,7 @@
 | `Phoney.NodaTime` | [NodaTime values and members](#nodatime) | [![NuGet](https://img.shields.io/nuget/v/Phoney.NodaTime.svg?label=)](https://www.nuget.org/packages/Phoney.NodaTime) |
 | `Phoney.WireMock` | [Fake JSON bodies for WireMock.Net mocks](#wiremocknet-mocks) | [![NuGet](https://img.shields.io/nuget/v/Phoney.WireMock.svg?label=)](https://www.nuget.org/packages/Phoney.WireMock) |
 
-Targets .NET 8 and .NET 10.
+Targets .NET 10 and .NET 11: every .NET LTS release Microsoft supports, and every stable release after it.
 
 ```bash
 dotnet add package Phoney

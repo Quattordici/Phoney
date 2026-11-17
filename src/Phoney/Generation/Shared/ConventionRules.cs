@@ -1,4 +1,4 @@
-// Shared between the Phoney runtime (net8.0+) and Phoney.SourceGenerator (netstandard2.0), so the reflection
+// Shared between the Phoney runtime (net10.0+) and Phoney.SourceGenerator (netstandard2.0), so the reflection
 // and source-generated paths pick identical conventions. Keep this file free of APIs newer than netstandard2.0.
 // The generator compiles it with PHONEY_GENERATOR so these types stay internal there.
 #nullable enable

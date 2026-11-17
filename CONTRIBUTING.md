@@ -17,8 +17,9 @@ dotnet build -c Release
 dotnet test -c Release --no-build
 ```
 
-The test projects (`tests/*.Tests`, one per package) target `net10.0` locally and also `net8.0` in CI,
-where `Phoney.EntityFrameworkCore` is tested against EF Core 8. The CI also runs a Native AOT smoke test (`tests/Phoney.AotSmoke`) where trim and AOT warnings
+Phoney targets every .NET LTS release Microsoft supports plus every stable release after it, named once as `PhoneyTargetFrameworks` in
+`Directory.Build.props` (a weekly workflow compares it with Microsoft's release index). The test projects (`tests/*.Tests`, one per package) target the
+newest locally and every supported target in CI, where `Phoney.EntityFrameworkCore` is tested against the EF Core release of each. The CI also runs a Native AOT smoke test (`tests/Phoney.AotSmoke`) where trim and AOT warnings
 fail the build, so avoid reflection-based patterns in library code.
 
 ## Locale data

@@ -29,15 +29,36 @@
       matchManagers: ['github-actions'],
     },
     {
-      // Each target framework runs on the EF Core release built for it.
-      matchDepNames: ['Microsoft.EntityFrameworkCore.Sqlite'],
-      matchCurrentVersion: '/^8\\./',
-      allowedVersions: '/^8\\./',
-    },
-    {
+      // Each target framework runs on the EF Core release built for it (EfCore<major>Latest), so each stays on its major. A new .NET release
+      // gets its own property when it becomes a target (see the dotnet-sdk rule below).
       matchDepNames: ['Microsoft.EntityFrameworkCore.Sqlite'],
       matchCurrentVersion: '/^10\\./',
       allowedVersions: '/^10\\./',
+    },
+    {
+      matchDepNames: ['Microsoft.EntityFrameworkCore.Sqlite'],
+      matchCurrentVersion: '/^11\\./',
+      allowedVersions: '/^11\\./',
+    },
+    {
+      // Which .NET versions Phoney supports is a rule, not an update: every LTS Microsoft still supports plus every stable release after it,
+      // named once as PhoneyTargetFrameworks in Directory.Build.props and checked weekly against Microsoft's release index (dotnet-support.yml).
+      // The workflows install exactly those versions (TargetFrameworkTests), so Renovate must not move them: bumping 10.0.x to 11.0.x in a
+      // list would silently drop a supported target.
+      matchManagers: ['github-actions'],
+      matchDatasources: ['dotnet-version'],
+      enabled: false,
+    },
+    {
+      // global.json names the SDK of the newest target. Patch and feature bands follow it automatically; a new major only arrives together with
+      // the new target framework, so it waits for approval on the Dependency Dashboard instead of opening a PR that would build nothing new.
+      matchDatasources: ['dotnet-version'],
+      matchDepNames: ['dotnet-sdk'],
+      matchUpdateTypes: ['major'],
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        'A new .NET major is supported by adding it to PhoneyTargetFrameworks in Directory.Build.props (the weekly .NET support check says when), then following the failing TargetFrameworkTests: this SDK, the workflows, the README, an EfCore<major>Latest with its rule in renovate.json5.',
+      ],
     },
     {
       // Pinned for the floors run of the EF Core tests, which still use SQLitePCLRaw 2.
@@ -47,7 +68,7 @@
     {
       // Floors (dependencies of the shipped packages) and the versions set through properties are not updated by the
       // NuGet manager: a floor is raised by hand only when the code needs a newer API, and the *Latest properties
-      // belong to the custom manager above. Roslyn stays at the version of the .NET 8 SDK so the generator loads there.
+      // belong to the custom manager above. Roslyn stays at the lowest version the generator needs, so it loads in every supported SDK.
       matchManagers: ['nuget'],
       matchDepNames: [
         'xunit.v3',

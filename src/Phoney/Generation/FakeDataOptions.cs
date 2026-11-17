@@ -90,7 +90,7 @@ public sealed class FakeDataOptions : FakeArgumentOptions
 
     /// <summary>
     /// <see cref="Type.FullName"/> without the assembly names it puts in type arguments (<c>System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, …]]</c>),
-    /// whose versions differ between .NET 8 and .NET 10 and change with every release of the assembly, which would move the seed. Other names are unchanged.
+    /// whose versions differ between .NET releases and change with every release of the assembly, which would move the seed. Other names are unchanged.
     /// </summary>
     internal static string StableName(Type type)
     {
