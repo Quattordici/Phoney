@@ -247,12 +247,10 @@ internal abstract class LifecycleDefinition
             queue.Enqueue(from);
             while (queue.TryDequeue(out var state))
             {
-                foreach (var next in _moves[state])
+                foreach (var to in _moves[state].Select(move => move.To).Where(to => row[to] == int.MaxValue))
                 {
-                    if (row[next.To] != int.MaxValue)
-                        continue;
-                    row[next.To] = row[state] + 1;
-                    queue.Enqueue(next.To);
+                    row[to] = row[state] + 1;
+                    queue.Enqueue(to);
                 }
             }
 
