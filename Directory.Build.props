@@ -20,6 +20,19 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageIcon>phoney-icon-128.png</PackageIcon>
   </PropertyGroup>
+  <!--
+    The supported .NET releases, named once: every LTS release Microsoft still supports plus every stable release after the oldest of them.
+    The weekly .NET support check (tools/Phoney.DotNetSupport, .github/workflows/dotnet-support.yml) fails when Microsoft's release index says
+    otherwise; TargetFrameworkTests then point at what follows it (global.json, the workflows, the README).
+  -->
+  <PropertyGroup>
+    <PhoneyTargetFrameworks>net10.0;net11.0</PhoneyTargetFrameworks>
+    <!-- Apps, tools and benchmarks run on the newest. -->
+    <PhoneyAppTargetFramework>net11.0</PhoneyAppTargetFramework>
+    <!-- Tests run on the newest locally, where only the SDK's runtime is required; CI installs every runtime and tests every target. -->
+    <PhoneyTestTargetFrameworks>$(PhoneyAppTargetFramework)</PhoneyTestTargetFrameworks>
+    <PhoneyTestTargetFrameworks Condition="'$(GITHUB_ACTIONS)' == 'true'">$(PhoneyTargetFrameworks)</PhoneyTestTargetFrameworks>
+  </PropertyGroup>
   <!-- Items are evaluated after all properties, so IsPackable here already sees the value set in the project file. -->
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)images/phoney-icon-128.png" Pack="true" PackagePath="/" Visible="false" />

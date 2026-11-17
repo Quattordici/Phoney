@@ -200,7 +200,7 @@ public static partial class TemplateFunctions
         f["number.long"] = (faker, a) => faker.Number.Long(a.IntRange().Min ?? 0, a.IntRange().Max ?? long.MaxValue).ToString(inv);
         f["number.double"] = f["number.float"];
         f["number.normal"] = (faker, a) => faker.Number.Normal(a.Double(0, "mean") ?? 0, a.Double(1, "standardDeviation") ?? 1, a.Double(2, "min"), a.Double(3, "max")).ToString(CultureInfo.InvariantCulture);
-        f["number.decimal"] = (faker, a) => faker.Number.Decimal((decimal)(a.Double(0) ?? 0), (decimal)(a.Double(1) ?? 1), a.Int(2) ?? 2).ToString(inv);
+        f["number.decimal"] = (faker, a) => faker.Number.Decimal(PortableDecimal.FromDouble(a.Double(0) ?? 0), PortableDecimal.FromDouble(a.Double(1) ?? 1), a.Int(2) ?? 2).ToString(inv);
     }
 
     /// <summary>Registers string template functions, reading length, casing, exclusion and prefix options where supported.</summary>
@@ -374,8 +374,8 @@ public static partial class TemplateFunctions
         Add("commerce.ean8", x => x.Commerce.Ean8());
         // faker.js reads an options object; older versions took the plain values min, max, dec and symbol.
         f["commerce.price"] = (faker, a) => a.IsOptions(0)
-            ? faker.Commerce.PriceText(a.OptionString(0, "symbol", "")!, (decimal)(a.Double(0, "min") ?? 1), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2)
-            : faker.Commerce.PriceText(a.String(3) ?? "", (decimal)(a.Double(0) ?? 1), (decimal)(a.Double(1) ?? 1000), a.Int(2) ?? 2);
+            ? faker.Commerce.PriceText(a.OptionString(0, "symbol", "")!, PortableDecimal.FromDouble(a.Double(0, "min") ?? 1), PortableDecimal.FromDouble(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2)
+            : faker.Commerce.PriceText(a.String(3) ?? "", PortableDecimal.FromDouble(a.Double(0) ?? 1), PortableDecimal.FromDouble(a.Double(1) ?? 1000), a.Int(2) ?? 2);
         f["commerce.priceText"] = f["commerce.price"];
     }
 
@@ -387,8 +387,8 @@ public static partial class TemplateFunctions
         Add("finance.accountName", x => x.Finance.AccountName());
         Add("finance.routingNumber", x => x.Finance.RoutingNumber());
         f["finance.amount"] = (faker, a) => a.IsOptions(0)
-            ? faker.Finance.AmountText((decimal)(a.Double(0, "min") ?? 0), (decimal)(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2, a.OptionString(0, "symbol", "")!)
-            : faker.Finance.AmountText((decimal)(a.Double(0) ?? 0), (decimal)(a.Double(1) ?? 1000), a.Int(2) ?? 2, a.String(3) ?? "");
+            ? faker.Finance.AmountText(PortableDecimal.FromDouble(a.Double(0, "min") ?? 0), PortableDecimal.FromDouble(a.Double(0, "max") ?? 1000), a.Int(0, "dec") ?? 2, a.OptionString(0, "symbol", "")!)
+            : faker.Finance.AmountText(PortableDecimal.FromDouble(a.Double(0) ?? 0), PortableDecimal.FromDouble(a.Double(1) ?? 1000), a.Int(2) ?? 2, a.String(3) ?? "");
         Add("finance.transactionType", x => x.Finance.TransactionType());
         Add("finance.transactionDescription", x => x.Finance.TransactionDescription());
         Add("finance.currencyCode", x => x.Finance.CurrencyCode());

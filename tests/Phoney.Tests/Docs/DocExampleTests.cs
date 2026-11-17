@@ -6,7 +6,7 @@ namespace Phoney.Tests.Docs;
 /// </summary>
 public sealed class DocExampleTests
 {
-    private static readonly string Root = FindRoot();
+    private static readonly string Root = Repository.RepositoryFiles.Root;
 
     private static readonly Lazy<Dictionary<string, string>> Snippets = new(() =>
     {
@@ -56,15 +56,5 @@ public sealed class DocExampleTests
         var shown = Guides().SelectMany(g => DocSnippets.NamesIn(File.ReadAllText(Path.Combine(Root, g)))).ToHashSet(StringComparer.Ordinal);
 
         Snippets.Value.Keys.Where(k => !shown.Contains(k)).Order(StringComparer.Ordinal).ShouldBeEmpty("These examples are in no guide; show them or remove them.");
-    }
-
-    private static string FindRoot()
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "Phoney.slnx")))
-                return dir.FullName;
-        }
-        throw new InvalidOperationException($"No Phoney.slnx above {AppContext.BaseDirectory}; the guide tests read the repository's docs.");
     }
 }

@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Checks that PhoneyTargetFrameworks (Directory.Build.props) follows the support rule; run weekly by .github/workflows/dotnet-support.yml. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(PhoneyAppTargetFramework)</TargetFramework>
+  </PropertyGroup>
+</Project>

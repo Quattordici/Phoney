@@ -44,8 +44,8 @@ public sealed partial class FastPathParityTests
         var arguments = new SeededRandom(99);
         for (var i = 0; i < 20_000; i++)
         {
-            var a = arguments.Bool(0.4) ? (decimal)arguments.Double(-5000, 5000) : edges[arguments.Index(edges.Length)];
-            var b = arguments.Bool(0.4) ? (decimal)arguments.Double(-5000, 5000) : edges[arguments.Index(edges.Length)];
+            var a = arguments.Bool(0.4) ? PortableDecimal.FromDouble(arguments.Double(-5000, 5000)) : edges[arguments.Index(edges.Length)];
+            var b = arguments.Bool(0.4) ? PortableDecimal.FromDouble(arguments.Double(-5000, 5000)) : edges[arguments.Index(edges.Length)];
             if (arguments.Bool(0.3))
                 a = decimal.Round(a, arguments.Int(0, 4));
             var (min, max) = a <= b ? (a, b) : (b, a);
@@ -154,7 +154,7 @@ public sealed partial class FastPathParityTests
                 throw new ArgumentException("no value", nameof(decimals));
             if (low < 0 && high > decimal.MaxValue + low)
             {
-                var share = (decimal)random.Double();
+                var share = PortableDecimal.FromDouble(random.Double()); // the cast before .NET 11
                 var value = decimal.Floor((low * (1 - share)) + (high * share));
                 return decimal.Round(Math.Clamp(value, low, high) / factor, places);
             }
@@ -162,7 +162,7 @@ public sealed partial class FastPathParityTests
             var range = high - low;
             var offset = range <= long.MaxValue
                 ? random.Long(0, (long)range)
-                : decimal.Floor((decimal)random.Double() * (range < decimal.MaxValue ? range + 1 : range));
+                : decimal.Floor(PortableDecimal.FromDouble(random.Double()) * (range < decimal.MaxValue ? range + 1 : range));
             return decimal.Round((low + offset) / factor, places);
         }
 

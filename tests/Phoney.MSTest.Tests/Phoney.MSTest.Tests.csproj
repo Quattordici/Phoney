@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- CI installs the .NET 8 runtime and tests both targets; locally only the SDK's runtime is required. -->
-    <TargetFrameworks>net10.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(GITHUB_ACTIONS)' == 'true'">net10.0;net8.0</TargetFrameworks>
+    <!-- Every supported target in CI, the newest locally (Directory.Build.props). -->
+    <TargetFrameworks>$(PhoneyTestTargetFrameworks)</TargetFrameworks>
     <!-- MSTest's own Microsoft.Testing.Platform runner, which is what `dotnet test` uses here (global.json). -->
     <EnableMSTestRunner>true</EnableMSTestRunner>
     <OutputType>Exe</OutputType>

@@ -54,7 +54,7 @@ public sealed class FakeDataOptionsTests
     [Test]
     public void The_default_seed_of_generic_types_does_not_depend_on_assembly_versions()
     {
-        // FullName puts "System.Private.CoreLib, Version=…" in type arguments, which differs between .NET 8 and .NET 10 (CI runs both) and with every release.
+        // FullName puts "System.Private.CoreLib, Version=…" in type arguments, which differs between .NET releases (CI runs every target) and with every release.
         FakeArgument[] arguments = [new("quantity", typeof(int?)), new("emails", typeof(List<string>)), new("scores", typeof(Dictionary<string, int[]>[]))];
         FakeDataOptions.DefaultSeed("Shop.OrderTests.Places_order", arguments).ShouldBe(PinnedGenericSeed);
         FakeDataOptions.StableName(typeof(Dictionary<string, int[]>[])).ShouldBe("System.Collections.Generic.Dictionary`2[[System.String],[System.Int32[]]][]");
