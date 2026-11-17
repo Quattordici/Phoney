@@ -26,9 +26,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is Apple Silicon and ubuntu-24.04-arm is Linux on arm64: seeded data must be bit-identical off x64 too, on both of the
-        # arm64 runtimes the package ships ReadyToRun code for.
-        os: [ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm]
+        # macos-latest is Apple Silicon, so seeded data is checked to be bit-identical off x64 too. One arm64 runner is enough: the tests run the
+        # project's IL under the same arm64 JIT on Linux and macOS (not the packed ReadyToRun copies), and generated values never call the
+        # platform's libm (PureMath), so a separate Linux arm64 run repeated macOS's coverage.
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
