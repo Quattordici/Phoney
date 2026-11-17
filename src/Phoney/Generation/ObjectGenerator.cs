@@ -645,6 +645,57 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     }
 
     /// <summary>
+    /// Gives a member a lifecycle: every object walks from the start state through the transitions, by weight, so its status is one it can really be in, e.g.
+    /// <c>.Lifecycle(o =&gt; o.Status, l =&gt; l.From(Placed).To(Paid, 4).To(Cancelled, 1).From(Paid).To(Shipped))</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// At each state an object stays (weight 1, see <see cref="LifecycleBuilder{T, TState}.Stays"/>) or takes one of the state's transitions, until it stays, reaches a
+    /// state with no way out or has taken <see cref="LifecycleBuilder{T, TState}.MaxTransitions"/> transitions; with <see cref="LifecycleBuilder{T, TState}.EndsIn"/> the end
+    /// state is drawn first and the object walks there. The lifecycle is checked when the rule is added.
+    /// </para>
+    /// <para>
+    /// Works for members of nested objects and collection elements too (<c>o =&gt; o.Lines.Each().Status</c>). Like <c>With</c> it takes the member's rule slot, so a
+    /// later rule for the member replaces it. The path is drawn once per object, so <see cref="Where{TValue}(Expression{Func{T, TValue}}, Func{TValue, bool}, int)"/> and
+    /// <see cref="Unique{TValue}"/> on the member generate the whole object again. Generators reflected and generated give the same objects for a seed.
+    /// </para>
+    /// </remarks>
+    /// <param name="member">The status member: <c>o =&gt; o.Status</c>.</param>
+    /// <param name="lifecycle">The states and transitions: <c>l =&gt; l.From(Placed).To(Paid)</c>.</param>
+    /// <exception cref="ArgumentException">The lifecycle has no transitions, a state the start can't reach, a value its enum doesn't define, or an end state it can't reach in time.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A weight is not positive and finite (a stay weight may be zero).</exception>
+    /// <exception cref="InvalidOperationException">A transition comes before any <c>From</c>, or the lambda returned <see langword="null"/>.</exception>
+    public ObjectGenerator<T> Lifecycle<TState>(Expression<Func<T, TState>> member, Func<LifecycleBuilder<T, TState>, LifecycleBuilder<T, TState>> lifecycle)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        ArgumentNullException.ThrowIfNull(lifecycle);
+        var path = MemberPath(member);
+        var name = $"{typeof(T).Name}.{string.Join('.', path)}";
+        LifecycleDefinition definition = LifecycleDefinition<TState>.Of(lifecycle, name, stamp => StampMember(name, path, stamp));
+        return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)(scope => definition.StateAt(scope.LifecyclePath(definition).Status)), ObjectBound: true, Lifecycle: definition));
+    }
+
+    /// <summary>The name of the member a lifecycle's <c>Stamp</c> selects, which must be a date member of the object that holds the status at <paramref name="status"/>.</summary>
+    private static string StampMember(string lifecycle, string[] status, LambdaExpression stamp)
+    {
+        var steps = PathSteps(stamp);
+        var names = steps.Select(step => step.Member.Name).ToArray();
+        if (names.Length != status.Length || !names.AsSpan(0, names.Length - 1).SequenceEqual(status.AsSpan(0, status.Length - 1)))
+        {
+            var owner = status.Length == 1 ? typeof(T).Name : string.Join('.', status[..^1]);
+            throw new ArgumentException(
+                $"The lifecycle of {lifecycle} stamps '{stamp}', which is not a member of the object that holds the status ({owner}). Select a member next to it, like {string.Join('.', [.. status[..^1], "PaidAt"])}.",
+                nameof(lifecycle));
+        }
+
+        var member = steps[^1].Member;
+        var type = member is PropertyInfo property ? property.PropertyType : ((FieldInfo)member).FieldType;
+        if (!LifecycleStamps.CanHold(type))
+            throw new ArgumentException($"The lifecycle of {lifecycle} stamps {member.Name}, a {type.Name}: a stamp is a DateTimeOffset, DateTime or DateOnly (nullable unless every object reaches the state).", nameof(lifecycle));
+        return member.Name;
+    }
+
+    /// <summary>
     /// Gives a number member values from a normal (Gaussian) distribution, e.g. <c>.WithNormalDistribution(x =&gt; x.Height, 175, 8)</c>: most heights are near 175, about two thirds within 8 of it.
     /// Realistic measurements, ages, scores and durations look like this, where a plain range gives every value the same chance.
     /// </summary>
@@ -909,6 +960,55 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
     /// <summary>Separates the stream the object count is drawn from from the streams of the objects themselves.</summary>
     private const long CountStreamSalt = 0x0C0DE5EED5L;
+
+    /// <summary>
+    /// Generates <paramref name="count"/> objects with the history behind each: the transitions every lifecycle in its graph took, with their times. The objects
+    /// are exactly the ones <see cref="Generate(int)"/> makes, e.g. <c>orders.GenerateHistory(100)[0].Of(o =&gt; o.Status)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Making a history draws nothing more while an object is made, so seeds, <see cref="Keyed"/> and conditions behave as for <see cref="Generate(int)"/>. The
+    /// transitions include those of nested objects, collection elements and objects other generators make (<see cref="WithGeneratorFor{TNested}"/>), each with
+    /// its path (<c>Lines[2].Status</c>) and owner.
+    /// </remarks>
+    /// <param name="count">How many objects to generate.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    /// <exception cref="InvalidOperationException">The generator has no lifecycle.</exception>
+    public IReadOnlyList<History<T>> GenerateHistory(int count = 1)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        var lifecycles = DeclaredLifecycles();
+        if (lifecycles.IsEmpty)
+        {
+            throw new InvalidOperationException(
+                $"This generator of {typeof(T).Name} has no lifecycle, so its objects have no history. Give a status member one first: .Lifecycle(x => x.Status, l => l.From(a).To(b)).");
+        }
+
+        var run = Start();
+        var recorder = new LifecycleRecorder();
+        run.Faker.Recorder = recorder;
+        var first = _state.NextIndex(count);
+        var made = new (T Item, DateTimeOffset Created, Transition[] Transitions)[count];
+        for (var i = 0; i < count; i++)
+        {
+            var item = run.Create(first + i);
+            var (created, transitions) = recorder.Finish(item);
+            made[i] = (item, created, transitions);
+        }
+
+        // Of accepts the lifecycles of other generators' objects too, by the paths they were seen at in any of the objects.
+        var known = lifecycles.Union(made.SelectMany(m => m.Transitions).Select(t => t.Lifecycle));
+        if (count > 0)
+            VerifyUsage();
+        return [.. made.Select(m => new History<T>(m.Item, m.Created, m.Transitions, known))];
+    }
+
+    /// <summary>The members this generator gives a lifecycle, by path without positions: <c>Status</c>, <c>Lines.Status</c>.</summary>
+#pragma warning disable PHONEYDEV001 // the names go into a set, so the order they are read in can't matter
+    private ImmutableHashSet<string> DeclaredLifecycles() =>
+        _config.Rules.Where(r => r.Value.Lifecycle is not null).Select(r => r.Key)
+            .Concat(_config.PathRules.Where(p => p.Value.Rule.Lifecycle is not null).Select(p => p.Key))
+            .ToImmutableHashSet(StringComparer.Ordinal);
+#pragma warning restore PHONEYDEV001
 
     /// <summary>Generates objects lazily and endlessly; take what you need: <c>gen.Stream().Take(10)</c>.</summary>
     public IEnumerable<T> Stream()
@@ -1293,7 +1393,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 nameof(member));
         }
 
-        var spec = new PathSpec(path, new PathRule(rule.Kind, rule.Value, rule.Boxed));
+        var spec = new PathSpec(path, new PathRule(rule.Kind, rule.Value, rule.Boxed, rule.Lifecycle));
         return Derive(_config with { PathRules = _config.PathRules.SetItem(string.Join('.', path), spec), RuleCount = _config.RuleCount + 1 });
     }
 
@@ -1305,7 +1405,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         // A new faker per run, never a pooled one: rules, AfterCreate actions, conventions and Stream() enumerators can keep the faker, and a
         // pooled faker would be reseeded under them by later runs, silently changing seeded data (a nested run also needs its own while the parent's
         // is in use). The facade's per-call cost is in compiling rules, which Fresh() shares; keep a generator to avoid the faker too.
-        var faker = new Faker(data, new SeededRandom(0) { Tape = parentFaker?.Random.Tape }); // a nested object's draws belong to the checked object's tape
+        var faker = new Faker(data, new SeededRandom(0) { Tape = parentFaker?.Random.Tape }) { Recorder = parentFaker?.Recorder }; // a nested object's draws belong to the checked object's tape (and its walks to its history)
         var keyed = _config.Key is not null && parentFaker is null;
         _config.Clock.Apply(faker, parentFaker, _config.Seed is not null || stableDates || keyed);
         return new Run(this, compiled, faker, seed ?? BaseSeed, keyed);
@@ -1368,7 +1468,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 dependent.Add((index, DependentRule(members[index], rule)));
 
             var value = rule.Kind == RuleKind.Constraint ? ConstraintCases.Resolve(typeof(T).Name, members[index], (ConstraintRequest)rule.Value!) : rule.Value;
-            rules[index] = new SlotDecision(rule.Kind, value, rule.Boxed);
+            rules[index] = new SlotDecision(rule.Kind, value, rule.Boxed, rule.ObjectBound, rule.Lifecycle);
         }
 
         return rules;
@@ -1418,6 +1518,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <summary>One generation run: a faker reused for every item, reseeded per item for order-independent results.</summary>
     private sealed class Run(ObjectGenerator<T> generator, Compiled compiled, Faker faker, long seed, bool keyed = false)
     {
+        /// <summary>The run's faker.</summary>
+        public Faker Faker => faker;
+
         /// <summary>Creates item <paramref name="index"/> with its draws recorded on, or replayed from, <paramref name="tape"/>.</summary>
         public T CreateOnTape(long index, ChoiceTape tape)
         {
@@ -1493,6 +1596,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         {
             if (!filters.IsEmpty && (compiled.ObjectRetries == 0 || attempts < compiled.ObjectRetries))
                 return Filter.Exhausted(typeof(T), filters, attempts);
+            if (Array.Find(compiled.Slots, s => s is { RetriesObject: true, Filter: not null }) is { } conditioned)
+            {
+                return new InvalidOperationException(
+                    $"Could not generate a {typeof(T).Name} whose {conditioned.MemberName} satisfies its Where condition after {attempts} attempts: almost every object is rejected. "
+                    + "Loosen the condition, make the values it accepts more likely, or raise maxAttempts.");
+            }
+
             return new InvalidOperationException(
                 $"Could not generate a {typeof(T).Name} with a unique {UniqueNames()} after {attempts} attempts: almost every value was produced before. "
                 + "Give the member a source with more distinct values with .With(…), generate fewer objects, or raise maxAttempts.");
@@ -1542,7 +1652,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             var factory = generator._config.Factory;
             var scope = new FakeScope(faker, compiled.Settings, compiled.Slots, index, typeof(T), parent, compiled.RootChildren);
             var item = factory is null ? generator._model.Create(scope) : ApplyRules(factory(faker), scope);
-            return (Complete(item, scope, PopulateMode.All, compare: factory is null), scope); // a factory decides the members no rule is for
+            item = Complete(item, scope, PopulateMode.All, compare: factory is null); // a factory decides the members no rule is for
+            faker.Recorder?.Made(item, scope, root: parent is null);
+            return (item, scope);
         }
 
         private (T Item, FakeScope Scope) PopulateOnce(T instance, long index, PopulateMode mode, long itemSeed)
@@ -1630,7 +1742,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations, bool BackReferences);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
-    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false);
+    private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false, bool ObjectBound = false, LifecycleDefinition? Lifecycle = null);
 
     /// <summary>Mutable per-instance state; derived generators start fresh.</summary>
     private sealed class State(State? shared)
@@ -1759,10 +1871,10 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             nameof(member));
     }
 
-    private static string[] MemberPath<TValue>(Expression<Func<T, TValue>> expression) => [.. PathSteps(expression).Select(step => step.Member.Name)];
+    internal static string[] MemberPath<TValue>(Expression<Func<T, TValue>> expression) => [.. PathSteps(expression).Select(step => step.Member.Name)];
 
     /// <summary>The members a path selects, from the root on, each with the type of the object it is read from (the element type after <c>Each()</c>).</summary>
-    private static List<(MemberInfo Member, Type Owner)> PathSteps<TValue>(Expression<Func<T, TValue>> expression)
+    private static List<(MemberInfo Member, Type Owner)> PathSteps(LambdaExpression expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
         var steps = new List<(MemberInfo, Type)>();

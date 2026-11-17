@@ -248,13 +248,34 @@ public sealed class FakeScope
                 + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");
     }
 
-    /// <summary>Produces a unique identity value once; a duplicate marks the object for another attempt instead of drawing the member again.</summary>
+    /// <summary>
+    /// Produces a value that is drawn once per object (an identity value, a lifecycle's status) once; a duplicate, or a value its condition rejects, marks the object
+    /// for another attempt instead of drawing the member again.
+    /// </summary>
     private TValue ProduceForObjectRetry<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback)
     {
         var value = Produce(slot, fallback);
-        (_ledger ??= new()).Produced(slot, value);
+        if (slot.Filter is { } accepts && !accepts(value))
+            (_ledger ??= new()).Reject();
+        else if (slot.Unique)
+            (_ledger ??= new()).Produced(slot, value);
         return value;
     }
+
+    /// <summary>The path this object walks through <paramref name="lifecycle"/>, drawn on first use and the same for every member that reads it.</summary>
+    internal LifecycleWalk LifecyclePath(LifecycleDefinition lifecycle)
+    {
+        var walk = (_ledger ??= new()).Path(lifecycle, Faker.Random, out var drawn);
+        if (drawn)
+            Faker.Recorder?.Walked(this, lifecycle, walk);
+        return walk;
+    }
+
+    /// <summary>When this object last entered <paramref name="state"/> of <paramref name="lifecycle"/>, or <see langword="null"/> when it never did.</summary>
+    internal DateTimeOffset? Entered(LifecycleDefinition lifecycle, int state) => LifecyclePath(lifecycle).Entered(state, Created, Faker.ReferenceDate);
+
+    /// <summary>When this object took the last transition of <paramref name="lifecycle"/>, or its creation time when it took none.</summary>
+    internal DateTimeOffset LastTransition(LifecycleDefinition lifecycle) => LifecyclePath(lifecycle).LastTransition(Created, Faker.ReferenceDate);
 
     /// <summary>
     /// Claims the unique identity values and <paramref name="combinations"/> of an accepted object; false when one was produced before or another thread
@@ -461,7 +482,9 @@ public sealed class FakeScope
             return CutOff();
         var (slots, children) = RulesFor(type, model);
         var nested = new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children);
-        return Comparisons.Apply(model, model.CreateObject(nested), nested);
+        var created = Comparisons.Apply(model, model.CreateObject(nested), nested);
+        Faker.Recorder?.Made(created, nested, root: false);
+        return created;
     }
 
     /// <summary>

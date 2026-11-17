@@ -263,6 +263,22 @@ catch (FakeCheckException<StepRun<List<Person>>> failure) when (failure.Countere
     Check(failure.Counterexample.State[0].Email, "shrunk steps");
 }
 
+// A lifecycle walks the generated model's status member, and stamps the NodaTime member named after its state.
+var suspended = Fakes.Person.Seed(16)
+    .Lifecycle(p => p.Status, l => l.From(Status.Active).To(Status.Suspended).EndsIn(Status.Suspended, 1))
+    .Generate(5);
+if (suspended.Any(p => p.Status != Status.Suspended))
+    throw new InvalidOperationException("the lifecycle did not end in its end state");
+if (suspended.Any(p => p.SuspendedAt is not { } at || at <= p.CreatedAt))
+    throw new InvalidOperationException("the stamp of the end state is missing or before the creation time");
+
+// Its history walks the finished graph through the generated models and agrees with the stamp.
+var histories = Fakes.Person.Seed(16)
+    .Lifecycle(p => p.Status, l => l.From(Status.Active).To(Status.Suspended).EndsIn(Status.Suspended, 1))
+    .GenerateHistory(5);
+if (histories.Any(h => h.Of(p => p.Status) is not [{ To: Status.Suspended } t] || global::NodaTime.Instant.FromDateTimeOffset(t.At) != h.Object.SuspendedAt))
+    throw new InvalidOperationException("the history does not end in the end state at the time of its stamp");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 

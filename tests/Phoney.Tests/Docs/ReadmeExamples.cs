@@ -236,6 +236,75 @@ public sealed class ReadmeExamples
     }
 
     [Test]
+    public void Lifecycles()
+    {
+        // snippet: readme-lifecycle
+        var orders = Fake.For<Order>().Seed(1)
+            .Lifecycle(o => o.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid, 4).To(OrderStatus.Cancelled, 1)   // staying pending weighs 1
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped))                                   // a cancelled order stays cancelled
+            .Generate(1000);                                    // about 1/6 pending, 1/6 cancelled, 1/3 paid, 1/3 shipped
+
+        var mix = Fake.For<Order>().Seed(1)
+            .Lifecycle(o => o.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped)
+                .EndsIn(OrderStatus.Shipped, 80).EndsIn(OrderStatus.Cancelled, 20))                // exactly this mix
+            .Generate(1000);
+        // end snippet
+
+        orders.Select(o => o.Status).Distinct().Count().ShouldBe(4);
+        mix.Count(o => o.Status == OrderStatus.Shipped).ShouldBeInRange(740, 860);
+        mix.ShouldAllBe(o => o.Status == OrderStatus.Shipped || o.Status == OrderStatus.Cancelled);
+    }
+
+    [Test]
+    public void Lifecycle_stamps()
+    {
+        // snippet: readme-lifecycle-stamps
+        var purchases = Fake.For<Purchase>().Seed(1)
+            .Lifecycle(p => p.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid, after: (TimeSpan.FromMinutes(5), TimeSpan.FromDays(2))).To(OrderStatus.Cancelled)
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped)
+                .Stamp(OrderStatus.Shipped, p => p.Dispatched))  // a member with another name
+            .Generate(100);
+
+        // PaidAt and ShippedAt are found by name: set when the purchase got there, null when it didn't.
+        // CreatedAt <= PaidAt <= ShippedAt <= reference date, and UpdatedAt is the last of them.
+        // end snippet
+
+        purchases.ShouldAllBe(p => (p.PaidAt != null) == (p.Status == OrderStatus.Paid || p.Status == OrderStatus.Shipped));
+        purchases.ShouldAllBe(p => p.Dispatched == p.ShippedAt && (p.ShippedAt == null || p.ShippedAt >= p.PaidAt));
+        purchases.ShouldAllBe(p => p.UpdatedAt == (p.ShippedAt ?? p.PaidAt ?? p.CreatedAt) || p.Status == OrderStatus.Cancelled);
+    }
+
+    [Test]
+    public void Lifecycle_history()
+    {
+        var auditLog = new List<string>();
+
+        // snippet: readme-lifecycle-history
+        var histories = Fake.For<Purchase>().Seed(1)
+            .Lifecycle(p => p.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped))
+            .GenerateHistory(100);
+
+        foreach (var history in histories)
+        {
+            Purchase purchase = history.Object;                     // exactly what Generate(100) gives
+            foreach (var t in history.Of(p => p.Status))            // Pending → Paid at …, Paid → Shipped at …
+                auditLog.Add($"{purchase.Id} {t.Path}: {t.From} → {t.To} at {t.At:u}");
+        }
+        // end snippet
+
+        foreach (var history in histories)
+            (history.Of(p => p.Status) is [.., var last] ? last.To : OrderStatus.Pending).ShouldBe(history.Object.Status);
+        histories.ShouldAllBe(h => h.Created == h.Object.CreatedAt);
+        auditLog.Count.ShouldBe(histories.Sum(h => h.Transitions.Count));
+    }
+
+    [Test]
     public void Populating_existing_objects()
     {
         var generator = Fake.For<Customer>().Seed(1);

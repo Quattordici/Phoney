@@ -19,6 +19,7 @@ public sealed class Person
     public global::NodaTime.Instant CreatedAt { get; set; }
     public System.Collections.Immutable.ImmutableArray<string> Aliases { get; set; }
     public System.Collections.Frozen.FrozenDictionary<string, int> Visits { get; set; } = null!;
+    public global::NodaTime.Instant? SuspendedAt { get; set; }
     public List<string> Badges { get; } = [];
 }
 

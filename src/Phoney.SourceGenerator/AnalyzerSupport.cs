@@ -157,7 +157,7 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
 internal static class AnalyzerSupport
 {
     /// <summary>The generator calls that produce objects, which end a fluent chain (<c>Check</c> generates the objects it tests).</summary>
-    public static readonly HashSet<string> Terminals = new(StringComparer.Ordinal) { "Generate", "Stream", "GenerateParallel", "Populate", "GenerateFor", "Pseudonymize", "Check", "CheckAsync" };
+    public static readonly HashSet<string> Terminals = new(StringComparer.Ordinal) { "Generate", "Stream", "GenerateParallel", "Populate", "GenerateFor", "Pseudonymize", "Check", "CheckAsync", "GenerateHistory" };
 
     /// <summary>Whether the chain starts a new generator (<c>Fake.For&lt;T&gt;()</c>, <c>new ObjectGenerator&lt;T&gt;(…)</c> or a <c>[FakeFor]</c> property), so no rules can have been added elsewhere.</summary>
     public static bool IsStart(IOperation? receiver, INamedTypeSymbol? fake, INamedTypeSymbol? fakeFor) => receiver switch

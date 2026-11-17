@@ -96,6 +96,20 @@ The creation time of one generated object, drawn once, that its updated and late
 **Causal timeline**:
 A Timeline across a whole graph, in which each nested object is created after the object that contains it.
 
+**Lifecycle**:
+The states a member can be in and the transitions between them, declared on a Generator, so every object's status is one it can really reach from the start.
+_Avoid_: state machine, workflow
+
+**Transition**:
+One allowed move of a Lifecycle from a state to another, with a weight and the time it takes.
+
+**Stamp**:
+A date member that holds the time an object entered a state of its Lifecycle (`PaidAt`), or the time of its last transition (`UpdatedAt`).
+_Avoid_: timestamp, audit field
+
+**History**:
+The transitions one object (and the objects inside it) went through, with their times, next to the object itself (`GenerateHistory`).
+
 **National id**:
 A personal, company or VAT number with valid check digits for a country. Structurally valid, not issued.
 _Avoid_: identity (reserved for Identity)
