@@ -291,7 +291,7 @@ internal static class ConstraintCases
     {
         try
         {
-            return ToNumber(type, allowed.Max(a => Convert.ToDecimal(a, CultureInfo.InvariantCulture)) + 1);
+            return ToNumber(type, allowed.Max(PortableDecimal.FromNumber) + 1);
         }
         catch (Exception e) when (e is FormatException or OverflowException or InvalidCastException)
         {

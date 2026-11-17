@@ -10,3 +10,5 @@ P:System.DateTimeOffset.UtcNow;Use Faker.ReferenceDate (or a TimeProvider) so se
 M:System.Guid.NewGuid();Generate ids from the faker's SeededRandom so results are reproducible for a seed
 P:System.Environment.TickCount;Not reproducible; derive values from the seed
 P:System.Environment.TickCount64;Not reproducible; derive values from the seed
+M:System.Convert.ToDecimal(System.Double);.NET 11 rounds this exactly and earlier releases to 15 digits: use PortableDecimal.FromDouble so seeded decimals match on every target
+M:System.Convert.ToDecimal(System.Single);.NET 11 rounds this exactly and earlier releases to 7 digits: use PortableDecimal.FromSingle so seeded decimals match on every target
