@@ -7,11 +7,11 @@ public sealed class DiagnosticCategoryTests
     [Test]
     public void Advisory_rules_share_the_Phoney_Usage_category_so_they_can_be_switched_off_together()
     {
-        DiagnosticAnalyzer[] analyzers = [new StrictAnalyzer(), new UsageAnalyzer(), new ModelSuggestionAnalyzer()];
+        DiagnosticAnalyzer[] analyzers = [new StrictAnalyzer(), new UsageAnalyzer(), new ModelSuggestionAnalyzer(), new LifecycleAnalyzer()];
         var descriptors = analyzers.SelectMany(a => a.SupportedDiagnostics).ToList();
 
         descriptors.Select(d => d.Id).Order().ShouldBe(
-            ["PHONEY004", "PHONEY005", "PHONEY006", "PHONEY007", "PHONEY008", "PHONEY010", "PHONEY011", "PHONEY012"]);
+            ["PHONEY004", "PHONEY005", "PHONEY006", "PHONEY007", "PHONEY008", "PHONEY010", "PHONEY011", "PHONEY012", "PHONEY013", "PHONEY014"]);
         descriptors.ShouldAllBe(d => d.Category == "Phoney.Usage");
     }
 

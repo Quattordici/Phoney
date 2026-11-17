@@ -17,3 +17,5 @@ PHONEY009 | Phoney | Error | Subtype cannot be registered
 PHONEY010 | Phoney.Usage | Warning | Constant seed in a loop repeats the same objects
 PHONEY011 | Phoney.Usage | Warning | Argument is out of range
 PHONEY012 | Phoney.Usage | Info | Type is generated with reflection
+PHONEY013 | Phoney.Usage | Warning | Lifecycle can't work as written
+PHONEY014 | Phoney.Usage | Warning | Stamp can't be filled
