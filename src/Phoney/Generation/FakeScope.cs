@@ -248,13 +248,22 @@ public sealed class FakeScope
                 + "Almost every generated value is rejected: give the member values that can pass with .With(…), loosen the condition, or raise maxAttempts.");
     }
 
-    /// <summary>Produces a unique identity value once; a duplicate marks the object for another attempt instead of drawing the member again.</summary>
+    /// <summary>
+    /// Produces a value that is drawn once per object (an identity value, a lifecycle's status) once; a duplicate, or a value its condition rejects, marks the object
+    /// for another attempt instead of drawing the member again.
+    /// </summary>
     private TValue ProduceForObjectRetry<TValue>(RuleSlot slot, Func<FakeScope, TValue> fallback)
     {
         var value = Produce(slot, fallback);
-        (_ledger ??= new()).Produced(slot, value);
+        if (slot.Filter is { } accepts && !accepts(value))
+            (_ledger ??= new()).Reject();
+        else if (slot.Unique)
+            (_ledger ??= new()).Produced(slot, value);
         return value;
     }
+
+    /// <summary>The path this object walks through <paramref name="lifecycle"/>, drawn on first use and the same for every member that reads it.</summary>
+    internal int[] LifecyclePath(LifecycleDefinition lifecycle) => (_ledger ??= new()).Path(lifecycle, Faker.Random);
 
     /// <summary>
     /// Claims the unique identity values and <paramref name="combinations"/> of an accepted object; false when one was produced before or another thread

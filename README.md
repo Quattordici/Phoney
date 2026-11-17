@@ -632,6 +632,32 @@ var tickets = Fake.For<Ticket>().Seed(1)
 
 The value depends on the object's position: the first object is 0 and the numbers continue over calls, whatever the seed, the batch size, `GenerateParallel` or `Stream()`, and a `Where` retry keeps its position. Only members of the generated object take these rules, and a generator with them can't be nested (every nested object would be 0). The object's own `Id` already counts 1, 2, 3… by [convention](#conventions).
 
+### Lifecycles
+
+A status is rarely random: an order is paid before it ships, and a cancelled one stays cancelled. `Lifecycle` declares the states and the transitions between them, and every object walks there from the start:
+
+<!-- snippet: readme-lifecycle -->
+```csharp
+var orders = Fake.For<Order>().Seed(1)
+    .Lifecycle(o => o.Status, l => l
+        .From(OrderStatus.Pending).To(OrderStatus.Paid, 4).To(OrderStatus.Cancelled, 1)   // staying pending weighs 1
+        .From(OrderStatus.Paid).To(OrderStatus.Shipped))                                   // a cancelled order stays cancelled
+    .Generate(1000);                                    // about 1/6 pending, 1/6 cancelled, 1/3 paid, 1/3 shipped
+
+var mix = Fake.For<Order>().Seed(1)
+    .Lifecycle(o => o.Status, l => l
+        .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+        .From(OrderStatus.Paid).To(OrderStatus.Shipped)
+        .EndsIn(OrderStatus.Shipped, 80).EndsIn(OrderStatus.Cancelled, 20))                // exactly this mix
+    .Generate(1000);
+```
+<!-- end snippet -->
+
+- **The walk**: the first `From` is the start (or `.Start(state)`). At each state an object stays, with weight 1 next to the transitions' weights (`.Stays(0)` makes it move on), or takes a transition. A state with no way out is final, and `MaxTransitions(n)` (16 by default) ends a walk round a cycle.
+- **`EndsIn`** draws the end state first, by weight, and walks there, so the mix is exactly what you ask for.
+- **Checked when added**: a state the start can't reach, a transition given twice, a weight that isn't positive, an enum value that isn't defined and an end state that can't be reached in time throw at once. States can be enums, strings or any type compared by value.
+- **One path per object**: `Where` and `Unique` on the status generate the whole object again, a later rule for the member replaces the lifecycle, and nested members take it too (`o => o.Lines.Each().Status`). Shrinking a failing `Check` heads for the start state.
+
 ### Filling in existing objects
 
 `Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:

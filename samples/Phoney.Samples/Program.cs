@@ -105,6 +105,15 @@ var shoppers = Fake.For<Customer>().Seed(2)
 foreach (var shopper in shoppers)
     Console.WriteLine($"{shopper.FirstName} lives in {shopper.Address.City}; orders: {string.Join(", ", shopper.Orders.Select(o => o.Status))}");
 
+// 7c1. Lifecycles: a status the object can really be in ---------------------------------------
+Console.WriteLine("\n== Lifecycles");
+var lived = Fake.For<Order>().Seed(4)
+    .Lifecycle(o => o.Status, l => l
+        .From(OrderStatus.Pending).To(OrderStatus.Paid, 3)   // staying pending weighs 1
+        .From(OrderStatus.Paid).To(OrderStatus.Shipped))
+    .Generate(12);
+Console.WriteLine($"statuses: {string.Join(", ", lived.Select(o => o.Status))}");
+
 // 7c2. Conditions and checked rules -------------------------------------------------------------
 Console.WriteLine("\n== Conditions and checked rules");
 foreach (var order in Fake.For<Order>().Seed(3).Where(o => o.Total > 100).Where(o => o.Status != OrderStatus.Pending).Generate(3))

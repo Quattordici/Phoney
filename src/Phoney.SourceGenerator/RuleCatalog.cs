@@ -15,7 +15,7 @@ internal static class RuleCatalog
 
     /// <summary>The methods that take a member selector (<c>x =&gt; x.Name</c>) and say how that member gets its value or that it has none.</summary>
     public static IReadOnlyList<string> MemberRules { get; } =
-        ["With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", Unique, "Invalid", "Boundary", "Sequence", "Cycle"];
+        ["With", "WithNormalDistribution", "WithOneOf", "WithSubsetOf", "Ignore", Unique, "Invalid", "Boundary", "Sequence", "Cycle", "Lifecycle"];
 
     /// <summary>The member rules that occupy a member's one rule slot; <see cref="Unique"/> is kept separately.</summary>
     public static IReadOnlyList<string> SlotRules { get; } = [.. MemberRules.Where(n => n != Unique)];
@@ -43,6 +43,7 @@ internal static class RuleCatalog
         ["Boundary"] = "Boundary",
         ["Sequence"] = "Sequence",
         ["Cycle"] = "Cycle",
+        ["Lifecycle"] = "Lifecycle",
         ["Where"] = "Where",
     };
 

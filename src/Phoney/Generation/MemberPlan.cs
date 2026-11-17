@@ -1,7 +1,8 @@
 namespace Phoney.Generation;
 
 /// <summary>What produces a member's value, before it is bound to the member as a <see cref="RuleSlot"/>.</summary>
-internal readonly record struct SlotDecision(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null);
+/// <summary>Who gives a member its value; <paramref name="ObjectBound"/> when the value is drawn once per object (a lifecycle's path), so a check on it makes the whole object again.</summary>
+internal readonly record struct SlotDecision(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, bool ObjectBound = false);
 
 /// <summary>
 /// How a member's produced values are checked, besides who produces them: uniqueness (attempts per value, 0 for none), a <c>Where</c> condition, whether a duplicate
@@ -147,6 +148,16 @@ internal sealed class MemberPlan
             var retriesObject = decision.Kind == RuleKind.Default && policy.Unique && inputs.NameConventions && ConventionValues.IsIdentityBound(members[i].Convention);
             if (retriesObject)
                 objectRetries = Smallest(objectRetries, policy.UniqueAttempts);
+
+            // A value drawn once per object (a lifecycle's path) is the same however often the member is produced, so a duplicate or a rejected value makes the whole object again.
+            if (decision.ObjectBound && (policy.Unique || policy.Filter is not null))
+            {
+                retriesObject = true;
+                if (policy.Unique)
+                    objectRetries = Smallest(objectRetries, policy.UniqueAttempts);
+                if (policy.Filter is { } filter)
+                    objectRetries = Smallest(objectRetries, filter.MaxAttempts);
+            }
 
             slots[i] = new RuleSlot(members[i], decision, new SlotChecks(policy.UniqueAttempts, policy.Filter?.Accepts, policy.Filter?.MaxAttempts ?? 0, retriesObject, policy.RecordsKeyPart));
         }
