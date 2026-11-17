@@ -2,7 +2,6 @@
   <!--
     Dependency floors of the add-on packages: the lowest versions whose build and tests pass (found by building the library against the floor and running its tests with the
     framework at the floor and at the newest). MSTest 3.x is binary incompatible with 4.x apps; TUnit 1.0 fails the FakeSeed executor-order test; NodaTime 3.0 lacks LocalDate.ToDateOnly.
-    EF Core 8.0.0-8.0.8 bring Microsoft.Extensions.Caching.Memory 8.0.0, which has a high severity advisory (NuGet audit fails the build).
     WireMock.Net before 2.31.0 brings Microsoft.AspNetCore.WebUtilities 2.3.0-2.3.13 (GHSA-6527-9fp8-r4x6), and its servers before 2.12.0 a Scriban.Signed with advisories.
     The tests run on the newest versions, or on the floors with -p:TestAgainstFloors=true (the "floors" CI job).
     Renovate (.github/renovate.json5) never touches a *Floor; it updates each *Latest through the "renovate: depName" comment above it.
@@ -14,7 +13,6 @@
     <TUnitFloor>1.10.0</TUnitFloor>
     <NodaTimeFloor>3.1.0</NodaTimeFloor>
     <DependencyInjectionFloor>8.0.0</DependencyInjectionFloor>
-    <EfCore8Floor>8.0.10</EfCore8Floor>
     <EfCore10Floor>10.0.0</EfCore10Floor>
     <WireMockFloor>2.31.0</WireMockFloor>
 
@@ -31,9 +29,9 @@
     <!-- renovate: depName=Microsoft.Extensions.DependencyInjection -->
     <DependencyInjectionLatest>10.0.13</DependencyInjectionLatest>
     <!-- renovate: depName=Microsoft.EntityFrameworkCore.Sqlite -->
-    <EfCore8Latest>8.0.31</EfCore8Latest>
-    <!-- renovate: depName=Microsoft.EntityFrameworkCore.Sqlite -->
     <EfCore10Latest>10.0.12</EfCore10Latest>
+    <!-- renovate: depName=Microsoft.EntityFrameworkCore.Sqlite -->
+    <EfCore11Latest>11.0.0</EfCore11Latest>
     <!-- renovate: depName=WireMock.Net.Minimal -->
     <WireMockLatest>2.31.0</WireMockLatest>
 
@@ -44,8 +42,8 @@
     <TUnitTestVersion>$(TUnitLatest)</TUnitTestVersion>
     <NodaTimeTestVersion>$(NodaTimeLatest)</NodaTimeTestVersion>
     <DependencyInjectionTestVersion>$(DependencyInjectionLatest)</DependencyInjectionTestVersion>
-    <EfCore8TestVersion>$(EfCore8Latest)</EfCore8TestVersion>
     <EfCore10TestVersion>$(EfCore10Latest)</EfCore10TestVersion>
+    <EfCore11TestVersion>$(EfCore11Latest)</EfCore11TestVersion>
     <WireMockTestVersion>$(WireMockLatest)</WireMockTestVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TestAgainstFloors)' == 'true'">
@@ -55,8 +53,8 @@
     <TUnitTestVersion>$(TUnitFloor)</TUnitTestVersion>
     <NodaTimeTestVersion>$(NodaTimeFloor)</NodaTimeTestVersion>
     <DependencyInjectionTestVersion>$(DependencyInjectionFloor)</DependencyInjectionTestVersion>
-    <EfCore8TestVersion>$(EfCore8Floor)</EfCore8TestVersion>
     <EfCore10TestVersion>$(EfCore10Floor)</EfCore10TestVersion>
+    <EfCore11TestVersion>$(EfCore10Floor)</EfCore11TestVersion>
     <WireMockTestVersion>$(WireMockFloor)</WireMockTestVersion>
   </PropertyGroup>
 
@@ -73,21 +71,25 @@
     <!-- Add-on packages depend on the lowest version that supports every target, so apps can use any newer one. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DependencyInjectionFloor)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(DependencyInjectionTestVersion)" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="11.0.0" />
     <PackageVersion Include="NodaTime" Version="$(NodaTimeFloor)" />
     <!-- Phoney.WireMock depends on the builder interfaces only; the tests run the server of the same release. -->
     <PackageVersion Include="WireMock.Net.Shared" Version="$(WireMockFloor)" />
     <PackageVersion Include="WireMock.Net.Minimal" Version="$(WireMockTestVersion)" />
   </ItemGroup>
 
-  <!-- EF Core: each target framework uses the EF Core release built for it. The add-on depends on the floor, the tests run on Microsoft.EntityFrameworkCore.Sqlite. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(EfCore8Floor)" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCore8TestVersion)" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' != 'net8.0'">
+  <!--
+    EF Core: the add-on depends on the floor, EF Core 10, for every target (it runs on later .NET releases, so apps choose their EF Core). The tests run on
+    Microsoft.EntityFrameworkCore.Sqlite of the release built for each target framework, so the newest EF Core is tested too.
+  -->
+  <ItemGroup>
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(EfCore10Floor)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCore10TestVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCore11TestVersion)" />
   </ItemGroup>
   <ItemGroup>
     <!-- Only for the floors run: the SQLite native library of the oldest EF Core releases has a high severity advisory, and the tests need a working one. -->
@@ -95,7 +97,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Kept at the Roslyn version shipped with the .NET 8 SDK so the generator runs on every supported toolchain. -->
+    <!-- The lowest Roslyn the generator needs (the .NET 8 SDK's), kept so it loads in every compiler a supported SDK ships; raise it only when the code needs a newer API. -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />

@@ -25,8 +25,10 @@ public sealed class ComparisonConfig : ManualConfig
         var job = Job.Default.WithStrategy(RunStrategy.Throughput).WithLaunchCount(1).WithWarmupCount(5).WithIterationCount(15);
         if (Environment.GetEnvironmentVariable("PHONEY_BENCH_AOT") == "1")
         {
-            var toolchain = NativeAotToolchain.CreateBuilder().IlcInstructionSet("x86-64-v3").UseNuGet().TargetFrameworkMoniker("net10.0").ToToolchain();
-            job = job.WithRuntime(NativeAotRuntime.Net10_0).WithToolchain(toolchain);
+            // The runtime this process runs on, so the comparison follows the project's target framework (PhoneyAppTargetFramework).
+            var runtime = NativeAotRuntime.GetCurrentVersion();
+            var toolchain = NativeAotToolchain.CreateBuilder().IlcInstructionSet("x86-64-v3").UseNuGet().TargetFrameworkMoniker(runtime.MsBuildMoniker).ToToolchain();
+            job = job.WithRuntime(runtime).WithToolchain(toolchain);
         }
 
         AddJob(job);
