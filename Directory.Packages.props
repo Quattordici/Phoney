@@ -3,7 +3,7 @@
     Dependency floors of the add-on packages: the lowest versions whose build and tests pass (found by building the library against the floor and running its tests with the
     framework at the floor and at the newest). MSTest 3.x is binary incompatible with 4.x apps; TUnit 1.0 fails the FakeSeed executor-order test; NodaTime 3.0 lacks LocalDate.ToDateOnly.
     EF Core 8.0.0-8.0.8 bring Microsoft.Extensions.Caching.Memory 8.0.0, which has a high severity advisory (NuGet audit fails the build).
-    Phoney.WireMock builds against WireMock.Net.Shared 2.0.0, but the WireMock.Net servers before 2.12.0 bring a Scriban.Signed with advisories, so its tests can't run there.
+    WireMock.Net before 2.31.0 brings Microsoft.AspNetCore.WebUtilities 2.3.0-2.3.13 (GHSA-6527-9fp8-r4x6), and its servers before 2.12.0 a Scriban.Signed with advisories.
     The tests run on the newest versions, or on the floors with -p:TestAgainstFloors=true (the "floors" CI job).
     Renovate (.github/renovate.json5) never touches a *Floor; it updates each *Latest through the "renovate: depName" comment above it.
   -->
@@ -16,7 +16,7 @@
     <DependencyInjectionFloor>8.0.0</DependencyInjectionFloor>
     <EfCore8Floor>8.0.10</EfCore8Floor>
     <EfCore10Floor>10.0.0</EfCore10Floor>
-    <WireMockFloor>2.12.0</WireMockFloor>
+    <WireMockFloor>2.31.0</WireMockFloor>
 
     <!-- renovate: depName=xunit.v3 -->
     <XunitLatest>4.0.2</XunitLatest>
@@ -35,7 +35,7 @@
     <!-- renovate: depName=Microsoft.EntityFrameworkCore.Sqlite -->
     <EfCore10Latest>10.0.12</EfCore10Latest>
     <!-- renovate: depName=WireMock.Net.Minimal -->
-    <WireMockLatest>2.19.0</WireMockLatest>
+    <WireMockLatest>2.31.0</WireMockLatest>
 
     <!-- The versions the test projects of the integration packages run against. -->
     <XunitTestVersion>$(XunitLatest)</XunitTestVersion>

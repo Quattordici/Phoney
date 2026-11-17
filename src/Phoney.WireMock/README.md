@@ -29,4 +29,4 @@ server.Given(Request.Create().WithPath("/customers").UsingGet())
 - **JSON.** Bodies are written with `System.Text.Json` and `JsonSerializerDefaults.Web` (camelCase) and sent as `application/json; charset=utf-8`; pass `JsonSerializerOptions`, or a `JsonTypeInfo<T>` from a `JsonSerializerContext` together with a `[FakeFor<T>]` model to stay free of reflection. Status codes, headers, delays and faults compose as usual.
 - **Fails early.** The generator makes one object when the response is built, so a generator that can't make keyed objects (such as one with a `Unique` rule) throws there, not as a 500 in the middle of a run.
 
-Requires WireMock.Net 2.12.0 or newer.
+Requires WireMock.Net 2.31.0 or newer.
