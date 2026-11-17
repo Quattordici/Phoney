@@ -206,8 +206,9 @@ internal abstract class LifecycleDefinition
                 return true;
             foreach (var to in _moves[at.State].Select(move => move.To).Where(to => to != avoided))
             {
-                if (seen.Add((to, at.Taken + 1)))
-                    queue.Enqueue((to, at.Taken + 1));
+                var next = (to, at.Taken + 1);
+                if (seen.Add(next))
+                    queue.Enqueue(next);
             }
         }
 
@@ -226,8 +227,9 @@ internal abstract class LifecycleDefinition
                 return true;
             foreach (var to in _moves[at.State].Select(move => move.To).Where(to => to != avoided && _distance[to][end] <= at.Left - 1))
             {
-                if (seen.Add((to, at.Left - 1)))
-                    queue.Enqueue((to, at.Left - 1));
+                var next = (to, at.Left - 1);
+                if (seen.Add(next))
+                    queue.Enqueue(next);
             }
         }
 
