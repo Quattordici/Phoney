@@ -1,5 +1,8 @@
 using Phoney.Generation;
 
+// These tests pin what the runtime throws for lifecycles written wrong, which LifecycleAnalyzer also reports at compile time.
+#pragma warning disable PHONEY013, PHONEY014
+
 namespace Phoney.Tests;
 
 /// <summary>The history behind generated objects: the transitions each lifecycle in the graph took, with their times, next to the very objects Generate makes.</summary>

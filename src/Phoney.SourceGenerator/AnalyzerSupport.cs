@@ -38,11 +38,14 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
     public bool IsNested => Path is not null && Path != Name;
 
     /// <summary>Reads the first argument of <paramref name="call"/> (<c>With</c>, <c>Ignore</c>, <c>Unique</c>, <c>WithOneOf</c>).</summary>
-    public static RuleSelector Read(IInvocationOperation call)
+    public static RuleSelector Read(IInvocationOperation call) =>
+        Read(call.Arguments.FirstOrDefault(a => a.Parameter?.Ordinal == 0), call.Syntax.GetLocation());
+
+    /// <summary>Reads a selector passed as <paramref name="argument"/>; <paramref name="fallback"/> is where it is reported when the argument is missing.</summary>
+    public static RuleSelector Read(IArgumentOperation? argument, Location fallback)
     {
-        var argument = call.Arguments.FirstOrDefault(a => a.Parameter?.Ordinal == 0);
         if (argument is null)
-            return new RuleSelector(SelectorKind.Unknown, null, call.Syntax.GetLocation());
+            return new RuleSelector(SelectorKind.Unknown, null, fallback);
 
         var location = argument.Syntax.GetLocation();
         if (Lambda(argument.Value) is not { } lambda)
@@ -61,7 +64,7 @@ internal readonly record struct RuleSelector(SelectorKind Kind, string? Name, Lo
     }
 
     /// <summary>The lambda an argument passes, looking through conversions and delegate creations, or <see langword="null"/> when it is not one.</summary>
-    private static IAnonymousFunctionOperation? Lambda(IOperation value)
+    public static IAnonymousFunctionOperation? Lambda(IOperation value)
     {
         while (true)
         {

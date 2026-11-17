@@ -37,7 +37,7 @@ internal abstract class LifecycleDefinition
     private readonly LifecycleMove[][] _moves;
     private readonly int[]? _ends;
     private readonly double[]? _endTotals;
-    private readonly int[][] _distance;
+    private readonly LifecycleGraph _graph;
     private readonly int _max;
 
     protected LifecycleDefinition(int start, int stateCount, IReadOnlyList<LifecycleMove> transitions, double[] stays, IReadOnlyList<(int State, double Weight)> ends, int max)
@@ -77,7 +77,7 @@ internal abstract class LifecycleDefinition
             _totals[s] = [.. totals];
         }
 
-        _distance = Distances(stateCount);
+        _graph = new LifecycleGraph(start, stateCount, [.. transitions.Select(t => (t.From, t.To))], stays, [.. ends.Select(e => e.State)], max);
         if (ends.Count > 0)
         {
             _ends = [.. ends.Select(e => e.State)];
@@ -121,7 +121,7 @@ internal abstract class LifecycleDefinition
     }
 
     /// <summary>Whether a walk can get from the start into <paramref name="state"/> within the transitions it may take.</summary>
-    public bool Reaches(int state) => _distance[_start][state] <= _max;
+    public bool Reaches(int state) => _graph.Reaches(state);
 
     /// <summary>
     /// The state of a status <c>Populate</c> keeps, which the walk then ends in; <paramref name="member"/> names the status in messages.
@@ -140,7 +140,7 @@ internal abstract class LifecycleDefinition
         if (!Reaches(state))
         {
             throw new InvalidOperationException(
-                string.Create(CultureInfo.InvariantCulture, $"Populate keeps {member} = {StateText(state)}, but its lifecycle can't get there: it takes {_distance[_start][state]} transitions from {StateText(_start)}, ")
+                string.Create(CultureInfo.InvariantCulture, $"Populate keeps {member} = {StateText(state)}, but its lifecycle can't get there: it takes {_graph.Distance(_start, state)} transitions from {StateText(_start)}, ")
                 + string.Create(CultureInfo.InvariantCulture, $"and MaxTransitions is {_max}. Raise MaxTransitions, keep a nearer state, or populate with PopulateMode.All to draw a new status."));
         }
 
@@ -189,14 +189,7 @@ internal abstract class LifecycleDefinition
     /// Whether some object can end its walk without entering <paramref name="state"/> (so a stamp of it must be able to hold <see langword="null"/>): it stops
     /// before it, or walks round it, or ends in a state that doesn't need it.
     /// </summary>
-    public bool IsSkippable(int state)
-    {
-        if (state == _start)
-            return false;
-        if (_ends is null)
-            return CanStopAvoiding(state);
-        return _ends.Any(end => end != state && CanArriveAvoiding(state, end));
-    }
+    public bool IsSkippable(int state) => _graph.IsSkippable(state);
 
     /// <summary>The state a date member is named after (<c>PaidAt</c>, <c>PaidOn</c>, <c>PaidDate</c>, any case), or -1.</summary>
     public int StateNamed(string member)
@@ -213,8 +206,8 @@ internal abstract class LifecycleDefinition
         return -1;
     }
 
-    /// <summary>The number of transitions the shortest way from <paramref name="from"/> to <paramref name="to"/> takes, or <see cref="int.MaxValue"/>.</summary>
-    protected int Distance(int from, int to) => _distance[from][to];
+    /// <summary>The shape of the lifecycle: where its walks can go.</summary>
+    protected LifecycleGraph Graph => _graph;
 
     /// <summary>The state with number <paramref name="state"/>, boxed.</summary>
     public abstract object? StateAt(int state);
@@ -243,7 +236,7 @@ internal abstract class LifecycleDefinition
             var total = 0.0;
             for (var i = 0; i < moves.Length; i++)
             {
-                if (_distance[moves[i].To][end] > left - 1)
+                if (_graph.Distance(moves[i].To, end) > left - 1)
                     continue; // from there the end can't be reached in time
                 total += moves[i].Weight;
                 candidates[count] = i;
@@ -257,73 +250,6 @@ internal abstract class LifecycleDefinition
             path.Add(current);
             left--;
         }
-    }
-
-    /// <summary>Whether a walk without end states can stop (stay, reach a terminal state or use up its transitions) without entering <paramref name="avoided"/>.</summary>
-    private bool CanStopAvoiding(int avoided)
-    {
-        var seen = new HashSet<(int State, int Taken)> { (_start, 0) };
-        var queue = new Queue<(int State, int Taken)>();
-        queue.Enqueue((_start, 0));
-        while (queue.TryDequeue(out var at))
-        {
-            var targets = _targets[at.State];
-            if (at.Taken == _max || targets.Length == 0 || targets[0] == Stay)
-                return true;
-            foreach (var to in _moves[at.State].Select(move => move.To).Where(to => to != avoided))
-            {
-                var next = (to, at.Taken + 1);
-                if (seen.Add(next))
-                    queue.Enqueue(next);
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Whether a walk towards <paramref name="end"/> can arrive without entering <paramref name="avoided"/>, taking only the moves the walk may take.</summary>
-    private bool CanArriveAvoiding(int avoided, int end)
-    {
-        var seen = new HashSet<(int State, int Left)> { (_start, _max) };
-        var queue = new Queue<(int State, int Left)>();
-        queue.Enqueue((_start, _max));
-        while (queue.TryDequeue(out var at))
-        {
-            if (at.State == end)
-                return true;
-            foreach (var to in _moves[at.State].Select(move => move.To).Where(to => to != avoided && _distance[to][end] <= at.Left - 1))
-            {
-                var next = (to, at.Left - 1);
-                if (seen.Add(next))
-                    queue.Enqueue(next);
-            }
-        }
-
-        return false;
-    }
-
-    private int[][] Distances(int count)
-    {
-        var distance = new int[count][];
-        for (var from = 0; from < count; from++)
-        {
-            var row = Enumerable.Repeat(int.MaxValue, count).ToArray();
-            row[from] = 0;
-            var queue = new Queue<int>();
-            queue.Enqueue(from);
-            while (queue.TryDequeue(out var state))
-            {
-                foreach (var to in _moves[state].Select(move => move.To).Where(to => row[to] == int.MaxValue))
-                {
-                    row[to] = row[state] + 1;
-                    queue.Enqueue(to);
-                }
-            }
-
-            distance[from] = row;
-        }
-
-        return distance;
     }
 }
 
@@ -377,24 +303,19 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
         };
 
         var startText = Text(states[start]);
-        for (var s = 0; s < states.Length; s++)
+        var graph = definition.Graph;
+        if (graph.FirstUnreachable() is var unreachable and >= 0)
         {
-            if (definition.Distance(start, s) == int.MaxValue)
-            {
-                throw new ArgumentException(
-                    $"The lifecycle of {member} can't reach {Text(states[s])} from its start state {startText}. Add a transition into it, or remove it.", nameof(lifecycle));
-            }
+            throw new ArgumentException(
+                $"The lifecycle of {member} can't reach {Text(states[unreachable])} from its start state {startText}. Add a transition into it, or remove it.", nameof(lifecycle));
         }
 
-        foreach (var (end, _) in ends)
+        if (graph.FirstEndTooFar() is var far and >= 0)
         {
-            if (definition.Distance(start, end) > spec.Max)
-            {
-                throw new ArgumentException(
-                    string.Create(CultureInfo.InvariantCulture, $"The lifecycle of {member} can't end in {Text(states[end])}: it takes {definition.Distance(start, end)} transitions from {startText}, ")
-                    + string.Create(CultureInfo.InvariantCulture, $"and MaxTransitions is {spec.Max}. Raise MaxTransitions, or remove the EndsIn."),
-                    nameof(lifecycle));
-            }
+            throw new ArgumentException(
+                string.Create(CultureInfo.InvariantCulture, $"The lifecycle of {member} can't end in {Text(states[far])}: it takes {graph.Distance(start, far)} transitions from {startText}, ")
+                + string.Create(CultureInfo.InvariantCulture, $"and MaxTransitions is {spec.Max}. Raise MaxTransitions, or remove the EndsIn."),
+                nameof(lifecycle));
         }
 
         return definition;
