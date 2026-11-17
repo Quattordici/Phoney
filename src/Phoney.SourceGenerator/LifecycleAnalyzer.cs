@@ -158,34 +158,47 @@ public sealed class LifecycleAnalyzer : DiagnosticAnalyzer
             var later = FluentChain.Later(holder, chain.Generator).ToList();
             foreach (var call in FluentChain.Earlier(holder, chain.Generator).Concat(later))
             {
-                if (RuleGroup.Of(call) is { } group)
-                {
-                    if (group.Selector.Kind == SelectorKind.Combination)
-                        continue;
-                    if (group.Selector is not { Kind: SelectorKind.Member, Name: { } name })
-                        return null;
-                    if (name == status && later.Contains(call) && !group.Selector.IsNested && (group.Rules is null || group.Rules.Any(r => r.Name is not ("Invalid" or "Where" or RuleCatalog.Unique))))
-                        return null; // the lifecycle is replaced, so its stamps don't apply
-                    if (!group.Selector.IsNested)
-                        rules.Ruled.Add(name);
-                }
-                else if (call.TargetMethod.Name == "WithFeed")
-                {
-                    rules.HasFeed = true;
-                }
-                else if (call.TargetMethod.Name == "WithNameConventions")
-                {
-                    var argument = call.Arguments.FirstOrDefault();
-                    if (argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue)
-                        rules.NameConventions = true;
-                    else if (argument.Value.ConstantValue is { HasValue: true, Value: bool on })
-                        rules.NameConventions = on;
-                    else
-                        return null;
-                }
+                if (!rules.Read(call, status, replacesLifecycle: later.Contains(call)))
+                    return null;
             }
 
             return rules;
+        }
+
+        /// <summary>Records what <paramref name="call"/> does to the members; <see langword="false"/> when that can't be known, or when it replaces the lifecycle of <paramref name="status"/>.</summary>
+        private bool Read(IInvocationOperation call, string status, bool replacesLifecycle)
+        {
+            if (RuleGroup.Of(call) is { } group)
+            {
+                if (group.Selector.Kind == SelectorKind.Combination)
+                    return true;
+                if (group.Selector is not { Kind: SelectorKind.Member, Name: { } name })
+                    return false;
+                if (group.Selector.IsNested)
+                    return true;
+                if (replacesLifecycle && name == status && (group.Rules is null || group.Rules.Any(r => r.Name is not ("Invalid" or "Where" or RuleCatalog.Unique))))
+                    return false; // the lifecycle is replaced, so its stamps don't apply
+                Ruled.Add(name);
+                return true;
+            }
+
+            switch (call.TargetMethod.Name)
+            {
+                case "WithFeed":
+                    HasFeed = true;
+                    return true;
+                case "WithNameConventions":
+                    var argument = call.Arguments.FirstOrDefault();
+                    if (argument is null || argument.ArgumentKind == ArgumentKind.DefaultValue)
+                        NameConventions = true;
+                    else if (argument.Value.ConstantValue is { HasValue: true, Value: bool on })
+                        NameConventions = on;
+                    else
+                        return false;
+                    return true;
+                default:
+                    return true;
+            }
         }
     }
 }

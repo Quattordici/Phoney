@@ -28,6 +28,9 @@ internal sealed record SketchStamp(int State, bool StateKnown, RuleSelector Sele
 /// </summary>
 internal sealed class LifecycleSketch
 {
+    /// <summary>The name of the state parameter of the builder's methods.</summary>
+    private const string StateParameter = "state";
+
     private readonly List<object?> _states = [];
     private readonly List<(int From, int To)> _moves = [];
     private readonly List<(int State, double Weight)> _stays = [];
@@ -156,7 +159,7 @@ internal sealed class LifecycleSketch
         switch (step.TargetMethod.Name)
         {
             case "From":
-                _from = State(Argument(step, "state"));
+                _from = State(Argument(step, StateParameter));
                 _hasFrom = true;
                 break;
             case "To":
@@ -166,7 +169,7 @@ internal sealed class LifecycleSketch
                 ReplayStays(step, at);
                 break;
             case "Start":
-                _start = State(Argument(step, "state"));
+                _start = State(Argument(step, StateParameter));
                 _hasStart = true;
                 break;
             case "EndsIn":
@@ -189,7 +192,7 @@ internal sealed class LifecycleSketch
     private void ReplayTo(IInvocationOperation step, Location at)
     {
         _transitions++;
-        var to = State(Argument(step, "state"));
+        var to = State(Argument(step, StateParameter));
         if (!RequireFrom(at, "To"))
             return;
         if (Number(Argument(step, "weight")) is { } weight && !(weight > 0 && !double.IsInfinity(weight)))
@@ -230,7 +233,7 @@ internal sealed class LifecycleSketch
 
     private void ReplayEndsIn(IInvocationOperation step, Location at)
     {
-        var state = State(Argument(step, "state"));
+        var state = State(Argument(step, StateParameter));
         if (Number(Argument(step, "weight")) is { } weight && !(weight > 0 && !double.IsInfinity(weight)))
             Refuse(at, $"The weight {Show(weight)} of EndsIn({Text(state)}) is refused: a weight is greater than zero and finite.");
         if (state < 0)
@@ -243,7 +246,7 @@ internal sealed class LifecycleSketch
 
     private void ReplayStamp(IInvocationOperation step)
     {
-        var constant = Argument(step, "state")?.Value.ConstantValue;
+        var constant = Argument(step, StateParameter)?.Value.ConstantValue;
         var member = Argument(step, "member");
         var selector = RuleSelector.Read(member, step.Syntax.GetLocation());
         ITypeSymbol? type = null;
@@ -310,27 +313,26 @@ internal sealed class LifecycleSketch
         var statusPath = Status is { Kind: SelectorKind.Member, Path: { } p } ? p.Split('.') : null;
         foreach (var stamp in _stamps)
         {
-            if (stamp.MemberName is not { } name)
-                continue;
-            var path = stamp.Selector.Path!.Split('.');
-            if (statusPath is not null && (path.Length != statusPath.Length || !path.Take(path.Length - 1).SequenceEqual(statusPath.Take(statusPath.Length - 1))))
-            {
-                var holder = statusPath.Length == 1 ? _member.Substring(0, _member.IndexOf('.')) : string.Join(".", statusPath.Take(statusPath.Length - 1));
-                Stamp(stamp, $"The lifecycle of {_member} stamps {stamp.Selector.Path}, which is not a member of the object that holds the status ({holder}). Select a member next to it.");
-            }
-            else if (stamp.Type is { } type && !CanHold(type))
-            {
-                Stamp(stamp, $"The lifecycle of {_member} stamps {name}, a {type.Name}: a stamp is a DateTimeOffset, DateTime or DateOnly (nullable unless every object reaches the state).");
-            }
-            else if (stamp.StateKnown && StatesKnown && stamp.State < 0)
-            {
-                Stamp(stamp, $"The lifecycle of {_member} stamps {name} with a state that is not one of its states. Stamp a state it has.");
-            }
-            else if (!seen.Add(name))
-            {
-                Stamp(stamp, $"The lifecycle of {_member} stamps {name} twice. Give each member one state.");
-            }
+            if (stamp.MemberName is { } name && Refusal(stamp, name, statusPath, seen) is { } message)
+                Stamp(stamp, message);
         }
+    }
+
+    /// <summary>Why the runtime refuses <paramref name="stamp"/>, or <see langword="null"/>; <paramref name="seen"/> collects the members stamped so far.</summary>
+    private string? Refusal(SketchStamp stamp, string name, string[]? statusPath, HashSet<string> seen)
+    {
+        var path = stamp.Selector.Path!.Split('.');
+        if (statusPath is not null && (path.Length != statusPath.Length || !path.Take(path.Length - 1).SequenceEqual(statusPath.Take(statusPath.Length - 1))))
+        {
+            var holder = statusPath.Length == 1 ? _member.Substring(0, _member.IndexOf('.')) : string.Join(".", statusPath.Take(statusPath.Length - 1));
+            return $"The lifecycle of {_member} stamps {stamp.Selector.Path}, which is not a member of the object that holds the status ({holder}). Select a member next to it.";
+        }
+
+        if (stamp.Type is { } type && !CanHold(type))
+            return $"The lifecycle of {_member} stamps {name}, a {type.Name}: a stamp is a DateTimeOffset, DateTime or DateOnly (nullable unless every object reaches the state).";
+        if (stamp.StateKnown && StatesKnown && stamp.State < 0)
+            return $"The lifecycle of {_member} stamps {name} with a state that is not one of its states. Stamp a state it has.";
+        return seen.Add(name) ? null : $"The lifecycle of {_member} stamps {name} twice. Give each member one state.";
     }
 
     private void Stamp(SketchStamp stamp, string message) => _problems.Add(new LifecycleProblem(stamp.Location, message, true));

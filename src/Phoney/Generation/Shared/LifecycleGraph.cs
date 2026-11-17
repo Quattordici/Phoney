@@ -1,5 +1,6 @@
 // Compiled into both the runtime and the netstandard2.0 generator (like ConventionRules.cs): keep it free of newer APIs.
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Phoney.Generation;
 
@@ -82,12 +83,8 @@ internal sealed class LifecycleGraph
     {
         if (_ends is null)
             return -1;
-        foreach (var end in _ends)
-        {
-            if (!Reaches(end))
-                return end;
-        }
-
+        foreach (var end in _ends.Where(end => !Reaches(end)))
+            return end;
         return -1;
     }
 
@@ -101,13 +98,7 @@ internal sealed class LifecycleGraph
             return false;
         if (_ends is null)
             return CanStopAvoiding(state);
-        foreach (var end in _ends)
-        {
-            if (end != state && CanArriveAvoiding(state, end))
-                return true;
-        }
-
-        return false;
+        return _ends.Any(end => end != state && CanArriveAvoiding(state, end));
     }
 
     /// <summary>Whether a walk without end states can stop (stay, reach a terminal state or use up its transitions) without entering <paramref name="avoided"/>.</summary>
@@ -121,11 +112,8 @@ internal sealed class LifecycleGraph
             var (state, taken) = queue.Dequeue();
             if (taken == Max || _canStop[state])
                 return true;
-            foreach (var to in _targets[state])
-            {
-                if (to != avoided && seen.Add((to, taken + 1)))
-                    queue.Enqueue((to, taken + 1));
-            }
+            foreach (var to in _targets[state].Where(to => to != avoided && seen.Add((to, taken + 1))))
+                queue.Enqueue((to, taken + 1));
         }
 
         return false;
@@ -142,11 +130,8 @@ internal sealed class LifecycleGraph
             var (state, left) = queue.Dequeue();
             if (state == end)
                 return true;
-            foreach (var to in _targets[state])
-            {
-                if (to != avoided && _distance[to][end] <= left - 1 && seen.Add((to, left - 1)))
-                    queue.Enqueue((to, left - 1));
-            }
+            foreach (var to in _targets[state].Where(to => to != avoided && _distance[to][end] <= left - 1 && seen.Add((to, left - 1))))
+                queue.Enqueue((to, left - 1));
         }
 
         return false;
@@ -163,13 +148,10 @@ internal sealed class LifecycleGraph
         while (queue.Count > 0)
         {
             var state = queue.Dequeue();
-            foreach (var to in _targets[state])
+            foreach (var to in _targets[state].Where(to => row[to] == int.MaxValue))
             {
-                if (row[to] == int.MaxValue)
-                {
-                    row[to] = row[state] + 1;
-                    queue.Enqueue(to);
-                }
+                row[to] = row[state] + 1;
+                queue.Enqueue(to);
             }
         }
 
