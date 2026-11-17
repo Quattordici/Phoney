@@ -14,6 +14,7 @@ namespace Phoney.Generation;
 public static class ScalarAdapters
 {
     private static readonly ConcurrentDictionary<Type, Func<FakeScope, ConventionKind, MemberConstraints?, object>> Adapters = new();
+    private static readonly ConcurrentDictionary<Type, Func<DateTimeOffset, object>> Moments = new();
     // Thread-safe: concurrent callers wait until the add-ons have registered, so no model caches a missing adapter.
     private static readonly Lazy<bool> AddOnsLoaded = new(LoadAddOns);
 
@@ -23,6 +24,28 @@ public static class ScalarAdapters
     {
         ArgumentNullException.ThrowIfNull(produce);
         Adapters[typeof(T)] = (s, k, c) => produce(s, k, c);
+    }
+
+    /// <summary>
+    /// Registers how a moment becomes a <typeparamref name="T"/>, for a lifecycle's stamps (<c>PaidAt</c> gets the time the object entered <c>Paid</c>). Time zones
+    /// and local times are UTC, like every date Phoney generates.
+    /// </summary>
+    public static void RegisterMoment<T>(Func<DateTimeOffset, T> convert)
+        where T : notnull
+    {
+        ArgumentNullException.ThrowIfNull(convert);
+        Moments[typeof(T)] = moment => convert(moment);
+    }
+
+    /// <summary>How a moment becomes a value of the adapted <paramref name="type"/>; loads a known add-on package the first time one of its types is seen.</summary>
+    internal static bool TryGetMoment(Type type, [NotNullWhen(true)] out Func<DateTimeOffset, object>? convert)
+    {
+        if (Moments.TryGetValue(type, out convert))
+            return true;
+        if (ConventionRules.AdaptedCategoryOf(type.FullName ?? "") == TypeCategory.Other)
+            return false;
+        _ = AddOnsLoaded.Value;
+        return Moments.TryGetValue(type, out convert);
     }
 
     /// <summary>Whether <paramref name="type"/> (or its nullable form) is produced by a registered adapter.</summary>

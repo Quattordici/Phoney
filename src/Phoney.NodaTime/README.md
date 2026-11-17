@@ -49,4 +49,4 @@ var subscriptions = Fake.Many<Subscription>(10);
 ```
 <!-- end snippet -->
 
-`Instant`, `OffsetDateTime` and `ZonedDateTime` (UTC) are generated like `DateTimeOffset`, `LocalDateTime` like `DateTime`, `LocalDate` like `DateOnly`, `LocalTime` like `TimeOnly` and `Duration` like `TimeSpan`. They count as values for `Strict()`.
+`Instant`, `OffsetDateTime` and `ZonedDateTime` (UTC) are generated like `DateTimeOffset`, `LocalDateTime` like `DateTime`, `LocalDate` like `DateOnly`, `LocalTime` like `TimeOnly` and `Duration` like `TimeSpan`. They count as values for `Strict()`, and they can be lifecycle stamps: with `Lifecycle(o => o.Status, …)`, an `Instant? PaidAt` gets the time the object was paid (see the Phoney README).

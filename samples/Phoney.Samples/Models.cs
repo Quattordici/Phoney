@@ -33,6 +33,15 @@ public sealed record Address(string Street, string City, string ZipCode);
 
 public sealed record Order(Guid Id, decimal Total, OrderStatus Status);
 
+public sealed class Purchase
+{
+    public OrderStatus Status { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? PaidAt { get; set; }     // when it was paid, by name
+    public DateTimeOffset? ShippedAt { get; set; }  // when it was shipped, by name
+    public DateTimeOffset UpdatedAt { get; set; }   // its last transition
+}
+
 [FakeFor<Customer>]
 internal static partial class SampleData;
 

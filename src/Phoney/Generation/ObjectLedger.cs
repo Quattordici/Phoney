@@ -11,7 +11,7 @@ internal sealed class ObjectLedger
     private List<int>? _brokenComparisons;
     private Dictionary<int, object?>? _keyParts;
     private List<(RuleSlot Slot, object? Value)>? _pendingClaims;
-    private List<(LifecycleDefinition Lifecycle, int[] Path)>? _paths;
+    private List<(LifecycleDefinition Lifecycle, LifecycleWalk Walk)>? _paths;
     private bool _rejected;
 
     /// <summary>Records that <c>Populate</c> keeps the value <paramref name="member"/> already has.</summary>
@@ -40,7 +40,7 @@ internal sealed class ObjectLedger
     public void Reject() => _rejected = true;
 
     /// <summary>The path the object walks through <paramref name="lifecycle"/>: drawn from <paramref name="random"/> the first time it is asked for, then the same.</summary>
-    public int[] Path(LifecycleDefinition lifecycle, SeededRandom random)
+    public LifecycleWalk Path(LifecycleDefinition lifecycle, SeededRandom random)
     {
         _paths ??= [];
         foreach (var (known, path) in _paths)

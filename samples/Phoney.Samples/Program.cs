@@ -114,6 +114,15 @@ var lived = Fake.For<Order>().Seed(4)
     .Generate(12);
 Console.WriteLine($"statuses: {string.Join(", ", lived.Select(o => o.Status))}");
 
+// Date members named after a state get the time the object entered it, and UpdatedAt its last move.
+var purchases = Fake.For<Purchase>().Seed(4)
+    .Lifecycle(p => p.Status, l => l
+        .From(OrderStatus.Pending).To(OrderStatus.Paid, 3, after: (TimeSpan.FromMinutes(5), TimeSpan.FromHours(2)))
+        .From(OrderStatus.Paid).To(OrderStatus.Shipped))
+    .Generate(3);
+foreach (var p in purchases)
+    Console.WriteLine($"{p.Status}: created {p.CreatedAt:u}, paid {p.PaidAt:u}, shipped {p.ShippedAt:u}, updated {p.UpdatedAt:u}");
+
 // 7c2. Conditions and checked rules -------------------------------------------------------------
 Console.WriteLine("\n== Conditions and checked rules");
 foreach (var order in Fake.For<Order>().Seed(3).Where(o => o.Total > 100).Where(o => o.Status != OrderStatus.Pending).Generate(3))

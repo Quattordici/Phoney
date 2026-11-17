@@ -658,6 +658,26 @@ var mix = Fake.For<Order>().Seed(1)
 - **Checked when added**: a state the start can't reach, a transition given twice, a weight that isn't positive, an enum value that isn't defined and an end state that can't be reached in time throw at once. States can be enums, strings or any type compared by value.
 - **One path per object**: `Where` and `Unique` on the status generate the whole object again, a later rule for the member replaces the lifecycle, and nested members take it too (`o => o.Lines.Each().Status`). Shrinking a failing `Check` heads for the start state.
 
+The dates agree with the status too. Each transition takes time, and a date member named after a state gets the time the object entered it:
+
+<!-- snippet: readme-lifecycle-stamps -->
+```csharp
+var purchases = Fake.For<Purchase>().Seed(1)
+    .Lifecycle(p => p.Status, l => l
+        .From(OrderStatus.Pending).To(OrderStatus.Paid, after: (TimeSpan.FromMinutes(5), TimeSpan.FromDays(2))).To(OrderStatus.Cancelled)
+        .From(OrderStatus.Paid).To(OrderStatus.Shipped)
+        .Stamp(OrderStatus.Shipped, p => p.Dispatched))  // a member with another name
+    .Generate(100);
+
+// PaidAt and ShippedAt are found by name: set when the purchase got there, null when it didn't.
+// CreatedAt <= PaidAt <= ShippedAt <= reference date, and UpdatedAt is the last of them.
+```
+<!-- end snippet -->
+
+- **Stamps**: a `DateTimeOffset`, `DateTime` (UTC) or `DateOnly` member named `{State}At`, `{State}On` or `{State}Date` (any case), or one tied to a state with `.Stamp(state, o => o.Member)`, gets the time the object last entered that state, and `null` when it never did. The start state's stamp is the creation time. A member that can't be `null` must be stamped by a state every object reaches; otherwise make it nullable or `Ignore` it. A member with its own rule keeps it. NodaTime members work with `Phoney.NodaTime`.
+- **Gaps**: each transition happens a gap after the state before it, drawn from `after: (min, max)` (an hour to a week by default) from the object's creation time on. When the gaps would pass the reference date they are all scaled down by one factor, so the last transition lands on it at the latest.
+- **Updated**: on an object with a lifecycle, the "updated" member (`UpdatedAt`, `ModifiedOn`…) is the time of the last transition, or the creation time when there was none.
+
 ### Filling in existing objects
 
 `Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:

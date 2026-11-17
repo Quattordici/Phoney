@@ -45,6 +45,18 @@ public sealed class Contact
     public string Email { get; set; } = "";
 }
 
+/// <summary>An order with the dates of its lifecycle, for the README's stamps example.</summary>
+public sealed class Purchase
+{
+    public int Id { get; set; }
+    public OrderStatus Status { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? PaidAt { get; set; }
+    public DateTimeOffset? ShippedAt { get; set; }
+    public DateTimeOffset? Dispatched { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class Order
 {
     public int Id { get; set; }

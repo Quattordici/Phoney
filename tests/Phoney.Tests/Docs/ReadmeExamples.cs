@@ -259,6 +259,26 @@ public sealed class ReadmeExamples
     }
 
     [Test]
+    public void Lifecycle_stamps()
+    {
+        // snippet: readme-lifecycle-stamps
+        var purchases = Fake.For<Purchase>().Seed(1)
+            .Lifecycle(p => p.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid, after: (TimeSpan.FromMinutes(5), TimeSpan.FromDays(2))).To(OrderStatus.Cancelled)
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped)
+                .Stamp(OrderStatus.Shipped, p => p.Dispatched))  // a member with another name
+            .Generate(100);
+
+        // PaidAt and ShippedAt are found by name: set when the purchase got there, null when it didn't.
+        // CreatedAt <= PaidAt <= ShippedAt <= reference date, and UpdatedAt is the last of them.
+        // end snippet
+
+        purchases.ShouldAllBe(p => (p.PaidAt != null) == (p.Status == OrderStatus.Paid || p.Status == OrderStatus.Shipped));
+        purchases.ShouldAllBe(p => p.Dispatched == p.ShippedAt && (p.ShippedAt == null || p.ShippedAt >= p.PaidAt));
+        purchases.ShouldAllBe(p => p.UpdatedAt == (p.ShippedAt ?? p.PaidAt ?? p.CreatedAt) || p.Status == OrderStatus.Cancelled);
+    }
+
+    [Test]
     public void Populating_existing_objects()
     {
         var generator = Fake.For<Customer>().Seed(1);
