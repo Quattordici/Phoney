@@ -678,6 +678,28 @@ var purchases = Fake.For<Purchase>().Seed(1)
 - **Gaps**: each transition happens a gap after the state before it, drawn from `after: (min, max)` (an hour to a week by default) from the object's creation time on. When the gaps would pass the reference date they are all scaled down by one factor, so the last transition lands on it at the latest.
 - **Updated**: on an object with a lifecycle, the "updated" member (`UpdatedAt`, `ModifiedOn`…) is the time of the last transition, or the creation time when there was none.
 
+`GenerateHistory` gives the same objects with the story behind each one, for an audit log, an event table or a test of code that replays events:
+
+<!-- snippet: readme-lifecycle-history -->
+```csharp
+var histories = Fake.For<Purchase>().Seed(1)
+    .Lifecycle(p => p.Status, l => l
+        .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+        .From(OrderStatus.Paid).To(OrderStatus.Shipped))
+    .GenerateHistory(100);
+
+foreach (var history in histories)
+{
+    Purchase purchase = history.Object;                     // exactly what Generate(100) gives
+    foreach (var t in history.Of(p => p.Status))            // Pending → Paid at …, Paid → Shipped at …
+        auditLog.Add($"{purchase.Id} {t.Path}: {t.From} → {t.To} at {t.At:u}");
+}
+```
+<!-- end snippet -->
+
+- **History**: `History<T>` has the `Object` (the one `Generate` makes at the same position, with no extra draws), its `Created` time and the `Transitions` of every lifecycle in its graph, nested objects, collection elements and objects from `WithGeneratorFor` included, earliest first. Each transition has the `Member`, its `Path` from the root (`Lines[2].Status`), the `Owner` object, `From`, `To` and `At`.
+- **`Of(o => o.Status)`** picks one lifecycle's transitions, typed (`o => o.Lines.Each().Status` for those of every line). The start state isn't a transition: the object is in it from `Created`.
+
 ### Filling in existing objects
 
 `Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:

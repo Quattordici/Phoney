@@ -279,6 +279,32 @@ public sealed class ReadmeExamples
     }
 
     [Test]
+    public void Lifecycle_history()
+    {
+        var auditLog = new List<string>();
+
+        // snippet: readme-lifecycle-history
+        var histories = Fake.For<Purchase>().Seed(1)
+            .Lifecycle(p => p.Status, l => l
+                .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+                .From(OrderStatus.Paid).To(OrderStatus.Shipped))
+            .GenerateHistory(100);
+
+        foreach (var history in histories)
+        {
+            Purchase purchase = history.Object;                     // exactly what Generate(100) gives
+            foreach (var t in history.Of(p => p.Status))            // Pending → Paid at …, Paid → Shipped at …
+                auditLog.Add($"{purchase.Id} {t.Path}: {t.From} → {t.To} at {t.At:u}");
+        }
+        // end snippet
+
+        foreach (var history in histories)
+            (history.Of(p => p.Status).LastOrDefault()?.To ?? OrderStatus.Pending).ShouldBe(history.Object.Status);
+        histories.ShouldAllBe(h => h.Created == h.Object.CreatedAt);
+        auditLog.Count.ShouldBe(histories.Sum(h => h.Transitions.Count));
+    }
+
+    [Test]
     public void Populating_existing_objects()
     {
         var generator = Fake.For<Customer>().Seed(1);

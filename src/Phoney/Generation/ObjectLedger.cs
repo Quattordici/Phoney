@@ -40,9 +40,10 @@ internal sealed class ObjectLedger
     public void Reject() => _rejected = true;
 
     /// <summary>The path the object walks through <paramref name="lifecycle"/>: drawn from <paramref name="random"/> the first time it is asked for, then the same.</summary>
-    public LifecycleWalk Path(LifecycleDefinition lifecycle, SeededRandom random)
+    public LifecycleWalk Path(LifecycleDefinition lifecycle, SeededRandom random, out bool drawn)
     {
         _paths ??= [];
+        drawn = false;
         foreach (var (known, path) in _paths)
         {
             if (ReferenceEquals(known, lifecycle))
@@ -51,6 +52,7 @@ internal sealed class ObjectLedger
 
         var walked = lifecycle.Walk(random);
         _paths.Add((lifecycle, walked));
+        drawn = true;
         return walked;
     }
 

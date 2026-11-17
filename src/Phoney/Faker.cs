@@ -65,6 +65,9 @@ public sealed partial class Faker : IFaker
     /// <summary>The source of randomness. Use it for custom values so seeding stays reproducible.</summary>
     public SeededRandom Random { get; }
 
+    /// <summary>Records the lifecycle walks of the objects this faker makes, for <c>GenerateHistory</c>; <see langword="null"/> otherwise, so nothing is paid.</summary>
+    internal Generation.LifecycleRecorder? Recorder { get; set; }
+
     /// <summary>
     /// The point in time that relative dates (past, future, recent, birthdates…) are computed from: the value you set,
     /// else the current time of <see cref="TimeProvider"/>, else <see cref="DefaultSeededReferenceDate"/> once the faker

@@ -13,6 +13,9 @@ internal abstract class ObjectGraph
     // The objects above the one being visited, nearest last; the visited object is not among them, so it is never its own parent.
     private readonly List<object> _above = [];
 
+    // How the walk got to the object being visited: the member of each object above it, and the element's position when the member is a collection (else -1).
+    private readonly List<(string Member, int Element)> _steps = [];
+
     /// <summary>How many objects are above the one being visited: 0 for the root.</summary>
     protected int Depth => _above.Count;
 
@@ -38,18 +41,47 @@ internal abstract class ObjectGraph
         _above.Add(owner);
         if (CollectionTypes.IsGeneratedCollection(member.Type))
         {
+            var position = 0;
             foreach (var element in value is IDictionary dictionary ? dictionary.Values : (IEnumerable)value)
             {
                 if (element is not null)
+                {
+                    _steps.Add((member.Name, position));
                     Visit(element);
+                    _steps.RemoveAt(_steps.Count - 1);
+                }
+
+                position++;
             }
         }
         else
         {
+            _steps.Add((member.Name, -1));
             Visit(value);
+            _steps.RemoveAt(_steps.Count - 1);
         }
 
         _above.RemoveAt(_above.Count - 1);
+    }
+
+    /// <summary>
+    /// The path from the root to <paramref name="member"/> of the object being visited: <c>Lines[2].Status</c>, with element positions, or without them
+    /// (<c>Lines.Status</c>) when <paramref name="positions"/> is false.
+    /// </summary>
+    protected string PathTo(string member, bool positions)
+    {
+        if (_steps.Count == 0)
+            return member;
+        var path = new System.Text.StringBuilder();
+        foreach (var (step, element) in _steps)
+        {
+            path.Append(step);
+            if (positions && element >= 0)
+                path.Append('[').Append(element.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(']');
+            path.Append('.');
+        }
+
+        return path.Append(member).ToString();
     }
 
     /// <summary>The nearest object above the one being visited that is a <paramref name="type"/>, or <see langword="null"/>.</summary>

@@ -123,6 +123,13 @@ var purchases = Fake.For<Purchase>().Seed(4)
 foreach (var p in purchases)
     Console.WriteLine($"{p.Status}: created {p.CreatedAt:u}, paid {p.PaidAt:u}, shipped {p.ShippedAt:u}, updated {p.UpdatedAt:u}");
 
+// The same objects with the transitions behind them, for an audit log or an event table.
+var history = Fake.For<Purchase>().Seed(4)
+    .Lifecycle(p => p.Status, l => l.From(OrderStatus.Pending).To(OrderStatus.Paid).From(OrderStatus.Paid).To(OrderStatus.Shipped))
+    .GenerateHistory(1)[0];
+foreach (var t in history.Transitions)
+    Console.WriteLine($"  {t.Path}: {t.From} -> {t.To} at {t.At:u}");
+
 // 7c2. Conditions and checked rules -------------------------------------------------------------
 Console.WriteLine("\n== Conditions and checked rules");
 foreach (var order in Fake.For<Order>().Seed(3).Where(o => o.Total > 100).Where(o => o.Status != OrderStatus.Pending).Generate(3))

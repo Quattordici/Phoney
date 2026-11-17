@@ -263,7 +263,13 @@ public sealed class FakeScope
     }
 
     /// <summary>The path this object walks through <paramref name="lifecycle"/>, drawn on first use and the same for every member that reads it.</summary>
-    internal LifecycleWalk LifecyclePath(LifecycleDefinition lifecycle) => (_ledger ??= new()).Path(lifecycle, Faker.Random);
+    internal LifecycleWalk LifecyclePath(LifecycleDefinition lifecycle)
+    {
+        var walk = (_ledger ??= new()).Path(lifecycle, Faker.Random, out var drawn);
+        if (drawn)
+            Faker.Recorder?.Walked(this, lifecycle, walk);
+        return walk;
+    }
 
     /// <summary>When this object last entered <paramref name="state"/> of <paramref name="lifecycle"/>, or <see langword="null"/> when it never did.</summary>
     internal DateTimeOffset? Entered(LifecycleDefinition lifecycle, int state) => LifecyclePath(lifecycle).Entered(state, Created, Faker.ReferenceDate);
@@ -476,7 +482,9 @@ public sealed class FakeScope
             return CutOff();
         var (slots, children) = RulesFor(type, model);
         var nested = new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children);
-        return Comparisons.Apply(model, model.CreateObject(nested), nested);
+        var created = Comparisons.Apply(model, model.CreateObject(nested), nested);
+        Faker.Recorder?.Made(created, nested, root: false);
+        return created;
     }
 
     /// <summary>

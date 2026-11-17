@@ -108,7 +108,7 @@ A date member that holds the time an object entered a state of its Lifecycle (`P
 _Avoid_: timestamp, audit field
 
 **History**:
-The transitions one object (and the objects inside it) went through, with their times.
+The transitions one object (and the objects inside it) went through, with their times, next to the object itself (`GenerateHistory`).
 
 **National id**:
 A personal, company or VAT number with valid check digits for a country. Structurally valid, not issued.

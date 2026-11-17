@@ -25,6 +25,9 @@ internal abstract class LifecycleDefinition
     /// <summary>The longest time a transition takes when <c>after:</c> isn't given.</summary>
     internal static readonly TimeSpan DefaultMaxGap = TimeSpan.FromDays(7);
 
+    /// <summary>The name of the status member, for histories: <c>Status</c>.</summary>
+    public string Member { get; init; } = "";
+
     private const int Stay = -1;
 
     private readonly int _start;
@@ -304,6 +307,7 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
         var definition = new LifecycleDefinition<TState>(states, start, transitions, stays, ends, spec.Max)
         {
             Stamps = CheckStamps(spec, Index, member, stampMember, nameof(lifecycle)),
+            Member = member[(member.LastIndexOf('.') + 1)..],
         };
 
         var startText = Text(states[start]);
