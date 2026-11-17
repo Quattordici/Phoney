@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>$(PhoneyAppTargetFramework)</TargetFramework>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <!-- The competitors target .NET Framework / .NET Standard 1.x; they run fine on .NET 10. -->
+    <!-- The competitors target .NET Framework / .NET Standard 1.x; they run fine on current .NET. -->
     <NoWarn>$(NoWarn);NU1701;NU1903;NU1904</NoWarn>
   </PropertyGroup>
 

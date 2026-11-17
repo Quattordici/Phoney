@@ -156,9 +156,7 @@ public static class DataExport
         {
             Indented = indented,
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // readable non-ASCII text; this is a data file, not HTML
-#if NET9_0_OR_GREATER
             NewLine = "\n",
-#endif
         };
         using var json = new Utf8JsonWriter(utf8Stream, options);
         json.WriteStartArray();
