@@ -299,7 +299,7 @@ public sealed class ReadmeExamples
         // end snippet
 
         foreach (var history in histories)
-            (history.Of(p => p.Status).LastOrDefault()?.To ?? OrderStatus.Pending).ShouldBe(history.Object.Status);
+            (history.Of(p => p.Status) is [.., var last] ? last.To : OrderStatus.Pending).ShouldBe(history.Object.Status);
         histories.ShouldAllBe(h => h.Created == h.Object.CreatedAt);
         auditLog.Count.ShouldBe(histories.Sum(h => h.Transitions.Count));
     }

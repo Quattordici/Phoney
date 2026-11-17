@@ -38,7 +38,7 @@ internal sealed class LifecycleRecorder
         if (made is not null)
             graph.Walk(made);
         var transitions = graph.Transitions;
-        transitions.Sort(static (a, b) => a.Transition.At != b.Transition.At ? a.Transition.At.CompareTo(b.Transition.At) : a.Order != b.Order ? a.Order.CompareTo(b.Order) : a.Step.CompareTo(b.Step));
+        transitions.Sort(static (a, b) => (a.Transition.At, a.Order, a.Step).CompareTo((b.Transition.At, b.Order, b.Step)));
         var result = (root.Created, transitions.Select(t => t.Transition).ToArray());
 
         _walks.Clear();
