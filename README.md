@@ -700,6 +700,25 @@ foreach (var history in histories)
 - **History**: `History<T>` has the `Object` (the one `Generate` makes at the same position, with no extra draws), its `Created` time and the `Transitions` of every lifecycle in its graph, nested objects, collection elements and objects from `WithGeneratorFor` included, earliest first. Each transition has the `Member`, its `Path` from the root (`Lines[2].Status`), the `Owner` object, `From`, `To` and `At`.
 - **`Of(o => o.Status)`** picks one lifecycle's transitions, typed (`o => o.Lines.Each().Status` for those of every line). The start state isn't a transition: the object is in it from `Created`.
 
+Objects you already have and objects that break the rules work with lifecycles too:
+
+<!-- snippet: readme-lifecycle-populate -->
+```csharp
+var shop = Fake.For<Purchase>().Seed(1)
+    .Lifecycle(p => p.Status, l => l
+        .From(OrderStatus.Pending).To(OrderStatus.Paid).To(OrderStatus.Cancelled)
+        .From(OrderStatus.Paid).To(OrderStatus.Shipped));
+
+var shipped = shop.Populate(new Purchase { Status = OrderStatus.Shipped });  // walked into Shipped: PaidAt and ShippedAt are set
+
+foreach (var invalid in shop.InvalidCases().Where(c => c.Member == "Status"))
+    IsValid(invalid.Value).ShouldBeFalse(invalid.ToString());               // "Status: PaidAt is earlier than the object's creation", …
+```
+<!-- end snippet -->
+
+- **Populate**: a status that is set is kept, and the object walks into it (as with `EndsIn`, without drawing an end), so the stamps on the way agree with it. A status the lifecycle doesn't have, or can't reach within `MaxTransitions`, throws; `PopulateMode.All` draws a new one. A stamp that is set stays as it is.
+- **Invalid**: `Invalid(o => o.Status)` and `InvalidCases()` keep the lifecycle and break one stamp: a stamp earlier than the object's creation, a state the object entered without its stamp (nullable stamps only) or a stamp of a state it never entered. Each object walks into the state its case needs. A stamp with a rule of its own is left alone, and there are no boundary cases.
+
 ### Filling in existing objects
 
 `Populate` fills in an object you already have, with the same conventions, rules and annotations as `Generate`:

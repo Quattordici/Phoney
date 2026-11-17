@@ -386,8 +386,8 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
             .Concat(FluentChain.Earlier(call, symbols.Generator).SelectMany(earlier =>
                 RuleGroup.Of(earlier) is { Selector: { Kind: SelectorKind.Member } previous, Rules: { } before } && previous.Path == selector.Path ? before.Reverse() : []))
             .FirstOrDefault(r => RuleCatalog.OccupiesSlot(r.Name));
-        if (replaced.Call is null)
-            return;
+        if (replaced.Call is null || (rules[index].Name == "Invalid" && replaced.Name == "Lifecycle"))
+            return; // Invalid on a lifecycle's status breaks its stamps and keeps the lifecycle
         // The replaced call goes along so the code fix can remove it.
         context.ReportDiagnostic(Diagnostic.Create(Diagnostics.RuleReplaced, Where(selector, rules[index]), additionalLocations: new[] { replaced.Call.Syntax.GetLocation() }, selector.Path));
     }
