@@ -212,7 +212,7 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
     }
 
     /// <summary>The enum type of the states (their underlying type when nullable), or <see langword="null"/> when they aren't enum values.</summary>
-    private static Type? EnumType { get; } = Nullable.GetUnderlyingType(typeof(TState)) is { IsEnum: true } underlying ? underlying : typeof(TState).IsEnum ? typeof(TState) : null;
+    private static Type? EnumType { get; } = (Nullable.GetUnderlyingType(typeof(TState)) ?? typeof(TState)) is { IsEnum: true } type ? type : null;
 
     /// <summary>The first state that is not a defined value of its enum, or <see langword="null"/> when there is none (or the states aren't enum values).</summary>
     private static object? Undefined(TState[] states)
