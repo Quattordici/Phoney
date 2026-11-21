@@ -13,22 +13,27 @@ internal sealed record GenerationDefaults(
     bool BackReferences,
     bool CausalTimelines,
     bool ParameterDefaults,
-    bool NameConventions)
+    bool NameConventions,
+    bool ValidateObjects)
 {
     /// <summary>What a generator does when neither it nor the app says otherwise.</summary>
-    public static readonly GenerationDefaults BuiltIn = new(0, 1, 3, 4, Strict: false, BackReferences: false, CausalTimelines: false, ParameterDefaults: false, NameConventions: true);
+    public static readonly GenerationDefaults BuiltIn = new(0, 1, 3, 4, Strict: false, BackReferences: false, CausalTimelines: false, ParameterDefaults: false, NameConventions: true, ValidateObjects: true);
 
-    /// <summary>These defaults with what <paramref name="overrides"/> set on top.</summary>
+    /// <summary>
+    /// These defaults with what <paramref name="overrides"/> set on top. A collection-size bound that was set wins over the default of the other one, which
+    /// moves to meet it when the two would cross (a minimum of 6 over the default 1–3 gives 6–6).
+    /// </summary>
     public GenerationDefaults With(SettingOverrides overrides) => new(
         overrides.NullProbability ?? NullProbability,
-        overrides.MinCollectionSize ?? MinCollectionSize,
-        overrides.MaxCollectionSize ?? MaxCollectionSize,
+        overrides.MinCollectionSize ?? Math.Min(MinCollectionSize, overrides.MaxCollectionSize ?? int.MaxValue),
+        overrides.MaxCollectionSize ?? Math.Max(MaxCollectionSize, overrides.MinCollectionSize ?? 0),
         overrides.MaxDepth ?? MaxDepth,
         overrides.Strict ?? Strict,
         overrides.BackReferences ?? BackReferences,
         overrides.CausalTimelines ?? CausalTimelines,
         overrides.ParameterDefaults ?? ParameterDefaults,
-        overrides.NameConventions ?? NameConventions);
+        overrides.NameConventions ?? NameConventions,
+        overrides.ValidateObjects ?? ValidateObjects);
 
     /// <summary>The run settings with these values (Strict and back-references are the generator's own steps, not run settings).</summary>
     public GenerationSettings ApplyTo(GenerationSettings settings) => settings with
@@ -40,6 +45,7 @@ internal sealed record GenerationDefaults(
         MaxDepth = MaxDepth,
         CausalTimelines = CausalTimelines,
         ParameterDefaults = ParameterDefaults,
+        ValidateObjects = ValidateObjects,
     };
 
     /// <summary>Validates a null probability like <c>NullProbability(p)</c> does.</summary>
@@ -69,4 +75,5 @@ internal readonly record struct SettingOverrides(
     bool? BackReferences = null,
     bool? CausalTimelines = null,
     bool? ParameterDefaults = null,
-    bool? NameConventions = null);
+    bool? NameConventions = null,
+    bool? ValidateObjects = null);

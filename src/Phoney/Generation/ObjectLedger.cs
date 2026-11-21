@@ -14,6 +14,7 @@ internal sealed class ObjectLedger
     private List<(LifecycleDefinition Lifecycle, LifecycleWalk Walk)>? _paths;
     private List<(LifecycleDefinition Lifecycle, int State)>? _keptStates;
     private bool _rejected;
+    private string? _invalidNested;
     private LifecycleDefinition? _firstLifecycle;
     private LifecycleWalk? _firstPath;
 
@@ -41,6 +42,12 @@ internal sealed class ObjectLedger
         value = null;
         return _keyParts is not null && _keyParts.TryGetValue(member, out value);
     }
+
+    /// <summary>Why the first nested object that failed its own <c>Validate</c> did, or <see langword="null"/> when none did.</summary>
+    public string? InvalidNested => _invalidNested;
+
+    /// <summary>Records that a nested object failed its own <c>Validate</c> (the first reason is kept), so the object is generated again.</summary>
+    public void Invalid(string problem) => _invalidNested ??= problem;
 
     /// <summary>Records that a value drawn once per object was rejected by its member's condition, so the object is generated again.</summary>
     public void Reject() => _rejected = true;

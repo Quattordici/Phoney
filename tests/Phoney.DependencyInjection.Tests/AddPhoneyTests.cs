@@ -171,6 +171,38 @@ public sealed class AddPhoneyTests
     }
 
     [Test]
+    [NotInParallel] // Fake.Defaults is process-wide
+    [Arguments(null, 10, 5, 10)]
+    [Arguments(6, null, 6, 8)]
+    public void A_single_collection_size_bound_keeps_the_other_from_Fake_Defaults(int? min, int? max, int low, int high)
+    {
+        try
+        {
+            Fake.Defaults.CollectionSize = (5, 8);
+            using var provider = Provider(o => { o.Seed = 1; o.MinCollectionSize = min; o.MaxCollectionSize = max; });
+            var counts = provider.GetRequiredService<ObjectGenerator<Basket>>().Generate(300).Select(b => b.Tags.Count).ToList();
+
+            counts.Min().ShouldBe(low);
+            counts.Max().ShouldBe(high);
+        }
+        finally
+        {
+            Fake.Defaults.Reset();
+        }
+    }
+
+    [Test]
+    public void A_single_collection_size_bound_keeps_the_other_from_the_generator()
+    {
+        using var provider = new ServiceCollection().AddPhoney(o => { o.Seed = 1; o.MaxCollectionSize = 10; })
+            .AddGenerator(new ObjectGenerator<Basket>(ModelRegistry.For<Basket>()).CollectionSize(5, 8)).Services.BuildServiceProvider();
+        var counts = provider.GetRequiredService<ObjectGenerator<Basket>>().Generate(300).Select(b => b.Tags.Count).ToList();
+
+        counts.Min().ShouldBe(5);
+        counts.Max().ShouldBe(10);
+    }
+
+    [Test]
     public void A_single_collection_size_bound_keeps_the_other_default_workable()
     {
         using var minOnly = Provider(o => o.MinCollectionSize = 6);

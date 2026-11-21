@@ -220,25 +220,30 @@ internal sealed class Identity(Faker faker)
     public AddressProfile Address => _address ??= faker.Location.Address();
 
     /// <summary>
-    /// The address's country, or in a locale without a country of its own (<c>en</c>, <c>de</c>…) a drawn one that names the same country as a
-    /// <see cref="CountryCode"/> the object already has. It is drawn either way, so every member after it draws what it drew before.
+    /// The country an object's country member gets: the one a <see cref="CountryCode"/> the object was given names, else the address's country (in a
+    /// country locale such as <c>de_AT</c>), else a drawn one. A given code's country has its English name (also in <c>de</c> or <c>sv</c>, whose lists name
+    /// countries in their own language and can't be matched to codes), so the two members always agree. The address and the country are drawn either way, so every member after it draws what it
+    /// drew before.
     /// </summary>
     public string Country()
     {
         if (Address.Country is { } own)
-            return own;
+            return _countryCode is { } given && !string.Equals(given, Address.CountryCode, StringComparison.OrdinalIgnoreCase) && CountryNames.NameOf(given) is { } other ? other : own;
         var drawn = faker.Location.Country();
-        if (_countryCode is { } code && CountryNames.NameOf(code) is { } name && faker.Data.TryStrings(DataKeys.LocationCountry) is { } names && Array.IndexOf((string[])names.Values, name) >= 0)
+        if (_countryCode is { } code && CountryNames.NameOf(code) is { } name)
             return name;
         _country ??= drawn;
         return drawn;
     }
 
-    /// <summary>The address's country code, or a drawn one that matches a <see cref="Country"/> the object already has (see there).</summary>
+    /// <summary>
+    /// The code an object's country-code member gets: the code of a <see cref="Country"/> the object was given (by its English name; the locale's own country
+    /// also by its name there), else the address's code, else a drawn one that matches a country the object already has (see there).
+    /// </summary>
     public string CountryCode()
     {
         if (Address.CountryCode is { } own)
-            return own;
+            return _country is { } given && CountryNames.CodeOf(given) is { } other && !string.Equals(other, own, StringComparison.OrdinalIgnoreCase) ? other : own;
         var drawn = faker.Location.CountryCode();
         if (_country is { } country && CountryNames.CodeOf(country) is { } code)
             return code;

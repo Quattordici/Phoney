@@ -265,3 +265,23 @@ internal readonly record struct CheckSeed(long Value, CheckSeed.Origin From, str
         _ => $"Replay: {FakeSeed.EnvironmentVariable}={Value} dotnet test, or {Pin}.",
     };
 }
+
+/// <summary>Argument checks shared by the synchronous checks.</summary>
+internal static class PropertyChecks
+{
+    /// <summary>
+    /// Throws for an <c>async</c> lambda bound to an <see cref="Action{T}"/> overload: it runs as <c>async void</c>, so the check would pass before the
+    /// property has run and a later failure would crash the process instead of failing the check.
+    /// </summary>
+    /// <param name="property">The property the caller gave.</param>
+    /// <param name="checkAsync">The method to use instead, named in the message.</param>
+    public static void RejectAsyncVoid(Delegate property, string checkAsync)
+    {
+        if (property.Method.ReturnType == typeof(void) && property.Method.IsDefined(typeof(System.Runtime.CompilerServices.AsyncStateMachineAttribute), inherit: false))
+        {
+            throw new ArgumentException(
+                $"The property is an async lambda, which Check runs as async void: the check would pass before the property finishes, and a failure after its first await would crash the process. Use {checkAsync} instead.",
+                nameof(property));
+        }
+    }
+}

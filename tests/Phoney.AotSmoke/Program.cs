@@ -286,6 +286,20 @@ if (lifecycle.Populate(new Person { Status = Status.Suspended }) is not { Suspen
 if (lifecycle.InvalidCases().Count(c => c.Member == "Status") != 3)
     throw new InvalidOperationException("the lifecycle does not have its three invalid cases");
 
+// The synchronous Check refuses an async lambda (it would run as async void), which needs the AsyncStateMachine attribute to survive trimming.
+try
+{
+    Fakes.Person.Seed(1).Check(async _ => await Task.Yield(), count: 1);
+    throw new InvalidOperationException("Check accepted an async lambda");
+}
+catch (ArgumentException refused) when (refused.Message.Contains("CheckAsync", StringComparison.Ordinal))
+{
+}
+
+// Objects that implement IValidatableObject pass their own Validate through the generated model.
+if (Fakes.Reservation.Seed(1).Generate(200).Any(r => r.End <= r.Start))
+    throw new InvalidOperationException("a reservation failed its own Validate");
+
 Console.WriteLine($"OK: {people[0].FirstName} {people[0].LastName} <{people[0].Email}>, {people[0].Home.City}");
 return 0;
 

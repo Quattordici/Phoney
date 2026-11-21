@@ -106,7 +106,7 @@ jobs:
         with:
           dotnet-version: 11.0.x
       - name: Publish with Native AOT (trim/AOT warnings fail the build)
-        run: dotnet publish tests/Phoney.AotSmoke -c Release -o artifacts/aot -p:TreatWarningsAsErrors=true
+        run: dotnet publish tests/Phoney.AotSmoke -c Release -p:TreatWarningsAsErrors=true
       - run: ./artifacts/aot/Phoney.AotSmoke
 
   data:

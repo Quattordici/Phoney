@@ -70,7 +70,7 @@ public sealed class StepCheck<TState>
     /// <param name="apply">What the step does to the state; an exception fails the run, so assertions in it are postconditions.</param>
     /// <param name="when">When the step may run (a precondition), or <see langword="null"/> for always.</param>
     /// <returns>A new check with the step.</returns>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or white space.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or white space, or another step already has it.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="apply"/> is <see langword="null"/>.</exception>
     public StepCheck<TState> Step(string name, Action<TState> apply, Func<TState, bool>? when = null) =>
         With(StepDefinition<TState>.Of(NameOf(name), apply, when));
@@ -87,7 +87,7 @@ public sealed class StepCheck<TState>
     /// <param name="apply">What the step does to the state with the argument; an exception fails the run, so assertions in it are postconditions.</param>
     /// <param name="when">When the step may run (a precondition), or <see langword="null"/> for always.</param>
     /// <returns>A new check with the step.</returns>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or white space.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or white space, or another step already has it.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="name"/>, <paramref name="argument"/> or <paramref name="apply"/> is <see langword="null"/>.</exception>
     public StepCheck<TState> Step<TArg>(string name, Func<Faker, TArg> argument, Action<TState, TArg> apply, Func<TState, bool>? when = null) =>
         With(StepDefinition<TState>.Of(NameOf(name), Ignoring(argument), apply, when));
@@ -114,7 +114,7 @@ public sealed class StepCheck<TState>
     /// Adds a step whose argument is an object of <paramref name="argument"/>, made with its rules from the run's draws, so it shrinks like the rest of the
     /// run: <c>Step("add", Fake.For&lt;Customer&gt;(), (repo, c) =&gt; repo.Add(c))</c>. A generator with unique values starts afresh for every run.
     /// </summary>
-    /// <exception cref="ArgumentException">The generator can't make objects for another one (it is keyed, verifies its rules, numbers its objects or has a feed).</exception>
+    /// <exception cref="ArgumentException">The generator can't make objects for another one (it is keyed, verifies its rules, numbers its objects or has a feed), or the name is empty, white space or taken by another step.</exception>
     /// <inheritdoc cref="Step{TArg}(string, Func{Faker, TArg}, Action{TState, TArg}, Func{TState, bool}?)"/>
     public StepCheck<TState> Step<TArg>(string name, ObjectGenerator<TArg> argument, Action<TState, TArg> apply, Func<TState, bool>? when = null) =>
         With(StepDefinition<TState>.Of(NameOf(name), FromGenerator(argument), apply, when));
@@ -171,7 +171,7 @@ public sealed class StepCheck<TState>
     /// <param name="maxSteps">The most steps a sequence takes.</param>
     /// <param name="maxShrinks">How many simpler sequences shrinking may try; 0 reports the original one.</param>
     /// <exception cref="FakeCheckException{T}">A run failed; its <see cref="FakeCheckException{T}.Counterexample"/> is the shrunk <see cref="StepRun{TState}"/>.</exception>
-    /// <exception cref="InvalidOperationException">There is no step, or a step or invariant is asynchronous (use <see cref="CheckAsync"/>).</exception>
+    /// <exception cref="InvalidOperationException">There is no step, a step or invariant is asynchronous (use <see cref="CheckAsync"/>), no step could run in any run, or the factory returned the same state for two runs.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="runs"/> or <paramref name="maxShrinks"/> is negative, or <paramref name="maxSteps"/> is not positive.</exception>
     public void Check(int runs = 100, int maxSteps = 50, int maxShrinks = 1000)
     {
@@ -181,7 +181,16 @@ public sealed class StepCheck<TState>
             throw Asynchronous($"The invariant {invariant.Text} is asynchronous");
 
         var (check, execution) = Start(runs, maxSteps, maxShrinks);
-        check.Run(run => Synchronously(execution.Run(run)));
+        try
+        {
+            check.Run(run => Synchronously(execution.Run(run)));
+        }
+        catch (FakeCheckException<StepRun<TState>> failure) when (failure.InnerException is SharedStateException shared)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(shared); // a mistake in the setup, not a counterexample
+        }
+
+        execution.ThrowIfNoStepRan(runs);
     }
 
     /// <summary>The asynchronous form of <see cref="Check"/>, which also runs asynchronous steps and invariants, one at a time and in order.</summary>
@@ -190,12 +199,26 @@ public sealed class StepCheck<TState>
     /// <param name="maxShrinks">How many simpler sequences shrinking may try; 0 reports the original one.</param>
     /// <param name="cancellationToken">Stops the check between runs.</param>
     /// <returns>A task that completes when every run passed, and faults with the <see cref="FakeCheckException{T}"/> when one failed.</returns>
-    /// <exception cref="InvalidOperationException">There is no step.</exception>
+    /// <exception cref="InvalidOperationException">There is no step; the task faults with it when no step could run in any run, or the factory returned the same state for two runs.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="runs"/> or <paramref name="maxShrinks"/> is negative, or <paramref name="maxSteps"/> is not positive.</exception>
     public Task CheckAsync(int runs = 100, int maxSteps = 50, int maxShrinks = 1000, CancellationToken cancellationToken = default)
     {
         var (check, execution) = Start(runs, maxSteps, maxShrinks);
-        return check.RunAsync(execution.Run, cancellationToken);
+        return Run(check, execution, runs, cancellationToken);
+
+        static async Task Run(PropertyCheck<StepRun<TState>> check, StepExecution<TState> execution, int runs, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await check.RunAsync(execution.Run, cancellationToken).ConfigureAwait(false);
+            }
+            catch (FakeCheckException<StepRun<TState>> failure) when (failure.InnerException is SharedStateException shared)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(shared);
+            }
+
+            execution.ThrowIfNoStepRan(runs);
+        }
     }
 
     /// <summary>
@@ -244,9 +267,12 @@ public sealed class StepCheck<TState>
 
     private StepCheck<TState> With(StepInvariant<TState> invariant) => new(_create, _steps, _invariants.Add(invariant), _seed, _locale, _referenceDate);
 
-    private static string NameOf(string name)
+    /// <summary>A step's name: not empty, and not the name of a step already added, so the counterexample says which step ran.</summary>
+    private string NameOf(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (_steps.Any(s => string.Equals(s.Name, name, StringComparison.Ordinal)))
+            throw new ArgumentException($"A step named '{name}' is already added; give each step its own name so the counterexample says which one ran.", nameof(name));
         return name;
     }
 

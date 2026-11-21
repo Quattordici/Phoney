@@ -130,6 +130,12 @@ public sealed class UsageAnalyzer : DiagnosticAnalyzer
                 if (Constant(call, "min") is { } min)
                     Check(context, call, "max", v => v >= min, $"at least {min.ToString(CultureInfo.InvariantCulture)} (the minimum)");
                 break;
+            case "MinCollectionSize":
+                Check(context, call, "min", v => v >= 0, AtLeastZero);
+                break;
+            case "MaxCollectionSize":
+                Check(context, call, "max", v => v >= 0, AtLeastZero);
+                break;
             case "MaxDepth":
                 Check(context, call, "depth", v => v >= 0, AtLeastZero);
                 break;

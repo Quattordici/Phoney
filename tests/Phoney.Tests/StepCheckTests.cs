@@ -281,4 +281,60 @@ public sealed class StepCheckTests
     {
         Account().Invariant(_ => false).Check(runs: 0);
     }
+
+    [Test]
+    public async Task Steps_that_can_never_run_fail_the_check_instead_of_passing()
+    {
+        var never = Fake.Steps(() => new CheckedAccount())
+            .Seed(1)
+            .Step("withdraw", f => f.Random.Int(1, 100), (a, amount) => a.Withdraw(amount), when: a => a.Balance > 0)
+            .Invariant(a => a.Balance >= 0);
+
+        var error = Should.Throw<InvalidOperationException>(() => never.Check());
+        error.Message.ShouldContain("No step could run in 100 runs");
+        error.Message.ShouldContain("'withdraw'");
+        (await Should.ThrowAsync<InvalidOperationException>(() => never.CheckAsync())).Message.ShouldBe(error.Message);
+        never.Check(runs: 0); // zero runs test nothing, so there is nothing to miss
+    }
+
+    [Test]
+    public void A_step_that_is_only_enabled_after_another_one_still_passes() =>
+        Fake.Steps(() => new CheckedAccount())
+            .Seed(1)
+            .Step("deposit", f => f.Random.Int(1, 100), (a, amount) => a.Deposit(amount))
+            .Step("withdraw", f => f.Random.Int(1, 100), (a, amount) => a.Withdraw(Math.Min(amount, a.Balance)), when: a => a.Balance > 0)
+            .Invariant(a => a.Balance >= 0)
+            .Check(runs: 1, maxSteps: 1); // the one run may stop before its first step: a step that could run counts
+
+    [Test]
+    public async Task A_factory_that_returns_the_same_state_twice_is_refused()
+    {
+        var shared = new CheckedAccount();
+        var steps = Fake.Steps(() => shared)
+            .Seed(1)
+            .Step("deposit", f => f.Random.Int(1, 100), (a, amount) => a.Deposit(amount))
+            .Invariant(a => a.Balance < 1_000_000);
+
+        var error = Should.Throw<InvalidOperationException>(() => steps.Check());
+        error.Message.ShouldContain("returned the same CheckedAccount for two runs");
+        error.Message.ShouldContain("() => new CheckedAccount()");
+        (await Should.ThrowAsync<InvalidOperationException>(() => steps.CheckAsync())).Message.ShouldBe(error.Message);
+    }
+
+    [Test]
+    public void A_struct_state_and_a_new_object_per_run_are_not_shared()
+    {
+        Fake.Steps(() => 0).Seed(1).Step("noop", _ => { }).Check(runs: 10);
+        Fake.Steps(() => new CheckedAccount()).Seed(1).Step("deposit", a => a.Deposit(1)).Check(runs: 10);
+    }
+
+    [Test]
+    public void Two_steps_with_the_same_name_are_refused()
+    {
+        var steps = Fake.Steps(() => new CheckedAccount()).Step("op", a => a.Deposit(1));
+
+        Should.Throw<ArgumentException>(() => steps.Step("op", f => f.Random.Int(1, 9), (a, x) => a.Withdraw(x)))
+            .Message.ShouldContain("A step named 'op' is already added");
+        steps.Step("Op", a => a.Withdraw(1)).ShouldNotBeNull(); // names are compared ordinally
+    }
 }

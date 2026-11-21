@@ -161,10 +161,12 @@ public sealed class ArgumentGenerator
     /// <param name="maxShrinks">How many simpler rows shrinking may try; 0 reports the original row.</param>
     /// <exception cref="FakeCheckException{T}">The property threw for a row.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="property"/> is an <c>async</c> lambda, which would run as <c>async void</c>; use <c>CheckAsync</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
     public void Check(Action<object?[]> property, int count = 100, int maxShrinks = 1000)
     {
         ArgumentNullException.ThrowIfNull(property);
+        PropertyChecks.RejectAsyncVoid(property, "CheckAsync");
         StartCheck(count, maxShrinks).Run(row => PropertyCheck<object?[]>.Outcome.Of(() => property(row)));
     }
 

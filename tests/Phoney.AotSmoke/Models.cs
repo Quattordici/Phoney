@@ -144,5 +144,18 @@ public sealed class Shipment
 [FakeFor<Shipment>]
 internal static partial class ShipmentFakes;
 
-[FakeFor<Folder>, FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeFor<Signup>, FakeSubtype<IInsurance, Policy>]
+/// <summary>Validates itself: generated reservations must end after they start.</summary>
+public sealed class Reservation : System.ComponentModel.DataAnnotations.IValidatableObject
+{
+    public DateTime Start { get; set; }
+    public DateTime End { get; set; }
+
+    public IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult> Validate(System.ComponentModel.DataAnnotations.ValidationContext validationContext)
+    {
+        if (End <= Start)
+            yield return new("End must be after Start.");
+    }
+}
+
+[FakeFor<Folder>, FakeFor<Person>, FakeFor<Email>, FakeFor<Phone>, FakeFor<Ticket>, FakeFor<Signup>, FakeFor<Reservation>, FakeSubtype<IInsurance, Policy>]
 internal static partial class Fakes;

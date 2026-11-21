@@ -38,10 +38,30 @@ internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenera
         registrations.Generators.TryGetValue(typeof(T), out var registered) && registered is TypeConfiguration<T> configuration ? configuration.Apply(plain) : plain;
 
     /// <summary>Runs the delegate on <paramref name="plain"/> and refuses a result that would silently misbehave somewhere the configuration reaches.</summary>
-    /// <exception cref="InvalidOperationException">The delegate returned <see langword="null"/>, set a seed, or added rules a nested generator can't have.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The delegate returned <see langword="null"/>, set a seed, added rules a nested generator can't have, or asked for a <typeparamref name="T"/> generator itself.
+    /// </exception>
     public ObjectGenerator<T> Apply(ObjectGenerator<T> plain)
     {
-        var configured = configure(plain) ?? throw Refused("returned null; return the configured generator.");
+        if (!ConfigurationsRunning.TryEnter(typeof(T)))
+        {
+            var name = typeof(T).Name;
+            throw Refused(
+                $"asks for a {name} generator itself (Fake.For<{name}>(), Fake.One<{name}>()…, directly or through another configuration), which runs the configuration again without end. Configure the generator the delegate is given: g => g.With(…).");
+        }
+
+        ObjectGenerator<T>? configured;
+        try
+        {
+            configured = configure(plain);
+        }
+        finally
+        {
+            ConfigurationsRunning.Exit(typeof(T));
+        }
+
+        if (configured is null)
+            throw Refused("returned null; return the configured generator.");
         if (configured.ConfiguredSeed != plain.ConfiguredSeed)
         {
             throw Refused(
@@ -53,4 +73,27 @@ internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenera
 
     private static InvalidOperationException Refused(string reason) =>
         new($"The {typeof(T).Name} generator from Fake.Generators.Configure<{typeof(T).Name}> {reason}");
+}
+
+/// <summary>
+/// The types whose <see cref="FakeGenerators.Configure{T}"/> delegate this thread is running, so a delegate that asks for its own type again (directly or
+/// through another configuration) is refused instead of running without end.
+/// </summary>
+internal static class ConfigurationsRunning
+{
+    [ThreadStatic]
+    private static List<Type>? t_running;
+
+    /// <summary>Records that the delegate for <paramref name="type"/> runs; false when it already runs on this thread.</summary>
+    public static bool TryEnter(Type type)
+    {
+        var running = t_running ??= [];
+        if (running.Contains(type))
+            return false;
+        running.Add(type);
+        return true;
+    }
+
+    /// <summary>Records that the delegate for <paramref name="type"/> finished.</summary>
+    public static void Exit(Type type) => t_running!.Remove(type);
 }
