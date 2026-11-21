@@ -216,36 +216,39 @@ internal sealed class Identity(Faker faker)
     /// <summary>Age in whole years at the reference date, matching <see cref="BirthDate"/>.</summary>
     public int Age => AgeAt(BirthDate, DateOnly.FromDateTime(faker.ReferenceDate.UtcDateTime));
 
+    /// <summary>The country names of the locale's language (English where Phoney has no table for it), which given and drawn countries are matched with.</summary>
+    private CountryNameTable Names => CountryNames.For(faker.Data.Info.Language);
+
     /// <summary>One address, so street, city, zip code, state and country agree.</summary>
     public AddressProfile Address => _address ??= faker.Location.Address();
 
     /// <summary>
     /// The country an object's country member gets: the one a <see cref="CountryCode"/> the object was given names, else the address's country (in a
-    /// country locale such as <c>de_AT</c>), else a drawn one. A given code's country has its English name (also in <c>de</c> or <c>sv</c>, whose lists name
-    /// countries in their own language and can't be matched to codes), so the two members always agree. The address and the country are drawn either way, so every member after it draws what it
+    /// country locale such as <c>de_AT</c>), else a drawn one. A given code's country is named in the locale's language where Phoney has a table for it
+    /// (<c>de</c>, <c>sv</c>; see <see cref="CountryNames.For"/>), else in English, so the two members always agree. The address and the country are drawn either way, so every member after it draws what it
     /// drew before.
     /// </summary>
     public string Country()
     {
         if (Address.Country is { } own)
-            return _countryCode is { } given && !string.Equals(given, Address.CountryCode, StringComparison.OrdinalIgnoreCase) && CountryNames.NameOf(given) is { } other ? other : own;
+            return _countryCode is { } given && !string.Equals(given, Address.CountryCode, StringComparison.OrdinalIgnoreCase) && Names.NameOf(given) is { } other ? other : own;
         var drawn = faker.Location.Country();
-        if (_countryCode is { } code && CountryNames.NameOf(code) is { } name)
+        if (_countryCode is { } code && Names.NameOf(code) is { } name)
             return name;
         _country ??= drawn;
         return drawn;
     }
 
     /// <summary>
-    /// The code an object's country-code member gets: the code of a <see cref="Country"/> the object was given (by its English name; the locale's own country
-    /// also by its name there), else the address's code, else a drawn one that matches a country the object already has (see there).
+    /// The code an object's country-code member gets: the code of a <see cref="Country"/> the object was given (by its name in the locale's language or in
+    /// English; the locale's own country also by its name there), else the address's code, else a drawn one that matches a country the object already has (see there).
     /// </summary>
     public string CountryCode()
     {
         if (Address.CountryCode is { } own)
-            return _country is { } given && CountryNames.CodeOf(given) is { } other && !string.Equals(other, own, StringComparison.OrdinalIgnoreCase) ? other : own;
+            return _country is { } given && Names.CodeOf(given) is { } other && !string.Equals(other, own, StringComparison.OrdinalIgnoreCase) ? other : own;
         var drawn = faker.Location.CountryCode();
-        if (_country is { } country && CountryNames.CodeOf(country) is { } code)
+        if (_country is { } country && Names.CodeOf(country) is { } code)
             return code;
         _countryCode ??= drawn;
         return drawn;
