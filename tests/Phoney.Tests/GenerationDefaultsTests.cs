@@ -21,6 +21,18 @@ public sealed class Hound
 
 public sealed record Leash(string Color, int Length = 7);
 
+public sealed class Visit : System.ComponentModel.DataAnnotations.IValidatableObject
+{
+    public int From { get; set; }
+    public int To { get; set; }
+
+    public IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult> Validate(System.ComponentModel.DataAnnotations.ValidationContext validationContext)
+    {
+        if (To <= From)
+            yield return new("To must be after From.");
+    }
+}
+
 public sealed class Oddity
 {
     public string Zork { get; set; } = "";
@@ -64,6 +76,7 @@ public sealed class GenerationDefaultsTests
         defaults.CausalTimelines.ShouldBeFalse();
         defaults.ParameterDefaults.ShouldBeFalse();
         defaults.NameConventions.ShouldBeTrue();
+        defaults.ValidateObjects.ShouldBeTrue();
     }
 
     [Test]
@@ -116,6 +129,53 @@ public sealed class GenerationDefaultsTests
         WithDefaults(d => d.Strict = true, () => Fake.For<Oddity>().Strict(false).Generate().Zork.ShouldNotBeNull());
         WithDefaults(d => d.NullProbability = 1, () => Fake.For<Kennel>().NullProbability(0).Generate().Nickname.ShouldNotBeNull());
     }
+
+    [Test]
+    public void One_collection_size_bound_keeps_the_other_from_the_defaults() =>
+        WithDefaults(d => d.CollectionSize = (5, 8), () =>
+        {
+            var counts = Fake.For<Kennel>().Seed(1).MinCollectionSize(6).Generate(200).Select(k => k.Hounds.Count).ToList();
+            counts.Min().ShouldBe(6);
+            counts.Max().ShouldBe(8);
+
+            counts = Fake.For<Kennel>().Seed(1).MaxCollectionSize(10).Generate(200).Select(k => k.Hounds.Count).ToList();
+            counts.Min().ShouldBe(5);
+            counts.Max().ShouldBe(10);
+        });
+
+    [Test]
+    public void One_collection_size_bound_keeps_the_other_the_generator_set()
+    {
+        var counts = Fake.For<Kennel>().Seed(1).CollectionSize(5, 8).MaxCollectionSize(10).Generate(200).Select(k => k.Hounds.Count).ToList();
+        counts.Min().ShouldBe(5);
+        counts.Max().ShouldBe(10);
+    }
+
+    [Test]
+    public void A_bound_beyond_the_other_moves_it_along()
+    {
+        Fake.For<Kennel>().Seed(1).MinCollectionSize(6).Generate(20).ShouldAllBe(k => k.Hounds.Count == 6); // the built-in maximum 3 moves up
+        Fake.For<Kennel>().Seed(1).CollectionSize(5, 8).MinCollectionSize(9).Generate(20).ShouldAllBe(k => k.Hounds.Count == 9); // the later call wins
+        Fake.For<Kennel>().Seed(1).CollectionSize(5, 8).MaxCollectionSize(0).Generate(20).ShouldAllBe(k => k.Hounds.Count == 0);
+        WithDefaults(d => d.CollectionSize = (5, 8), () => Fake.For<Kennel>().Seed(1).MaxCollectionSize(2).Generate(20).ShouldAllBe(k => k.Hounds.Count <= 2));
+    }
+
+    [Test]
+    public void A_single_bound_is_validated_like_both()
+    {
+#pragma warning disable PHONEY011 // the runtime checks are what this test is about
+        Should.Throw<ArgumentOutOfRangeException>(() => Fake.For<Kennel>().MinCollectionSize(-1)).ParamName.ShouldBe("min");
+        Should.Throw<ArgumentOutOfRangeException>(() => Fake.For<Kennel>().MaxCollectionSize(-1)).ParamName.ShouldBe("max");
+#pragma warning restore PHONEY011
+    }
+
+    [Test]
+    public void ValidateObjects_turns_the_check_off_app_wide_and_a_generator_can_turn_it_on_again() =>
+        WithDefaults(d => d.ValidateObjects = false, () =>
+        {
+            Fake.For<Visit>().Seed(1).Generate(200).ShouldContain(v => v.To <= v.From);
+            Fake.For<Visit>().Seed(1).ValidateObjects().Generate(200).ShouldAllBe(v => v.To > v.From);
+        });
 
     [Test]
     public void A_configured_type_wins_over_the_defaults() =>

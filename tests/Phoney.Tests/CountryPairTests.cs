@@ -75,6 +75,47 @@ public sealed class CountryPairTests
     public void A_locale_with_other_country_names_still_works() =>
         Shipments(generated: true, locale: "de").Generate(50).ShouldAllBe(s => s.Country.Length > 0 && s.CountryCode.Length == 2);
 
+    [Test]
+    [Arguments("de_AT", true)]
+    [Arguments("de_AT", false)]
+    [Arguments("en_US", true)]
+    [Arguments("en_US", false)]
+    public void In_a_country_locale_a_given_other_country_decides_the_other_member(string locale, bool generated)
+    {
+        Shipments(generated, locale).With(s => s.Country, "Sweden").Generate(20).ShouldAllBe(s => s.CountryCode == "SE");
+        Shipments(generated, locale).With(s => s.CountryCode, "SE").Generate(20).ShouldAllBe(s => s.Country == "Sweden");
+        Shipments(generated, locale).Populate(new Shipment { Country = "Sweden" }).CountryCode.ShouldBe("SE");
+        Shipments(generated, locale).Populate(new Shipment { CountryCode = "SE" }).Country.ShouldBe("Sweden");
+    }
+
+    [Test]
+    public void In_a_country_locale_its_own_country_in_its_own_language_keeps_its_code()
+    {
+        Shipments(generated: true, locale: "de_AT").With(s => s.Country, "Österreich").Generate(5).ShouldAllBe(s => s.CountryCode == "AT");
+        Shipments(generated: true, locale: "de_AT").With(s => s.CountryCode, "AT").Generate(5).ShouldAllBe(s => s.Country == "Österreich");
+    }
+
+    [Test]
+    public void A_given_country_moves_no_other_member()
+    {
+        var plain = Shipments(generated: true, locale: "de_AT").Generate(20);
+        var given = Shipments(generated: true, locale: "de_AT").With(s => s.Country, "Sweden").Generate(20);
+
+        given.Select(s => (s.City, s.Notes)).ShouldBe(plain.Select(s => (s.City, s.Notes)));
+    }
+
+    [Test]
+    [Arguments("de", true)]
+    [Arguments("de", false)]
+    [Arguments("sv", true)]
+    public void In_another_language_a_given_code_gets_its_country(string locale, bool generated)
+    {
+        // "Japan" is the German and Swedish name too, so it comes from the locale's own list; "Sweden" is in neither, so the English name stands in.
+        Shipments(generated, locale).With(s => s.CountryCode, "JP").Generate(20).ShouldAllBe(s => s.Country == "Japan");
+        Shipments(generated, locale).With(s => s.CountryCode, "SE").Generate(20).ShouldAllBe(s => s.Country == "Sweden");
+        Shipments(generated, locale).Populate(new Shipment { CountryCode = "SE" }).Country.ShouldBe("Sweden");
+    }
+
     // The table was built from faker.js' English country list and checked against pycountry (ISO 3166-1); every English name and every code has exactly one partner.
     [Test]
     public void The_table_pairs_every_english_country_name_with_one_code()

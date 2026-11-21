@@ -585,6 +585,20 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// </summary>
     public ObjectGenerator<T> Strict(bool strict = true) => Override(o => o with { Strict = strict });
 
+    /// <summary>
+    /// Whether objects that implement <see cref="System.ComponentModel.DataAnnotations.IValidatableObject"/> must pass their own <c>Validate</c>: on by default, so a
+    /// generated <c>Booking</c> whose <c>Validate</c> says "End must be after Start" never has its end first. An object that fails is generated again like one a
+    /// <see cref="Where(Func{T, bool}, int)"/> condition rejects (up to 1000 attempts, or the smallest limit of the conditions), for this object and for
+    /// every object nested in it.
+    /// </summary>
+    /// <remarks>
+    /// An object that passes is the object it would be without the check, so seeds only move for objects that failed. <see cref="Populate(T, PopulateMode)"/>
+    /// checks with <see cref="PopulateMode.All"/> only, because kept values can't be generated again, and <see cref="InvalidCases"/> and
+    /// <see cref="BoundaryCases"/> don't check. <c>Validate</c> gets a <see cref="System.ComponentModel.DataAnnotations.ValidationContext"/> without services.
+    /// </remarks>
+    /// <param name="enabled"><see langword="false"/> turns the check off, e.g. for data that is meant to be invalid.</param>
+    public ObjectGenerator<T> ValidateObjects(bool enabled = true) => Override(o => o with { ValidateObjects = enabled });
+
     /// <summary>Turns name conventions off: members get values based on their type only.</summary>
     public ObjectGenerator<T> WithNameConventions(bool useConventions = true) => Override(o => o with { NameConventions = useConventions });
 
@@ -626,6 +640,28 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         ArgumentOutOfRangeException.ThrowIfNegative(min);
         ArgumentOutOfRangeException.ThrowIfLessThan(max, min);
         return Override(o => o with { MinCollectionSize = min, MaxCollectionSize = max });
+    }
+
+    /// <summary>
+    /// Sets the fewest elements generated collections get, and keeps the maximum this generator or <see cref="Fake.Defaults"/> already has:
+    /// <c>.MinCollectionSize(2)</c> with the default 1–3 gives 2–3. A maximum below <paramref name="min"/> moves up to it.
+    /// </summary>
+    /// <param name="min">The fewest elements; 0 allows empty collections.</param>
+    public ObjectGenerator<T> MinCollectionSize(int min)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(min);
+        return Override(o => o with { MinCollectionSize = min, MaxCollectionSize = o.MaxCollectionSize is { } max && max < min ? min : o.MaxCollectionSize });
+    }
+
+    /// <summary>
+    /// Sets the most elements generated collections get, and keeps the minimum this generator or <see cref="Fake.Defaults"/> already has:
+    /// <c>.MaxCollectionSize(10)</c> with the default 1–3 gives 1–10. A minimum above <paramref name="max"/> moves down to it, so <c>.MaxCollectionSize(0)</c> gives empty collections.
+    /// </summary>
+    /// <param name="max">The most elements.</param>
+    public ObjectGenerator<T> MaxCollectionSize(int max)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(max);
+        return Override(o => o with { MaxCollectionSize = max, MinCollectionSize = o.MinCollectionSize is { } min && min > max ? max : o.MinCollectionSize });
     }
 
     /// <summary>Sets how deep nested objects are generated (default 4); deeper members stay <see langword="null"/>.</summary>
@@ -1270,10 +1306,12 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// <param name="maxShrinks">How many simpler objects shrinking may try; 0 reports the original object.</param>
     /// <exception cref="FakeCheckException{T}">The property threw for an object.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="property"/> is an <c>async</c> lambda, which would run as <c>async void</c>; use <c>CheckAsync</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> or <paramref name="maxShrinks"/> is negative.</exception>
     public void Check(Action<T> property, int count = 100, int maxShrinks = 1000)
     {
         ArgumentNullException.ThrowIfNull(property);
+        PropertyChecks.RejectAsyncVoid(property, "CheckAsync");
         Check(item => PropertyCheck<T>.Outcome.Of(() => property(item)), count, maxShrinks);
     }
 
@@ -1434,7 +1472,7 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             for (var i = 0; i < descriptions.Count; i++)
             {
                 var rule = new Rule(RuleKind.Constraint, new ConstraintRequest(boundary, i), Added: _config.RuleCount, Lifecycle: lifecycle);
-                var generator = Derive(_config with { Seed = seed, Rules = _config.Rules.SetItem(member.Name, rule), RuleCount = _config.RuleCount + 1, Filters = [], MemberFilters = _config.MemberFilters.Clear(), Verify = false });
+                var generator = Derive(_config with { Seed = seed, Rules = _config.Rules.SetItem(member.Name, rule), RuleCount = _config.RuleCount + 1, Filters = [], MemberFilters = _config.MemberFilters.Clear(), Verify = false, Overrides = _config.Overrides with { ValidateObjects = false } });
                 cases.Add(new ConstraintCase<T>(member.Name, descriptions[i], generator.Generate()));
             }
         }
@@ -1517,7 +1555,8 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             TypeGenerators = registrations.GeneratorsWith(_config.TypeGenerators),
             Usage = usage,
         };
-        return new Compiled(plan.Slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, plan.ObjectRetries, plan.Combinations, registrations, resolved.BackReferences);
+        return new Compiled(plan.Slots, [.. dependent], settings, PathRules.Build(typeof(T), members, _config.PathRules, usage), usage, plan.ObjectRetries, plan.Combinations, registrations, resolved.BackReferences,
+            ValidatesRoot: resolved.ValidateObjects && ObjectValidation.Applies(typeof(T)));
     }
 
     /// <summary>The explicit rules by member index, in the order they were added; the rules that depend on the object are also collected in <paramref name="dependent"/>.</summary>
@@ -1622,15 +1661,18 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         /// <summary>Creates an object from <paramref name="itemSeed"/> (and attempts derived from it), as item <paramref name="index"/>.</summary>
         public T CreateFrom(long index, FakeScope? parent, long itemSeed)
         {
-            return MayRetry ? CreateAccepted(index, parent, itemSeed) : CreateOnce(index, parent, itemSeed).Item;
+            if (MayRetry)
+                return CreateAccepted(index, parent, itemSeed);
+            var (item, scope) = CreateOnce(index, parent, itemSeed);
+            return scope.InvalidNested is null ? item : CreateAccepted(index, parent, itemSeed); // a nested object failed its own Validate
         }
 
         // Apart from CreateFrom, so the closure is only allocated when an object may be made again (captured parameters are allocated on entry).
         private T CreateAccepted(long index, FakeScope? parent, long itemSeed) =>
             Accepted(default!, itemSeed, PopulateMode.All, (_, attemptSeed) => CreateOnce(index, parent, attemptSeed));
 
-        /// <summary>Whether an object can be rejected and made again: by a condition, a unique identity member or a unique combination.</summary>
-        private bool MayRetry => !generator._config.Filters.IsEmpty || compiled.ObjectRetries != 0;
+        /// <summary>Whether an object can be rejected and made again: by a condition, a unique identity member, a unique combination or its own <c>Validate</c>.</summary>
+        private bool MayRetry => !generator._config.Filters.IsEmpty || compiled.ObjectRetries != 0 || compiled.ValidatesRoot;
 
         /// <summary>
         /// The first attempt whose object the conditions accept and whose unique values are new; attempt <c>k</c> makes the object from
@@ -1641,10 +1683,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         {
             var filters = generator._config.Filters;
             var limit = AttemptLimit(filters);
+            string? problem = null;
             for (var i = 0; i < limit; i++)
             {
                 (item, var scope) = attempt(item, Filter.AttemptSeed(itemSeed, i));
-                if (Filter.Accepts(filters, item) && scope.TryClaimPending(CombinationsOf(item, scope)))
+                if (!Filter.Accepts(filters, item))
+                    problem = null;
+                else if ((problem = mode == PopulateMode.All ? ValidationProblem(item, scope) : null) is null && scope.TryClaimPending(CombinationsOf(item, scope)))
                     return item;
                 if (mode != PopulateMode.All)
                 {
@@ -1655,15 +1700,22 @@ public sealed class ObjectGenerator<T> : INestedGenerator
                 }
             }
 
-            throw Exhausted(filters, limit);
+            throw problem is not null ? ObjectValidation.Exhausted(typeof(T), problem, limit) : Exhausted(filters, limit);
         }
 
-        /// <summary>The attempts an object gets: the smallest limit of the conditions and of the unique identity members.</summary>
+        /// <summary>
+        /// Why the finished object or one nested in it fails its own <c>Validate</c>, or <see langword="null"/> when it passes (or isn't checked).
+        /// </summary>
+        private string? ValidationProblem(T item, FakeScope scope) =>
+            scope.InvalidNested ?? (compiled.ValidatesRoot && item is not null ? ObjectValidation.Problem(item) : null);
+
+        /// <summary>The attempts an object gets: the smallest limit of the conditions and of the unique identity members, else that of <c>Validate</c>.</summary>
         private int AttemptLimit(ImmutableList<Filter> filters)
         {
-            if (filters.IsEmpty)
-                return compiled.ObjectRetries;
-            return compiled.ObjectRetries == 0 ? Filter.AttemptLimit(filters) : Math.Min(compiled.ObjectRetries, Filter.AttemptLimit(filters));
+            var limit = filters.IsEmpty ? int.MaxValue : Filter.AttemptLimit(filters);
+            if (compiled.ObjectRetries != 0)
+                limit = Math.Min(limit, compiled.ObjectRetries);
+            return limit == int.MaxValue ? ObjectValidation.MaxAttempts : limit;
         }
 
         /// <summary>The error when no attempt gave an acceptable object.</summary>
@@ -1706,7 +1758,10 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         public T PopulateFrom(T instance, long index, PopulateMode mode, long itemSeed)
         {
             if (!MayRetry)
-                return PopulateOnce(instance, index, mode, itemSeed).Item;
+            {
+                var (item, scope) = PopulateOnce(instance, index, mode, itemSeed);
+                return scope.InvalidNested is null || mode != PopulateMode.All ? item : PopulateAccepted(item, index, mode, itemSeed); // a nested object failed its own Validate
+            }
 
             if (mode != PopulateMode.All && !generator._config.Filters.IsEmpty)
             {
@@ -1812,9 +1867,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
     /// <summary>
     /// Rules bound to member indices, plus rules that run after creation; <paramref name="ObjectRetries"/> is the attempt limit of unique identity members and
-    /// <paramref name="Combinations"/> (0 when there are none).
+    /// <paramref name="Combinations"/> (0 when there are none); <paramref name="ValidatesRoot"/> whether the object must pass its own <c>Validate</c>.
     /// </summary>
-    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations, bool BackReferences);
+    private sealed record Compiled(RuleSlot?[] Slots, (int Member, Func<Faker, T, object?> Rule)[] Dependent, GenerationSettings Settings, PathNode?[]? RootChildren, RuleUsage? Usage, int ObjectRetries, UniqueCombination[] Combinations, Registrations Registrations, bool BackReferences, bool ValidatesRoot);
 
     /// <summary>A configured rule; <paramref name="Boxed"/> is the object-returning twin of a typed factory, <paramref name="Added"/> its position among the rules added, <paramref name="Positional"/> whether its value depends on the object's position (<c>Sequence</c>, <c>Cycle</c>).</summary>
     private sealed record Rule(RuleKind Kind, object? Value, Func<Faker, object?>? Boxed = null, int Added = 0, bool Positional = false, bool ObjectBound = false, LifecycleDefinition? Lifecycle = null);

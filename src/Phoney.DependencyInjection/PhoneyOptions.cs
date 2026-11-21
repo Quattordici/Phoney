@@ -25,14 +25,14 @@ public sealed class PhoneyOptions
     public double? NullProbability { get; set; }
 
     /// <summary>
-    /// Fewest elements a generated collection gets; the generator default (1) when <see langword="null"/>. When only this is set, the
-    /// most is the larger of this and the default (3).
+    /// Fewest elements a generated collection gets; the generator's own setting, else <see cref="Fake.Defaults"/> (1 built in), when <see langword="null"/>.
+    /// When only this is set, the most stays the generator's or <see cref="Fake.Defaults"/>' and moves up to this when it is smaller.
     /// </summary>
     public int? MinCollectionSize { get; set; }
 
     /// <summary>
-    /// Most elements a generated collection gets; the generator default (3) when <see langword="null"/>. When only this is set, the
-    /// fewest is the smaller of this and the default (1).
+    /// Most elements a generated collection gets; the generator's own setting, else <see cref="Fake.Defaults"/> (3 built in), when <see langword="null"/>.
+    /// When only this is set, the fewest stays the generator's or <see cref="Fake.Defaults"/>' and moves down to this when it is larger.
     /// </summary>
     public int? MaxCollectionSize { get; set; }
 

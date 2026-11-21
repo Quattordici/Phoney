@@ -287,6 +287,24 @@ public sealed class FakeScope
     /// <summary>When this object took the last transition of <paramref name="lifecycle"/>, or its creation time when it took none.</summary>
     internal DateTimeOffset LastTransition(LifecycleDefinition lifecycle) => LifecyclePath(lifecycle).LastTransition(Created, Faker.ReferenceDate);
 
+    /// <summary>The scope of the object at the top of the graph, whose run makes the whole graph again when an object in it fails its own <c>Validate</c>.</summary>
+    private FakeScope Outermost
+    {
+        get
+        {
+            var scope = this;
+            while (scope._parent is not null)
+                scope = scope._parent;
+            return scope;
+        }
+    }
+
+    /// <summary>Why the first nested object that failed its own <c>Validate</c> did, or <see langword="null"/> when none did.</summary>
+    internal string? InvalidNested => _ledger?.InvalidNested;
+
+    /// <summary>Records that a nested object of <paramref name="type"/> failed its own <c>Validate</c>, so this object is generated again.</summary>
+    private void ReportInvalid(Type type, string problem) => (_ledger ??= new()).Invalid($"{type.Name}: {problem}");
+
     /// <summary>
     /// Claims the unique identity values and <paramref name="combinations"/> of an accepted object; false when one was produced before or another thread
     /// claimed one of them first (the object is then generated again).
@@ -494,6 +512,8 @@ public sealed class FakeScope
         var nested = new FakeScope(Faker, Settings, slots, Faker.Random.Long(0, int.MaxValue), type, this, children);
         var created = Comparisons.Apply(model, model.CreateObject(nested), nested);
         Faker.Recorder?.Made(created, nested, root: false);
+        if (Settings.ValidateObjects && created is System.ComponentModel.DataAnnotations.IValidatableObject && ObjectValidation.Problem(created) is { } problem)
+            Outermost.ReportInvalid(created.GetType(), problem);
         return created;
     }
 

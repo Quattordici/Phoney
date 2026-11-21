@@ -21,6 +21,26 @@ internal sealed class StepExecution<TState>(Func<TState> create, ImmutableArray<
     /// </summary>
     private readonly int _odds = Math.Max(1, maxSteps / 2);
 
+    /// <summary>The state the run before this one created, so a factory that hands out one object for every run is caught.</summary>
+    private TState? _previous;
+
+    /// <summary>Whether any run had a step it could take; a check where none had tested nothing.</summary>
+    private bool _anyEnabled;
+
+    /// <summary>
+    /// Throws when the check made <paramref name="runs"/> runs and none of them had a step it could take: every <c>when:</c> condition was false for the
+    /// state the factory creates and stayed false, so the check would pass without testing anything.
+    /// </summary>
+    public void ThrowIfNoStepRan(int runs)
+    {
+        if (runs == 0 || _anyEnabled)
+            return;
+        var names = string.Join(", ", steps.Select(s => $"'{s.Name}'"));
+        throw new InvalidOperationException(
+            string.Create(CultureInfo.InvariantCulture, $"No step could run in {runs} runs: the when: condition of every step ({names}) was false for the new {typeof(TState).Name} and stayed false, so nothing was tested. ")
+            + "Add a step that may run from the start, or check the conditions.");
+    }
+
     /// <summary>Runs <paramref name="run"/> and tells how it did; the state is disposed when it is disposable, and the faker leaves the tape.</summary>
     public async ValueTask<PropertyCheck<StepRun<TState>>.Outcome> Run(StepRun<TState> run)
     {
@@ -41,6 +61,9 @@ internal sealed class StepExecution<TState>(Func<TState> create, ImmutableArray<
         try
         {
             run.State = create();
+            if (!typeof(TState).IsValueType && run.State is not null && ReferenceEquals(run.State, _previous))
+                throw new SharedStateException(typeof(TState).Name);
+            _previous = run.State;
         }
 #pragma warning disable CA1031 // any exception fails the run; it becomes the inner exception of the report
         catch (Exception e)
@@ -60,6 +83,7 @@ internal sealed class StepExecution<TState>(Func<TState> create, ImmutableArray<
             try
             {
                 Enabled(run.State, enabled);
+                _anyEnabled |= enabled.Count > 0;
                 var start = faker.Random.Tape?.Position ?? 0;
                 if (enabled.Count == 0 || faker.Random.Int(0, _odds) == 0)
                     break;
@@ -148,3 +172,11 @@ internal sealed class StepExecution<TState>(Func<TState> create, ImmutableArray<
         }
     }
 }
+
+/// <summary>
+/// The factory of <c>Fake.Steps</c> returned the state of an earlier run again: the runs then share their history, so no failure can be replayed. The check
+/// rethrows it as it is instead of reporting a counterexample.
+/// </summary>
+internal sealed class SharedStateException(string type)
+    : InvalidOperationException($"Fake.Steps' factory returned the same {type} for two runs, so the runs share their history and a failure can't be replayed. Return a new state from it: () => new {type}().");
+

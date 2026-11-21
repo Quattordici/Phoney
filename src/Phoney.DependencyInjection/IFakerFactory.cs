@@ -12,9 +12,6 @@ public interface IFakerFactory
 /// <summary>Applies <see cref="PhoneyOptions"/> to fakers and generators.</summary>
 internal sealed class FakerFactory(PhoneyOptions options, TimeProvider? containerTime) : IFakerFactory
 {
-    private const int DefaultMinCollectionSize = 1;
-    private const int DefaultMaxCollectionSize = 3;
-
     /// <summary>The clock to use: the configured one, else a non-system one from the container.</summary>
     private TimeProvider? Clock => options.TimeProvider ?? (ReferenceEquals(containerTime, TimeProvider.System) ? null : containerTime);
 
@@ -30,7 +27,7 @@ internal sealed class FakerFactory(PhoneyOptions options, TimeProvider? containe
     }
 
     /// <summary>Returns a generator with the configured locale, seed, clock and generation settings applied.</summary>
-    /// <remarks>Unset generation options preserve the generator's settings. A single collection-size bound uses the other default (1 or 3), adjusted to keep the range valid.</remarks>
+    /// <remarks>Unset generation options preserve the generator's settings. A single collection-size bound keeps the other one the generator has, or else <see cref="Fake.Defaults"/>, moved only when the two would cross.</remarks>
     public ObjectGenerator<T> Apply<T>(ObjectGenerator<T> generator)
     {
         if (options.Locale is { } locale)
@@ -43,12 +40,10 @@ internal sealed class FakerFactory(PhoneyOptions options, TimeProvider? containe
             generator = generator.TimeProvider(clock);
         if (options.NullProbability is { } nullProbability)
             generator = generator.NullProbability(nullProbability);
-        if (options.MinCollectionSize is not null || options.MaxCollectionSize is not null)
-        {
-            var min = options.MinCollectionSize;
-            var max = options.MaxCollectionSize;
-            generator = generator.CollectionSize(min ?? Math.Min(DefaultMinCollectionSize, max!.Value), max ?? Math.Max(DefaultMaxCollectionSize, min!.Value));
-        }
+        if (options.MinCollectionSize is { } min)
+            generator = generator.MinCollectionSize(min);
+        if (options.MaxCollectionSize is { } max)
+            generator = generator.MaxCollectionSize(max);
 
         if (options.MaxDepth is { } depth)
             generator = generator.MaxDepth(depth);

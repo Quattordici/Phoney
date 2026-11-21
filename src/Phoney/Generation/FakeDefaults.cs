@@ -103,6 +103,13 @@ public sealed class FakeDefaults
         set => Update(d => d with { NameConventions = value });
     }
 
+    /// <summary>Whether objects that implement <c>IValidatableObject</c> are generated again until they pass their own <c>Validate</c> (see <see cref="ObjectGenerator{T}.ValidateObjects"/>). Built-in: <see langword="true"/>.</summary>
+    public bool ValidateObjects
+    {
+        get => Current.ValidateObjects;
+        set => Update(d => d with { ValidateObjects = value });
+    }
+
     /// <summary>Restores the built-in defaults.</summary>
     public void Reset() => Volatile.Write(ref s_current, GenerationDefaults.BuiltIn);
 #pragma warning restore S2325

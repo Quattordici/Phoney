@@ -7,6 +7,10 @@ namespace Phoney.Generation;
 /// </summary>
 internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenerator<T>> configure) : INestedGenerator
 {
+    /// <summary>Whether this thread is running the delegate for <typeparamref name="T"/>, so a delegate that asks for <typeparamref name="T"/> again is refused.</summary>
+    [ThreadStatic]
+    private static bool t_applying;
+
     private ObjectGenerator<T>? _nested;
 
     /// <inheritdoc />
@@ -38,10 +42,31 @@ internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenera
         registrations.Generators.TryGetValue(typeof(T), out var registered) && registered is TypeConfiguration<T> configuration ? configuration.Apply(plain) : plain;
 
     /// <summary>Runs the delegate on <paramref name="plain"/> and refuses a result that would silently misbehave somewhere the configuration reaches.</summary>
-    /// <exception cref="InvalidOperationException">The delegate returned <see langword="null"/>, set a seed, or added rules a nested generator can't have.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The delegate returned <see langword="null"/>, set a seed, added rules a nested generator can't have, or asked for a <typeparamref name="T"/> generator itself.
+    /// </exception>
     public ObjectGenerator<T> Apply(ObjectGenerator<T> plain)
     {
-        var configured = configure(plain) ?? throw Refused("returned null; return the configured generator.");
+        if (t_applying)
+        {
+            var name = typeof(T).Name;
+            throw Refused(
+                $"asks for a {name} generator itself (Fake.For<{name}>(), Fake.One<{name}>()…, directly or through another configuration), which runs the configuration again without end. Configure the generator the delegate is given: g => g.With(…).");
+        }
+
+        ObjectGenerator<T>? configured;
+        t_applying = true;
+        try
+        {
+            configured = configure(plain);
+        }
+        finally
+        {
+            t_applying = false;
+        }
+
+        if (configured is null)
+            throw Refused("returned null; return the configured generator.");
         if (configured.ConfiguredSeed != plain.ConfiguredSeed)
         {
             throw Refused(

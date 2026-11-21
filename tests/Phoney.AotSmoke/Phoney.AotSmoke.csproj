@@ -6,6 +6,8 @@
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <IsPackable>false</IsPackable>
+    <!-- Every publish lands where CI and the docs run it, so a local run never picks up an older binary. -->
+    <PublishDir>$(MSBuildThisFileDirectory)../../artifacts/aot/</PublishDir>
   </PropertyGroup>
 
   <ItemGroup>

@@ -227,6 +227,26 @@ public sealed class ConfiguredGeneratorsTests
             _ => _ => null!,
         });
 
+    // A delegate that asks the facade for its own type ran the configuration again without end and overflowed the stack, which no test host survives.
+    [Test]
+    public void A_configuration_that_asks_for_its_own_type_is_refused() =>
+        Configured(() =>
+        {
+            var error = Should.Throw<InvalidOperationException>(() => Fake.One<Part>());
+            error.Message.ShouldContain("asks for a Part generator itself");
+            error.Message.ShouldContain("g => g.With(");
+            Fake.Generators.Clear();
+            Fake.One<Part>().ShouldNotBeNull(); // nothing is left half applied
+        }, _ => Fake.For<Part>().With(p => p.Code, "CFG"));
+
+    [Test]
+    public void Configurations_that_ask_for_each_other_are_refused() =>
+        Configured(() =>
+        {
+            Fake.Generators.Configure<LoosePart>(g => g.With(p => p.Code, Fake.One<Part>().Code));
+            Should.Throw<InvalidOperationException>(() => Fake.One<LoosePart>()).Message.ShouldContain("generator itself");
+        }, g => g.With(p => p.Code, Fake.One<LoosePart>().Code));
+
     private static string Describe(Hamper c) =>
         $"{c.Title}|{c.Main.Code}|{c.Main.Count}|{string.Join(",", c.Parts.Select(p => p.Code + p.Count))}";
 }

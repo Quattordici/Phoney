@@ -24,7 +24,7 @@ dotnet test                              # all test projects; runner is Microsof
 dotnet test --project tests/Phoney.Tests -- --treenode-filter "/*/*/PopulateTests/Keeps_what_is_set_and_fills_the_rest"   # one test
 dotnet test --project tests/Phoney.Tests -- --treenode-filter "/*/*/NationalIdTests/*"                                      # one class
 dotnet test --project tests/Phoney.NodaTime.Tests                                                                            # one add-on (also .DependencyInjection/.EntityFrameworkCore/.SourceGenerator/.TUnit/.WireMock)
-dotnet publish tests/Phoney.AotSmoke -c Release -p:TreatWarningsAsErrors=true   # Native AOT: trim/AOT warnings must stay at zero
+dotnet publish tests/Phoney.AotSmoke -c Release -p:TreatWarningsAsErrors=true && artifacts/aot/Phoney.AotSmoke   # Native AOT: trim/AOT warnings must stay at zero; the project publishes to artifacts/aot
 dotnet run -c Release --project benchmarks/Phoney.Benchmarks -- --filter '*'
 ```
 
