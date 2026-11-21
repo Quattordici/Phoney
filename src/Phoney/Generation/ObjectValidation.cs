@@ -22,13 +22,9 @@ internal static class ObjectValidation
 
         // The constructor with a display name is the trim-safe one: the others read the display name through reflection.
         var context = new ValidationContext(item, item.GetType().Name, serviceProvider: null, items: null);
-        foreach (var result in validatable.Validate(context))
-        {
-            if (result is not null)
-                return result.ErrorMessage is { Length: > 0 } message ? message : "Validate returned an error without a message.";
-        }
-
-        return null;
+        if (validatable.Validate(context).FirstOrDefault(result => result is not null) is not { } error)
+            return null;
+        return error.ErrorMessage is { Length: > 0 } message ? message : "Validate returned an error without a message.";
     }
 
     /// <summary>The error when no attempt in <paramref name="attempts"/> gave an object that passes its own <c>Validate</c>.</summary>

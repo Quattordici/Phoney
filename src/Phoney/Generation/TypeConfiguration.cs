@@ -7,10 +7,6 @@ namespace Phoney.Generation;
 /// </summary>
 internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenerator<T>> configure) : INestedGenerator
 {
-    /// <summary>Whether this thread is running the delegate for <typeparamref name="T"/>, so a delegate that asks for <typeparamref name="T"/> again is refused.</summary>
-    [ThreadStatic]
-    private static bool t_applying;
-
     private ObjectGenerator<T>? _nested;
 
     /// <inheritdoc />
@@ -47,7 +43,7 @@ internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenera
     /// </exception>
     public ObjectGenerator<T> Apply(ObjectGenerator<T> plain)
     {
-        if (t_applying)
+        if (!ConfigurationsRunning.TryEnter(typeof(T)))
         {
             var name = typeof(T).Name;
             throw Refused(
@@ -55,14 +51,13 @@ internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenera
         }
 
         ObjectGenerator<T>? configured;
-        t_applying = true;
         try
         {
             configured = configure(plain);
         }
         finally
         {
-            t_applying = false;
+            ConfigurationsRunning.Exit(typeof(T));
         }
 
         if (configured is null)
@@ -78,4 +73,27 @@ internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenera
 
     private static InvalidOperationException Refused(string reason) =>
         new($"The {typeof(T).Name} generator from Fake.Generators.Configure<{typeof(T).Name}> {reason}");
+}
+
+/// <summary>
+/// The types whose <see cref="FakeGenerators.Configure{T}"/> delegate this thread is running, so a delegate that asks for its own type again (directly or
+/// through another configuration) is refused instead of running without end.
+/// </summary>
+internal static class ConfigurationsRunning
+{
+    [ThreadStatic]
+    private static List<Type>? t_running;
+
+    /// <summary>Records that the delegate for <paramref name="type"/> runs; false when it already runs on this thread.</summary>
+    public static bool TryEnter(Type type)
+    {
+        var running = t_running ??= [];
+        if (running.Contains(type))
+            return false;
+        running.Add(type);
+        return true;
+    }
+
+    /// <summary>Records that the delegate for <paramref name="type"/> finished.</summary>
+    public static void Exit(Type type) => t_running!.Remove(type);
 }
