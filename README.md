@@ -655,7 +655,7 @@ var mix = Fake.For<Order>().Seed(1)
 
 - **The walk**: the first `From` is the start (or `.Start(state)`). At each state an object stays, with weight 1 next to the transitions' weights (`.Stays(0)` makes it move on), or takes a transition. A state with no way out is final, and `MaxTransitions(n)` (16 by default) ends a walk round a cycle.
 - **`EndsIn`** draws the end state first, by weight, and walks there, so the mix is exactly what you ask for.
-- **Checked when added**: a state the start can't reach, a transition given twice, a weight that isn't positive, an enum value that isn't defined and an end state that can't be reached in time throw at once. States can be enums, strings or any type compared by value.
+- **Checked when added**: a state the start can't reach, a transition given twice, a weight that isn't positive, an enum value that isn't defined, an end state that can't be reached in time and a `Stays` that can't matter (with `EndsIn`, or on a state with no way out) throw at once. States can be enums, strings or any type compared by value.
 - **One path per object**: `Where` and `Unique` on the status generate the whole object again, a later rule for the member replaces the lifecycle, and nested members take it too (`o => o.Lines.Each().Status`). Shrinking a failing `Check` heads for the start state.
 
 The dates agree with the status too. Each transition takes time, and a date member named after a state gets the time the object entered it:
@@ -674,7 +674,7 @@ var purchases = Fake.For<Purchase>().Seed(1)
 ```
 <!-- end snippet -->
 
-- **Stamps**: a `DateTimeOffset`, `DateTime` (UTC) or `DateOnly` member named `{State}At`, `{State}On` or `{State}Date` (any case), or one tied to a state with `.Stamp(state, o => o.Member)`, gets the time the object last entered that state, and `null` when it never did. The start state's stamp is the creation time. A member that can't be `null` must be stamped by a state every object reaches; otherwise make it nullable or `Ignore` it. A member with its own rule keeps it. NodaTime members work with `Phoney.NodaTime`.
+- **Stamps**: a `DateTimeOffset`, `DateTime` (UTC) or `DateOnly` member named `{State}At`, `{State}On` or `{State}Date` (any case), or one tied to a state with `.Stamp(state, o => o.Member)`, gets the time the object last entered that state, and `null` when it never did. The start state's stamp is the creation time. A member that can't be `null` must be stamped by a state every object reaches; otherwise make it nullable or `Ignore` it. A member with its own rule keeps it: a rule added after the lifecycle replaces its `Stamp`, while a `Stamp` of a member that already has a rule, or that another lifecycle already stamps, throws when the lifecycle is added. NodaTime members work with `Phoney.NodaTime`.
 - **Gaps**: each transition happens a gap after the state before it, drawn from `after: (min, max)` (an hour to a week by default) from the object's creation time on. When the gaps would pass the reference date they are all scaled down by one factor, so the last transition lands on it at the latest.
 - **Updated**: on an object with a lifecycle, the "updated" member (`UpdatedAt`, `ModifiedOn`…) is the time of the last transition, or the creation time when there was none.
 
@@ -697,7 +697,7 @@ foreach (var history in histories)
 ```
 <!-- end snippet -->
 
-- **History**: `History<T>` has the `Object` (the one `Generate` makes at the same position, with no extra draws), its `Created` time and the `Transitions` of every lifecycle in its graph, nested objects, collection elements and objects from `WithGeneratorFor` included, earliest first. Each transition has the `Member`, its `Path` from the root (`Lines[2].Status`), the `Owner` object, `From`, `To` and `At`.
+- **History**: `History<T>` has the `Object` (the one `Generate` makes at the same position, with no extra draws), its `Created` time and the `Transitions` of every lifecycle in its graph, nested objects, collection elements and objects from `WithGeneratorFor` or `Fake.Generators.Configure` included, earliest first. Those can bring the only lifecycle: the root needs none of its own. Each transition has the `Member`, its `Path` from the root (`Lines[2].Status`), the `Owner` object, `From`, `To` and `At`.
 - **`Of(o => o.Status)`** picks one lifecycle's transitions, typed (`o => o.Lines.Each().Status` for those of every line). The start state isn't a transition: the object is in it from `Created`.
 
 Objects you already have and objects that break the rules work with lifecycles too:
@@ -718,7 +718,7 @@ foreach (var invalid in shop.InvalidCases().Where(c => c.Member == "Status"))
 
 - **Populate**: a status that is set is kept, and the object walks into it (as with `EndsIn`, without drawing an end), so the stamps on the way agree with it. A status the lifecycle doesn't have, or can't reach within `MaxTransitions`, throws; `PopulateMode.All` draws a new one. A stamp that is set stays as it is.
 - **Invalid**: `Invalid(o => o.Status)` and `InvalidCases()` keep the lifecycle and break one stamp: a stamp earlier than the object's creation, a state the object entered without its stamp (nullable stamps only) or a stamp of a state it never entered. Each object walks into the state its case needs. A stamp with a rule of its own is left alone, and there are no boundary cases.
-- **Analyzers**: a lifecycle written with constant states is checked as you type, with the same rules the runtime uses: **PHONEY013** when it can't work (an unreachable state, a duplicate transition, an end state too far away, `GenerateHistory` without a lifecycle) and **PHONEY014** when a stamp can't be filled (a `DateTime PaidAt` while some orders are never paid). Strict mode (**PHONEY004**) counts the status and its stamps as covered.
+- **Analyzers**: a lifecycle written with constant states is checked as you type, with the same rules the runtime uses: **PHONEY013** when it can't work (an unreachable state, a duplicate transition, an end state too far away, a `Stays` that can't matter, `GenerateHistory` without a lifecycle) and **PHONEY014** when a stamp can't be filled (a `DateTime PaidAt` while some orders are never paid) or could never apply (its member already has a rule or another lifecycle's stamp). Strict mode (**PHONEY004**) counts the status and its stamps as covered.
 
 ### Filling in existing objects
 
@@ -920,8 +920,8 @@ var customer = Fake.ForGenerated<Customer>().Populate(new Customer { Id = 42 });
 | PHONEY010 | Warning | a new generator with a constant `.Seed(...)` is created inside a loop, so every iteration generates the same objects |
 | PHONEY011 | Warning | a constant argument is out of range and the call throws (`NullProbability(1.5)`, `CollectionSize(5, 2)`, `Generate(-1)`, `Unique(x => x.Id, 0)`, `Where(x => …, 0)`, `WithNormalDistribution(x => x.Age, 40, -5)`…) |
 | PHONEY012 | Info | `Fake.For<T>()`, `One`, `Many` or `Populate` generate a type with reflection because no `[FakeFor<T>]` covers it |
-| PHONEY013 | Warning | a lifecycle can't work as written and adding it throws: a transition before any `From`, a weight that isn't positive, a transition or `EndsIn` given twice, no transitions, an undefined enum value, a state the start can't reach, an end state further than `MaxTransitions`; or `GenerateHistory` on a generator without a lifecycle |
-| PHONEY014 | Warning | a stamp can't be filled: the member isn't a date, isn't next to the status, is stamped twice or with a state the lifecycle doesn't have, or can't be `null` although some objects never enter its state (also a member named after a state, like `PaidAt`) |
+| PHONEY013 | Warning | a lifecycle can't work as written and adding it throws: a transition before any `From`, a weight that isn't positive, a transition or `EndsIn` given twice, no transitions, an undefined enum value, a state the start can't reach, an end state further than `MaxTransitions`, `Stays` together with `EndsIn` or on a state with no transitions out; or `GenerateHistory` on a generator without a lifecycle (a generator registered with `Fake.Generators` can bring one, which the analyzer can't see) |
+| PHONEY014 | Warning | a stamp can't be filled: the member isn't a date, isn't next to the status, is stamped twice or with a state the lifecycle doesn't have, or can't be `null` although some objects never enter its state (also a member named after a state, like `PaidAt`); or a `Stamp` that could never apply, because an earlier call gave the member a rule or another lifecycle stamps it |
 
 The IDE offers fixes for these rules:
 

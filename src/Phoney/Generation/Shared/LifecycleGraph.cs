@@ -88,6 +88,31 @@ internal sealed class LifecycleGraph
     }
 
     /// <summary>
+    /// Why a <c>Stays</c> of one of the <paramref name="stayed"/> states (in the order they were written) can have no effect, or <see langword="null"/>: with end
+    /// states a walk goes straight to the one drawn and never stays, and an object in a state with no transitions out always stays. One message for the
+    /// runtime and the analyzer; <paramref name="member"/> names the lifecycle and <paramref name="text"/> writes a state.
+    /// </summary>
+    public string? IdleStay(IEnumerable<int> stayed, string member, System.Func<int, string> text)
+    {
+        foreach (var state in stayed)
+        {
+            if (_ends is not null)
+            {
+                return $"The lifecycle of {member} gives {text(state)} a stay weight, but it has EndsIn: the end state is drawn first and the walk goes straight there, "
+                    + "so Stays has no effect. Remove Stays, or the EndsIn calls.";
+            }
+
+            if (_targets[state].Length == 0)
+            {
+                return $"The lifecycle of {member} gives {text(state)} a stay weight, but {text(state)} has no transitions out, so an object there always stays. "
+                    + $"Remove Stays, or add a transition out of {text(state)}.";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Whether some object can end its walk without entering <paramref name="state"/> (so a stamp of it must be able to hold <see langword="null"/>): it stops
     /// before it, or walks round it, or ends in a state that doesn't need it.
     /// </summary>

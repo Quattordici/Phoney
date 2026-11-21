@@ -39,6 +39,7 @@ internal abstract class LifecycleDefinition
     private readonly double[]? _endTotals;
     private readonly LifecycleGraph _graph;
     private readonly int _max;
+    private readonly int _widest;
 
     protected LifecycleDefinition(int start, int stateCount, IReadOnlyList<LifecycleMove> transitions, double[] stays, IReadOnlyList<(int State, double Weight)> ends, int max)
     {
@@ -77,6 +78,7 @@ internal abstract class LifecycleDefinition
             _totals[s] = [.. totals];
         }
 
+        _widest = _moves.Max(m => m.Length);
         _graph = new LifecycleGraph(start, stateCount, [.. transitions.Select(t => (t.From, t.To))], stays, [.. ends.Select(e => e.State)], max);
         if (ends.Count > 0)
         {
@@ -153,23 +155,25 @@ internal abstract class LifecycleDefinition
     /// </summary>
     public LifecycleWalk Walk(SeededRandom random, int? end = null)
     {
-        var path = new List<int>(4) { _start };
-        var gaps = new List<long>(4);
+        Span<int> path = _max < 64 ? stackalloc int[_max + 1] : new int[_max + 1];
+        Span<long> gaps = _max < 64 ? stackalloc long[_max] : new long[_max];
+        path[0] = _start;
+        int taken;
         if (Breaks is { } breaks)
         {
             var broken = breaks[breaks.Length == 1 ? 0 : random.Index(breaks.Length)];
-            WalkInto(random, path, gaps, broken.End);
-            return new LifecycleWalk([.. path], [.. gaps]) { Break = broken };
+            taken = WalkInto(random, path, gaps, broken.End);
+            return new LifecycleWalk(path[..(taken + 1)].ToArray(), gaps[..taken].ToArray()) { Break = broken };
         }
 
         if (end is not null || _ends is not null)
         {
-            WalkInto(random, path, gaps, end ?? _ends![random.WeightedIndex(_endTotals!)]);
-            return new LifecycleWalk([.. path], [.. gaps]);
+            taken = WalkInto(random, path, gaps, end ?? _ends![random.WeightedIndex(_endTotals!)]);
+            return new LifecycleWalk(path[..(taken + 1)].ToArray(), gaps[..taken].ToArray());
         }
 
         var current = _start;
-        for (var taken = 0; taken < _max; taken++)
+        for (taken = 0; taken < _max; taken++)
         {
             var targets = _targets[current];
             if (targets.Length == 0)
@@ -177,12 +181,12 @@ internal abstract class LifecycleDefinition
             var picked = random.WeightedIndex(_totals[current]);
             if (targets[picked] == Stay)
                 break;
-            gaps.Add(Gap(random, _targetMoves[current][picked]));
+            gaps[taken] = Gap(random, _targetMoves[current][picked]);
             current = targets[picked];
-            path.Add(current);
+            path[taken + 1] = current;
         }
 
-        return new LifecycleWalk([.. path], [.. gaps]);
+        return new LifecycleWalk(path[..(taken + 1)].ToArray(), gaps[..taken].ToArray());
     }
 
     /// <summary>
@@ -222,13 +226,14 @@ internal abstract class LifecycleDefinition
     private static long Gap(SeededRandom random, LifecycleMove move) =>
         move.MinGap + (long)(random.Double() * (move.MaxGap - move.MinGap));
 
-    private void WalkInto(SeededRandom random, List<int> path, List<long> gaps, int end)
+    private int WalkInto(SeededRandom random, Span<int> path, Span<long> gaps, int end)
     {
-        var widest = _moves.Max(m => m.Length);
+        var widest = _widest;
         Span<double> totals = widest <= 32 ? stackalloc double[widest] : new double[widest];
         Span<int> candidates = widest <= 32 ? stackalloc int[widest] : new int[widest];
         var current = _start;
         var left = _max;
+        var taken = 0;
         while (current != end)
         {
             var moves = _moves[current];
@@ -245,11 +250,13 @@ internal abstract class LifecycleDefinition
             }
 
             var move = moves[candidates[random.WeightedIndex(totals[..count])]];
-            gaps.Add(Gap(random, move));
+            gaps[taken] = Gap(random, move);
             current = move.To;
-            path.Add(current);
+            path[++taken] = current;
             left--;
         }
+
+        return taken;
     }
 }
 
@@ -318,6 +325,8 @@ internal sealed class LifecycleDefinition<TState> : LifecycleDefinition
                 nameof(lifecycle));
         }
 
+        if (graph.IdleStay(spec.Stays.Select(s => Index(s.State)), member, s => Text(states[s])) is { } idle)
+            throw new ArgumentException(idle, nameof(lifecycle));
         return definition;
     }
 

@@ -332,6 +332,39 @@ public sealed class LifecycleStampTests
     }
 
     [Test]
+    public void A_Stamp_of_a_member_that_already_has_a_rule_is_refused_because_the_rule_would_win()
+    {
+        var ruled = Model(false).With(s => s.SettledAt, (DateTimeOffset?)null);
+
+        Should.Throw<ArgumentException>(() => ruled.Lifecycle(s => s.Status, l => Shop(l).Stamp(ParcelState.Paid, s => s.SettledAt))).Message.ShouldBe(
+            "Carriage.SettledAt has a rule of its own, and the lifecycle of Carriage.Status stamps it. The rule wins, so the Stamp would do nothing. "
+            + "Remove the rule or the Stamp. (Parameter 'lifecycle')");
+        Should.Throw<ArgumentException>(() => Model(false).Ignore(s => s.SettledAt).Member(s => s.Status, m => m.Lifecycle(l => Shop(l).Stamp(ParcelState.Paid, s => s.SettledAt))));
+        Should.Throw<ArgumentException>(() => Model(false).With(s => s.Lines.Each().Packed, (DateTimeOffset?)null)
+            .Lifecycle(s => s.Lines.Each().Status, l => Shop(l).Stamp(ParcelState.Paid, s => s.Lines.Each().Packed))).Message.ShouldContain("Carriage.Lines.Packed has a rule");
+    }
+
+    [Test]
+    public void A_rule_after_a_Stamp_still_replaces_it()
+    {
+        var at = new DateTimeOffset(2001, 2, 3, 0, 0, 0, TimeSpan.Zero);
+
+        Model(false).Lifecycle(s => s.Status, l => Shop(l).Stamp(ParcelState.Paid, s => s.SettledAt)).With(s => s.SettledAt, at)
+            .Generate(5).ShouldAllBe(s => s.SettledAt == at);
+    }
+
+    [Test]
+    public void A_member_two_lifecycles_stamp_is_refused()
+    {
+        var noted = Model(false).Lifecycle(s => s.Note, l => l.From("new").To("old").Stamp("old", s => s.SettledAt));
+
+        Should.Throw<ArgumentException>(() => noted.Lifecycle(s => s.Status, l => Shop(l).Stamp(ParcelState.Paid, s => s.SettledAt))).Message.ShouldBe(
+            "Carriage.SettledAt is stamped by the lifecycles of both Carriage.Note and Carriage.Status. Give each member one state. (Parameter 'lifecycle')");
+        noted.Lifecycle(s => s.Note, l => l.From("new").To("old")).Lifecycle(s => s.Status, l => Shop(l).Stamp(ParcelState.Paid, s => s.SettledAt))
+            .Generate(20).ShouldContain(s => s.SettledAt != null); // the first lifecycle of Note was replaced, so its stamp is gone
+    }
+
+    [Test]
     public void A_stamp_that_isnt_a_date_is_refused()
     {
         Should.Throw<ArgumentException>(() => Model(false).Lifecycle(s => s.Status, l => Shop(l).Stamp(ParcelState.Paid, s => s.Note)))
