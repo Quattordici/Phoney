@@ -700,13 +700,13 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             {
                 throw new ArgumentException(
                     $"{typeof(T).Name}.{key} has a rule of its own, and the lifecycle of {lifecycle} stamps it. The rule wins, so the Stamp would do nothing. Remove the rule or the Stamp.",
-                    "lifecycle");
+                    nameof(lifecycle));
             }
 
             if (OtherLifecycles(holder, string.Join('.', status)).FirstOrDefault(other => other.Lifecycle.Stamps.Any(s => s.Member == stamped)) is { Status: { } other })
             {
                 throw new ArgumentException(
-                    $"{typeof(T).Name}.{key} is stamped by the lifecycles of both {typeof(T).Name}.{other} and {lifecycle}. Give each member one state.", "lifecycle");
+                    $"{typeof(T).Name}.{key} is stamped by the lifecycles of both {typeof(T).Name}.{other} and {lifecycle}. Give each member one state.", nameof(lifecycle));
             }
         }
     }

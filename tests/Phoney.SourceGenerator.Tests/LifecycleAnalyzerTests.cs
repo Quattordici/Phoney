@@ -157,7 +157,7 @@ public sealed class LifecycleAnalyzerTests
 
         var diagnostic = diagnostics.ShouldHaveSingleItem();
         var line = diagnostic.Location.GetLineSpan().StartLinePosition.Line;
-        diagnostic.Location.SourceTree!.GetText().Lines[line].ToString().ShouldContain("Seed(1)"); // C: the nested generator has none either
+        diagnostic.Location.SourceTree!.GetText(cancellationToken).Lines[line].ToString().ShouldContain("Seed(1)"); // C: the nested generator has none either
         diagnostic.GetMessage().ShouldContain("Fake.Generators");
     }
 }
