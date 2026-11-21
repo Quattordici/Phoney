@@ -76,7 +76,8 @@ public sealed class LifecycleBuilder<T, TState>
 
     /// <summary>
     /// Sets how likely an object is to stay in the state of the last <see cref="From"/> next to its transitions (1 by default); 0 means an object that gets
-    /// there always moves on.
+    /// there always moves on. It only matters for a state with transitions out, in a lifecycle without <see cref="EndsIn"/> (a walk towards an end state
+    /// never stays), so anything else is refused when the lifecycle is added.
     /// </summary>
     /// <param name="weight">Zero or more, finite.</param>
     /// <exception cref="InvalidOperationException">No <see cref="From"/> came before, or it was given twice for the state.</exception>
@@ -128,6 +129,10 @@ public sealed class LifecycleBuilder<T, TState>
     /// <typeparam name="TValue">A <see cref="DateTimeOffset"/>, <see cref="DateTime"/> (UTC) or <see cref="DateOnly"/>, nullable unless every object reaches the state.</typeparam>
     /// <param name="state">One of the lifecycle's states.</param>
     /// <param name="member">The member, on the object that holds the lifecycle's member.</param>
+    /// <remarks>
+    /// A rule for the member added after the lifecycle replaces the stamp. A member that already has a rule, or that another lifecycle of the object already
+    /// stamps, is refused when the lifecycle is added, because the stamp would do nothing.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="member"/> is <see langword="null"/>.</exception>
     public LifecycleBuilder<T, TState> Stamp<TValue>(TState state, Expression<Func<T, TValue>> member)
     {

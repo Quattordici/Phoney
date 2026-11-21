@@ -16,6 +16,9 @@ internal sealed class TypeConfiguration<T>(Func<ObjectGenerator<T>, ObjectGenera
     public string? CannotBeNested => null; // checked when the configuration is applied: the delegate has not run yet
 
     /// <inheritdoc />
+    public bool HasLifecycle => ((INestedGenerator)Nested).HasLifecycle;
+
+    /// <inheritdoc />
     public object? CreateNested(FakeScope parent) => ((INestedGenerator)Nested).CreateNested(parent);
 
     /// <summary>The generator for nested objects, shared like one registered with <see cref="FakeGenerators.Add{TNested}"/>.</summary>

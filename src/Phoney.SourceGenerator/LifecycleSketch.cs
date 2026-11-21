@@ -292,6 +292,8 @@ internal sealed class LifecycleSketch
             _problems.Add(new LifecycleProblem(at, $"The lifecycle of {_member} can't reach {Text(unreachable)} from its start state {start}. Add a transition into it, or remove it.", false));
         else if (graph.FirstEndTooFar() is var far and >= 0)
             _problems.Add(new LifecycleProblem(at, $"The lifecycle of {_member} can't end in {Text(far)}: it takes {Show(graph.Distance(graph.Start, far))} transitions from {start}, and MaxTransitions is {Show(graph.Max)}. Raise MaxTransitions, or remove the EndsIn.", false));
+        else if (graph.IdleStay(_stays.Select(s => s.State), _member, Text) is { } idle)
+            _problems.Add(new LifecycleProblem(at, idle, false));
         if (!_problems.Exists(p => !p.IsStamp))
             Graph = graph;
     }

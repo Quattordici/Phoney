@@ -130,4 +130,34 @@ public sealed class LifecycleAnalyzerTests
         TextOf(diagnostic).ShouldBe("GenerateHistory");
         diagnostic.GetMessage().ShouldContain("has no lifecycle");
     }
+
+    [Test]
+    public async Task A_Stamp_that_could_never_apply_is_reported_at_the_stamp(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("""
+            public static object A() => Fake.For<Invoice>().Ignore(i => i.SentAt).Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.SentAt));
+            public static object B() => Fake.For<Invoice>().Lifecycle(i => i.Note, l => l.From("a").To("b").Stamp("b", i => i.SentAt)).Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.SentAt));
+            """, cancellationToken);
+
+        diagnostics.Select(d => d.Id).ShouldBe(["PHONEY014", "PHONEY014"]);
+        diagnostics.ShouldAllBe(d => TextOf(d) == "i => i.SentAt");
+        diagnostics[0].GetMessage().ShouldBe(
+            "Invoice.SentAt has a rule of its own, and the lifecycle of Invoice.Status stamps it. The rule wins, so the Stamp would do nothing. Remove the rule or the Stamp.");
+        diagnostics[1].GetMessage().ShouldBe("Invoice.SentAt is stamped by the lifecycles of both Invoice.Note and Invoice.Status. Give each member one state.");
+    }
+
+    [Test]
+    public async Task History_with_a_lifecycle_from_a_generator_for_a_nested_type_is_not_reported(CancellationToken cancellationToken)
+    {
+        var diagnostics = await Diagnose("""
+            public static object A() => Fake.For<Invoice>().WithGeneratorFor(Fake.For<Line>().Lifecycle(l => l.Status, b => b.From(Phase.Draft).To(Phase.Sent))).GenerateHistory();
+            public static object B(ObjectGenerator<Line> lines) => Fake.For<Invoice>().WithGeneratorFor(lines).GenerateHistory();
+            public static object C() => Fake.For<Invoice>().WithGeneratorFor(Fake.For<Line>().Seed(1)).GenerateHistory();
+            """, cancellationToken);
+
+        var diagnostic = diagnostics.ShouldHaveSingleItem();
+        var line = diagnostic.Location.GetLineSpan().StartLinePosition.Line;
+        diagnostic.Location.SourceTree!.GetText().Lines[line].ToString().ShouldContain("Seed(1)"); // C: the nested generator has none either
+        diagnostic.GetMessage().ShouldContain("Fake.Generators");
+    }
 }

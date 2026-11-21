@@ -305,10 +305,18 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Invoice>().Lifecycle(i => i.Note, l => l.From("new"))),
             R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Lifecycle(l => l.From(Phase.Draft).To(Phase.Sent)))),
             R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Lifecycle(l => l.From(Phase.Draft)))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stays(3).From(Phase.Sent).To(Phase.Paid).EndsIn(Phase.Paid, 1))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(0).To(Phase.Sent).EndsIn(Phase.Sent, 1))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).From(Phase.Sent).Stays(2))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).Stays(2).To(Phase.Sent).From(Phase.Sent).To(Phase.Draft))),
             R(() => Fake.For<Invoice>().GenerateHistory()),
             R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent)).GenerateHistory()),
             R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Lifecycle(l => l.From(Phase.Draft).To(Phase.Sent))).GenerateHistory()),
             R(() => Fake.For<Invoice>().Member(i => i.Status, m => m.Is(Phase.Paid)).Seed(1).GenerateHistory(2)),
+            R(() => Fake.For<Product>().WithGeneratorFor(Fake.For<Address>().Lifecycle(a => a.Street, l => l.From("new").To("old"))).GenerateHistory()),
+            R(() => Fake.For<Product>().WithGeneratorFor(Fake.For<Address>().Seed(2)).GenerateHistory()),
+            R(() => Fake.For<Product>().WithGeneratorFor(Fake.For<Invoice>().WithGeneratorFor(Fake.For<Address>())).GenerateHistory()),
+            R(() => Fake.For<Product>().WithGeneratorFor(Fake.For<Invoice>().WithGeneratorFor(Fake.For<Address>().Lifecycle(a => a.Street, l => l.From("new").To("old")))).GenerateHistory()),
         ];
 
         (await Disagreements(rows, new LifecycleAnalyzer(), "PHONEY013", CannotBeApplied, cancellationToken)).ShouldBeEmpty();
@@ -337,6 +345,14 @@ public sealed class AnalyzerParityTests
             R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).To(Phase.Paid)).With(r => r.PaidAt, DateTime.UnixEpoch).Generate()),
             R(() => Fake.For<Receipt>().Lifecycle(r => r.Status, l => l.From(Phase.Draft).To(Phase.Sent)).Generate()),
             R(() => Fake.For<Receipt>().Member(r => r.Status, m => m.Lifecycle(l => l.From(Phase.Draft).To(Phase.Paid))).Generate()),
+            R(() => Fake.For<Invoice>().With(i => i.Settled, (DateTimeOffset?)null).Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled)).With(i => i.Settled, (DateTimeOffset?)null).Generate()),
+            R(() => Fake.For<Invoice>().Where(i => i.Settled, s => true).Unique(i => i.Settled).Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled))),
+            R(() => Fake.For<Invoice>().Member(i => i.Settled, m => m.Ignore()).Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Note, l => l.From("new").To("old").Stamp("old", i => i.Settled)).Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Note, l => l.From("new").To("old").Stamp("old", i => i.Settled)).With(i => i.Note, "x").Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled)).Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Paid).Stamp(Phase.Paid, i => i.Settled))),
+            R(() => Fake.For<Invoice>().Lifecycle(i => i.Status, l => l.From(Phase.Draft).To(Phase.Sent).Stamp(Phase.Sent, i => i.Settled)).Invalid(i => i.Status).Member(i => i.Note, m => m.Lifecycle(l => l.From("new").To("old").Stamp("old", i => i.Settled)))),
         ];
 
         (await Disagreements(rows, new LifecycleAnalyzer(), "PHONEY014", CannotBeApplied, cancellationToken)).ShouldBeEmpty();

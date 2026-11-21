@@ -14,6 +14,8 @@ internal sealed class ObjectLedger
     private List<(LifecycleDefinition Lifecycle, LifecycleWalk Walk)>? _paths;
     private List<(LifecycleDefinition Lifecycle, int State)>? _keptStates;
     private bool _rejected;
+    private LifecycleDefinition? _firstLifecycle;
+    private LifecycleWalk? _firstPath;
 
     /// <summary>Records that <c>Populate</c> keeps the value <paramref name="member"/> already has.</summary>
     public void Keep(int member) => (_kept ??= []).Add(member);
@@ -46,16 +48,23 @@ internal sealed class ObjectLedger
     /// <summary>The path the object walks through <paramref name="lifecycle"/>: drawn from <paramref name="random"/> the first time it is asked for, then the same.</summary>
     public LifecycleWalk Path(LifecycleDefinition lifecycle, SeededRandom random, out bool drawn)
     {
-        _paths ??= [];
         drawn = false;
-        foreach (var (known, path) in _paths)
+        if (ReferenceEquals(_firstLifecycle, lifecycle))
+            return _firstPath!;
+        if (_paths is not null)
         {
-            if (ReferenceEquals(known, lifecycle))
-                return path;
+            foreach (var (known, path) in _paths)
+            {
+                if (ReferenceEquals(known, lifecycle))
+                    return path;
+            }
         }
 
         var walked = lifecycle.Walk(random, KeptState(lifecycle));
-        _paths.Add((lifecycle, walked));
+        if (_firstLifecycle is null)
+            (_firstLifecycle, _firstPath) = (lifecycle, walked);
+        else
+            (_paths ??= []).Add((lifecycle, walked));
         drawn = true;
         return walked;
     }

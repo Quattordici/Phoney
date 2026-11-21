@@ -682,7 +682,45 @@ public sealed class ObjectGenerator<T> : INestedGenerator
         var path = MemberPath(member);
         var name = $"{typeof(T).Name}.{string.Join('.', path)}";
         LifecycleDefinition definition = LifecycleDefinition<TState>.Of(lifecycle, name, stamp => StampMember(name, path, stamp));
+        RejectIdleStamps(path, definition, name);
         return AddRule(member, new Rule(RuleKind.Convention, (Func<FakeScope, object?>)definition.Status, ObjectBound: true, Lifecycle: definition));
+    }
+
+    /// <summary>
+    /// Refuses a <c>Stamp</c> that could never apply: its member already has a rule, which wins (a rule added after the lifecycle replaces the stamp, like any
+    /// later rule), or another lifecycle of the same object already stamps it.
+    /// </summary>
+    private void RejectIdleStamps(string[] status, LifecycleDefinition definition, string lifecycle)
+    {
+        var holder = status[..^1];
+        foreach (var (_, stamped) in definition.Stamps)
+        {
+            var key = string.Join('.', [.. holder, stamped]);
+            if (holder.Length == 0 ? _config.Rules.ContainsKey(key) : _config.PathRules.ContainsKey(key))
+            {
+                throw new ArgumentException(
+                    $"{typeof(T).Name}.{key} has a rule of its own, and the lifecycle of {lifecycle} stamps it. The rule wins, so the Stamp would do nothing. Remove the rule or the Stamp.",
+                    "lifecycle");
+            }
+
+            if (OtherLifecycles(holder, string.Join('.', status)).FirstOrDefault(other => other.Lifecycle.Stamps.Any(s => s.Member == stamped)) is { Status: { } other })
+            {
+                throw new ArgumentException(
+                    $"{typeof(T).Name}.{key} is stamped by the lifecycles of both {typeof(T).Name}.{other} and {lifecycle}. Give each member one state.", "lifecycle");
+            }
+        }
+    }
+
+    /// <summary>The lifecycles of the object at <paramref name="holder"/> other than the one of <paramref name="status"/>, by their status path, in name order.</summary>
+    private IEnumerable<(string Status, LifecycleDefinition Lifecycle)> OtherLifecycles(string[] holder, string status)
+    {
+#pragma warning disable PHONEYDEV001 // filtered here, then sorted by name below
+        var lifecycles = holder.Length == 0
+            ? _config.Rules.Where(r => r.Value.Lifecycle is not null).Select(r => (Status: r.Key, Lifecycle: r.Value.Lifecycle!))
+            : _config.PathRules.Where(p => p.Value.Rule.Lifecycle is not null && p.Value.Segments.Length == holder.Length + 1 && p.Value.Segments.AsSpan(0, holder.Length).SequenceEqual(holder))
+                .Select(p => (Status: p.Key, Lifecycle: p.Value.Rule.Lifecycle!));
+#pragma warning restore PHONEYDEV001
+        return lifecycles.Where(l => l.Status != status).OrderBy(l => l.Status, StringComparer.Ordinal);
     }
 
     /// <summary>The name of the member a lifecycle's <c>Stamp</c> selects, which must be a date member of the object that holds the status at <paramref name="status"/>.</summary>
@@ -977,20 +1015,21 @@ public sealed class ObjectGenerator<T> : INestedGenerator
     /// </summary>
     /// <remarks>
     /// Making a history draws nothing more while an object is made, so seeds, <see cref="Keyed"/> and conditions behave as for <see cref="Generate(int)"/>. The
-    /// transitions include those of nested objects, collection elements and objects other generators make (<see cref="WithGeneratorFor{TNested}"/>), each with
-    /// its path (<c>Lines[2].Status</c>) and owner.
+    /// transitions include those of nested objects, collection elements and objects other generators make (<see cref="WithGeneratorFor{TNested}"/>,
+    /// <see cref="FakeGenerators.Configure{T}"/>), each with its path (<c>Lines[2].Status</c>) and owner; the lifecycle may come from those alone.
     /// </remarks>
     /// <param name="count">How many objects to generate.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">The generator has no lifecycle.</exception>
+    /// <exception cref="InvalidOperationException">Neither the generator nor a generator it uses for a nested type has a lifecycle.</exception>
     public IReadOnlyList<History<T>> GenerateHistory(int count = 1)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         var lifecycles = DeclaredLifecycles();
-        if (lifecycles.IsEmpty)
+        if (lifecycles.IsEmpty && !AnyHasLifecycle(Registrations.Current.Generators.SetItems(_config.TypeGenerators)))
         {
             throw new InvalidOperationException(
-                $"This generator of {typeof(T).Name} has no lifecycle, so its objects have no history. Give a status member one first: .Lifecycle(x => x.Status, l => l.From(a).To(b)).");
+                $"This generator of {typeof(T).Name} has no lifecycle, and neither has a generator it uses for a nested type (WithGeneratorFor, Fake.Generators), so its objects "
+                + "have no history. Give a status member one first: .Lifecycle(x => x.Status, l => l.From(a).To(b)).");
         }
 
         var run = Start();
@@ -1011,6 +1050,11 @@ public sealed class ObjectGenerator<T> : INestedGenerator
             VerifyUsage();
         return [.. made.Select(m => new History<T>(m.Item, m.Created, m.Transitions, known))];
     }
+
+    /// <summary>Whether one of <paramref name="generators"/> (by type) makes objects with a lifecycle.</summary>
+#pragma warning disable PHONEYDEV001 // Any: whether one of them has a lifecycle doesn't depend on the order they are asked in
+    private static bool AnyHasLifecycle(ImmutableDictionary<Type, INestedGenerator> generators) => generators.Values.Any(g => g.HasLifecycle);
+#pragma warning restore PHONEYDEV001
 
     /// <summary>The members this generator gives a lifecycle, by path without positions: <c>Status</c>, <c>Lines.Status</c>.</summary>
 #pragma warning disable PHONEYDEV001 // the names go into a set, so the order they are read in can't matter
@@ -1309,6 +1353,9 @@ public sealed class ObjectGenerator<T> : INestedGenerator
 
     /// <inheritdoc />
     Type INestedGenerator.GeneratedType => typeof(T);
+
+    /// <inheritdoc />
+    bool INestedGenerator.HasLifecycle => !DeclaredLifecycles().IsEmpty || AnyHasLifecycle(_config.TypeGenerators);
 
     /// <inheritdoc />
     string? INestedGenerator.CannotBeNested

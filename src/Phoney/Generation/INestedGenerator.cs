@@ -12,5 +12,11 @@ internal interface INestedGenerator
     /// </summary>
     string? CannotBeNested { get; }
 
+    /// <summary>
+    /// Whether the objects the generator makes can have a history: it declares a lifecycle, or a generator it uses for a nested type does. <c>GenerateHistory</c>
+    /// reads it, so a root without a lifecycle of its own still records the transitions its nested objects bring.
+    /// </summary>
+    bool HasLifecycle { get; }
+
     object? CreateNested(FakeScope parent);
 }

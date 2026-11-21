@@ -146,6 +146,34 @@ public class CollectionBenchmarks
     public List<Basket> Generated() => _generated.Generate(Count);
 }
 
+/// <summary>Objects with a lifecycle: a free walk with a stamp and a walk towards a drawn end state. A walk should cost little beyond its two arrays.</summary>
+[MemoryDiagnoser]
+public class LifecycleBenchmarks
+{
+    private ObjectGenerator<Parcel> _walk = null!;
+    private ObjectGenerator<Parcel> _endsIn = null!;
+
+    [Params(1_000)]
+    public int Count { get; set; }
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        var parcels = BenchmarkFakes.Parcel.Seed(1);
+        _walk = parcels.Lifecycle(p => p.Status, l => l.From(ParcelState.Placed).To(ParcelState.Paid).From(ParcelState.Paid).To(ParcelState.Shipped));
+        _endsIn = parcels.Lifecycle(p => p.Status, l => l.From(ParcelState.Placed).To(ParcelState.Paid).From(ParcelState.Paid).To(ParcelState.Shipped)
+            .EndsIn(ParcelState.Shipped, 3).EndsIn(ParcelState.Placed, 1));
+        _walk.Generate(10);
+        _endsIn.Generate(10);
+    }
+
+    [Benchmark(Baseline = true, Description = "Lifecycle, free walk")]
+    public List<Parcel> Walk() => _walk.Generate(Count);
+
+    [Benchmark(Description = "Lifecycle, EndsIn")]
+    public List<Parcel> EndsIn() => _endsIn.Generate(Count);
+}
+
 /// <summary>Picking a random enum value.</summary>
 [MemoryDiagnoser]
 public class EnumBenchmarks
@@ -194,5 +222,13 @@ public sealed class Basket
     public Dictionary<string, int> Quantities { get; set; } = [];
 }
 
-[FakeFor<Customer>, FakeFor<Basket>]
+public enum ParcelState { Placed, Paid, Shipped }
+
+public sealed class Parcel
+{
+    public ParcelState Status { get; set; }
+    public DateTimeOffset? ShippedAt { get; set; }
+}
+
+[FakeFor<Customer>, FakeFor<Basket>, FakeFor<Parcel>]
 public static partial class BenchmarkFakes;

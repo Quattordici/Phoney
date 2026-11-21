@@ -143,6 +143,47 @@ public sealed class LifecycleHistoryTests
     }
 
     [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public void A_generator_for_a_nested_type_brings_its_lifecycle_to_a_root_without_one(bool generated)
+    {
+        var lines = new ObjectGenerator<CarriageLine>(new ReflectionModel<CarriageLine>()).Lifecycle(l => l.Status, Shop);
+
+        var histories = Model(generated).WithGeneratorFor(lines).GenerateHistory(20);
+
+        histories.Select(h => Values(h.Object)).ShouldBe(Model(generated).WithGeneratorFor(lines).Generate(20).Select(Values));
+        histories.SelectMany(h => h.Of(c => c.Lines.Each().Status)).ShouldNotBeEmpty();
+    }
+
+    [Test]
+    public void A_generator_for_a_nested_type_without_a_lifecycle_gives_no_history()
+    {
+        var lines = new ObjectGenerator<CarriageLine>(new ReflectionModel<CarriageLine>()).With(l => l.Sku, "x");
+
+        Should.Throw<InvalidOperationException>(() => Model(true).WithGeneratorFor(lines).GenerateHistory()).Message.ShouldContain("Fake.Generators");
+    }
+
+    [Test]
+    [NotInParallel]
+    public void A_type_wide_configuration_brings_its_lifecycle_to_a_root_without_one()
+    {
+        try
+        {
+            Fake.Generators.Configure<HistoryLine>(g => g.Lifecycle(l => l.Status, Shop));
+
+            var histories = Fake.For<HistoryBasket>().Seed(5).ReferenceDate(Now).GenerateHistory(20);
+
+            var transitions = histories.SelectMany(h => h.Of(b => b.Lines.Each().Status)).ToList();
+            transitions.ShouldNotBeEmpty();
+            transitions.ShouldAllBe(t => t.Owner is HistoryLine);
+        }
+        finally
+        {
+            Fake.Generators.Clear();
+        }
+    }
+
+    [Test]
     public void The_count_is_checked()
     {
         var generator = LifecycleStampFakes.Carriage.Lifecycle(c => c.Status, Shop);
@@ -160,4 +201,16 @@ public sealed class LifecycleHistoryTests
         Should.Throw<ArgumentException>(() => history.Of(c => c.Note)).Message.ShouldContain("Carriage.Note");
         Should.Throw<ArgumentException>(() => history.Of(c => c.Lines.Each().Status)).Message.ShouldContain("Carriage.Lines.Status");
     }
+}
+
+/// <summary>Only <see cref="LifecycleHistoryTests"/> configures this type app-wide, so no other test sees the configuration.</summary>
+public sealed class HistoryBasket
+{
+    public List<HistoryLine> Lines { get; set; } = [];
+}
+
+/// <summary>A line of <see cref="HistoryBasket"/>.</summary>
+public sealed class HistoryLine
+{
+    public ParcelState Status { get; set; }
 }

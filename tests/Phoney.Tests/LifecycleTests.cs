@@ -313,6 +313,28 @@ public sealed class LifecycleTests
     }
 
     [Test]
+    public void Stays_with_EndsIn_is_refused_because_a_walk_towards_an_end_state_never_stays()
+    {
+        var error = Should.Throw<ArgumentException>(() => Reflected().Lifecycle(p => p.Status, l => l
+            .From(ParcelState.Placed).To(ParcelState.Paid).Stays(50).From(ParcelState.Paid).To(ParcelState.Shipped)
+            .EndsIn(ParcelState.Placed, 1).EndsIn(ParcelState.Shipped, 1)));
+
+        error.Message.ShouldBe(
+            "The lifecycle of Freight.Status gives Placed a stay weight, but it has EndsIn: the end state is drawn first and the walk goes straight there, so Stays has no effect. "
+            + "Remove Stays, or the EndsIn calls. (Parameter 'lifecycle')");
+    }
+
+    [Test]
+    public void Stays_on_a_state_with_no_transitions_out_is_refused()
+    {
+        var error = Should.Throw<ArgumentException>(() => Reflected().Lifecycle(p => p.Status, l => l
+            .From(ParcelState.Placed).To(ParcelState.Paid).From(ParcelState.Paid).Stays(0)));
+
+        error.Message.ShouldBe(
+            "The lifecycle of Freight.Status gives Paid a stay weight, but Paid has no transitions out, so an object there always stays. Remove Stays, or add a transition out of Paid. (Parameter 'lifecycle')");
+    }
+
+    [Test]
     public void An_end_state_the_walk_cant_reach_in_time_is_refused()
     {
         Should.Throw<ArgumentException>(() => Reflected().Lifecycle(p => p.Status, l => Shop(l).EndsIn(ParcelState.Delivered, 1).MaxTransitions(2)))
