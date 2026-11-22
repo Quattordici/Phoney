@@ -6,12 +6,12 @@ namespace Phoney.Data;
 /// with its 249 codes one to one and was checked against pycountry (ISO 3166-1).
 /// </summary>
 /// <remarks>
-/// The table is one string (<c>code=name|</c>), parsed the first time an object needs both a country and a code, so it costs nothing on the
+/// Each table is one string (<c>code=name|</c>), parsed the first time an object of its language needs both a country and a code, so it costs nothing on the
 /// first call of a process (see <c>CharMappings</c>).
 /// </remarks>
-internal static class CountryNames
+internal static partial class CountryNames
 {
-    private const string Pairs =
+    private const string EnglishPairs =
         "AD=Andorra|AE=United Arab Emirates|AF=Afghanistan|AG=Antigua and Barbuda|AI=Anguilla|AL=Albania|AM=Armenia|AO=Angola|AQ=Antarctica|AR=Argentina|" +
         "AS=American Samoa|AT=Austria|AU=Australia|AW=Aruba|AX=Åland Islands|AZ=Azerbaijan|BA=Bosnia and Herzegovina|BB=Barbados|BD=Bangladesh|BE=Belgium|" +
         "BF=Burkina Faso|BG=Bulgaria|BH=Bahrain|BI=Burundi|BJ=Benin|BL=Saint Barthélemy|BM=Bermuda|BN=Brunei Darussalam|BO=Bolivia|" +
@@ -39,31 +39,24 @@ internal static class CountryNames
         "UY=Uruguay|UZ=Uzbekistan|VA=Holy See (Vatican City State)|VC=Saint Vincent and the Grenadines|VE=Venezuela|VG=Virgin Islands, British|" +
         "VI=Virgin Islands, U.S.|VN=Vietnam|VU=Vanuatu|WF=Wallis and Futuna|WS=Samoa|YE=Yemen|YT=Mayotte|ZA=South Africa|ZM=Zambia|ZW=Zimbabwe|";
 
+    private static readonly CountryNameTable EnglishTable = new(EnglishPairs);
+    private static readonly CountryNameTable GermanTable = new(GermanPairs, EnglishTable);
+    private static readonly CountryNameTable SwedishTable = new(SwedishPairs, EnglishTable);
+
     /// <summary>The English name faker.js uses for <paramref name="alpha2"/>, or <see langword="null"/>.</summary>
-    public static string? NameOf(string alpha2) => Table.Names.GetValueOrDefault(alpha2);
+    public static string? NameOf(string alpha2) => EnglishTable.NameOf(alpha2);
 
     /// <summary>The alpha-2 code of the English country name <paramref name="name"/>, or <see langword="null"/>.</summary>
-    public static string? CodeOf(string name) => Table.Codes.GetValueOrDefault(name);
+    public static string? CodeOf(string name) => EnglishTable.CodeOf(name);
 
-    private static class Table
+    /// <summary>
+    /// The names a locale of <paramref name="language"/> (its ISO 639 code, as in <see cref="LocaleInfo.Language"/>) uses: its own table where faker.js
+    /// lists countries in that language and Phoney has one (German, Swedish), each falling back to English, else the English table.
+    /// </summary>
+    public static CountryNameTable For(string? language) => language switch
     {
-        public static readonly Dictionary<string, string> Names = Parse(byName: false);
-        public static readonly Dictionary<string, string> Codes = Parse(byName: true);
-
-        private static Dictionary<string, string> Parse(bool byName)
-        {
-            var map = new Dictionary<string, string>(260, StringComparer.Ordinal);
-            foreach (var pair in Pairs.Split('|', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var separator = pair.IndexOf('=', StringComparison.Ordinal);
-                var (code, name) = (pair[..separator], pair[(separator + 1)..]);
-                if (byName)
-                    map.Add(name, code);
-                else
-                    map.Add(code, name);
-            }
-
-            return map;
-        }
-    }
+        "de" => GermanTable,
+        "sv" => SwedishTable,
+        _ => EnglishTable,
+    };
 }
