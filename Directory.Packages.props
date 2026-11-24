@@ -71,7 +71,7 @@
     <!-- Add-on packages depend on the lowest version that supports every target, so apps can use any newer one. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(DependencyInjectionFloor)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(DependencyInjectionTestVersion)" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="11.0.1" />
     <PackageVersion Include="NodaTime" Version="$(NodaTimeFloor)" />
     <!-- Phoney.WireMock depends on the builder interfaces only; the tests run the server of the same release. -->
     <PackageVersion Include="WireMock.Net.Shared" Version="$(WireMockFloor)" />
